@@ -37,10 +37,11 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
+    add_start_docstrings_to_model_forward,
     logging,
 )
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings, add_code_sample_docstrings
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
@@ -97,18 +98,25 @@ SEAMLESS_M4T_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+M4T_INPUTS_DOCSTRING_FIRST_PART = r"""Args:"""
 
-SEAMLESS_M4T_INPUTS_DOCSTRING = r"""
-    Args:
+M4T_INPUTS_DOCSTRING_TEXT_PART = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
+        """
+
+M4T_INPUTS_DOCSTRING_SPEECH_PART = r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
+            [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+        """
+
+M4T_INPUTS_DOCSTRING_LAST_PART = r"""
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -171,9 +179,10 @@ SEAMLESS_M4T_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+        inputs_embeds (`torch.FloatTensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -198,6 +207,21 @@ SEAMLESS_M4T_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
+M4T_MODEL_INPUTS_DOCSTRING = (
+    M4T_INPUTS_DOCSTRING_FIRST_PART
+    + M4T_INPUTS_DOCSTRING_TEXT_PART
+    + M4T_INPUTS_DOCSTRING_SPEECH_PART
+    + M4T_INPUTS_DOCSTRING_LAST_PART
+)
+
+M4T_TEXT_INPUTS_DOCSTRING = (
+    M4T_INPUTS_DOCSTRING_FIRST_PART + M4T_INPUTS_DOCSTRING_TEXT_PART + M4T_INPUTS_DOCSTRING_LAST_PART
+)
+
+M4T_SPEECH_INPUTS_DOCSTRING = (
+    M4T_INPUTS_DOCSTRING_FIRST_PART + M4T_INPUTS_DOCSTRING_SPEECH_PART + M4T_INPUTS_DOCSTRING_LAST_PART
+)
 ############ UTILS ################
 
 
@@ -2863,12 +2887,12 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
         self.text_decoder.embed_tokens = value
         self.shared = value
 
-    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #    checkpoint=_CHECKPOINT_FOR_DOC,
-    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
-    #    config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+       checkpoint=_CHECKPOINT_FOR_DOC,
+       output_type=Seq2SeqLMOutput,
+       config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2889,15 +2913,6 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        """
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -2979,14 +2994,15 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         tgt_lang (`str`, *optional*):
             The language to use as target language for translation.
-            
-        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
+
+        kwargs (*optional*):
+            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
         """
         # prepare text_decoder_input_ids
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
@@ -3091,12 +3107,12 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_decoder.embed_tokens = value
 
-    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #    checkpoint=_CHECKPOINT_FOR_DOC,
-    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
-    #    config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+       checkpoint=_CHECKPOINT_FOR_DOC,
+       output_type=Seq2SeqLMOutput,
+       config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_features: torch.LongTensor = None,
@@ -3117,15 +3133,6 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        """
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -3210,12 +3217,14 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
     def generate(self, input_features=None, tgt_lang=None, **kwargs):
         """
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
-            
+            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
+            [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+
         tgt_lang (`str`, *optional*):
             The language to use as target language for translation.
-            
-        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
+
+        kwargs (*optional*):
+            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
         """
         # prepare text_decoder_input_ids
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
@@ -3292,12 +3301,12 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
 
-    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #    checkpoint=_CHECKPOINT_FOR_DOC,
-    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
-    #    config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+       checkpoint=_CHECKPOINT_FOR_DOC,
+       output_type=Seq2SeqLMOutput,
+       config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -3317,16 +3326,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        """
-
         logger.warning(
             "This is the same forward method as `SeamlessM4TForTextToText`. It doesn't use the text-to-unit model `SeamlessM4TTextToUnitForConditionalGeneration`. If you want to generate speech, use the `.generate` method."
         )
@@ -3364,31 +3363,38 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         return_intermediate_token_ids (`bool`, *optional*):
-            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will be ignored.
-        
+            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
+            want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will
+            be ignored.
+
         tgt_lang (`str`, *optional*):
             The language to use as target language for translation.
         spkr_id (`int`, *optional*):
             The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
 
-        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword arguments are of two types:
+        kwargs (*optional*):
+            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
+            arguments are of two types:
 
-                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model, except for `decoder_input_ids` which will only be passed through the text components.
+                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
+                  except for `decoder_input_ids` which will only be passed through the text components.
                 - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
                 text model and speech model respectively. It has the priority over the keywords without a prefix.
 
-                This means you can, for example, specify a generation strategy for one generation but not for the other.
+                This means you can, for example, specify a generation strategy for one generation but not for the
+                other.
 
 
         Returns:
             `Union[SeamlessM4TGenerationOutput, Tuple[Tensor]]`:
-            - If `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`]. 
-            - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size, sequence_length)`and and `waveform_lengths` which gives the length of each sample.
+            - If `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`].
+            - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size,
+              sequence_length)`and and `waveform_lengths` which gives the length of each sample.
         """
         batch_size = len(input_ids) if input_ids is not None else len(kwargs.get("inputs_embeds"))
 
@@ -3552,12 +3558,12 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
 
-    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #    checkpoint=_CHECKPOINT_FOR_DOC,
-    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
-    #    config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+       checkpoint=_CHECKPOINT_FOR_DOC,
+       output_type=Seq2SeqLMOutput,
+       config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_features: torch.LongTensor = None,
@@ -3578,16 +3584,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        """
-
         logger.warning(
             "This is the same forward method as `SeamlessM4TForSpeechToText`. It doesn't use `self.t2u_model`. If you want to generate speech, use the `generate` method."
         )
@@ -3624,29 +3620,37 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         """
         Args:
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
-            
+            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
+            [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+
         return_intermediate_token_ids (`bool`, *optional*):
-            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will be ignored.
-        
+            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
+            want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will
+            be ignored.
+
         tgt_lang (`str`, *optional*):
             The language to use as target language for translation.
         spkr_id (`int`, *optional*):
             The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
 
-        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword arguments are of two types:
+        kwargs (*optional*):
+            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
+            arguments are of two types:
 
-                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model, except for `decoder_input_ids` which will only be passed through the text components.
+                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
+                  except for `decoder_input_ids` which will only be passed through the text components.
                 - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
                 text model and speech model respectively. It has the priority over the keywords without a prefix.
 
-                This means you can, for example, specify a generation strategy for one generation but not for the other.
+                This means you can, for example, specify a generation strategy for one generation but not for the
+                other.
 
 
         Returns:
             `Union[SeamlessM4TGenerationOutput, Tuple[Tensor]]`:
-            - If `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`]. 
-            - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size, sequence_length)`and and `waveform_lengths` which gives the length of each sample.
+            - If `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`].
+            - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size,
+              sequence_length)`and and `waveform_lengths` which gives the length of each sample.
         """
         batch_size = len(input_features) if input_features is not None else len(kwargs.get("inputs_embeds"))
 
@@ -3745,8 +3749,10 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
             t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
 
             if t2u_tgt_lang_id is None:
+                # TODO
                 raise ValueError(
-                    f"`tgt_lang={tgt_lang}` is not supported for speech generation. Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())} to generate speech, or set TODO"  # TODO
+                    f"`tgt_lang={tgt_lang}` is not supported for speech generation."
+                    "Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())} to generate speech, or set TODO"
                 )
             # + 5 for EOS/PAD/BOS/UNK token + mask token
             t2u_tgt_lang_id = (
@@ -3869,11 +3875,11 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         self.text_decoder.embed_tokens = value
         self.shared = value
 
-    @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(M4T_MODEL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-       checkpoint=_CHECKPOINT_FOR_DOC,
-       output_type=Seq2SeqLMOutput,
-       config_class=_CONFIG_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=Seq2SeqLMOutput,
+        config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
@@ -3914,7 +3920,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         # TODO: keep it or not ?
         logger.warning(
-            "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText` depending on the input modality. If you want to generate speech, use the `generate` method."
+            "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText` depending on the input modality."
+            "If you want to generate speech, use the `generate` method."
         )
 
         if input_ids is None and input_features is None and inputs_embeds is None and encoder_outputs is None:
@@ -3924,12 +3931,14 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         elif input_features is not None:
             if input_ids is not None:
                 logger.warning(
-                    "`input_ids` is not `None` but `input_features` has been given. `input_features` will be used in priority through the `speech_encoder`. Make sure that `input_features` and `input_ids` are mutually exclusive."
+                    "`input_ids` is not `None` but `input_features` has been given. `input_features` will be used in priority through the `speech_encoder`. "
+                    "Make sure that `input_features` and `input_ids` are mutually exclusive."
                 )
 
             if inputs_embeds is not None:
                 logger.warning(
-                    "`inputs_embeds` is not `None` but `input_features` has been given. `input_features` will be used in priority through `speech_encoder`. `inputs_embeds` will be ignored."
+                    "`inputs_embeds` is not `None` but `input_features` has been given. `input_features` will be used in priority through `speech_encoder`. "
+                    "`inputs_embeds` will be ignored."
                 )
 
             self.set_modality("speech")
@@ -4026,35 +4035,43 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
-            
+            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
+            [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+
         return_intermediate_token_ids (`bool`, *optional*):
-            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will be ignored.
-        
+            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
+            want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will
+            be ignored.
+
         tgt_lang (`str`, *optional*):
             The language to use as target language for translation.
         spkr_id (`int`, *optional*):
             The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
         generate_speech (`bool`, *optional*, defaults to `True`):
             If `False`, will only returns the text tokens and won't generate speech.
-        
-        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword arguments are of two types:
 
-                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model, except for `decoder_input_ids` which will only be passed through the text components.
+        kwargs (*optional*):
+            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
+            arguments are of two types:
+
+                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
+                  except for `decoder_input_ids` which will only be passed through the text components.
                 - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
                 text model and speech model respectively. It has the priority over the keywords without a prefix.
 
-                This means you can, for example, specify a generation strategy for one generation but not for the other.
+                This means you can, for example, specify a generation strategy for one generation but not for the
+                other.
 
         Returns:
             `Union[SeamlessM4TGenerationOutput, Tuple[Tensor], ModelOutput]`:
-            - If `generate_speech` and `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`]. 
-            - If `generate_speech` and not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size, sequence_length)`and and `waveform_lengths` which gives the length of each sample.
+            - If `generate_speech` and `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`].
+            - If `generate_speech` and not `return_intermediate_token_ids`, returns a tuple composed of waveforms of
+              shape `(batch_size, sequence_length)`and and `waveform_lengths` which gives the length of each sample.
             - If `generate_speech`, it will returns `ModelOutput`.
         """
         if input_ids is None and input_features is None and kwargs.get("inputs_embeds", None) is None:
@@ -4114,8 +4131,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             self.set_modality("speech")
             if input_ids is not None:
                 logger.warning(
-                    "`input_features` and `input_ids` are both non empty. `input_features` will be used in priority through the speech encoder."
-                    "Make sure `input_features=None` if you want to use the text encoder."
+                    "`input_features` and `input_ids` are both non empty. `input_features` will be used in priority "
+                    "through the speech encoder. Make sure `input_features=None` if you want to use the text encoder."
                 )
             text_generation_output = super().generate(input_features=input_features, **kwargs_text)
         else:
@@ -4183,7 +4200,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
             if t2u_tgt_lang_id is None:
                 raise ValueError(
-                    f"`tgt_lang={tgt_lang}` is not supported for speech generation. Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())} to generate speech, or set TODO"  # TODO
+                    f"""`tgt_lang={tgt_lang}` is not supported for speech generation.
+                    Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())}
+                    to generate speech, or set TODO"""  # TODO
                 )
             # + 5 for EOS/PAD/BOS/UNK token + mask token
             t2u_tgt_lang_id = (
