@@ -506,7 +506,7 @@ class MusicgenTester:
 class MusicgenStreamer(BaseStreamer):
     def __init__(
         self,
-        model: MusicgenForConditionalGeneration,
+        model: "MusicgenForConditionalGeneration",
         device: Optional[str] = None,
         play_steps: Optional[int] = 10,
         stride: Optional[int] = None,
