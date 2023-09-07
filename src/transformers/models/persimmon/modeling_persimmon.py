@@ -251,8 +251,8 @@ class PersimmonAttention(nn.Module):
         self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
         
         if self.qk_layernorm:
-            self.q_layernorm = nn.LayerNorm(config.hidden_size, elementwise_affine = True)
-            self.k_layernorm = nn.LayerNorm(config.hidden_size, elementwise_affine = True)
+            self.q_layernorm = nn.LayerNorm(config.hidden_size // self.num_heads, elementwise_affine = True)
+            self.k_layernorm = nn.LayerNorm(config.hidden_size // self.num_heads, elementwise_affine = True)
 
         self._init_rope()
 

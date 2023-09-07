@@ -36,8 +36,10 @@ except ImportError as e:
 Sample usage:
 
 ```
-python src/transformers/models/persimmon/convert_persimmon_weights_to_hf.py \
-    --input_dir /path/to/downloaded/persimmon/weights --model_size 7B --output_dir /output/path
+git clone https://github.com/persimmon-ai-labs/adept-inference
+wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_base_model_release.tar
+wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_chat_model_release.tar
+python src/transformers/models/persimmon/convert_persimmon_weights_to_hf.py  --input_dir /path/to/downloaded/persimmon/weights --output_dir /output/path
 ```
 
 Thereafter, models can be loaded via:
