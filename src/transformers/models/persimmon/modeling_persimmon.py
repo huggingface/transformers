@@ -313,20 +313,21 @@ class PersimmonAttention(nn.Module):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         
         # 3 x [batch_size, seq_length, num_heads, head_dim]
-        (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
+        (query_states, key_states, value_states) = self._split_heads(fused_qkv)
 
-        query_layer = query_layer.transpose(1, 2).reshape(bsz * self.num_heads, q_len, self.head_dim)
-        key_layer = key_layer.permute(0, 2, 3, 1).reshape(bsz * self.num_heads, self.head_dim, q_len)
-        value_layer = value_layer.transpose(1, 2).reshape(bsz * self.num_heads, q_len, self.head_dim)
-
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
-        
         if self.qk_layernorm:
             query_states = self.q_layernorm(query_states)
             key_states = self.k_layernorm(key_states)
     
+        query_states = query_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[0].shape[-2]
+
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
