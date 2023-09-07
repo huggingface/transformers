@@ -169,6 +169,33 @@ class IdeficsModelTester:
 
         return (config, input_ids, input_mask, pixel_values, image_attention_mask)
 
+    def prepare_config_and_inputs_for_image_pos_embeddings_interpolation(self):
+        self.seq_length = 42
+
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        num_images = 2 if self.add_multiple_images else 1
+        expand_image_size = 2
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                num_images,
+                self.num_channels,
+                self.image_size + expand_image_size,
+                self.image_size + expand_image_size,
+            ]
+        )
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
+
+        config = self.get_config()
+        config.vision_config.interpolate_pos_encoding = True
+
+        return (config, input_ids, input_mask, pixel_values, image_attention_mask)
+
     def get_config(self):
         return IdeficsConfig(
             image_size=self.image_size,
@@ -270,6 +297,10 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_image_pos_embeddings_interpolation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_image_pos_embeddings_interpolation()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_training(self):
