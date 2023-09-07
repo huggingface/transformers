@@ -1289,6 +1289,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             self.revin = RevIN()
         else:
             self.revin = nn.Identity()
+        config.pooling = None
 
         # Initialize weights and apply final processing
         self.post_init()
