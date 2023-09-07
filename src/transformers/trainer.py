@@ -1159,21 +1159,21 @@ class Trainer:
         except (NameError, AttributeError, TypeError):  # no dataset or length, estimate by length of dataloader
             return len(dataloader) * self.args.per_device_train_batch_size
 
-    def num_tokens(self, train_dl: DataLoader, max_steps: bool = False) -> int:
+    def num_tokens(self, train_dl: DataLoader, max_steps: Optional[int] = None) -> int:
         """
         Helper to get number of tokens in a [`~torch.utils.data.DataLoader`] by enumerating dataloader.
         """
+        train_tokens = 0 
         try:
-            train_tokens = 0
             for step, batch in enumerate(train_dl):
                 tokens = batch["input_ids"].numel()
-                if max_steps:
-                    return tokens
+                if max_steps is not None:
+                    return tokens * max_steps
                 train_tokens += tokens
             return train_tokens
         except KeyError:
             logger.warning("Cannot get num_tokens from dataloader")
-            return 0
+            return train_tokens
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """HP search setup code"""
