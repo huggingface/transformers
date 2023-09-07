@@ -156,7 +156,7 @@ class TextClassificationPipeline(Pipeline):
         result = super().__call__(*args, **kwargs)
         # TODO try and retrieve it in a nicer way from _sanitize_parameters.
         _legacy = "top_k" not in kwargs
-        if ("inputs" in kwargs or isinstance(args[0], str)) and _legacy:
+        if (len(args) > 1 and isinstance(args[0], str)) or isinstance(kwargs.get("inputs", None), str) and _legacy:
             # This pipeline is odd, and return a list when single item is run
             return [result]
         else:
