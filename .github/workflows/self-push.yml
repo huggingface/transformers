@@ -167,7 +167,7 @@ jobs:
 
   setup_amdgpu:
     name: Setup AMDGPU
-    needs: check_runners
+    needs: check_runners_amdgpu
     strategy:
       matrix:
         machine_type: [single-amdgpu]
