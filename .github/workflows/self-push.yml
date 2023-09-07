@@ -54,7 +54,6 @@ jobs:
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
-          
 
   check_runners_amdgpu:
     name: Check Runners AMDGPU
@@ -72,8 +71,8 @@ jobs:
         run: |
           rocm-smi
 
-  setup:
-    name: Setup
+  setup_gpu:
+    name: Setup CUDA
     needs: check_runners
     strategy:
       matrix:
@@ -166,9 +165,104 @@ jobs:
           echo "matrix=$keys" >> $GITHUB_OUTPUT
           echo "test_map=$test_map" >> $GITHUB_OUTPUT
 
+  setup_amdgpu:
+    name: Setup AMDGPU
+    needs: check_runners
+    strategy:
+      matrix:
+        machine_type: [single-amdgpu]
+    runs-on: [self-hosted, docker-amdgpu, '${{ matrix.machine_type }}']
+    container:
+      # --device /dev/dri/renderD128 == AMDGPU:0 (indexing for AMDGPU starts at 128 ...)
+      image: huggingface/transformers-pytorch-latest-amdgpu-push-ci  # <--- We test only for PyTorch for now
+      options: --device /dev/kfd --device /dev/dri/renderD128 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      test_map: ${{ steps.set-matrix.outputs.test_map }}
+    steps:
+      # Necessary to get the correct branch name and commit SHA for `workflow_run` event
+      # We also take into account the `push` event (we might want to test some changes in a branch)
+      - name: Prepare custom environment variables
+        shell: bash
+        # `CI_BRANCH_PUSH`: The branch name from the push event
+        # `CI_BRANCH_WORKFLOW_RUN`: The name of the branch on which this workflow is triggered by `workflow_run` event
+        # `CI_BRANCH`: The non-empty branch name from the above two (one and only one of them is empty)
+        # `CI_SHA_PUSH`: The commit SHA from the push event
+        # `CI_SHA_WORKFLOW_RUN`: The commit SHA that triggers this workflow by `workflow_run` event
+        # `CI_SHA`: The non-empty commit SHA from the above two (one and only one of them is empty)
+        run: |
+          CI_BRANCH_PUSH=${{ github.event.ref }}
+          CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
+          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
+          CI_SHA_PUSH=${{ github.event.head_commit.id }}
+          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
+          echo $CI_BRANCH_PUSH
+          echo $CI_BRANCH_WORKFLOW_RUN
+          echo $CI_SHA_PUSH
+          echo $CI_SHA_WORKFLOW_RUN
+          [[ ! -z "$CI_BRANCH_PUSH" ]] && echo "CI_BRANCH=$CI_BRANCH_PUSH" >> $GITHUB_ENV || echo "CI_BRANCH=$CI_BRANCH_WORKFLOW_RUN" >> $GITHUB_ENV
+          [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_SHA=$CI_SHA_PUSH" >> $GITHUB_ENV || echo "CI_SHA=$CI_SHA_WORKFLOW_RUN" >> $GITHUB_ENV
+
+      - name: print environment variables
+        run: |
+          echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
+          echo "env.CI_SHA = ${{ env.CI_SHA }}"
+
+      - name: Update clone using environment variables
+        working-directory: /transformers
+        run: |
+          echo "original branch = $(git branch --show-current)"
+          git fetch && git checkout ${{ env.CI_BRANCH }}
+          echo "updated branch = $(git branch --show-current)"
+          git checkout ${{ env.CI_SHA }}
+          echo "log = $(git log -n 1)"
+
+      - name: Cleanup
+        working-directory: /transformers
+        run: |
+          rm -rf tests/__pycache__
+          rm -rf tests/models/__pycache__
+          rm -rf reports
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Fetch the tests to run
+        working-directory: /transformers
+        # TODO: add `git-python` in the docker images
+        run: |
+          pip install --upgrade git-python
+          python3 utils/tests_fetcher.py --diff_with_last_commit | tee test_preparation.txt
+
+      - name: Report fetched tests
+        uses: actions/upload-artifact@v3
+        with:
+          name: test_fetched
+          path: /transformers/test_preparation.txt
+
+      - id: set-matrix
+        name: Organize tests into models
+        working-directory: /transformers
+        # The `keys` is used as GitHub actions matrix for jobs, i.e. `models/bert`, `tokenization`, `pipeline`, etc.
+        # The `test_map` is used to get the actual identified test files under each key.
+        # If no test to run (so no `test_map.json` file), create a dummy map (empty matrix will fail)
+        run: |
+          if [ -f test_map.json ]; then
+              keys=$(python3 -c 'import json; fp = open("test_map.json"); test_map = json.load(fp); fp.close(); d = list(test_map.keys()); print(d)')
+              test_map=$(python3 -c 'import json; fp = open("test_map.json"); test_map = json.load(fp); fp.close(); print(test_map)')
+          else
+              keys=$(python3 -c 'keys = ["dummy"]; print(keys)')
+              test_map=$(python3 -c 'test_map = {"dummy": []}; print(test_map)')
+          fi
+          echo $keys
+          echo $test_map
+          echo "matrix=$keys" >> $GITHUB_OUTPUT
+          echo "test_map=$test_map" >> $GITHUB_OUTPUT
+
   run_tests_single_gpu:
     name: Model tests
-    needs: setup
+    needs: setup_gpu
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
     strategy:
@@ -261,7 +355,7 @@ jobs:
 
   run_tests_single_amdgpu:
     name: Model tests
-    needs: setup
+    needs: setup_amdgpu
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
     strategy:
@@ -355,7 +449,7 @@ jobs:
 
   run_tests_multi_gpu:
     name: Model tests
-    needs: setup
+    needs: setup_gpu
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
     strategy:
@@ -450,7 +544,7 @@ jobs:
 
   run_tests_torch_cuda_extensions_single_gpu:
     name: Torch CUDA extension tests
-    needs: setup
+    needs: setup_gpu
     if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
     strategy:
       fail-fast: false
@@ -540,7 +634,7 @@ jobs:
 
   run_tests_torch_cuda_extensions_multi_gpu:
     name: Torch CUDA extension tests
-    needs: setup
+    needs: setup_gpu
     if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
     strategy:
       fail-fast: false
