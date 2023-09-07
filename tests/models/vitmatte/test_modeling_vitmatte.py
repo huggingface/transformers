@@ -18,6 +18,8 @@
 import inspect
 import unittest
 
+from huggingface_hub import hf_hub_download
+
 from transformers import VitMatteConfig
 from transformers.testing_utils import (
     require_torch,
@@ -245,16 +247,17 @@ class VitMatteModelIntegrationTest(unittest.TestCase):
         processor = VitMatteImageProcessor.from_pretrained("nielsr/vitmatte-small-composition-1k")
         model = VitMatteForImageMatting.from_pretrained("nielsr/vitmatte-small-composition-1k").to(torch_device)
 
-        import requests
-
-        # TODO add to hf-internal-testing
-        url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_rgb.png?raw=true"
-        image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-        url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_trimap.png?raw=true"
-        trimap = Image.open(requests.get(url, stream=True).raw)
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/image-matting-fixtures", filename="image.png", repo_type="dataset"
+        )
+        image = Image.open(filepath).convert("RGB")
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/image-matting-fixtures", filename="trimap.png", repo_type="dataset"
+        )
+        trimap = Image.open(filepath).convert("L")
 
         # prepare image + trimap for the model
-        inputs = processor(images=image, trimaps=trimap.convert("L"), return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, trimaps=trimap, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             alphas = model(**inputs).alphas
