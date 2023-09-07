@@ -38,7 +38,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("bark", "BarkConfig"),
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
-        ("beit-3", "Beit3Config"),
+        ("beit3", "Beit3Config"),
         ("bert", "BertConfig"),
         ("bert-generation", "BertGenerationConfig"),
         ("big_bird", "BigBirdConfig"),
