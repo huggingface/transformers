@@ -264,6 +264,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
                 ]
             )
             self.update_post_processor()
+            return
 
         self._tokenizer.normalizer = normalizers.Replace(pattern=" ", content="▁")
         pair = [self.bos_token] if self.add_bos_token and add_special_tokens else []
