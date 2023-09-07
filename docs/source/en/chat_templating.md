@@ -58,7 +58,6 @@ that string will also be tokenized for us. To see a more complex template in act
 `meta-llama/Llama-2-7b-chat-hf` model. Note that this model has gated access, so you will have to
 [request access on the repo](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf) if you want to run this code yourself:
 
-<!--- We use >> instead of >>> to make doctest skip this one, because it can't access the gated repo. -->
 ```python
 >> from transformers import AutoTokenizer
 >> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
