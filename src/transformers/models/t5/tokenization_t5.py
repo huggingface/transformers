@@ -173,7 +173,9 @@ class T5Tokenizer(PreTrainedTokenizer):
             # for legacy purpose, we keep this. Will be removed and tests updated. (when `added_tokens_decoder` is not passed as kwargs)
             self._added_tokens_decoder = {}
             for i in range(extra_ids):
-                self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = AddedToken(additional_special_tokens[i], rstrip = True, lstrip = True)
+                self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = AddedToken(
+                    additional_special_tokens[i], rstrip=True, lstrip=True
+                )
 
         elif extra_ids > 0 and additional_special_tokens is not None:
             # Check that we have the right number of extra_id special tokens
@@ -186,7 +188,9 @@ class T5Tokenizer(PreTrainedTokenizer):
                 )
             self._added_tokens_decoder = {}
             for i in range(extra_ids):
-                self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = AddedToken(additional_special_tokens[i], rstrip = True, lstrip = True)
+                self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = AddedToken(
+                    additional_special_tokens[i], rstrip=True, lstrip=True
+                )
 
         if legacy is None:
             logger.warning_once(

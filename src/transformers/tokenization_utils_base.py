@@ -2054,12 +2054,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if slow_tokenizer is not None:
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
-
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
 
         additional_special_tokens = init_kwargs.pop("additional_special_tokens", None) or []
         added_tokens_decoder = {}
-
         legacy_saved = "added_tokens_decoder" not in init_kwargs
         if not legacy_saved:
             for idx, token in init_kwargs["added_tokens_decoder"].items():
@@ -2102,7 +2100,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens if the `fast` was not properly saved!
         # thus we delay adding special tokens in the init using `slow_to_fast` flag.
-        if added_tokens_decoder is not {} and legacy_saved and "Fast" in cls.__name__:
+        if added_tokens_decoder is not {} and "Fast" in cls.__name__:
             init_kwargs["slow_to_fast"] = True
         if len(additional_special_tokens) > 0:
             init_kwargs["additional_special_tokens"] = additional_special_tokens
@@ -2121,19 +2119,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
         # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
-        if legacy_saved and "Fast" not in cls.__name__ and added_tokens_file is None:
-            tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
-            if tokenizer_file is not None:
-                tokens_to_add_from_fast = []
-                with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
-                    tokenizer_file_handle = json.load(tokenizer_file_handle)
-                    added_tokens = tokenizer_file_handle.pop("added_tokens")
-                for serialized_tokens in added_tokens:
-                    serialized_tokens.pop("id")
-                    # for legacy purpose, we ignore whether or not these tokens are special.
-                    serialized_tokens.pop("special")
-                    tokens_to_add_from_fast.append(AddedToken(**serialized_tokens))
-                tokenizer.add_tokens(tokens_to_add_from_fast)
+        if legacy_saved and "Fast" not in cls.__name__ and added_tokens_file is None and has_tokenizer_file:
+            tokens_to_add_from_fast = []
+            with open(has_tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
+                tokenizer_file_handle = json.load(tokenizer_file_handle)
+                added_tokens = tokenizer_file_handle.pop("added_tokens")
+            for serialized_tokens in added_tokens:
+                serialized_tokens.pop("id")
+                # for legacy purpose, we ignore whether or not these tokens are special.
+                serialized_tokens.pop("special")
+                tokens_to_add_from_fast.append(AddedToken(**serialized_tokens))
+            tokenizer.add_tokens(tokens_to_add_from_fast)
 
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
         # uses the information stored in `added_tokens_decoder`. Checks after addition that we have the same ids
