@@ -56,14 +56,7 @@ come in several checkpoints they each contain a part of each weight of the model
 """
 
 # ! need to git clone their repo to have the tool_use folder
-
-import torch
 import flatdict
-
-# model_state_dict_chat = torch.load("/home/arthur_huggingface_co/adept-inference/weights/8b_chat_model_release/iter_0001251/mp_rank_00/model_optim_rng.pt", map_location="cpu")
-# config_chat = model_state_dict_chat["args"].__dict__
-model_state_dict_base = torch.load("/home/arthur_huggingface_co/adept-inference/weights/8b_base_model_release/iter_0375000/mp_rank_00/model_optim_rng.pt", map_location="cpu")
-config_base = model_state_dict_base["args"].__dict__
 
 KEYS_TO_MODIFY_MAPPING = {
     "self_attention": "self_attn",
@@ -72,11 +65,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "embedding": "embed_tokens",
 }
 
-# TO REMOVE: 
-keys_to_remove = "rotary_emb.inv_freq"
-
-new_dict = flatdict.FlatDict(model_state_dict_base["model"], '.')
-out_state_dict = {}
+KEYS_TO_REMOVE = "rotary_emb.inv_freq"
 
 def rename_state_dict(state_dict):
     model_state_dict = {}
@@ -84,21 +73,23 @@ def rename_state_dict(state_dict):
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
-        if keys_to_remove in key:
+        if KEYS_TO_REMOVE in key:
             continue
         model_state_dict[key] = value
     return model_state_dict
-    
-    
-def convert_persimmon_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path, enable_fusion=False):
-    model_state_dict_base = torch.load(checkpoint_path, map_location="cpu")
+
+def convert_persimmon_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path, safe_serialization=False):
+    import sys
+    sys.path.insert(0, ada_lib_path)
+    model_state_dict_base = torch.load(pt_model_path, map_location="cpu")
     state_dict = flatdict.FlatDict(model_state_dict_base["model"], '.')
     state_dict = rename_state_dict(state_dict)
     
     transformers_config = PersimmonConfig()
-    model = PersimmonModelForCausalLM(transformers_config).to(torch.bfloat16)
-    model.save_pretrained(pytorch_dump_folder_path)
+    model = PersimmonForCausalLM(transformers_config).to(torch.bfloat16)
+    model.save_pretrained(pytorch_dump_folder_path, safe_serialization = safe_serialization)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -107,7 +98,15 @@ def main():
         help="Location of Persimmon weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
+        "--pt_model_path",
+        help="Location of Persimmon `model_optim_rng.pt`",
+    )
+    parser.add_argument(
         "--output_dir",
+        help="Location to write HF model and tokenizer",
+    )
+    parser.add_argument(
+        "--ada_lib_path",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
@@ -115,11 +114,10 @@ def main():
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
 
     convert_persimmon_checkpoint(
-        model_path=args.output_dir,
-        input_base_path=args.input_dir,
-        model_size=args.model_size,
+        pytorch_dump_folder_path=args.output_dir,
+        pt_model_path=args.pt_model_path,
         safe_serialization=args.safe_serialization,
-        tokenizer_path=spm_path,
+        ada_lib_path=args.ada_lib_path
     )
     tokenizer = LlamaTokenizer(spm_path, bos_token = "|ENDOFTEXT", eos_token = None)
     tokenizer.save_pretrained(args.output_dir)
