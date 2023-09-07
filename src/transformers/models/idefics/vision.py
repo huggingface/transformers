@@ -61,7 +61,6 @@ class IdeficsVisionModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Idefics
 class IdeficsVisionEmbeddings(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
