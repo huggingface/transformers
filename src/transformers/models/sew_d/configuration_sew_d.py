@@ -72,6 +72,8 @@ class SEWDConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"`, `"gelu_python"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
+            Not used.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
