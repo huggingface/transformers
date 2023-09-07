@@ -767,8 +767,9 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
         images: Optional[torch.FloatTensor] = None,
-        IMAGE_TOKEN_INDEX = 200
-        DEFAULT_IMAGE_TOKEN = "<image>"
+        IGNORE_INDEX=-100,
+        IMAGE_TOKEN_INDEX = 200,
+        DEFAULT_IMAGE_TOKEN = "<image>",
     ):
         if images is None or input_ids.shape[1] == 1:
             if past_key_values is not None and images is not None and input_ids.shape[1] == 1:
