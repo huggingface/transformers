@@ -1,3 +1,20 @@
+# coding=utf-8
+# Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" PyTorch BEiT3 model."""
+
+
 import copy
 import math
 from dataclasses import dataclass
@@ -20,8 +37,6 @@ from transformers.models.beit3.configuration_beit3 import Beit3Config
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging
 
 
-EVAL_CAPACITY_TOKEN_FRACTION = 0.25
-SAMPLE_FRACTION = 0.2
 logger = logging.get_logger(__name__)
 
 BEIT3_START_DOCSTRING = r"""
@@ -1111,7 +1126,7 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
-class Biet3ImageTextMatchingModelOutput(ModelOutput):
+class Beit3ImageTextMatchingModelOutput(ModelOutput):
     """
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
     last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
@@ -1156,7 +1171,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         padding_mask=None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[Any], Biet3ImageTextMatchingModelOutput]:
+    ) -> Union[Tuple[Any], Beit3ImageTextMatchingModelOutput]:
         outputs = self.beit3(
             input_ids=None,
             pixel_values=pixel_values,
@@ -1194,4 +1209,4 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
                 else outputs
             )
 
-        return Biet3ImageTextMatchingModelOutput(similarity, text_out, vision_out)
+        return Beit3ImageTextMatchingModelOutput(similarity, text_out, vision_out)
