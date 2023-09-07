@@ -71,7 +71,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     ```python
     >>> from transformers import SeamlessM4TTokenizer
 
-    >>> tokenizer = SeamlessM4TTokenizer.from_pretrained("ylacombe/hf-seamless-m4t-medium", src_lang="eng", tgt_lang="fra")
+    >>> tokenizer = SeamlessM4TTokenizer.from_pretrained(
+    ...     "ylacombe/hf-seamless-m4t-medium", src_lang="eng", tgt_lang="fra"
+    ... )
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_french = "Le chef de l'ONU affirme qu'il n'y a pas de solution militaire en Syrie."
     >>> inputs = tokenizer(example_english_phrase, text_target=expected_translation_french, return_tensors="pt")
@@ -81,7 +83,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             Path to the vocabulary file.
         language_code (`List[str]`, *optional*):
-            List of languages that will be supported by the tokenizer. If non-specified, it will defaults to the languages supported by the [large version of Meta's seamless-M4T](https://huggingface.co/facebook/seamless-m4t-large).
+            List of languages that will be supported by the tokenizer. If non-specified, it will defaults to the
+            languages supported by the [large version of Meta's
+            seamless-M4T](https://huggingface.co/facebook/seamless-m4t-large).
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -208,7 +212,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
         language_code.extend(["<MINED_DATA>", "<MMT_BT_DATA>", "<SMT_BT_DATA>"])
-        
+
         self._additional_special_tokens = language_code  # list(self.fairseq_tokens_to_ids.keys())
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
@@ -321,9 +325,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
             src_lang (`str`, *optional*):
-                A string representing the source language. If not specified, the last `src_lang` specified (either during initialization or when calling this tokenizer) will be used.
+                A string representing the source language. If not specified, the last `src_lang` specified (either
+                during initialization or when calling this tokenizer) will be used.
             tgt_lang (`str`, *optional*):
-                A string representing the target language. If not specified, the last `tgt_lang` specified (either during initialization or when calling this tokenizer) will be used.
+                A string representing the target language. If not specified, the last `tgt_lang` specified (either
+                during initialization or when calling this tokenizer) will be used.
             kwargs (*optional*):
                 Remaining dictionary of keyword arguments that will be passed to [`PreTrainedTokenizer.__call__`].
         """
@@ -420,12 +426,12 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.create_token_type_ids_from_sequences with nllb -> seamless-M4T
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. seamless-M4T does not
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. nllb does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:

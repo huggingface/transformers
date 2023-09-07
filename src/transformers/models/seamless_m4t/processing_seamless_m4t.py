@@ -64,10 +64,14 @@ class SeamlessM4TProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            src_lang (`str`, *optional*): The language code of the input texts/audios. If not specified, the last `src_lang` specified will be used.
-            tgt_lang (`str`, *optional*): The code of the target language. If not specified, the last `tgt_lang` specified will be used.
+            src_lang (`str`, *optional*):
+                The language code of the input texts/audios. If not specified, the last `src_lang` specified will be
+                used.
+            tgt_lang (`str`, *optional*):
+                The code of the target language. If not specified, the last `tgt_lang` specified will be used.
             kwargs (*optional*):
-                Remaining dictionary of keyword arguments that will be passed to the feature extractor and/or the tokenizer.
+                Remaining dictionary of keyword arguments that will be passed to the feature extractor and/or the
+                tokenizer.
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 

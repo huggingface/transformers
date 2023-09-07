@@ -49,7 +49,8 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding vectors.
         stride (`int`, defaults to 2):
-            Stride used to reshape audios from shape (batch_size,num_frames,num_mel_bins) to  (batch_size,num_frames//stride,num_mel_bins*stride).
+            Stride used to reshape audios from shape (batch_size,num_frames,num_mel_bins) to
+            (batch_size,num_frames//stride,num_mel_bins*stride).
         src_lang (`str`, *optional*, defaults to `"eng"`):
             The language to use as source language for translation.
         tgt_lang (`str`, *optional*, defaults to `"fra"`):
@@ -185,9 +186,11 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
                 improve the performance of the model.
             tgt_lang (`str`, *optional*):
-                The language to use as target language for translation. If not specified, the last `tgt_lang` specified (either during initialization or when calling the feature extractor) will be used.
+                The language to use as target language for translation. If not specified, the last `tgt_lang` specified
+                (either during initialization or when calling the feature extractor) will be used.
             kwargs (*optional*):
-                Remaining dictionary of keyword arguments that will be passed to the tokenizer or the feature extractor.
+                Remaining dictionary of keyword arguments that will be passed to the tokenizer or the feature
+                extractor.
         """
         self.tgt_lang = self.tgt_lang if tgt_lang is None else tgt_lang
 

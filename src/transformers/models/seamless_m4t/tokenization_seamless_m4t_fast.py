@@ -77,7 +77,9 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         vocab_file (`str`):
             Path to the vocabulary file.
         language_code (`List[str]`, *optional*):
-            List of languages that will be supported by the tokenizer. If non-specified, it will defaults to the languages supported by the [large version of Meta's seamless-M4T](https://huggingface.co/facebook/seamless-m4t-large).
+            List of languages that will be supported by the tokenizer. If non-specified, it will defaults to the
+            languages supported by the [large version of Meta's
+            seamless-M4T](https://huggingface.co/facebook/seamless-m4t-large).
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -370,9 +372,11 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
             src_lang (`str`, *optional*):
-                A string representing the source language. If not specified, the last `src_lang` specified (either during initialization or when calling this tokenizer) will be used.
+                A string representing the source language. If not specified, the last `src_lang` specified (either
+                during initialization or when calling this tokenizer) will be used.
             tgt_lang (`str`, *optional*):
-                A string representing the target language. If not specified, the last `tgt_lang` specified (either during initialization or when calling this tokenizer) will be used.
+                A string representing the target language. If not specified, the last `tgt_lang` specified (either
+                during initialization or when calling this tokenizer) will be used.
             kwargs (*optional*):
                 Remaining dictionary of keyword arguments that will be passed to [`PreTrainedTokenizerFast.__call__`].
         """
