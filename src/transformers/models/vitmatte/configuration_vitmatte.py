@@ -45,9 +45,9 @@ class VitMatteConfig(PretrainedConfig):
             The number of input channels of the decoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        convstream_out (`List[int]`, *optional*, defaults to `[48, 96, 192]`):
+        convstream_hidden_sizes (`List[int]`, *optional*, defaults to `[48, 96, 192]`):
             The output channels of the ConvStream module.
-        fusion_out (`List[int]`, *optional*, defaults to `[256, 128, 64, 32]`):
+        fusion_hidden_sizes (`List[int]`, *optional*, defaults to `[256, 128, 64, 32]`):
             The output channels of the Fusion blocks.
 
     Example:
@@ -71,8 +71,8 @@ class VitMatteConfig(PretrainedConfig):
         backbone_config=None,
         hidden_size=384,
         initializer_range=0.02,
-        convstream_out=[48, 96, 192],
-        fusion_out=[256, 128, 64, 32],
+        convstream_hidden_sizes=[48, 96, 192],
+        fusion_hidden_sizes=[256, 128, 64, 32],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -88,8 +88,8 @@ class VitMatteConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
-        self.convstream_out = convstream_out
-        self.fusion_out = fusion_out
+        self.convstream_hidden_sizes = convstream_hidden_sizes
+        self.fusion_hidden_sizes = fusion_hidden_sizes
 
     def to_dict(self):
         """

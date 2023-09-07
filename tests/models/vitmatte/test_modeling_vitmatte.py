@@ -171,7 +171,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="UperNet does not support input and output embeddings")
+    @unittest.skip(reason="ViTMatte does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 

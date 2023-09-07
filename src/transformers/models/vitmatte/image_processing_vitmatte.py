@@ -85,6 +85,14 @@ class VitMatteImageProcessor(BaseImageProcessor):
         self.size_divisibility = size_divisibility
 
     def pad(self, images: np.ndarray, size_divisibility: int = 32):
+        """
+        Args:
+            images (`np.ndarray`):
+                Images to pad.
+            size_divisibility (`int`, *optional*, defaults to 32):
+                The width and height of the image will be padded to be divisible by this number.
+        """
+
         batch_size, height, width, num_channels = images.shape
 
         if height % size_divisibility != 0 or width % size_divisibility != 0:

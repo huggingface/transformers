@@ -22,7 +22,12 @@ from torch import nn
 
 from ... import AutoBackbone
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_vitmatte import VitMatteConfig
 
@@ -31,6 +36,10 @@ VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "hustvl/vitmatte-small-composition-1k",
     # See all VitMatte models at https://huggingface.co/models?filter=vitmatte
 ]
+
+
+# General docstring
+_CONFIG_FOR_DOC = "VitMatteConfig"
 
 
 @dataclass
@@ -87,15 +96,16 @@ class VitMatteBasicConv3x3(nn.Module):
     Basic convolution layers including: Conv3x3, BatchNorm2d, ReLU layers.
     """
 
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        stride=2,
-        padding=1,
-    ):
+    def __init__(self, in_channels, out_channels, stride=2, padding=1):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, 3, stride, padding, bias=False)
+        self.conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=stride,
+            padding=padding,
+            bias=False,
+        )
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(True)
 
@@ -179,17 +189,19 @@ class VitMatteDetailCaptureModule(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        if len(config.fusion_out) != len(config.convstream_out) + 1:
-            raise ValueError("The length of fusion_out should be equal to the length of convstream_out + 1.")
+        if len(config.fusion_hidden_sizes) != len(config.convstream_hidden_sizes) + 1:
+            raise ValueError(
+                "The length of fusion_hidden_sizes should be equal to the length of convstream_hidden_sizes + 1."
+            )
 
         self.config = config
         self.convstream = VitMatteConvStream(
-            in_channels=config.backbone_config.num_channels, out_channels=config.convstream_out
+            in_channels=config.backbone_config.num_channels, out_channels=config.convstream_hidden_sizes
         )
         self.conv_chans = self.convstream.conv_chans
 
         self.fusion_blocks = nn.ModuleList()
-        self.fusion_channels = config.fusion_out.copy()
+        self.fusion_channels = config.fusion_hidden_sizes.copy()
         self.fusion_channels.insert(0, config.hidden_size)
         for i in range(len(self.fusion_channels) - 1):
             self.fusion_blocks.append(
@@ -199,7 +211,7 @@ class VitMatteDetailCaptureModule(nn.Module):
                 )
             )
 
-        self.matting_head = VitMatteHead(in_channels=config.fusion_out[-1])
+        self.matting_head = VitMatteHead(in_channels=config.fusion_hidden_sizes[-1])
 
     def forward(self, features, pixel_values):
         detail_features = self.convstream(pixel_values)
@@ -212,6 +224,36 @@ class VitMatteDetailCaptureModule(nn.Module):
         return phas
 
 
+VITMATTE_START_DOCSTRING = r"""
+    Parameters:
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+        config ([`UperNetConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+VITMATTE_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`SegformerImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers in case the backbone has them. See
+            `attentions` under returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers of the backbone. See `hidden_states` under
+            returned tensors for more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    """ViTMatte framework leveraging any vision backbone e.g. for ADE20k, CityScapes.""",
+    VITMATTE_START_DOCSTRING,
+)
 class VitMatteForImageMatting(VitMattePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -223,6 +265,8 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(VITMATTE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=ImageMattingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -232,6 +276,9 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         """
+        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth image matting for computing the loss.
+
         Returns:
 
         Examples:
