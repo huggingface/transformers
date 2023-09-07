@@ -873,7 +873,6 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
     def test_whole_model(self):
         model = SeamlessM4TModel.from_pretrained(self.repo_id).to(torch_device)
 
-
         # test text - tgt lang: eng
 
         # fmt: off
