@@ -2546,7 +2546,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.warning(
                 "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
                 "`quantization_config` attribute and has already quantized weights. However, loading attributes"
-                " (e.g. disable_exllama, use_cuda_fp16) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+                " (e.g. disable_exllama, use_cuda_fp16, max_input_length) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
             )
         if (
             quantization_method_from_args == QuantizationMethod.GPTQ
@@ -2556,7 +2556,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise RuntimeError("GPU is required to quantize or run quantize model.")
             elif not (is_optimum_available() and is_auto_gptq_available()):
                 raise ImportError(
-                    "Loading GPTQ quantized model requires optimum library : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
+                    "Loading a GPTQ quantized model requires optimum (`pip install optimum`) and auto-gptq library (`pip install auto-gptq`)"
+                )
+            elif version.parse(importlib.metadata.version("auto_gptq")) < version.parse("0.4.2"):
+                raise ImportError(
+                    "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq`"
                 )
             else:
                 # Need to protect the import
