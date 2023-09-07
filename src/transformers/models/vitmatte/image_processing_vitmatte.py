@@ -19,7 +19,7 @@ from typing import List, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import to_channel_dimension_format
+from ...image_transforms import pad, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -86,31 +86,46 @@ class VitMatteImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.size_divisibility = size_divisibility
 
-    def pad_images(
+    def pad_image(
         self,
-        images: np.ndarray,
+        image: np.ndarray,
         size_divisibility: int = 32,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """
         Args:
-            images (`np.ndarray`):
-                Images to pad.
+            image (`np.ndarray`):
+                Image to pad.
             size_divisibility (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to be divisible by this number.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
 
-        batch_size, height, width, num_channels = images.shape
+        height, width, _ = image.shape if ChannelDimension.LAST else image.shape[1:]
 
         if height % size_divisibility != 0 or width % size_divisibility != 0:
-            new_height = (size_divisibility - height % size_divisibility) + height
-            new_width = (size_divisibility - width % size_divisibility) + width
-            new_images = np.zeros((batch_size, new_height, new_width, num_channels))
-            new_images[:, :, :height, :width] = images[:, :, :, :]
-            del images
-            images = new_images
+            pad_height = size_divisibility - height % size_divisibility
+            pad_width = size_divisibility - width % size_divisibility
+            padding = (pad_height, pad_width)
+            image = pad(image, padding=padding, data_format=data_format, input_data_format=input_data_format)
 
-        return images
+        if data_format is not None:
+            image = to_channel_dimension_format(image, data_format, input_data_format)
+
+        return image
 
     def preprocess(
         self,
@@ -195,6 +210,9 @@ class VitMatteImageProcessor(BaseImageProcessor):
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
+        if do_pad and size_divisibility is None:
+            raise ValueError("Size divisilibyt must be specified if do_pad is True.")
+
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
@@ -234,9 +252,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
         ]
 
         if do_pad:
-            images = self.pad_images(
-                np.array(images), size_divisibility=size_divisibility, input_data_format=input_data_format
-            )
+            images = [
+                self.pad_image(image, size_divisibility=size_divisibility, input_data_format=input_data_format)
+                for image in images
+            ]
 
         images = [
             to_channel_dimension_format(image=image, channel_dim=data_format, input_channel_dim=input_data_format)
