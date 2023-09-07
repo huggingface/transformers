@@ -137,11 +137,11 @@ class VitMatteConvStream(nn.Module):
             self.convs.append(VitMatteBasicConv3x3(in_chan_, out_chan_))
 
     def forward(self, pixel_values):
-        out_dict = {"D0": pixel_values}
+        out_dict = {"detailed_feature_map_0": pixel_values}
         embeddings = pixel_values
         for i in range(len(self.convs)):
             embeddings = self.convs[i](embeddings)
-            name_ = "D" + str(i + 1)
+            name_ = "detailed_feature_map_" + str(i + 1)
             out_dict[name_] = embeddings
 
         return out_dict
@@ -156,9 +156,9 @@ class VitMatteFusionBlock(nn.Module):
         super().__init__()
         self.conv = VitMatteBasicConv3x3(in_channels, out_channels, stride=1, padding=1)
 
-    def forward(self, features, D):
+    def forward(self, features, detailed_feature_map):
         upscaled_features = nn.functional.interpolate(features, scale_factor=2, mode="bilinear", align_corners=False)
-        out = torch.cat([D, upscaled_features], dim=1)
+        out = torch.cat([detailed_feature_map, upscaled_features], dim=1)
         out = self.conv(out)
 
         return out
@@ -219,8 +219,8 @@ class VitMatteDetailCaptureModule(nn.Module):
     def forward(self, features, pixel_values):
         detail_features = self.convstream(pixel_values)
         for i in range(len(self.fusion_blocks)):
-            d_name_ = "D" + str(len(self.fusion_blocks) - i - 1)
-            features = self.fusion_blocks[i](features, detail_features[d_name_])
+            detailed_feature_map_name = "detailed_feature_map_" + str(len(self.fusion_blocks) - i - 1)
+            features = self.fusion_blocks[i](features, detail_features[detailed_feature_map_name])
 
         phas = torch.sigmoid(self.matting_head(features))
 
