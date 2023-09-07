@@ -206,8 +206,7 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
         timeout = kwargs.pop("timeout", None)
         n_jobs = kwargs.pop("n_jobs", 1)
         directions = kwargs.pop("directions", None)
-        if directions is not None:
-            direction = None
+        direction = None if directions is not None else direction
         study = optuna.create_study(direction=direction, directions=directions, **kwargs)
         study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
         if not study._is_multi_objective():
