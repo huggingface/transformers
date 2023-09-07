@@ -55,8 +55,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+            Whether or not the model should return the last key/values attentions (not used by all models).
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model text encoder and decoder might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
@@ -74,7 +73,10 @@ class SeamlessM4TConfig(PretrainedConfig):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer text decoder.
         decoder_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer text decoder.
-
+        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the attention and fully connected layers for each encoder layer.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the attention and fully connected layers for each decoder layer.
 
 
         speech_encoder_layers (`int`, *optional*, defaults to 12):
@@ -160,7 +162,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.0,
-        init_std=0.02,
         decoder_start_token_id=3,
         scale_embedding=True,
         max_new_tokens=256,
@@ -172,18 +173,13 @@ class SeamlessM4TConfig(PretrainedConfig):
         speech_encoder_dropout=0.0,
         add_adapter=True,
         layerdrop=0.1,
-        conv_dim=(512, 512, 512, 512, 512, 512, 160),
-        conv_stride=(5, 2, 2, 2, 2, 2, 2),
-        conv_kernel=(10, 3, 3, 3, 3, 2, 2),
-        conv_bias=False,
+        feature_projection_input_dim=160,
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
         adaptor_kernel_size=8,
         adaptor_stride=8,
-        adaptor_layer_norm=True,
         adaptor_dropout=0.1,
         num_adapter_layers=1,
-        output_hidden_size=None,
         position_embeddings_type="relative",
         rotary_embedding_base=10000,
         max_source_positions=4096,
@@ -201,7 +197,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_decoder_ffn_dim=8192,
         t2u_decoder_attention_heads=16,
         t2u_num_langs=38,
-        hidden_act="gelu",
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
@@ -251,7 +246,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.init_std = init_std
         self.scale_embedding = scale_embedding
 
         # speech_encoder
@@ -260,18 +254,13 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.speech_encoder_dropout = speech_encoder_dropout
         self.speech_encoder_attention_heads = speech_encoder_attention_heads
 
-        self.conv_dim = list(conv_dim)
-        self.conv_stride = list(conv_stride)
-        self.conv_kernel = list(conv_kernel)
-        self.conv_bias = conv_bias
+        self.feature_projection_input_dim = feature_projection_input_dim
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
         self.adaptor_kernel_size = adaptor_kernel_size
         self.adaptor_stride = adaptor_stride
-        self.adaptor_layer_norm = adaptor_layer_norm
         self.adaptor_dropout = adaptor_dropout
         self.num_adapter_layers = num_adapter_layers
-        self.output_hidden_size = output_hidden_size
         self.position_embeddings_type = position_embeddings_type
         self.rotary_embedding_base = rotary_embedding_base
         self.max_source_positions = max_source_positions
@@ -284,7 +273,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_eos_token_id = t2u_eos_token_id
         self.t2u_decoder_start_token_id = t2u_decoder_start_token_id
         self.t2u_max_new_tokens = t2u_max_new_tokens
-        self.hidden_act = hidden_act
         self.t2u_num_langs = t2u_num_langs
         # self.type_vocab_size = type_vocab_size
         self.t2u_encoder_layers = t2u_encoder_layers

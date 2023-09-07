@@ -468,11 +468,10 @@ class SeamlessM4TConformerSamePadLayer(nn.Module):
 
 
 class SeamlessM4TConformerFeatureProjection(nn.Module):
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection.__init__ with feat_proj_dropout->speech_encoder_dropout
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
-        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.feature_projection_input_dim, eps=config.layer_norm_eps)
+        self.projection = nn.Linear(config.feature_projection_input_dim, config.hidden_size)
         self.dropout = nn.Dropout(config.speech_encoder_dropout)
 
     def forward(self, hidden_states):
