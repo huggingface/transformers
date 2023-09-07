@@ -114,12 +114,12 @@ class VitMatteImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
-        height, width, _ = image.shape if ChannelDimension.LAST else image.shape[1:]
+        height, width = image.shape[:2] if input_data_format == ChannelDimension.LAST else image.shape[1:]
 
         if height % size_divisibility != 0 or width % size_divisibility != 0:
             pad_height = size_divisibility - height % size_divisibility
             pad_width = size_divisibility - width % size_divisibility
-            padding = (pad_height, pad_width)
+            padding = ((0, pad_height), (0, pad_width))
             image = pad(image, padding=padding, data_format=data_format, input_data_format=input_data_format)
 
         if data_format is not None:

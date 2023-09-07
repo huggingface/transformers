@@ -16,6 +16,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -35,21 +37,24 @@ class VitMatteImageProcessingTester(unittest.TestCase):
         image_size=18,
         min_resolution=30,
         max_resolution=400,
-        do_resize=True,
-        size=None,
+        do_rescale=True,
+        rescale_factor=0.5,
+        do_pad=True,
+        size_divisibility=10,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
-        size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
+        self.do_pad = do_pad
+        self.size_divisibility = size_divisibility
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -59,8 +64,8 @@ class VitMatteImageProcessingTester(unittest.TestCase):
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
+            "do_rescale": self.do_rescale,
+            "rescale_factor": self.rescale_factor,
         }
 
     def expected_output_image_shape(self, images):
@@ -95,12 +100,13 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
         self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
+        self.assertTrue(hasattr(image_processing, "do_rescale"))
+        self.assertTrue(hasattr(image_processing, "rescale_factor"))
+        self.assertTrue(hasattr(image_processing, "do_pad"))
+        self.assertTrue(hasattr(image_processing, "size_divisibility"))
 
-    def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+    def test_padding(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image = np.random.randn(3, 249, 491)
+        images = image_processing.pad_image(image)
+        assert images.shape == (3, 256, 512)

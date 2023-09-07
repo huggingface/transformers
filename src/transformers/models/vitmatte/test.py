@@ -1,8 +1,8 @@
-import numpy as np
+import requests
+from PIL import Image
+
 from transformers import VitMatteImageProcessor
 
-from PIL import Image
-import requests
 
 url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_rgb.png?raw=true"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
@@ -17,4 +17,3 @@ processor = VitMatteImageProcessor()
 pixel_values = processor(images=image, trimaps=trimap, return_tensors="pt").pixel_values
 
 print(pixel_values.shape)
-
