@@ -264,11 +264,11 @@ jobs:
     name: Model tests
     needs: setup_gpu
     # `dummy` means there is no test to run
-    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
+    if: contains(fromJson(needs.setup_gpu.outputs.matrix), 'dummy') != true
     strategy:
       fail-fast: false
       matrix:
-        folders: ${{ fromJson(needs.setup.outputs.matrix) }}
+        folders: ${{ fromJson(needs.setup_gpu.outputs.matrix) }}
         machine_type: [single-gpu]
     runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
     container:
@@ -317,7 +317,7 @@ jobs:
         # set the artifact folder names (because the character `/` is not allowed).
         run: |
           echo "${{ matrix.folders }}"
-          echo "${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}"
+          echo "${{ fromJson(needs.setup_gpu.outputs.test_map)[matrix.folders] }}"
           matrix_folders=${{ matrix.folders }}
           matrix_folders=${matrix_folders/'models/'/'models_'}
           echo "$matrix_folders"
@@ -339,7 +339,7 @@ jobs:
       - name: Run all non-slow selected tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup_gpu.outputs.test_map)[matrix.folders] }}
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -357,11 +357,11 @@ jobs:
     name: Model tests
     needs: setup_amdgpu
     # `dummy` means there is no test to run
-    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
+    if: contains(fromJson(needs.setup_amdgpu.outputs.matrix), 'dummy') != true
     strategy:
       fail-fast: false
       matrix:
-        folders: ${{ fromJson(needs.setup.outputs.matrix) }}
+        folders: ${{ fromJson(needs.setup_amdgpu.outputs.matrix) }}
         machine_type: [ single-amdgpu ]
     runs-on: [ self-hosted, docker-amdgpu, '${{ matrix.machine_type }}' ]
     container:
@@ -411,7 +411,7 @@ jobs:
         # set the artifact folder names (because the character `/` is not allowed).
         run: |
           echo "${{ matrix.folders }}"
-          echo "${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}"
+          echo "${{ fromJson(needs.setup_amdgpu.outputs.test_map)[matrix.folders] }}"
           matrix_folders=${{ matrix.folders }}
           matrix_folders=${matrix_folders/'models/'/'models_'}
           echo "$matrix_folders"
@@ -433,7 +433,7 @@ jobs:
       - name: Run all non-slow selected tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup_amdgpu.outputs.test_map)[matrix.folders] }}
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -451,11 +451,11 @@ jobs:
     name: Model tests
     needs: setup_gpu
     # `dummy` means there is no test to run
-    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
+    if: contains(fromJson(needs.setup_gpu.outputs.matrix), 'dummy') != true
     strategy:
       fail-fast: false
       matrix:
-        folders: ${{ fromJson(needs.setup.outputs.matrix) }}
+        folders: ${{ fromJson(needs.setup_gpu.outputs.matrix) }}
         machine_type: [multi-gpu]
     runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
     container:
@@ -504,7 +504,7 @@ jobs:
         # set the artifact folder names (because the character `/` is not allowed).
         run: |
           echo "${{ matrix.folders }}"
-          echo "${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}"
+          echo "${{ fromJson(needs.setup_gpu.outputs.test_map)[matrix.folders] }}"
           matrix_folders=${{ matrix.folders }}
           matrix_folders=${matrix_folders/'models/'/'models_'}
           echo "$matrix_folders"
@@ -528,7 +528,7 @@ jobs:
           MKL_SERVICE_FORCE_INTEL: 1
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup_gpu.outputs.test_map)[matrix.folders] }}
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -545,7 +545,7 @@ jobs:
   run_tests_torch_cuda_extensions_single_gpu:
     name: Torch CUDA extension tests
     needs: setup_gpu
-    if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
+    if: contains(fromJson(needs.setup_gpu.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup_gpu.outputs.matrix), 'extended')
     strategy:
       fail-fast: false
       matrix:
@@ -635,7 +635,7 @@ jobs:
   run_tests_torch_cuda_extensions_multi_gpu:
     name: Torch CUDA extension tests
     needs: setup_gpu
-    if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
+    if: contains(fromJson(needs.setup_gpu.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup_gpu.outputs.matrix), 'extended')
     strategy:
       fail-fast: false
       matrix:
@@ -729,7 +729,7 @@ jobs:
     needs: [
         check_runner_status,
         check_runners,
-        setup,
+        setup_gpu,
         run_tests_single_gpu,
         run_tests_multi_gpu,
         run_tests_torch_cuda_extensions_single_gpu,
@@ -741,7 +741,7 @@ jobs:
         # For the meaning of these environment variables, see the job `Setup`
         run: |
           echo "Runner availability: ${{ needs.check_runner_status.result }}"
-          echo "Setup status: ${{ needs.setup.result }}"
+          echo "Setup status: ${{ needs.setup_gpu.result }}"
           echo "Runner status: ${{ needs.check_runners.result }}"
 
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
@@ -797,11 +797,11 @@ jobs:
           CI_SHA: ${{ env.CI_SHA }}
           RUNNER_STATUS: ${{ needs.check_runner_status.result }}
           RUNNER_ENV_STATUS: ${{ needs.check_runners.result }}
-          SETUP_STATUS: ${{ needs.setup.result }}
+          SETUP_STATUS: ${{ needs.setup_gpu.result }}
 
-        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+        # We pass `needs.setup_gpu.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           pip install slack_sdk
           pip show slack_sdk
-          python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
+          python utils/notification_service.py "${{ needs.setup_gpu.outputs.matrix }}"
