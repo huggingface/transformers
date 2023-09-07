@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-While individual tasks can be tackled by fine-tuning specialized models (see Task Guides docs), an alternative approach 
+While individual tasks can be tackled by fine-tuning specialized models, an alternative approach 
 that has recently emerged and gained popularity is to use large models for a diverse set of tasks without fine-tuning. 
 For instance, large language models can handle such NLP tasks as summarization, translation, classification, and more. 
 This approach is no longer limited to a single modality, such as text, and in this guide, we will illustrate how you can 
@@ -71,7 +71,7 @@ Let's start by loading the model's 9 billion parameters checkpoint:
 >>> checkpoint = "HuggingFaceM4/idefics-9b"
 ```
 
-Just like for other Transformers models, you need to lead a processor and the model itself from the checkpoint. 
+Just like for other Transformers models, you need to load a processor and the model itself from the checkpoint. 
 The IDEFICS processor wraps a LLama tokenizer and IDEFICS image processor into a single processor to take care of 
 preparing text and image inputs for the model.
 
@@ -243,13 +243,13 @@ Instruction: Provide an answer to the question. Use the image to answer.
 ## Image classification
 
 IDEFICS is capable of classifying images into different categories without being explicitly trained on data containing 
-labeled examples from those specific categories. Given a list of categories and using its image and test understanding 
+labeled examples from those specific categories. Given a list of categories and using its image and text understanding 
 capabilities, the model can infer which category the image likely belongs to. 
 
 Say, we have this image of a vegetable stand: 
 
 <div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-classification.jpg" alt="Image of a couple having a picnic"/>
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-classification.jpg" alt="Image of a vegetable stand"/>
 </div>
 
 Photo by [Peter Wendt](https://unsplash.com/@peterwendt).
@@ -279,7 +279,7 @@ useful to create descriptions of products, ads, descriptions of a scene, etc.
 Let's prompt IDEFICS to write a story based on a simple image of a red door: 
 
 <div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-story-generation.jpg" alt="Image of a couple having a picnic"/>
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-story-generation.jpg" alt="Image of a red door with a pumpkin on the steps"/>
 </div>
 
 Photo by [Craig Tidball](https://unsplash.com/@devonshiremedia).
@@ -314,12 +314,13 @@ He was wearing a long black coat and a top hat.
 The little girl ran
 ```
 
-Looks like IDEFICS noticed a pumpkin on the doorstesp and went with a spooky Halloween story.
+Looks like IDEFICS noticed the pumpkin on the doorstep and went with a spooky Halloween story about a ghost.
 
 <Tip>
 
-For longer outputs like this, you will greatly benefit from learning different text generation strategies that will help 
-you improve the quality of the generated output. Take a look at the [Text generation strategies doc](../generation_strategies.md) 
+For longer outputs like this, you will greatly benefit from tweaking the text generation strategy. This can help 
+you significantly improve the quality of the generated output. Check out the [Text generation strategies doc](../generation_strategies.md) 
+to learn more. 
 </Tip>
 
 ## Running inference in batch mode
