@@ -122,8 +122,12 @@ class VitMatteConvStream(nn.Module):
     Simple ConvStream containing a series of basic conv3x3 layers to extract detail features.
     """
 
-    def __init__(self, in_channels=4, out_channels=[48, 96, 192]):
+    def __init__(self, config):
         super().__init__()
+
+        in_channels = config.backbone_config.num_channels
+        out_channels = config.convstream_hidden_sizes
+
         self.convs = nn.ModuleList()
 
         self.conv_chans = out_channels.copy()
@@ -167,8 +171,11 @@ class VitMatteHead(nn.Module):
     Simple Matting Head, containing only conv3x3 and conv1x1 layers.
     """
 
-    def __init__(self, in_channels=32, mid_channels=16):
+    def __init__(self, config, mid_channels=16):
         super().__init__()
+
+        in_channels = config.fusion_hidden_sizes[-1]
+
         self.matting_convs = nn.Sequential(
             nn.Conv2d(in_channels, mid_channels, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(mid_channels),
@@ -195,9 +202,7 @@ class VitMatteDetailCaptureModule(nn.Module):
             )
 
         self.config = config
-        self.convstream = VitMatteConvStream(
-            in_channels=config.backbone_config.num_channels, out_channels=config.convstream_hidden_sizes
-        )
+        self.convstream = VitMatteConvStream(config)
         self.conv_chans = self.convstream.conv_chans
 
         self.fusion_blocks = nn.ModuleList()
@@ -211,7 +216,7 @@ class VitMatteDetailCaptureModule(nn.Module):
                 )
             )
 
-        self.matting_head = VitMatteHead(in_channels=config.fusion_hidden_sizes[-1])
+        self.matting_head = VitMatteHead(config)
 
     def forward(self, features, pixel_values):
         detail_features = self.convstream(pixel_values)
