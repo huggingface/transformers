@@ -1658,22 +1658,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.
-            tokenize (`bool`, *optional*):
+            tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
-            padding (`bool`, *optional*):
-                Whether to pad sequences to the maximum length.
-            truncation (`bool`, *optional*):
-                Whether to truncate sequences at the maximum length.
+            padding (`bool`, defaults to `False`):
+                Whether to pad sequences to the maximum length. Has no effect if tokenize is `False`.
+            truncation (`bool`, defaults to `False`):
+                Whether to truncate sequences at the maximum length. Has no effect if tokenize is `False`.
             max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
+                Maximum length (in tokens) to use for padding or truncation. Has no effect if tokenize is `False`. If
+                not specified, the tokenizer's `max_length` attribute will be used as a default.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
+                values are:
+                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
-
 
         Returns:
             `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
@@ -1697,13 +1698,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = self.default_chat_template
 
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+        # Compilation is probably quick, but maybe we should consider caching compiled templates
         compiled_template = jinja_env.from_string(chat_template)
         rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
 
         if padding is True:
-            padding = "max_length"
-        if truncation is True:
-            truncation = "max_length"
+            padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
         if tokenize:
             return self.encode(
                 rendered,
