@@ -25,6 +25,8 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -84,7 +86,12 @@ class VitMatteImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.size_divisibility = size_divisibility
 
-    def pad(self, images: np.ndarray, size_divisibility: int = 32):
+    def pad_images(
+        self,
+        images: np.ndarray,
+        size_divisibility: int = 32,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
         """
         Args:
             images (`np.ndarray`):
@@ -118,6 +125,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
         size_divisibility: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ):
         """
@@ -125,7 +133,8 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             trimaps (`ImageInput`):
                 Trimap to preprocess.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
@@ -154,6 +163,12 @@ class VitMatteImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -180,16 +195,38 @@ class VitMatteImageProcessor(BaseImageProcessor):
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
+        if do_normalize and (image_mean is None or image_std is None):
+            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
         trimaps = [to_numpy_array(trimap) for trimap in trimaps]
 
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
-            trimaps = [self.rescale(image=trimap, scale=rescale_factor) for trimap in trimaps]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
+            trimaps = [
+                self.rescale(image=trimap, scale=rescale_factor, input_data_format=input_data_format)
+                for trimap in trimaps
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
         # concatenate images and trimaps
         images = [
@@ -197,10 +234,12 @@ class VitMatteImageProcessor(BaseImageProcessor):
         ]
 
         if do_pad:
-            images = self.pad(np.array(images), size_divisibility=size_divisibility)
+            images = self.pad_images(
+                np.array(images), size_divisibility=size_divisibility, input_data_format=input_data_format
+            )
 
         images = [
-            to_channel_dimension_format(image=image, channel_dim=data_format, input_channel_dim=ChannelDimension.LAST)
+            to_channel_dimension_format(image=image, channel_dim=data_format, input_channel_dim=input_data_format)
             for image in images
         ]
 
