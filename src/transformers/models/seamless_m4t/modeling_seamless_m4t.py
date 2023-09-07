@@ -2377,9 +2377,12 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    # @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    # @add_end_docstrings(MBART_GENERATION_EXAMPLE)
+    @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+       checkpoint=_CHECKPOINT_FOR_DOC,
+       output_type=Seq2SeqLMOutput,
+       config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
