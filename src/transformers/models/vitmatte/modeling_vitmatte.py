@@ -106,15 +106,15 @@ class VitMatteBasicConv3x3(nn.Module):
             padding=padding,
             bias=False,
         )
-        self.bn = nn.BatchNorm2d(out_channels)
+        self.batch_norm = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(True)
 
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.bn(x)
-        x = self.relu(x)
+    def forward(self, hidden_state):
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.batch_norm(hidden_state)
+        hidden_state = self.relu(hidden_state)
 
-        return x
+        return hidden_state
 
 
 class VitMatteConvStream(nn.Module):
@@ -170,10 +170,10 @@ class VitMatteHead(nn.Module):
     def __init__(self, in_channels=32, mid_channels=16):
         super().__init__()
         self.matting_convs = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, 3, 1, 1),
+            nn.Conv2d(in_channels, mid_channels, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(mid_channels),
             nn.ReLU(True),
-            nn.Conv2d(mid_channels, 1, 1, 1, 0),
+            nn.Conv2d(mid_channels, 1, kernel_size=1, stride=1, padding=0),
         )
 
     def forward(self, hidden_state):

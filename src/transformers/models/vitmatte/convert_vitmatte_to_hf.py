@@ -85,6 +85,8 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
             key = key.replace("attn", "attention")
         if "fusion_blks" in key:
             key = key.replace("fusion_blks", "fusion_blocks")
+        if "bn" in key:
+            key = key.replace("bn", "batch_norm")
         state_dict[key] = val
 
     # rename keys
