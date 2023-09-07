@@ -2383,11 +2383,6 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
         self.model.decoder.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2894,11 +2889,6 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
         self.shared = value
 
     @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -3115,11 +3105,6 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
         self.text_decoder.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
         self,
         input_features: torch.LongTensor = None,
@@ -3310,11 +3295,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         self.vocoder = SeamlessM4TCodeHifiGan(config)
 
     @add_start_docstrings_to_model_forward(M4T_TEXT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -3572,11 +3552,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         self.vocoder = SeamlessM4TCodeHifiGan(config)
 
     @add_start_docstrings_to_model_forward(M4T_SPEECH_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
         self,
         input_features: torch.LongTensor = None,
@@ -3891,11 +3866,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         self.shared = value
 
     @add_start_docstrings_to_model_forward(M4T_MODEL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
