@@ -65,45 +65,30 @@ FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class FastViTEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
+    Construct the patch embeddings. Optionally, also the mask token.
     """
 
     def __init__(self, config: FastViTConfig, use_mask_token: bool = False) -> None:
         super().__init__()
 
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_sizes[0])) if use_mask_token else None
         self.patch_embeddings = FastViTPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
+        interpolate_pos_encoding: bool = False
     ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
+
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-
-        if bool_masked_pos is not None:
-            seq_length = embeddings.shape[1]
-            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-            # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
-
         embeddings = self.dropout(embeddings)
+
         return embeddings
 
 
 class FastViTPatchEmbeddings(nn.Module):
     """
     Construction of the Stem Block, following paper structure here <https://arxiv.org/abs/2303.14189>.
-
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-
     """
     def __init__(self, config: FastViTConfig) -> None:
         super().__init__()
@@ -118,6 +103,7 @@ class FastViTPatchEmbeddings(nn.Module):
         self.num_channels = num_channels
         self.num_patches = num_patches
         self.inference_mode = config.inference_mode
+        self.config = config
 
         self.projection_first_conv = FastViTConvLayer(
             in_channels=num_channels, 
@@ -143,7 +129,7 @@ class FastViTPatchEmbeddings(nn.Module):
             padding=0,
             groups=1,
             inference_mode = self.inference_mode)
-        self.config = config
+
     def forward(self,
         pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool = False
@@ -455,7 +441,7 @@ class FastViTSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+        self, hidden_states, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -475,10 +461,6 @@ class FastViTSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
         context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -491,6 +473,11 @@ class FastViTSelfAttention(nn.Module):
 
 
 class FastViTRepMixer(nn.Module):
+    """
+    Part of Metaformer block with RepMixer as token mixer, uses structural 
+    reparameterization to lower the memory access cost by removing skip-connections in the network.
+    For more info: `MetaFormer Is Actually What You Need for Vision <https://arxiv.org/pdf/2111.11418.pdf>`_
+    """
     def __init__(self, config: FastViTConfig, stage: str) -> None:
         super().__init__()
         dimension = config.hidden_sizes[stage]
@@ -892,8 +879,6 @@ class FastViTLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         if self.position_embeddings:
             hidden_states = self.position_embeddings(hidden_states)
@@ -917,7 +902,6 @@ class FastViTEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -928,8 +912,6 @@ class FastViTEncoder(nn.Module):
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
 
@@ -942,11 +924,9 @@ class FastViTEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
-                    # layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(hidden_states)
-                # layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs
 
@@ -1036,7 +1016,7 @@ FASTVIT_INPUTS_DOCSTRING = r"""
     FASTVIT_START_DOCSTRING,
 )
 class FastViTModel(FastViTPreTrainedModel):
-    def __init__(self, config: FastViTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: FastViTConfig):
         super().__init__(config)
         self.config = config
 
@@ -1069,8 +1049,6 @@ class FastViTModel(FastViTPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
@@ -1089,26 +1067,17 @@ class FastViTModel(FastViTPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        # head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers) 
-        # TODO: Temporal comment, might add for segmentation
-
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
         expected_dtype = self.embeddings.patch_embeddings.projection_first_conv.rbr_scale[0].weight.dtype
         if pixel_values.dtype != expected_dtype:
             pixel_values = pixel_values.to(expected_dtype)
 
         embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
+            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
         )
         
         encoder_outputs = self.encoder(
             embedding_output,
-            head_mask=None, # Should be modified when segmentation allowed
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1124,125 +1093,6 @@ class FastViTModel(FastViTPreTrainedModel):
             pooler_output=None,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """FastViT Model with a decoder on top for masked image modeling
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
-    """,
-    FASTVIT_START_DOCSTRING,
-)
-# Copied from transformers.models.vit.modeling_vit.ViTForMaskedImageModeling with VIT->FASTVIT,ViT->FastViT,vit->fastvit,google/vit-base-patch16-224-in21k->apple/fastvit-t8
-class FastViTForMaskedImageModeling(FastViTPreTrainedModel):
-    def __init__(self, config: FastViTConfig) -> None:
-        super().__init__(config)
-
-        self.fastvit = FastViTModel(config, add_pooling_layer=False, use_mask_token=True)
-
-        self.decoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=config.encoder_stride**2 * config.num_channels,
-                kernel_size=1,
-            ),
-            nn.PixelShuffle(config.encoder_stride),
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(FASTVIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedImageModelingOutput]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
-
-        Examples:
-        ```python
-        >>> from transformers import AutoImageProcessor, FastViTForMaskedImageModeling
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("apple/fastvit-t8")
-        >>> model = FastViTForMaskedImageModeling.from_pretrained("apple/fastvit-t8")
-
-        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
-        >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
-
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
-        >>> list(reconstructed_pixel_values.shape)
-        [1, 3, 224, 224]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.fastvit(
-            pixel_values,
-            bool_masked_pos=bool_masked_pos,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        # Reshape to (batch_size, num_channels, height, width)
-        sequence_output = sequence_output[:, 1:]
-        batch_size, sequence_length, num_channels = sequence_output.shape
-        height = width = math.floor(sequence_length**0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-
-        # Reconstruct pixel values
-        reconstructed_pixel_values = self.decoder(sequence_output)
-
-        masked_im_loss = None
-        if bool_masked_pos is not None:
-            size = self.config.image_size // self.config.patch_size
-            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
-            mask = (
-                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
-                .repeat_interleave(self.config.patch_size, 2)
-                .unsqueeze(1)
-                .contiguous()
-            )
-            reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
-            masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
-
-        if not return_dict:
-            output = (reconstructed_pixel_values,) + outputs[1:]
-            return ((masked_im_loss,) + output) if masked_im_loss is not None else output
-
-        return MaskedImageModelingOutput(
-            loss=masked_im_loss,
-            reconstruction=reconstructed_pixel_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
 
@@ -1267,7 +1117,7 @@ class FastViTForImageClassification(FastViTPreTrainedModel):
 
         self.num_labels = config.num_labels
         self.inference_mode = config.inference_mode
-        self.fastvit = FastViTModel(config, add_pooling_layer=False)
+        self.fastvit = FastViTModel(config)
 
         # Classifier head
         hidden_size = config.hidden_sizes[-1]
@@ -1298,7 +1148,6 @@ class FastViTForImageClassification(FastViTPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1315,7 +1164,6 @@ class FastViTForImageClassification(FastViTPreTrainedModel):
 
         outputs = self.fastvit(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
