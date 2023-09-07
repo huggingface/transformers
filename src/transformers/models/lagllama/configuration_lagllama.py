@@ -110,6 +110,7 @@ class LagLlamaConfig(PretrainedConfig):
         input_size: int = 1,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
         scaling: str = "mean",
+        num_parallel_samples: int = 100,
         hidden_size=256,
         intermediate_size=128,
         num_hidden_layers=4,
@@ -129,6 +130,7 @@ class LagLlamaConfig(PretrainedConfig):
         self.loss = loss
         self.input_size = input_size
         self.scaling = scaling
+        self.num_parallel_samples = num_parallel_samples
         self.lags_sequence = lags_sequence
         self.max_position_embeddings = max_context_length
         self.hidden_size = hidden_size

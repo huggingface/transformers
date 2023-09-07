@@ -1206,6 +1206,24 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             )
         return reordered_past
 
+    @torch.no_grad()
+    def generate(
+        self,
+        past_values: torch.Tensor,
+        **model_kwargs,
+    ):
+        # prepare model inputs
+        model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+
+        outputs = self(past_values=past_values, use_cache=True)
+        loc = outputs.loc
+        scale = outputs.scale
+
+        repeated_past_values = past_values.repeat_interleave(self.config.num_parallel_samples, 0)
+
+        # greedy decoding
+        for k in range(self.config.prediction_length):
+            pass
 
 @add_start_docstrings(
     """
