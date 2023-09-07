@@ -111,7 +111,7 @@ class PersimmonConfig(PretrainedConfig):
         self,
         vocab_size=262144,
         hidden_size=4096,
-        intermediate_size=11008, # 16384
+        intermediate_size=16384,
         num_hidden_layers=36,
         num_attention_heads=64,
         num_key_value_heads=64,
