@@ -66,7 +66,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     >>> from transformers import SeamlessM4TTokenizerFast
 
     >>> tokenizer = SeamlessM4TTokenizerFast.from_pretrained(
-    ...     "facebook/nllb-200-distilled-600M", src_lang="eng", tgt_lang="fra"
+    ...     "ylacombe/hf-seamless-m4t-medium", src_lang="eng", tgt_lang="fra"
     ... )
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_french = "Le chef de l'ONU affirme qu'il n'y a pas de solution militaire en Syrie."
@@ -76,6 +76,8 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        language_code (`List[str]`, *optional*):
+            List of languages that will be supported by the tokenizer. If non-specified, it will defaults to the languages supported by the [large version of Meta's seamless-M4T](https://huggingface.co/facebook/seamless-m4t-large).
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -113,10 +115,12 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             modeling. This is the token which the model will try to predict.
         tokenizer_file (`str`, *optional*):
             The path to a tokenizer file to use instead of the vocab file.
-        src_lang (`str`, *optional*):
+        src_lang (`str`, *optional*, defaults to `"eng"`):
             The language to use as source language for translation.
-        tgt_lang (`str`, *optional*):
+        tgt_lang (`str`, *optional*, defaults to `"fra"`):
             The language to use as target language for translation.
+        additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
+            A tuple or a list of additional special tokens.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -221,6 +225,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -246,6 +251,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast._build_translation_inputs
     def _build_translation_inputs(
         self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
     ):
@@ -258,6 +264,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast.prepare_seq2seq_batch with "fra_Latn"->"fra", "eng_Latn"->"eng"
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -270,9 +277,11 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         self.tgt_lang = tgt_lang
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast._switch_to_input_mode
     def _switch_to_input_mode(self):
         return self.set_src_lang_special_tokens(self.src_lang)
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast._switch_to_target_mode
     def _switch_to_target_mode(self):
         return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
@@ -312,6 +321,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
         )
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
@@ -340,6 +350,32 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         tgt_lang: Optional[str] = None,
         **kwargs,
     ):
+        """
+        Args:
+            text (Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]], *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence must be a string.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                 index) among:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the sequence to a multiple of the provided value.
+
+                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                `>= 7.5` (Volta).
+            src_lang (`str`, *optional*):
+                A string representing the source language.
+            tgt_lang (`str`, *optional*):
+                A string representing the target language.
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to [`PreTrainedTokenizerFast.__call__`].
+        """
         if src_lang is not None:
             self.src_leng = src_lang
         if tgt_lang is not None:

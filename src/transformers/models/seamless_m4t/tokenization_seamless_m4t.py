@@ -45,7 +45,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "repo/id": 2048,
+    "ylacombe/hf-seamless-m4t-medium": 2048,
 }
 
 # fmt: off
@@ -53,7 +53,6 @@ LARGE_SEAMLESS_M4T_LANGUAGE_CODES = ["afr","amh","arb","ary","arz","asm","azj","
 # fmt: on
 
 
-# TODO: change repo/id -> repo id
 # TODO: add language code to docstrings
 
 
@@ -72,7 +71,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     ```python
     >>> from transformers import SeamlessM4TTokenizer
 
-    >>> tokenizer = SeamlessM4TTokenizer.from_pretrained("repo/id", src_lang="eng", tgt_lang="fra")
+    >>> tokenizer = SeamlessM4TTokenizer.from_pretrained("ylacombe/hf-seamless-m4t-medium", src_lang="eng", tgt_lang="fra")
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_french = "Le chef de l'ONU affirme qu'il n'y a pas de solution militaire en Syrie."
     >>> inputs = tokenizer(example_english_phrase, text_target=expected_translation_french, return_tensors="pt")
@@ -81,6 +80,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        language_code (`List[str]`, *optional*):
+            List of languages that will be supported by the tokenizer. If non-specified, it will defaults to the languages supported by the [large version of Meta's seamless-M4T](https://huggingface.co/facebook/seamless-m4t-large).
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -118,12 +119,14 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         tokenizer_file (`str`, *optional*):
             The path to a tokenizer file to use instead of the vocab file.
-        src_lang (`str`, *optional*):
+        src_lang (`str`, *optional*, defaults to `"eng"`):
             The language to use as source language for translation.
-        tgt_lang (`str`, *optional*):
+        tgt_lang (`str`, *optional*, defaults to `"fra"`):
             The language to use as target language for translation.
-        sp_model_kwargs (`Dict[str, str]`):
+        sp_model_kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments to pass to the model initialization.
+        additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
+            A tuple or a list of additional special tokens.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -144,6 +147,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        mask_token="<mask>",
         tokenizer_file=None,
         src_lang="eng",
         tgt_lang="fra",
@@ -204,9 +208,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
         language_code.extend(["<MINED_DATA>", "<MMT_BT_DATA>", "<SMT_BT_DATA>"])
-        # language_code = []
-        # TODO: missing bos and everythin
-
+        
         self._additional_special_tokens = language_code  # list(self.fairseq_tokens_to_ids.keys())
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
@@ -299,6 +301,32 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         tgt_lang: Optional[str] = None,
         **kwargs,
     ):
+        """
+        Args:
+            text (Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]], *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence must be a string.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                 index) among:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the sequence to a multiple of the provided value.
+
+                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                `>= 7.5` (Volta).
+            src_lang (`str`, *optional*):
+                A string representing the source language.
+            tgt_lang (`str`, *optional*):
+                A string representing the target language.
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to [`PreTrainedTokenizer.__call__`].
+        """
         if src_lang is not None:
             self.src_leng = src_lang
         if tgt_lang is not None:
@@ -392,12 +420,12 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.create_token_type_ids_from_sequences
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.create_token_type_ids_from_sequences with nllb -> seamless-M4T
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. nllb does not
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. seamless-M4T does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
