@@ -26,7 +26,8 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_llava import LlamaConfig,LlavaConfig
+from .configuration_llava import LlamaConfig,LlavaConfig,LlavaLlamaConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -582,7 +583,6 @@ class LlamaModel(LlamaPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mm_projector = nn.Linear(config.mm_hidden_size, config.hidden_size)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -746,11 +746,12 @@ class LlamaModel(LlamaPreTrainedModel):
 
 
 class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
-    config_class = LlamaConfig
+    config_class = LlavaLlamaConfig
 
     def __init__(self, config):
         super().__init__(config)
         self.model = LlamaModel(config)
+        self.model.mm_projector = nn.Linear(config.mm_hidden_size, config.hidden_size)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -993,3 +994,4 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
+

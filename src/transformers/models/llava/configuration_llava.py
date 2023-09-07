@@ -17,6 +17,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from typing import Optional, Union
+import os
 
 logger = logging.get_logger(__name__)
 
@@ -175,6 +176,24 @@ class LlamaConfig(PretrainedConfig):
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the qformer config dict if we are loading from InstructBlipConfig
+        if config_dict.get("model_type") == "llavallama":
+            config_dict = config_dict["llama_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+
 class LlavaConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
@@ -310,3 +329,114 @@ class LlavaConfig(PretrainedConfig):
         #self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         super().__init__(**kwargs)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the qformer config dict if we are loading from InstructBlipConfig
+        if config_dict.get("model_type") == "llavallama":
+            config_dict = config_dict["llava_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+
+
+class LlavaLlamaConfig(PretrainedConfig):
+    r"""
+    [`InstructBlipConfig`] is the configuration class to store the configuration of a
+    [`InstructBlipForConditionalGeneration`]. It is used to instantiate a InstructBLIP model according to the specified
+    arguments, defining the vision model, Q-Former model and language model configs. Instantiating a configuration with
+    the defaults will yield a similar configuration to that of the InstructBLIP
+    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`InstructBlipVisionConfig`].
+        qformer_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`InstructBlipQFormerConfig`].
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
+        num_query_tokens (`int`, *optional*, defaults to 32):
+            The number of query tokens passed through the Transformer.
+
+        kwargs (*optional*):
+            Dictionary of keyword arguments.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     InstructBlipVisionConfig,
+    ...     InstructBlipQFormerConfig,
+    ...     OPTConfig,
+    ...     InstructBlipConfig,
+    ...     InstructBlipForConditionalGeneration,
+    ... )
+
+    >>> # Initializing a InstructBlipConfig with Salesforce/instruct-blip-flan-t5 style configuration
+    >>> configuration = InstructBlipConfig()
+
+    >>> # Initializing a InstructBlipForConditionalGeneration (with random weights) from the Salesforce/instruct-blip-flan-t5 style configuration
+    >>> model = InstructBlipForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a InstructBlipConfig from a InstructBlipVisionConfig, InstructBlipQFormerConfig and any PretrainedConfig
+
+    >>> # Initializing InstructBLIP vision, InstructBLIP Q-Former and language model configurations
+    >>> vision_config = InstructBlipVisionConfig()
+    >>> qformer_config = InstructBlipQFormerConfig()
+    >>> text_config = OPTConfig()
+
+    >>> config = InstructBlipConfig.from_text_vision_configs(vision_config, qformer_config, text_config)
+    ```"""
+
+    model_type = "llavallama"
+
+    def __init__(self, llama_config=None, llava_config=None,  **kwargs):
+        super().__init__(**kwargs)
+
+        if llama_config is None:
+            llama_config = {}
+            logger.info("vision_config is None. initializing the InstructBlipVisionConfig with default values.")
+
+        if llava_config is None:
+            llava_config = {}
+            logger.info("qformer_config is None. Initializing the InstructBlipQFormerConfig with default values.")
+
+
+        self.llama_config = LlamaConfig(**llama_config)
+        self.llava_config = LlavaConfig(**llava_config)
+
+    @classmethod
+    def from_llava_llama_configs(
+        cls,
+        llama_config: LlamaConfig,
+        llava_config: LlavaConfig,
+        **kwargs,
+    ):
+        r"""
+        Instantiate a [`InstructBlipConfig`] (or a derived class) from a InstructBLIP vision model, Q-Former and
+        language model configurations.
+
+        Returns:
+            [`InstructBlipConfig`]: An instance of a configuration object
+        """
+
+        return cls(
+            llama_config=llama_config.to_dict(),
+            llava_config=llava_config.to_dict(),
+            **kwargs,
+        )

@@ -29,32 +29,21 @@ Checkout all HF friendly Llava models [here](https://huggingface.co/models?searc
 
 Tips:
 
-- Weights for the Llama2 models can be obtained by filling out [this form](https://ai.meta.com/resources/models-and-libraries/llama-downloads/)
+- Weights for the Llava models can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-7B-hf/tree/main)
 - The architecture is very similar to the first Llama, with the addition of Grouped Query Attention (GQA) following this [paper](https://arxiv.org/pdf/2305.13245.pdf)
-- Setting `config.pretraining_tp` to a value different than 1 will activate the more accurate but slower computation of the linear layers, which should better match the original logits.
-- The original model uses `pad_id = -1` which means that there is no padding token. We can't have the same logic, make sure to add a padding token using `tokenizer.add_special_tokens({"pad_token":"<pad>"})` and resize the token embedding accordingly. You should also set the `model.config.pad_token_id`. The `embed_tokens` layer of the model is initialized with `self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.config.padding_idx)`, which makes sure that encoding the padding token will output zeros, so passing it when initializing is recommended.
-- After filling out the form and gaining access to the model checkpoints, you should be able to use the already converted checkpoints. Otherwise, if you are converting your own model, feel free to use the [conversion script](https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/convert_llama_weights_to_hf.py). The script can be called with the following (example) command:
-
-```bash
-python src/transformers/models/llama/convert_llama_weights_to_hf.py \
-    --input_dir /path/to/downloaded/llama/weights --model_size 7B --output_dir /output/path
-```
-
-- After conversion, the model and tokenizer can be loaded via:
 
 ```python
-from transformers import LlamaForCausalLM, LlamaTokenizer
+from transformers import LlavaLlamaForCausalLM, LlamaProcessor
 
-tokenizer = LlamaTokenizer.from_pretrained("/output/path")
-model = LlamaForCausalLM.from_pretrained("/output/path")
+processor = LlamaProcessor.from_pretrained("shauray/Llava-Llama-2-7B-hf")
+model = LlavaLlamaForCausalLM.from_pretrained("shauray/Llava-Llama-2-7B-hf")
 ```
 
 Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
-come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 75B model, it's thus 145GB of RAM needed.
+come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 13B model, it's thus 26GB of RAM needed.
 
-- The LLaMA tokenizer is a BPE model based on [sentencepiece](https://github.com/google/sentencepiece). One quirk of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string.
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) with contributions from [Lysandre Debut](https://huggingface.co/lysandre). The code of the implementation in Hugging Face is based on GPT-NeoX [here](https://github.com/EleutherAI/gpt-neox). The original code of the authors can be found [here](https://github.com/facebookresearch/llama).
+This model was contributed by [Shauray Singh](https://huggingface.co/shauray) The original code of the authors can be found [here](https://github.com/haotian-liu/LLaVA).
 
 
 ## LlavaConfig
@@ -62,8 +51,11 @@ This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) wi
 [[autodoc]] LlavaConfig
 
 
-## LlamaForCausalLM
+## LlavaLlamaForCausalLM
 
 [[autodoc]] LlavaLlamaForCausalLM
     - forward
 
+## LlavaProcessor
+
+[[autodoc]] LlavaProcessor

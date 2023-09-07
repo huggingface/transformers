@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlavaConfig"],
+    "configuration_llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlavaConfig","LlavaLlamaConfig"],
     "processing_llava": ["LlavaProcessor"],
 }
 
@@ -39,7 +39,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_llava import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig
+    from .configuration_llava import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig, LlavaLlamaConfig
 
 
     try:
