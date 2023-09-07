@@ -388,7 +388,6 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     base_model_prefix = "model"
     module_class: nn.Module = None
 
-    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__init__ with GPTNeo->Llama
     def __init__(
         self,
         config: LlamaConfig,
