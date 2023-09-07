@@ -440,7 +440,6 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
-    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__call__ with GPTNeo->Llama
     def __call__(
         self,
         input_ids,
