@@ -23,24 +23,10 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
+    "configuration_llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlavaConfig"],
+    "processing_llava": ["LlavaProcessor"],
 }
 
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_llama"] = ["LlamaTokenizer"]
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_llama_fast"] = ["LlamaTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -48,32 +34,13 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_llama"] = [
-        "LlamaForCausalLM",
-        "LlamaModel",
-        "LlamaPreTrainedModel",
-        "LlamaForSequenceClassification",
+    _import_structure["modeling_llava"] = [
+        "LlavaLlamaForCausalLM",
     ]
 
-
 if TYPE_CHECKING:
-    from .configuration_llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
+    from .configuration_llava import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig
 
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_llama import LlamaTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_llama_fast import LlamaTokenizerFast
 
     try:
         if not is_torch_available():
@@ -81,7 +48,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .modeling_llava import LlavaLlamaForCausalLM
 
 
 else:

@@ -31,8 +31,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_llama import LlamaConfig,LlavaConfig
-
+from .configuration_llava import LlamaConfig,LlavaConfig
 
 logger = logging.get_logger(__name__)
 
@@ -762,25 +761,20 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         self.model = LlamaModel(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        
+
         # Initialize weights and apply final processing
         self.post_init()
-    
+
     def get_model(self):
         return self.model
-        
+
     def prepare_inputs_labels_for_multimodal(
         self, input_ids, attention_mask, past_key_values, labels, images
     ):
-        CONTROLLER_HEART_BEAT_EXPIRATION = 30
-        WORKER_HEART_BEAT_INTERVAL = 15
-        LOGDIR = "."
-        IGNORE_INDEX = -100
-        IMAGE_TOKEN_INDEX = -200
+      
+        IMAGE_TOKEN_INDEX = 200
         DEFAULT_IMAGE_TOKEN = "<image>"
-        DEFAULT_IMAGE_PATCH_TOKEN = "<im_patch>"
-        DEFAULT_IM_START_TOKEN = "<im_start>"
-        DEFAULT_IM_END_TOKEN = "<im_end>"
+      
         if images is None or input_ids.shape[1] == 1:
             if past_key_values is not None and images is not None and input_ids.shape[1] == 1:
                 attention_mask = torch.ones((attention_mask.shape[0], past_key_values[-1][-1].shape[-2] + 1), dtype=attention_mask.dtype, device=attention_mask.device)
@@ -789,15 +783,17 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         new_input_embeds = []
         new_labels = [] if labels is not None else None
         cur_image_idx = 0
-        
+        image_features = self.model.mm_projector(images)
         for batch_idx, cur_input_ids in enumerate(input_ids):
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
                 # multimodal LLM, but the current sample is not multimodal
                 cur_input_embeds = self.get_model().embed_tokens(cur_input_ids)
                 dummy_feature = torch.zeros(1, self.config.mm_hidden_size, device="cuda", dtype=torch.float16)
-                cur_input_embeds = cur_input_embeds + (0. * self.model.mm_projector(dummy_feature)).sum()
+                inter = self.model.mm_projector(dummy_feature)
+                cur_input_embeds = cur_input_embeds + (0. * inter).sum()
+
                 new_input_embeds.append(cur_input_embeds)
-                
+
                 if labels is not None:
                     new_labels.append(labels[batch_idx])
                 cur_image_idx += 1
@@ -809,7 +805,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
                 cur_new_labels = []
                 assert cur_labels.shape == cur_input_ids.shape
             while image_token_indices.numel() > 0:
-                cur_image_features = images[cur_image_idx]
+                cur_image_features = image_features[cur_image_idx]
                 image_token_start = image_token_indices[0]
                 if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):
                     cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids[:image_token_start-1]).detach())
@@ -933,7 +929,6 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(input_ids, attention_mask, past_key_values, labels, pixel_values)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -997,5 +992,3 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
-
-

@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LLaMA model configuration"""
+""" LLaVA model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -25,7 +25,7 @@ from typing import Optional, Union
 
 logger = logging.get_logger(__name__)
 
-LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class LlamaConfig(PretrainedConfig):
@@ -252,7 +252,7 @@ class LlavaConfig(PretrainedConfig):
     ```
     """
 
-    model_type = "Llava"
+    model_type = "llava"
     attribute_map = {
         "num_attention_heads": "n_heads",
         "hidden_size": "d_model",
@@ -281,7 +281,6 @@ class LlavaConfig(PretrainedConfig):
         norm_type:str = "low_precision_layernorm",
         resid_pdrop:int = 0,
         sep_image_conv_front:bool = False,
-        tokenizer_name:str = "sam-mosaic/gpt-neox-20b-chatml",
         torch_dtype:str = "float16",
         tune_mm_mlp_adapter:bool = False,
         use_cache:bool = True,
@@ -313,6 +312,6 @@ class LlavaConfig(PretrainedConfig):
         self.verbose = verbose
         self.embedding_fraction = embedding_fraction
         self.norm_type = norm_type
-        self.layer_norm_epsilon = layer_norm_epsilon
+        #self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         super().__init__(**kwargs)

@@ -54,7 +54,7 @@ class LlavaProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, List[TextInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -78,12 +78,8 @@ class LlavaProcessor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
         """
         # Model Constants
-        IGNORE_INDEX = -100
         IMAGE_TOKEN_INDEX = 200
         DEFAULT_IMAGE_TOKEN = "<image>"
-        DEFAULT_IMAGE_PATCH_TOKEN = "<im_patch>"
-        DEFAULT_IM_START_TOKEN = "<im_start>"
-        DEFAULT_IM_END_TOKEN = "<im_end>"
 
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
@@ -92,7 +88,6 @@ class LlavaProcessor(ProcessorMixin):
         encoding = BatchFeature()
         dummy = {}
         if text is not None:
-            print(self.tokenizer)
             prompt_chunks = [self.tokenizer(
                 chunk,
                 add_special_tokens=add_special_tokens,
