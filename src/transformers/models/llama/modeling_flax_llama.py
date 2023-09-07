@@ -420,7 +420,6 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.init_cache with GPTNeo->Llama
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
