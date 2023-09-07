@@ -56,8 +56,6 @@ come in several checkpoints they each contain a part of each weight of the model
 """
 
 # ! need to git clone their repo to have the tool_use folder
-
-import torch
 import flatdict
 
 KEYS_TO_MODIFY_MAPPING = {
@@ -80,15 +78,18 @@ def rename_state_dict(state_dict):
         model_state_dict[key] = value
     return model_state_dict
 
-def convert_persimmon_checkpoint(checkpoint_path, pytorch_dump_folder_path, pt_model_path, safe_serialization=False):
-    model_state_dict_base = torch.load(checkpoint_path, map_location="cpu")
+def convert_persimmon_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path, safe_serialization=False):
+    import sys
+    sys.path.insert(0, ada_lib_path)
+    model_state_dict_base = torch.load(pt_model_path, map_location="cpu")
     state_dict = flatdict.FlatDict(model_state_dict_base["model"], '.')
     state_dict = rename_state_dict(state_dict)
     
     transformers_config = PersimmonConfig()
-    model = PersimmonModelForCausalLM(transformers_config).to(torch.bfloat16)
+    model = PersimmonForCausalLM(transformers_config).to(torch.bfloat16)
     model.save_pretrained(pytorch_dump_folder_path, safe_serialization = safe_serialization)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -104,15 +105,19 @@ def main():
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
+    parser.add_argument(
+        "--ada_lib_path",
+        help="Location to write HF model and tokenizer",
+    )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
 
     convert_persimmon_checkpoint(
-        checkpoint_path=args.input_dir,
-        pt_model_path=args.pt_model_path,
         pytorch_dump_folder_path=args.output_dir,
+        pt_model_path=args.pt_model_path,
         safe_serialization=args.safe_serialization,
+        ada_lib_path=args.ada_lib_path
     )
     tokenizer = LlamaTokenizer(spm_path, bos_token = "|ENDOFTEXT", eos_token = None)
     tokenizer.save_pretrained(args.output_dir)
