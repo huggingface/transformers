@@ -48,10 +48,12 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             Number of Mel-frequency bins.
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding vectors.
-        normalize_means (`bool`, *optional*, defaults to `True`):
-            Whether or not to zero-mean normalize the extracted features.
-        normalize_vars (`bool`, *optional*, defaults to `True`):
-            Whether or not to unit-variance normalize the extracted features.
+        stride (`int`, defaults to 2):
+            Stride used to reshape audios from shape (batch_size,num_frames,num_mel_bins) to  (batch_size,num_frames//stride,num_mel_bins*stride).
+        src_lang (`str`, *optional*, defaults to `"eng"`):
+            The language to use as source language for translation.
+        tgt_lang (`str`, *optional*, defaults to `"fra"`):
+            The language to use as target language for translation.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -65,7 +67,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         stride=2,  # TODO: add to docstrings
         src_lang="eng",
         tgt_lang="fra",
-        language_code: Optional[List] = None,
         **kwargs,
     ):
         self.num_mel_bins = num_mel_bins
@@ -180,11 +181,13 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
-            padding_value (`float`, defaults to 0.0):
-                The value that is used to fill the padding values / vectors.
             do_normalize (`bool`, *optional*, defaults to `True`):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
                 improve the performance of the model.
+            tgt_lang (`str`, *optional*):
+                The language to use as target language for translation. If not specified, the last `tgt_lang` specified (either during initialization or when calling the feature extractor) will be used.
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to the tokenizer or the feature extractor.
         """
         self.tgt_lang = self.tgt_lang if tgt_lang is None else tgt_lang
 

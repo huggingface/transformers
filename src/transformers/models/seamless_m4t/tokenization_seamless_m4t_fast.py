@@ -370,9 +370,9 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
             src_lang (`str`, *optional*):
-                A string representing the source language.
+                A string representing the source language. If not specified, the last `src_lang` specified (either during initialization or when calling this tokenizer) will be used.
             tgt_lang (`str`, *optional*):
-                A string representing the target language.
+                A string representing the target language. If not specified, the last `tgt_lang` specified (either during initialization or when calling this tokenizer) will be used.
             kwargs (*optional*):
                 Remaining dictionary of keyword arguments that will be passed to [`PreTrainedTokenizerFast.__call__`].
         """

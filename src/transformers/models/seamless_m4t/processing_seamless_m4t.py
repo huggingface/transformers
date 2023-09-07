@@ -64,10 +64,10 @@ class SeamlessM4TProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            src_lang (`str`, *optional*): The language code of the input texts/audios.
-            tgt_lang (`str`, *optional*): The code of the target language.
-
-
+            src_lang (`str`, *optional*): The language code of the input texts/audios. If not specified, the last `src_lang` specified will be used.
+            tgt_lang (`str`, *optional*): The code of the target language. If not specified, the last `tgt_lang` specified will be used.
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to the feature extractor and/or the tokenizer.
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
@@ -76,9 +76,6 @@ class SeamlessM4TProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **input_features** -- Audio input features to be fed to a model. Returned when `audios` is not `None`.
-            - **decoder_input_ids** -- List of tokens id to be passed as `decoder_input_ids` to the text decoder.
-            - **speech_tgt_lang_id** -- Target language id of the SeamlessM4T text-to-units sub-model.
-            - **vocoder_tgt_lang_id** -- Target language id of the SeamlessM4T vocoder model.
         """
         sampling_rate = kwargs.pop("sampling_rate", None)
 
