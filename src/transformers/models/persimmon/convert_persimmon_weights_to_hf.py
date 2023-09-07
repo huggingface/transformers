@@ -20,17 +20,17 @@ import warnings
 
 import torch
 
-from transformers import PersimmonConfig, PersimmonForCausalLM, PersimmonTokenizer
+from transformers import PersimmonConfig, PersimmonForCausalLM, LlamaTokenizer
 
 
 try:
-    from transformers import PersimmonTokenizerFast
+    from transformers import LlamaTokenizerFast
 except ImportError as e:
     warnings.warn(e)
     warnings.warn(
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
-    PersimmonTokenizerFast = None
+    LlamaTokenizerFast = None
 
 """
 Sample usage:
@@ -39,7 +39,7 @@ Sample usage:
 git clone https://github.com/persimmon-ai-labs/adept-inference
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_base_model_release.tar
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_chat_model_release.tar
-python src/transformers/models/persimmon/convert_persimmon_weights_to_hf.py  --input_dir /path/to/downloaded/persimmon/weights --output_dir /output/path
+python src/transformers/models/persimmon/convert_persimmon_weights_to_hf.py  --input_dir /path/to/downloaded/persimmon/weights/ --output_dir /output/path
 ```
 
 Thereafter, models can be loaded via:
@@ -65,7 +65,6 @@ import flatdict
 model_state_dict_base = torch.load("/home/arthur_huggingface_co/adept-inference/weights/8b_base_model_release/iter_0375000/mp_rank_00/model_optim_rng.pt", map_location="cpu")
 config_base = model_state_dict_base["args"].__dict__
 
-
 KEYS_TO_MODIFY_MAPPING = {
     "self_attention": "self_attn",
     "language_model.encoder": "model",
@@ -85,20 +84,21 @@ def rename_state_dict(state_dict):
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
+        if keys_to_remove in key:
+            continue
         model_state_dict[key] = value
     return model_state_dict
     
-new_dict = rename_state_dict(new_dict)
-torch.save(new_dict, "/home/arthur_huggingface_co/transformers/ArthurZ/persimmon-8b-base/pytorch_model.bin")
-from transformers import PersimmonConfig, PersimmonForCausalLM, FalconForCausalLM
-
-
-config = PersimmonConfig()
-model = PersimmonForCausalLM(config = config)
-model.load_state_dict(model_state_dict_base["model"])
-
-
-
+    
+def convert_persimmon_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path, enable_fusion=False):
+    model_state_dict_base = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = flatdict.FlatDict(model_state_dict_base["model"], '.')
+    state_dict = rename_state_dict(state_dict)
+    
+    transformers_config = PersimmonConfig()
+    model = PersimmonModelForCausalLM(transformers_config).to(torch.bfloat16)
+    model.save_pretrained(pytorch_dump_folder_path)
+    transformers_config.save_pretrained(pytorch_dump_folder_path)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -107,28 +107,22 @@ def main():
         help="Location of Persimmon weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
-        "--model_size",
-        choices=["7B", "7Bf", "13B", "13Bf", "30B", "34B", "65B", "70B", "70Bf", "tokenizer_only"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Persimmon2 official release. For more details on Persimmon2, checkout the original repo: https://huggingface.co/meta-persimmon",
-    )
-    parser.add_argument(
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
-    if args.model_size != "tokenizer_only":
-        write_model(
-            model_path=args.output_dir,
-            input_base_path=args.input_dir,
-            model_size=args.model_size,
-            safe_serialization=args.safe_serialization,
-            tokenizer_path=spm_path,
-        )
-    else:
-        write_tokenizer(args.output_dir, spm_path)
 
+    convert_persimmon_checkpoint(
+        model_path=args.output_dir,
+        input_base_path=args.input_dir,
+        model_size=args.model_size,
+        safe_serialization=args.safe_serialization,
+        tokenizer_path=spm_path,
+    )
+    tokenizer = LlamaTokenizer(spm_path, bos_token = "|ENDOFTEXT", eos_token = None)
+    tokenizer.save_pretrained(args.output_dir)
 
 if __name__ == "__main__":
     main()
