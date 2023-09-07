@@ -177,18 +177,13 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 
 
 class Beit3MLP(nn.Module):
-    def __init__(
-        self,
-        in_features,
-        hidden_features,
-        out_features,
-    ):
+    def __init__(self,config):
         super().__init__()
-        self.norm1 = nn.LayerNorm(in_features)
-        self.dense1 = nn.Linear(in_features, hidden_features)
-        self.norm2 = nn.LayerNorm(hidden_features)
+        self.norm1 = nn.LayerNorm(config.embed_dim * 4)
+        self.dense1 = nn.Linear(config.embed_dim * 4, config.embed_dim * 2)
+        self.norm2 = nn.LayerNorm(config.embed_dim * 2)
         self.act = nn.GELU()
-        self.dense2 = nn.Linear(hidden_features, out_features)
+        self.dense2 = nn.Linear(config.embed_dim * 2, config.num_labels)
 
     def forward(self, hidden_states):
         hidden_states = self.norm1(hidden_states)
@@ -799,13 +794,8 @@ class Beit3Model(Beit3PreTrainedModel):
 class Beit3ForVisualReasoning(Beit3PreTrainedModel):
     def __init__(self, config):
         super(Beit3ForVisualReasoning, self).__init__(config)
-        embed_dim = config.embed_dim
         self.beit3 = Beit3Model(config)
-        self.classifier = Beit3MLP(
-            in_features=embed_dim * 4,
-            hidden_features=embed_dim * 2,
-            out_features=config.num_labels,
-        )
+        self.classifier = Beit3MLP(config)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING)
@@ -1055,7 +1045,7 @@ multimodal
 )
 class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
     def __init__(self, config):
-        super(Beit3ForVisualQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         embed_dim = config.embed_dim
         self.num_labels = config.num_labels
         self.beit3 = Beit3Model(config)

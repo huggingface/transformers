@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VisualBERT model. """
+""" Testing suite for the PyTorch Beit3 model. """
 
 import inspect
 import unittest
@@ -20,7 +20,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from transformers import VisualBertConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.models.beit3.configuration_beit3 import Beit3Config
@@ -196,10 +196,6 @@ class Beit3ModelTester:
         model.to(torch_device)
         model.eval()
         model(**input_dict)
-        # self.parent.assertEqual(
-        #     result.last_hidden_state.shape,
-        #     (self.batch_size, self.seq_length + self.visual_seq_length, self.hidden_size),
-        # )
 
     def create_and_check_for_visual_reasoning(self, config, input_dict):
         model = Beit3ForVisualReasoning(config=config)
@@ -283,7 +279,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Beit3ModelTester()
-        self.config_tester = ConfigTester(self, config_class=VisualBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Beit3Config, hidden_size=37)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

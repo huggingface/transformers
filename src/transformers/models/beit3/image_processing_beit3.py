@@ -413,6 +413,15 @@ class Beit3ImageProcessor(BaseImageProcessor):
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         return image
 
+    def reduce_label(self, label: ImageInput) -> np.ndarray:
+        label = to_numpy_array(label)
+        # Avoid using underflow conversion
+        label[label == 0] = 255
+        label = label - 1
+        label[label == 254] = 255
+        return label
+
+
     def _preprocess(
         self,
         image: ImageInput,
