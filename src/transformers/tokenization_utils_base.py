@@ -1698,7 +1698,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 chat_template = self.default_chat_template
 
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
-        # Compilation is probably quick, but maybe we should consider caching compiled templates
+        # Compilation is slower than tokenization/rendering, so if performance becomes an issue here
+        # we should cache compiled templates.
         compiled_template = jinja_env.from_string(chat_template)
         rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
 
