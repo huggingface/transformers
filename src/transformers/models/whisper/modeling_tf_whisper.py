@@ -622,6 +622,7 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
         self.embed_positions = TFWhisperPositionalEmbedding(
             self.max_source_positions, self.embed_dim, name="embed_positions"
         )
+        self.embed_positions.trainable = False
 
         self.encoder_layers = [TFWhisperEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
