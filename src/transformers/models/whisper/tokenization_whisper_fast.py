@@ -329,7 +329,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         if not decode_with_timestamps:
             # filter timestamp tokens if they are contained in the vocab
-            timestamp_ids = [self.convert_tokens_to_ids("<|%.2f|>" % (i * 0.02)) for i in range(1500 + 1)]
+            timestamp_ids = self.convert_tokens_to_ids([("<|%.2f|>" % (i * 0.02)) for i in range(1500 + 1)])
             kwargs["token_ids"] = [token for token in kwargs["token_ids"] if token not in timestamp_ids]
 
         text = super()._decode(*args, **kwargs)
