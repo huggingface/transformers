@@ -70,15 +70,13 @@ tokenizer = PersimmonTokenizer.from_pretrained("/output/path")
 This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/persimmon-ai-labs/adept-inference).
 
+- Perismmon uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
+The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. The `chat` template will be updated with the templating functions in a follow up PR!
+
 
 ## PersimmonConfig
 
 [[autodoc]] PersimmonConfig
-
-
-## PersimmonTokenizer
-Perismmon uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
-The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. The `chat` template will be updated with the templating functions in a follow up PR!
 
 ## PersimmonModel
 

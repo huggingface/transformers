@@ -71,13 +71,13 @@ class PersimmonConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalPersimmon/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This
             is an experimental feature, subject to breaking API changes in future versions.
-        qk_layer_norm (`bool`, *optional*, default to `True`):
+        q_layer_norm (`bool`, *optional*, default to `True`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states
         hidden_dropout (`float`, *optional*, default to 0.0):
             The dropout ratio after applying the MLP to the hidden states.
         attention_dropout (`float`, *optional*, default to 0.0):
             The dropout ratio after computing the attention scores.
-        rotary_dim (`float`, *optional*, default to 0.5):
+        partial_rotary_factor (`float`, *optional*, default to 0.5):
             Percentage of the query and keys which will have rotary embedding.
 
         Example:
@@ -118,7 +118,7 @@ class PersimmonConfig(PretrainedConfig):
         qk_layernorm=True,
         hidden_dropout=0.0,
         attention_dropout=0.0,
-        rotary_dim=0.5,
+        partial_rotary_factor=0.5,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -136,7 +136,7 @@ class PersimmonConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
-        self.rotary_dim = rotary_dim
+        self.partial_rotary_factor = partial_rotary_factor
         self._rope_scaling_validation()
 
         super().__init__(

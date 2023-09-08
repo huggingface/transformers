@@ -39,6 +39,7 @@ if is_torch_available():
     )
 
 
+# Copied from transformers.tests.llama.test_modelling_llama.LlamaModelTest with Llama->Persimmon
 class PersimmonModelTester:
     def __init__(
         self,
@@ -265,6 +266,7 @@ class PersimmonModelTester:
         return config, inputs_dict
 
 
+# Copied from transformers.tests.llama.test_modelling_llama.LlamaModelTest with Llama->Persimmon
 @require_torch
 class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
