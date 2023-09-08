@@ -41,8 +41,9 @@ class Kosmos2Processor(ProcessorMixin):
     Constructs an KOSMOS-2 processor which wraps a KOSMOS-2 image processor and a KOSMOS-2 tokenizer into a single
     processor.
 
-    [`Kosmos2Processor`] offers all the functionalities of [`Kosmos2ImageProcessor`] and [`Kosmos2TokenizerFast`]. See
-    the docstring of [`~Kosmos2Processor.__call__`] and [`~Kosmos2Processor.decode`] for more information.
+    [`Kosmos2Processor`] offers all the functionalities of [`Kosmos2ImageProcessor`] and some functionalities of
+    [`Kosmos2TokenizerFast`]. See the docstring of [`~Kosmos2Processor.__call__`] and [`~Kosmos2Processor.decode`] for
+    more information.
 
     Args:
         image_processor (`Kosmos2ImageProcessor`):
