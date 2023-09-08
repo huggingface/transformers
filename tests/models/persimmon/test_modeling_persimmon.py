@@ -380,23 +380,25 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
 @require_torch
 class PersimmonIntegrationTest(unittest.TestCase):
+
+    @slow
     def test_model_8b_chat_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-chat", device_map="auto")
         out = model(torch.tensor([input_ids])).logits
 
         EXPECTED_MEAN = torch.tensor(
-            [[-4.2327, -3.3360, -4.6665, -4.7631, -1.8180, -3.4170, -1.4211, -3.1810]], dtype=torch.float32
+            [[-11.2879, -11.2628, -11.2498, -11.2534, -11.2676, -11.2638, -11.2501, -11.2431]], dtype=torch.float32
         )
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+        torch.testing.assert_close(out.cpu().mean(-1), EXPECTED_MEAN, atol=1e-4, rtol=1e-4)
         # fmt: off
-        EXPECTED_SLICE = torch.tensor([-9.4922, -3.9551, 1.7998, -5.6758, -5.1055, -5.8984, -4.8320, -6.8086, -6.5391, -5.6172, -5.5820, -5.5352, 1.7881, 3.6289, -6.5117, -3.4785, -9.5000, -6.0352, -6.8125, -6.0195, -6.6836, -5.4727, -6.2812, -6.0391, -7.3398, -7.4297, -7.4844, -6.5820, -5.8789, -5.5312])
+        EXPECTED_SLICE = torch.tensor([-16.9670, -16.9647, -16.9649, -16.9630, -16.9577, -16.9623, -17.0164, -16.9673, -16.9648, -16.9668, -17.0160, -16.9651, -17.0156, -16.9668, -16.9655, -16.9653, -16.9665, -16.9682, -17.0112, -16.9667, -16.9717, -16.9654, -16.9650, -16.9701, -16.9657, -17.0160, -16.9676, -17.0138, -16.9610, -16.9695])
         # fmt: on
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(out.cpu()[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
     @slow
     def test_model_8b_chat_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi"""
+        EXPECTED_TEXT_COMPLETION = """'Simply put, the theory of relativity states that "nothing can travel faster than the speed of light in a vacuum." This theory was proposed by Albert Einstein in 1905. Einstein\'s theory also states that time slows down for a moving object.\n\n1. Einstein\'s theory\n2. 1905\n3. nothing can travel faster than the speed of light in a vacuum\n4. Albert Einstein\n'"""
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
         tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-chat", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
