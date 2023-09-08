@@ -1399,10 +1399,13 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        print(vision_outputs)
+        # print(vision_outputs)
 
         image_embeds = vision_outputs[0]
 
+        d1, d2, d3 = image_embeds.shape
+
+        image_embeds = image_embeds.view(d1, -1, d3)
         print(image_embeds.shape)
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
