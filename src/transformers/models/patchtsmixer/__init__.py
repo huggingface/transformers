@@ -34,7 +34,7 @@ else:
         "PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PatchTSMixerPreTrainedModel",
         "PatchTSMixerModel",
-        "PatchTSMixerForPretraining",
+        "PatchTSMixerForMaskPretraining",
         "PatchTSMixerForForecasting",
         "PatchTSMixerForClassification",
         "PatchTSMixerForRegression"
@@ -57,7 +57,7 @@ if TYPE_CHECKING:
             PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
             PatchTSMixerPreTrainedModel,
             PatchTSMixerModel,
-            PatchTSMixerForPretraining,
+            PatchTSMixerForMaskPretraining,
             PatchTSMixerForForecasting,
             PatchTSMixerForClassification,
             PatchTSMixerForRegression,

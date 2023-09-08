@@ -301,9 +301,9 @@ class PatchTSMixerPretrainHead(nn.Module):
         return self.head(context_values)
 
 
-class PatchTSMixerForPreTrainingOutputWithNoAttention(ModelOutput):
+class PatchTSMixerForMaskPreTrainingOutputWithNoAttention(ModelOutput):
     """
-    Output type of [`PatchTSMixerForPreTrainingOutputWithNoAttention`].
+    Output type of [`PatchTSMixerForMaskPreTrainingOutputWithNoAttention`].
 
     Args: 
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, patch_len)`):
@@ -322,7 +322,7 @@ class PatchTSMixerForPreTrainingOutputWithNoAttention(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
 
 
-class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
+class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
     # PatchTSTModel + Pretraining Head
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
@@ -348,7 +348,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
             context_values: torch.Tensor,
             output_hidden_states: Optional[bool] = False,
             return_loss: bool = True
-        ) -> PatchTSMixerForPreTrainingOutputWithNoAttention:
+        ) -> PatchTSMixerForMaskPreTrainingOutputWithNoAttention:
         """
         context_values: tensor [bs x seq_len x in_channels]
         """
@@ -366,7 +366,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         if self.masked_loss is True and loss_val is not None:
             loss_val = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
         
-        return PatchTSMixerForPreTrainingOutputWithNoAttention(
+        return PatchTSMixerForMaskPreTrainingOutputWithNoAttention(
             prediction_logits=x_hat,  # tensor [bs x nvars x num_patch x patch_len]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states = model_output.hidden_states,

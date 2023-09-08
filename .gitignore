@@ -167,3 +167,9 @@ tags
 
 # ruff
 .ruff_cache
+
+# LOCAL STUFFS
+tests/models/patchtsmixer_bkp/
+src/transformers/models/patchtsmixer_bkp/
+src/transformers/models/patchtsmixer/modeling_patchtsmixer_bkp.py
+src/transformers/models/patchtsmixer/configuration_patchtsmixer_bkp.py

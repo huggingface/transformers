@@ -5,7 +5,7 @@ from transformers.models.patchtsmixer.modeling_patchtsmixer import (
     PatchTSMixerEncoder,
     PatchTSMixerModel,
     PatchTSMixerPretrainHead,
-    PatchTSMixerForPretraining,
+    PatchTSMixerForMaskPretraining,
     PatchTSMixerForecastHead,
     PatchTSMixerForForecasting,
     PatchTSMixerClassificationHead,
@@ -151,7 +151,7 @@ class TestHFPatchTSMixer(unittest.TestCase):
 
     def test_pretrain_full(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        mdl = PatchTSMixerForPretraining(config)
+        mdl = PatchTSMixerForMaskPretraining(config)
         output = mdl(self.__class__.data)
         self.assertEqual(
             output.prediction_logits.shape, self.__class__.correct_pretrain_output.shape
@@ -190,7 +190,7 @@ class TestHFPatchTSMixer(unittest.TestCase):
             target_input = self.__class__.correct_regression_output
             target_output = self.__class__.correct_regression_output
         elif task == "pretrain":
-            mdl = PatchTSMixerForPretraining(config)
+            mdl = PatchTSMixerForMaskPretraining(config)
             target_input = None
             target_output = self.__class__.correct_pretrain_output
         else:

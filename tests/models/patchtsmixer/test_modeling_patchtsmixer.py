@@ -36,7 +36,7 @@ TOLERANCE = 1e-4
 if is_torch_available():
     import torch
     from transformers import PatchTSMixerConfig, MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING, MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
-    from transformers import PatchTSMixerModel, PatchTSMixerForForecasting, PatchTSMixerForPretraining, PatchTSMixerForClassification, PatchTSMixerForRegression
+    from transformers import PatchTSMixerModel, PatchTSMixerForForecasting, PatchTSMixerForMaskPretraining, PatchTSMixerForClassification, PatchTSMixerForRegression
 
 
 
@@ -192,13 +192,13 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     all_model_classes = (
         (PatchTSMixerModel,
          PatchTSMixerForForecasting,
-         PatchTSMixerForPretraining,
+         PatchTSMixerForMaskPretraining,
          PatchTSMixerForClassification,
          PatchTSMixerForRegression)
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (PatchTSMixerForForecasting, PatchTSMixerForPretraining) if is_torch_available() else ()
+    all_generative_model_classes = (PatchTSMixerForForecasting, PatchTSMixerForMaskPretraining) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False
@@ -244,7 +244,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             # inputs_dict["labels"] = labels
             inputs_dict["target_values"] = labels
             # inputs_dict.pop("target_values")
-        elif model_class in [PatchTSMixerModel, PatchTSMixerForPretraining]:
+        elif model_class in [PatchTSMixerModel, PatchTSMixerForMaskPretraining]:
             inputs_dict.pop("target_values")
 
         inputs_dict["output_hidden_states"] = True
@@ -332,7 +332,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             #         model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             #     expected_arg_names.remove("target_values")
             #     expected_arg_names.append("labels")
-            if model_class in [PatchTSMixerModel, PatchTSMixerForPretraining]:
+            if model_class in [PatchTSMixerModel, PatchTSMixerForMaskPretraining]:
                 expected_arg_names.remove("target_values")
 
             # expected_arg_names.extend(
@@ -364,8 +364,8 @@ def prepare_batch(repo_id="ibm/etth1", file='train-batch.pt'):
 class PatchTSMixerModelIntegrationTests(unittest.TestCase):
     def test_pretrain_head(self):
         # TODO: upload to the model to user: ibm when approved
-        # model = PatchTSMixerForPretraining.from_pretrained('ajati/patchtsmixer_pretrained_etth1').to(torch_device)
-        model = PatchTSMixerForPretraining.from_pretrained('/dccstor/dnn_forecasting/FM/HF/dump/etth1/pretrain/patchtsmixer_pretrained_etth1').to(torch_device)
+        # model = PatchTSMixerForMaskPretraining.from_pretrained('ajati/patchtsmixer_pretrained_etth1').to(torch_device)
+        model = PatchTSMixerForMaskPretraining.from_pretrained('/dccstor/dnn_forecasting/FM/HF/dump/etth1/pretrain/patchtsmixer_pretrained_etth1').to(torch_device)
         batch = prepare_batch(repo_id="/dccstor/dnn_forecasting/FM/HF/dump/etth1/pretrain/", file="batch.pt")
 
         torch.manual_seed(0)
