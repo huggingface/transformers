@@ -151,7 +151,7 @@ class IdeficsModelTester:
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
 
     def prepare_config_and_inputs(self):
-        self.seq_length = 42
+        # self.seq_length = 42
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -166,11 +166,11 @@ class IdeficsModelTester:
         image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
 
         config = self.get_config()
-
-        return (config, input_ids, input_mask, pixel_values, image_attention_mask)
+        interpolate_pos_encoding = False
+        return (config, input_ids, input_mask, pixel_values, image_attention_mask, interpolate_pos_encoding)
 
     def prepare_config_and_inputs_for_image_pos_embeddings_interpolation(self):
-        self.seq_length = 42
+        # self.seq_length = 42
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -192,9 +192,8 @@ class IdeficsModelTester:
         image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
 
         config = self.get_config()
-        config.vision_config.interpolate_pos_encoding = True
-
-        return (config, input_ids, input_mask, pixel_values, image_attention_mask)
+        interpolate_pos_encoding = True
+        return (config, input_ids, input_mask, pixel_values, image_attention_mask, interpolate_pos_encoding)
 
     def get_config(self):
         return IdeficsConfig(
@@ -226,12 +225,17 @@ class IdeficsModelTester:
         input_mask,
         pixel_values,
         image_attention_mask,
+        interpolate_pos_encoding,
     ):
         model = IdeficsModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids, attention_mask=input_mask, pixel_values=pixel_values, image_attention_mask=image_attention_mask
+            input_ids,
+            attention_mask=input_mask,
+            pixel_values=pixel_values,
+            image_attention_mask=image_attention_mask,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, input_ids.shape[1], self.hidden_size)
@@ -245,12 +249,14 @@ class IdeficsModelTester:
             input_mask,
             pixel_values,
             image_attention_mask,
+            interpolate_pos_encoding,
         ) = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": input_mask,
             "pixel_values": pixel_values,
             "image_attention_mask": image_attention_mask,
+            "interpolate_pos_encoding": interpolate_pos_encoding,
         }
         return config, inputs_dict
 
@@ -321,7 +327,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             for k, v in inputs.items():
-                print(k, v.shape)
+                if isinstance(v, torch.Tensor):
+                    print(k, v.shape)
             loss = model(**inputs).loss
             loss.backward()
 

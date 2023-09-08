@@ -61,6 +61,7 @@ class IdeficsVisionModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+# Adapted from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings
 class IdeficsVisionEmbeddings(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
@@ -430,7 +431,6 @@ class IdeficsVisionTransformer(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
         self.config = config
-        self.interpolate_pos_encoding = config.interpolate_pos_encoding
         embed_dim = config.hidden_size
 
         self.embeddings = IdeficsVisionEmbeddings(config)
@@ -438,12 +438,13 @@ class IdeficsVisionTransformer(nn.Module):
         self.encoder = IdeficsVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    # copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer.forward
+    # Adapted from transformers.models.clip.modeling_clip.CLIPVisionTransformer.forward
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -459,7 +460,7 @@ class IdeficsVisionTransformer(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=self.interpolate_pos_encoding)
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(

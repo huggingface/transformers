@@ -93,7 +93,6 @@ class IdeficsVisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        interpolate_pos_encoding=False,
         **kwargs,
     ):
         self.embed_dim = embed_dim
@@ -108,7 +107,6 @@ class IdeficsVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.hidden_act = hidden_act
-        self.interpolate_pos_encoding = interpolate_pos_encoding
 
         super().__init__(**kwargs)
 
