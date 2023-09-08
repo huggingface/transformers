@@ -20,7 +20,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import PersimmonConfig, is_torch_available, set_seed
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -32,10 +32,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         PersimmonForCausalLM,
         PersimmonForSequenceClassification,
         PersimmonModel,
-        AutoTokenizer,
     )
 
 
@@ -267,7 +267,9 @@ class PersimmonModelTester:
 
 @require_torch
 class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (PersimmonForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False

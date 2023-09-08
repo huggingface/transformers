@@ -22,7 +22,6 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -189,7 +188,6 @@ class PersimmonMLP(nn.Module):
         return hidden_states
 
 
-
 class PersimmonAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -210,10 +208,14 @@ class PersimmonAttention(nn.Module):
             )
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
         self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
-        
+
         if self.qk_layernorm:
-            self.q_layernorm = nn.LayerNorm(config.hidden_size // self.num_heads, eps=config.layer_norm_eps ,elementwise_affine = True)
-            self.k_layernorm = nn.LayerNorm(config.hidden_size // self.num_heads, eps=config.layer_norm_eps ,elementwise_affine = True)
+            self.q_layernorm = nn.LayerNorm(
+                config.hidden_size // self.num_heads, eps=config.layer_norm_eps, elementwise_affine=True
+            )
+            self.k_layernorm = nn.LayerNorm(
+                config.hidden_size // self.num_heads, eps=config.layer_norm_eps, elementwise_affine=True
+            )
 
         self._init_rope()
 
@@ -272,8 +274,8 @@ class PersimmonAttention(nn.Module):
         bsz, q_len, _ = hidden_states.size()
 
         # [batch_size, seq_length, 3 x hidden_size]
-        fused_qkv = self.query_key_value(hidden_states)  
-        
+        fused_qkv = self.query_key_value(hidden_states)
+
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_states, key_states, value_states) = self._split_heads(fused_qkv)
 
@@ -285,7 +287,6 @@ class PersimmonAttention(nn.Module):
         query_states = query_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
-
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -330,7 +331,7 @@ class PersimmonAttention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights,  dtype=torch.float32,dim=-1).to(query_states.dtype) 
+        attn_weights = nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query_states.dtype)
         # TODO add attention_dropout
 
         attn_output = torch.matmul(attn_weights, value_states)
@@ -361,7 +362,7 @@ class PersimmonDecoderLayer(nn.Module):
         self.mlp = PersimmonMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout) # TODO To add to config
+        self.dropout = nn.Dropout(config.hidden_dropout)  # TODO To add to config
 
     def forward(
         self,
@@ -715,12 +716,11 @@ class PersimmonModel(PersimmonPreTrainedModel):
 
 # Partly copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->PERSIMMON,Llama->Persimmon
 class PersimmonForCausalLM(PersimmonPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.model = PersimmonModel(config)
         self.vocab_size = config.vocab_size
-        
+
         # rename word_embeddings_for_head to lm_head
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 

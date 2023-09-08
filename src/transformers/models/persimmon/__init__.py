@@ -50,7 +50,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_persimmon import PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonModel, PersimmonPreTrainedModel
+        from .modeling_persimmon import (
+            PersimmonForCausalLM,
+            PersimmonForSequenceClassification,
+            PersimmonModel,
+            PersimmonPreTrainedModel,
+        )
 
 
 else:

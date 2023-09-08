@@ -4504,7 +4504,6 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
-    from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -4556,6 +4555,7 @@ if TYPE_CHECKING:
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
+    from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5918,7 +5918,6 @@ if TYPE_CHECKING:
             LiltPreTrainedModel,
         )
         from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
-        from .models.persimmon import PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonModel, PersimmonPreTrainedModel
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,
@@ -6216,6 +6215,12 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
+        )
+        from .models.persimmon import (
+            PersimmonForCausalLM,
+            PersimmonForSequenceClassification,
+            PersimmonModel,
+            PersimmonPreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,

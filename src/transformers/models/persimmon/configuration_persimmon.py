@@ -29,6 +29,7 @@ PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "ArthurZ/persimmon-8b-base": "https://huggingface.co/ArthurZ/persimmon-8b-base/resolve/main/config.json",
 }
 
+
 class PersimmonConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PersimmonModel`]. It is used to instantiate an Persimmon
@@ -120,7 +121,7 @@ class PersimmonConfig(PretrainedConfig):
         qk_layernorm=True,
         hidden_dropout=0.6,
         **kwargs,
-    ):  
+    ):
         # untie_embeddings TODO
         #     "apply_query_key_layer_scaling": true,
         self.vocab_size = vocab_size
