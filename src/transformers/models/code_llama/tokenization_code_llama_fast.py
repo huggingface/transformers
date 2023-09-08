@@ -256,6 +256,15 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self.update_post_processor()
 
     def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens=True):
+        """
+        Updates the normalizer to make sure the prompt format for `infilling` is respected.
+        If `reset` is set to `True`, the normalizer is reset to the normal behaviour.
+        The infilling format is the following:
+        if suffix_first
+            " <PRE> <SUF>{suf} <MID> {pre}"
+        else:
+            " <PRE> {pre} <SUF>{suf} <MID>"
+        """
         if reset:
             self._tokenizer.normalizer = normalizers.Sequence(
                 [
