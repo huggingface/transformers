@@ -71,7 +71,7 @@ class PersimmonConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalPersimmon/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This
             is an experimental feature, subject to breaking API changes in future versions.
-        q_layer_norm (`bool`, *optional*, default to `True`):
+        qk_layernorm (`bool`, *optional*, default to `True`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states
         hidden_dropout (`float`, *optional*, default to 0.0):
             The dropout ratio after applying the MLP to the hidden states.
@@ -109,9 +109,6 @@ class PersimmonConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
         tie_word_embeddings=False,
         rope_theta=25000.0,
         rope_scaling=None,
@@ -119,6 +116,9 @@ class PersimmonConfig(PretrainedConfig):
         hidden_dropout=0.0,
         attention_dropout=0.0,
         partial_rotary_factor=0.5,
+        pad_token_id=None,
+        bos_token_id=1,
+        eos_token_id=2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -127,13 +127,13 @@ class PersimmonConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.qk_layernorm = qk_layernorm
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.qk_layernorm = qk_layernorm
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
