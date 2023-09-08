@@ -338,6 +338,8 @@
       - local: in_translation
         title: (번역중) LLaMA
       - local: in_translation
+      - local: model_doc/llama2
+        title: Llama2
         title: (번역중) Longformer
       - local: in_translation
         title: (번역중) LongT5
