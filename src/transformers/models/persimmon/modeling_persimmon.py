@@ -236,8 +236,8 @@ class PersimmonAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.query_key_value = nn.Linear(self.hidden_size, 3 *  self.num_heads * self.head_dim, bias=False)
-        self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
+        self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
         
         if self.qk_layernorm:
             self.q_layernorm = nn.LayerNorm(config.hidden_size // self.num_heads, elementwise_affine = True)
@@ -388,8 +388,8 @@ class PersimmonDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = PersimmonAttention(layer_id, config=config)
         self.mlp = PersimmonMLP(config)
-        self.input_layernorm = PersimmonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = PersimmonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout) # TODO To add to config
 
     def forward(

@@ -63,6 +63,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "language_model.encoder": "model",
     "word_embeddings_for_head": "lm_head",
     "embedding": "embed_tokens",
+    # final layer norm?
 }
 
 KEYS_TO_REMOVE = "rotary_emb.inv_freq"
@@ -87,6 +88,7 @@ def convert_persimmon_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_mode
     
     transformers_config = PersimmonConfig()
     model = PersimmonForCausalLM(transformers_config).to(torch.bfloat16)
+    model.load_state_dict(state_dict)
     model.save_pretrained(pytorch_dump_folder_path, safe_serialization = safe_serialization)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
 
