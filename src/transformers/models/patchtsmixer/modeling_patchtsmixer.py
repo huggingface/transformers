@@ -28,7 +28,7 @@ from transformers.utils import ModelOutput
 
 from ...modeling_outputs import ModelOutput 
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, logging
+from ...utils import add_start_docstrings, logging, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_patchtsmixer import PatchTSMixerConfig
 
 from .layers import (InjectRevinStatistics4D, LinearHead, PatchTSMixer, Patch,
@@ -171,12 +171,6 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
                                             hidden_states=hidden_states)
 
 
-
-@add_start_docstrings(
-    "The PatchTSMixer Model for time-series forecasting.",
-    PATCHTSMIXER_START_DOCSTRING,
-)
-
 class PatchTSMixerModelOutputWithNoAttention(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states.
@@ -203,7 +197,10 @@ class PatchTSMixerModelOutputWithNoAttention(ModelOutput):
     revin_mean: Optional[torch.FloatTensor] = None,
     revin_stdev: Optional[torch.FloatTensor] = None,
 
-
+@add_start_docstrings(
+    "The PatchTSMixer Model for time-series forecasting.",
+    PATCHTSMIXER_START_DOCSTRING,
+)
 class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig, mask_input: bool = False):
         super().__init__(config)
@@ -238,13 +235,18 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
+    @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PatchTSMixerModelOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def forward(
             self, 
             context_values: torch.Tensor, 
             output_hidden_states: Optional[bool] = False
         ) -> PatchTSMixerModelOutputWithNoAttention:
-        """
+        r"""
         context_values: tensor [bs x seq_len x in_channels]
+
+        Returns:
+
         """
         revin_mean = None
         revin_stdev = None
@@ -341,6 +343,8 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
+    @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PatchTSMixerForMaskPreTrainingOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def forward(
             self, 
             context_values: torch.Tensor,
@@ -349,6 +353,9 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
         ) -> PatchTSMixerForMaskPreTrainingOutputWithNoAttention:
         """
         context_values: tensor [bs x seq_len x in_channels]
+
+        Returns:
+
         """
         model_output = self.model(context_values, output_hidden_states = output_hidden_states) # x.last_hidden_state: [bs x nvars x num_patch x num_features]
         x_hat = self.head(
@@ -432,6 +439,8 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
+    @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PatchTSMixerForForecastOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         context_values: torch.Tensor,
@@ -441,6 +450,9 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
     ) -> PatchTSMixerForForecastOutputWithNoAttention:
         """
         context_values: tensor [bs x seq_len x in_channels]
+
+        Returns:
+
         """
 
         model_output = self.model(
@@ -540,7 +552,8 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
-
+    @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PatchTSMixerForClassificationOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def forward(
             self, 
             context_values: torch.Tensor, 
@@ -552,6 +565,9 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         """
         context_values: tensor [bs x seq_len x in_channels]
         target_values: tensor [bs x n_classes]
+
+        Returns:
+
         """
 
         model_output = self.model(
@@ -644,6 +660,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
+    @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PatchTSMixerForRegressionOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         context_values: torch.Tensor,
@@ -654,6 +672,9 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         """
         context_values: tensor [bs x seq_len x in_channels]
         target_values: tensor [bs x n_targets]
+
+        Returns:
+
         """
 
         model_output = self.model(
