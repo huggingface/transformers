@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 LLaMA 모델은 Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, Aurelien Rodriguez, Armand Joulin, Edouard Grave, Guillaume Lample에 의해 제안된 [LLaMA: Open and Efficient Foundation Language Models](https://arxiv.org/abs/2302.13971)에서 소개되었습니다. 이 모델은 7B에서 65B개의 파라미터까지 다양한 크기의 기초 언어 모델을 모아놓은 것입니다.
 
-논문의 요약은 다음과 같습니다:
+논문의 초록은 다음과 같습니다:
 
 *"LLaMA는 7B에서 65B개의 파라미터 수를 가진 기초 언어 모델의 모음입니다. 우리는 수조 개의 토큰으로 모델을 훈련시켰고, 공개적으로 이용 가능한 데이터셋만을 사용하여 최고 수준의 모델을 훈련시킬 수 있음을 보여줍니다. 특히, LLaMA-13B 모델은 대부분의 벤치마크에서 GPT-3 (175B)를 능가하며, LLaMA-65B는 최고 수준의 모델인 Chinchilla-70B와 PaLM-540B에 버금가는 성능을 보입니다. 우리는 모든 모델을 연구 커뮤니티에 공개합니다."*
 
@@ -43,17 +43,17 @@ tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 model = LlamaForCausalLM.from_pretrained("/output/path")
 ```
 
-스크립트를 실행하기 위해서는 모델을 float16 정밀도로 전체 RAM에 로드할 수 있을 만큼의 충분한 CPU RAM이 필요합니다. (가장 큰 버전의 모델이 여러 체크포인트로 나뉘어 있더라도, 각 체크포인트는 모델의 각 가중치의 일부를 포함하고 있기 때문에 모든 체크포인트를 RAM에 로드해야 합니다) 65B 모델의 경우, 이는 총 130GB의 RAM이 필요하다는 것을 의미합니다.
+스크립트를 실행하기 위해서는 모델을 float16 정밀도로 전부 로드할 수 있을 만큼의 충분한 CPU RAM이 필요합니다. (가장 큰 버전의 모델이 여러 체크포인트로 나뉘어 있더라도, 각 체크포인트는 모델의 각 가중치의 일부를 포함하고 있기 때문에 모든 체크포인트를 RAM에 로드해야 합니다) 65B 모델의 경우, 총 130GB의 RAM이 필요합니다.
 
 
 - LLaMA 토크나이저는 [sentencepiece](https://github.com/google/sentencepiece)를 기반으로 하는 BPE 모델입니다. sentencepiece의 특징 중 하나는 시퀀스를 디코딩할 때 첫 토큰이 단어의 시작이라면 (예를 들어 "Banana"), 토크나이저는 문자열 앞에 공백을 추가하지 않는다는 것입니다.
 
-이 모델은 [zphang](https://huggingface.co/zphang)에 의해 제공되었으며, [BlackSamorez](https://huggingface.co/BlackSamorez)의 기여도 포함되었습니다. Hugging Face에서의 구현 코드는 GPT-NeoX를 기반으로 하며 [여기](https://github.com/EleutherAI/gpt-neox)에서 찾을 수 있습니다. 저자의 코드는 [여기](https://github.com/facebookresearch/llama)에서 확인할 수 있습니다.
+이 모델은 [BlackSamorez](https://huggingface.co/BlackSamorez)의 기여와 함께, [zphang](https://huggingface.co/zphang)에 의해 제공되었습니다. Hugging Face에서의 구현 코드는 GPT-NeoX를 기반으로 하며 [여기](https://github.com/EleutherAI/gpt-neox)에서 찾을 수 있고, 저자의 코드 원본은 [여기](https://github.com/facebookresearch/llama)에서 확인할 수 있습니다.
 
 
 원래 LLaMA 모델을 기반으로 Meta AI에서 몇 가지 후속 작업을 발표했습니다:
 
-- **Llama2**: Llama2는 구조적인 몇 가지 수정(Grouped Query Attention)을 통해 개선된 버전이며, 2조 개의 토큰으로 사전 훈련이 되어 있습니다. Llama2에 대한 자세한 내용은 [여기](llama2)에서 찾을 수 있습니다.
+- **Llama2**: Llama2는 구조적인 몇 가지 수정(Grouped Query Attention)을 통해 개선된 버전이며, 2조 개의 토큰으로 사전 훈련이 되어 있습니다. Llama2에 대한 자세한 내용은 [이 문서](llama2)를 참고하세요.
 
 ## 리소스 [[resources]]
 
