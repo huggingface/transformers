@@ -110,7 +110,7 @@ class PersimmonRotaryEmbedding(torch.nn.Module):
         self.max_seq_len_cached = seq_len
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq.to(dtype))
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
@@ -122,8 +122,8 @@ class PersimmonRotaryEmbedding(torch.nn.Module):
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
-            self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
-            self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
+            self.cos_cached[:, :, :seq_len, ...].to(dtype=torch.bfloat16),
+            self.sin_cached[:, :, :seq_len, ...].to(dtype=torch.bfloat16),
         )
 
 
@@ -207,21 +207,10 @@ class PersimmonMLP(nn.Module):
         return hidden_states
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
 class PersimmonHeadLayerNorm(nn.Module):
-    def __init__(self, layernorm_builder, num_kv_heads):
+    def __init__(self, num_heads):
         super().__init__()
-        self.layernorms = torch.nn.ModuleList([layernorm_builder() for _ in range(num_kv_heads)])
+        self.layernorms = torch.nn.ModuleList([nn.LayerNorm() for _ in range(num_heads)])
 
     def forward(self, layer_input):
         layer_heads = torch.split(layer_input, 1, dim=2)
@@ -232,13 +221,13 @@ class PersimmonHeadLayerNorm(nn.Module):
 class PersimmonAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: PersimmonConfig):
+    def __init__(self, layer_id,  config: PersimmonConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = config.max_position_embeddings
+        self.max_position_embeddings = 1 # config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.qk_layernorm = config.qk_layernorm
 
@@ -259,7 +248,7 @@ class PersimmonAttention(nn.Module):
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = PersimmonRotaryEmbedding(
-                self.head_dim,
+                int(0.5 * self.head_dim),
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
             )
@@ -310,15 +299,17 @@ class PersimmonAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
+        # [batch_size, seq_length, 3 x hidden_size]
+        fused_qkv = self.query_key_value(hidden_states)  
         
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_states, key_states, value_states) = self._split_heads(fused_qkv)
 
         if self.qk_layernorm:
-            query_states = self.q_layernorm(query_states)
-            key_states = self.k_layernorm(key_states)
-    
+            query_states = self.q_layernorm(query_states.permute(1,0,3,2)).permute(1,0,3,2)
+            key_states = self.k_layernorm(key_states.permute(1,0,3,2)).permute(1,0,3,2)
+
+        # [batch_size, num_heads, seq_length, head_dim]
         query_states = query_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -329,7 +320,21 @@ class PersimmonAttention(nn.Module):
             kv_seq_len += past_key_value[0].shape[-2]
 
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        # Partial rotary embedding
+        query_rot, query_pass = (
+            query_states[..., : self.rotary_emb.dim],
+            query_states[..., self.rotary_emb.dim :],
+        )
+        key_rot, key_pass = (
+            key_states[..., : self.rotary_emb.dim],
+            key_states[..., self.rotary_emb.dim :],
+        )
+
+        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+        # [sq, b, np, hn]
+        query_states = torch.cat((query_rot, query_pass), dim=-1)
+        key_states = torch.cat((key_rot, key_pass), dim=-1)
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -337,7 +342,6 @@ class PersimmonAttention(nn.Module):
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
         past_key_value = (key_states, value_states) if use_cache else None
-
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -355,7 +359,9 @@ class PersimmonAttention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.softmax(attn_weights,  dtype=torch.float32,dim=-1).to(query_states.dtype) 
+        # TODO add attention_dropout
+
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -377,10 +383,10 @@ class PersimmonAttention(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Persimmon
 class PersimmonDecoderLayer(nn.Module):
-    def __init__(self, config: PersimmonConfig):
+    def __init__(self, layer_id, config: PersimmonConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = PersimmonAttention(config=config)
+        self.self_attn = PersimmonAttention(layer_id, config=config)
         self.mlp = PersimmonMLP(config)
         self.input_layernorm = PersimmonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = PersimmonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -574,7 +580,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([PersimmonDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([PersimmonDecoderLayer(layer_id, config) for layer_id in range(config.num_hidden_layers)])
         self.final_layernorm = PersimmonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -721,7 +727,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states = self.final_layernorm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
