@@ -208,6 +208,7 @@ class PersimmonAttention(nn.Module):
             )
         self.query_key_value = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
         self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
+        self.qk_layernorm = config.qk_layernorm
 
         if self.qk_layernorm:
             self.q_layernorm = nn.LayerNorm(
@@ -353,12 +354,11 @@ class PersimmonAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Persimmon
 class PersimmonDecoderLayer(nn.Module):
-    def __init__(self, layer_id, config: PersimmonConfig):
+    def __init__(self, config: PersimmonConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = PersimmonAttention(layer_id, config=config)
+        self.self_attn = PersimmonAttention(config=config)
         self.mlp = PersimmonMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -697,7 +697,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states = self.final_layernorm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
