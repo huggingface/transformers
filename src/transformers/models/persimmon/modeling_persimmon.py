@@ -76,7 +76,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 class PersimmonRotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-        # Precision is apparently an arg: torch.bfloat16 (parallel_attention_config.params_dtype)
+
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
@@ -174,7 +174,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaMLP with Llama->Persimmon
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXMLP with GPTNeoX->Persimmon
 class PersimmonMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -189,29 +189,19 @@ class PersimmonMLP(nn.Module):
         return hidden_states
 
 
-class PersimmonHeadLayerNorm(nn.Module):
-    def __init__(self, num_heads):
-        super().__init__()
-        self.layernorms = torch.nn.ModuleList([nn.LayerNorm() for _ in range(num_heads)])
 
-    def forward(self, layer_input):
-        layer_heads = torch.split(layer_input, 1, dim=2)
-        normed_heads = [ln(ln_input) for ln, ln_input in zip(self.layernorms, layer_heads)]
-        return torch.cat(normed_heads, dim=2)
-
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->Persimmon
 class PersimmonAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, layer_id,  config: PersimmonConfig):
+    def __init__(self, config: PersimmonConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.max_position_embeddings = 1 # config.max_position_embeddings
+        self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
-        self.qk_layernorm = config.qk_layernorm
+        self.rotary_dim = config.rotary_dim
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -230,7 +220,7 @@ class PersimmonAttention(nn.Module):
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = PersimmonRotaryEmbedding(
-                int(0.5 * self.head_dim),
+                int(self.rotary_dim * self.head_dim),
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
             )
@@ -239,14 +229,14 @@ class PersimmonAttention(nn.Module):
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
                 self.rotary_emb = PersimmonLinearScalingRotaryEmbedding(
-                    self.head_dim,
+                    int(self.rotary_dim * self.head_dim),
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
                 self.rotary_emb = PersimmonDynamicNTKScalingRotaryEmbedding(
-                    self.head_dim,
+                    int(self.rotary_dim * self.head_dim),
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
@@ -300,7 +290,6 @@ class PersimmonAttention(nn.Module):
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
-
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         # Partial rotary embedding
@@ -416,9 +405,6 @@ class PersimmonDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        
-        # if self.apply_residual_connection_post_layernorm:
-        #     hidden_states = residual + hidden_states
 
         hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + residual
@@ -547,7 +533,7 @@ PERSIMMON_INPUTS_DOCSTRING = r"""
     "The bare Persimmon Model outputting raw hidden-states without any specific head on top.",
     PERSIMMON_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->PERSIMMON,Llama->Persimmon
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->PERSIMMON,Llama->Persimmon,LlamaRMSLayerNorm->LayerNorm,norm->final_layer_norm
 class PersimmonModel(PersimmonPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PersimmonDecoderLayer`]
@@ -562,7 +548,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([PersimmonDecoderLayer(layer_id, config) for layer_id in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([PersimmonDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
@@ -575,6 +561,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -709,7 +696,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.final_layernorm(hidden_states)
+        hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
