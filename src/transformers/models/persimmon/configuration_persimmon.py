@@ -35,7 +35,7 @@ class PersimmonConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`PersimmonModel`]. It is used to instantiate an
     Persimmon model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [persimmon-8b-base](https://huggingface.co/ArthurZ/persimmon-8b-base).
+    [ArthurZ/persimmon-8b-base](https://huggingface.co/ArthurZ/persimmon-8b-base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -109,7 +109,6 @@ class PersimmonConfig(PretrainedConfig):
         intermediate_size=16384,
         num_hidden_layers=36,
         num_attention_heads=64,
-        num_key_value_heads=64,
         hidden_act="relu2",
         max_position_embeddings=16384,
         initializer_range=0.02,
@@ -135,11 +134,6 @@ class PersimmonConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.qk_layernorm = qk_layernorm
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
