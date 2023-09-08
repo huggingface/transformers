@@ -115,10 +115,7 @@ class IdeficsVisionEmbeddings(nn.Module):
             mode="bicubic",
             align_corners=False,
         )
-        if (
-            int(num_h_patches) != patch_pos_embed.shape[-2] 
-            or int(num_w_patches) == patch_pos_embed.shape[-1]
-        ):
+        if int(num_h_patches) != patch_pos_embed.shape[-2] or int(num_w_patches) != patch_pos_embed.shape[-1]:
             raise ValueError(
                 f"Number of patches for images ({int(num_h_patches), int(num_w_patches)}) don't match the "
                 f"shape of position embedding ({patch_pos_embed.shape[-2], patch_pos_embed.shape[-1]})"
