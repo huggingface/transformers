@@ -87,12 +87,6 @@ class PersimmonConfig(PretrainedConfig):
 
     >>> # Initializing a Persimmon persimmon-7b style configuration
     >>> configuration = PersimmonConfig()
-
-    >>> # Initializing a model from the persimmon-7b style configuration
-    >>> model = PersimmonModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "persimmon"
     keys_to_ignore_at_inference = ["past_key_values"]
