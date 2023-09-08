@@ -1526,6 +1526,12 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         batch_size = pixel_values.shape[0]
         image_embeds = self.vision_model(pixel_values, return_dict=True).last_hidden_state
 
+        
+        d1, d2, d3 = image_embeds.shape
+
+        image_embeds = image_embeds.view(1, -1, d3)
+        
+
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
