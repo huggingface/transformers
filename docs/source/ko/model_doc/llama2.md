@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Llama2 [[llama]]
+# Llama2 [[llama2]]
 
 ## 개요 [[overview]]
 
