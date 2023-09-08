@@ -1154,6 +1154,7 @@ class LlamaConverter(SpmConverter):
         vocab_scores = self.vocab(proto)
         if model_type == 1:
             import tokenizers
+
             if version.parse(tokenizers.__version__) < version.parse("0.14.0"):
                 tokenizer = Tokenizer(Unigram(vocab_scores, 0))
             else:
