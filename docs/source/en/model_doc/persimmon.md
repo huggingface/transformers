@@ -27,9 +27,20 @@ The authors showcase their approach to model evaluation, focusing on practical t
 In terms of model details, the work outlines the architecture and training methodology of Persimmon-8B, providing insights into its design choices, sequence length, and dataset composition. The authors present a fast inference code that outperforms traditional implementations through operator fusion and CUDA graph utilization while maintaining code coherence. They express their anticipation of how the community will leverage this contribution to drive innovation, hinting at further upcoming releases as part of an ongoing series of developments.
 
 
+<Tip warning={true}>
+
+The `Perismmon` models were trained using `bfloat16`, but the original inference uses `float16. The checkpoints uploaded on the hub use `torch_dtype = 'float16'` which will be
+used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
+
+The `dtype` of the online weights is mostly irrelevant, unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online) then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`) and finally, if there is a `torch_dtype` provided in the config, it will be used. 
+
+Training the model in `float16` is not recommended and known to produce `nan`, as such the model should be trained in `bfloat16`.
+
+</Tip>
+
+
 Tips:
 
-- The model was trained in `bfloat16`. As for other models we recommand doing inference in `float16` but train in `bfloat16`
 - To convert the model, you need to clone the original repository using `git clone https://github.com/persimmon-ai-labs/adept-inference`, then get the checkpoints:
 
 ```bash
@@ -54,11 +65,7 @@ from transformers import PersimmonForCausalLM, PersimmonTokenizer
 
 model = PersimmonForCausalLM.from_pretrained("/output/path")
 tokenizer = PersimmonTokenizer.from_pretrained("/output/path")
-
-
 ```
-
-
 
 This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/persimmon-ai-labs/adept-inference).
@@ -70,27 +77,12 @@ The original code can be found [here](https://github.com/persimmon-ai-labs/adept
 
 
 ## PersimmonTokenizer
-
-[[autodoc]] PersimmonTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-## PersimmonTokenizerFast
-
-[[autodoc]] PersimmonTokenizerFast
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - update_post_processor
-    - save_vocabulary
+Perismmon uses a `sentencepiece` based tokenizer, similar to [`Llama`]()
 
 ## PersimmonModel
 
 [[autodoc]] PersimmonModel
     - forward
-
 
 ## PersimmonForCausalLM
 
