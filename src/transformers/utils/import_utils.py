@@ -528,6 +528,25 @@ def is_ipex_available():
     return True
 
 
+@lru_cache
+def is_torch_xpu_available(check_device=False):
+    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
+    if not is_ipex_available():
+        return False
+
+    import intel_extension_for_pytorch  # noqa: F401
+    import torch
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no XPU  is found
+            _ = torch.xpu.device_count()
+            return torch.xpu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "xpu") and torch.xpu.is_available()
+
+
 def is_bitsandbytes_available():
     if not is_torch_available():
         return False
