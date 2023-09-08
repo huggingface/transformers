@@ -100,22 +100,30 @@ class IdeficsVisionEmbeddings(nn.Module):
             return self.position_embedding
         class_pos_embed = self.position_embedding(torch.tensor([0]))
         patch_pos_embed = self.position_embedding(torch.arange(1, self.position_embedding.num_embeddings))
-        dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
+        embed_dim = embeddings.shape[-1]
+        num_h_patches = height // self.config.patch_size
+        num_w_patches = width // self.config.patch_size
         # we add a small number to avoid floating point error in the interpolation
         # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        num_h_patches, num_w_patches = num_h_patches + 0.1, num_w_patches + 0.1
+        sqrt_num_positions = math.sqrt(num_positions)
+        patch_pos_embed = patch_pos_embed.reshape(1, int(sqrt_num_positions), int(sqrt_num_positions), embed_dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            scale_factor=(num_h_patches / sqrt_num_positions, num_w_patches / sqrt_num_positions),
             mode="bicubic",
             align_corners=False,
         )
-        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        if (
+            int(num_h_patches) != patch_pos_embed.shape[-2] 
+            or int(num_w_patches) == patch_pos_embed.shape[-1]
+        ):
+            raise ValueError(
+                f"Number of patches for images ({int(num_h_patches), int(num_w_patches)}) don't match the "
+                f"shape of position embedding ({patch_pos_embed.shape[-2], patch_pos_embed.shape[-1]})"
+            )
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, embed_dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
