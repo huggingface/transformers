@@ -82,7 +82,7 @@ class Beit3Processor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
-        encoding = dict()
+        encoding = {}
         if text is not None:
             text_encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
             encoding.update(text_encoding)

@@ -183,7 +183,7 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 
 
 class Beit3MLP(nn.Module):
-    def __init__(self,config):
+    def __init__(self, config):
         super().__init__()
         self.norm1 = nn.LayerNorm(config.embed_dim * 4)
         self.dense1 = nn.Linear(config.embed_dim * 4, config.embed_dim * 2)
@@ -197,6 +197,7 @@ class Beit3MLP(nn.Module):
         hidden_states = self.norm2(hidden_states)
         hidden_states = self.act(hidden_states)
         return self.dense2(hidden_states)
+
 
 class Beit3MultiwayFeedForwardNetwork(nn.Module):
     def __init__(self, module):
@@ -345,31 +346,6 @@ class Beit3PositionalEmbedding(nn.Embedding):
             self.scale_grad_by_freq,
             self.sparse,
         )
-
-
-class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.embed_dim = config.embed_dim
-        self.activation_fn = get_activation(config.activation_fn)
-        self.activation_dropout = torch.nn.Dropout(config.activation_dropout)
-        self.dropout = torch.nn.Dropout(config.dropout)
-        self.fc1 = nn.Linear(self.embed_dim, config.hidden_size)
-        self.fc2 = nn.Linear(config.hidden_size, self.embed_dim)
-        self.ffn_layernorm = LayerNorm(config.hidden_size, eps=config.layernorm_eps) if config.subln else None
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        x_shape = hidden_states.shape
-        hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states.float()).type_as(hidden_states)
-        hidden_states = self.activation_dropout(hidden_states)
-        if self.ffn_layernorm is not None:
-            hidden_states = self.ffn_layernorm(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = hidden_states.view(x_shape)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
 
 
 class Beit3MultiheadAttention(nn.Module):
@@ -533,6 +509,29 @@ class Beit3PreTrainedModel(PreTrainedModel):
             self.ffn_layernorm.reset_parameters()
 
 
+class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.embed_dim = config.embed_dim
+        self.activation_fn = get_activation(config.activation_fn)
+        self.activation_dropout = torch.nn.Dropout(config.activation_dropout)
+        self.dropout = torch.nn.Dropout(config.dropout)
+        self.fc1 = nn.Linear(self.embed_dim, config.hidden_size)
+        self.fc2 = nn.Linear(config.hidden_size, self.embed_dim)
+        self.ffn_layernorm = LayerNorm(config.hidden_size, eps=config.layernorm_eps) if config.subln else None
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        x_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states.float()).type_as(hidden_states)
+        hidden_states = self.activation_dropout(hidden_states)
+        if self.ffn_layernorm is not None:
+            hidden_states = self.ffn_layernorm(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = hidden_states.view(x_shape)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
 
 
 class Beit3EncoderLayer(Beit3PreTrainedModel):
@@ -1028,7 +1027,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
 
 
 class Beit3Pooler(nn.Module):
-    def __init__(self,config):
+    def __init__(self, config):
         super().__init__()
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dense = nn.Linear(config.embed_dim, config.embed_dim)

@@ -421,7 +421,6 @@ class Beit3ImageProcessor(BaseImageProcessor):
         label[label == 254] = 255
         return label
 
-
     def _preprocess(
         self,
         image: ImageInput,
