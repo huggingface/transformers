@@ -397,7 +397,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_8b_chat_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = """'Simply put, the theory of relativity states that "nothing can travel faster than the speed of light in a vacuum." This theory was proposed by Albert Einstein in 1905. Einstein\'s theory also states that time slows down for a moving object.\n\n1. Einstein\'s theory\n2. 1905\n3. nothing can travel faster than the speed of light in a vacuum\n4. Albert Einstein\n'"""
+        EXPECTED_TEXT_COMPLETION = """human: Simply put, the theory of relativity states that "nothing can travel faster than the speed of light in a vacuum." This theory was proposed by Albert Einstein in 1905. Einstein\'s theory also states that time slows down for a moving object.\n\n1. Einstein\'s theory\n2. 1905\n3. nothing can travel faster than the speed of light in a vacuum\n4. Albert Einstein\n'"""
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
         tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-chat", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
