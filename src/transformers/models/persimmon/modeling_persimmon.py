@@ -789,13 +789,12 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
 
         ```python
         >>> from transformers import AutoTokenizer, PersimmonForCausalLM
-        >>> from transformers.testing_utils import torch_device
 
-        >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base").to(torch_device)
+        >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base").cuda()
         >>> tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-base")
 
         >>> prompt = "human: Hey, what should I eat for dinner?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
+        >>> inputs = tokenizer(prompt, return_tensors="pt").cuda()
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
