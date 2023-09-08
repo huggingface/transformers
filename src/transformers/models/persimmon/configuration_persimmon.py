@@ -1,10 +1,5 @@
 # coding=utf-8
-# Copyright 2023 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2023 Adept AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -85,7 +80,7 @@ class PersimmonConfig(PretrainedConfig):
         rotary_dim (`float`, *optinal*, default to 0.5):
             Percentage of the query and keys which will have rotary embedding.
 
-    Example:
+        Example:
 
     ```python
     >>> from transformers import PersimmonModel, PersimmonConfig

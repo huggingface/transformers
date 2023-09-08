@@ -1,4 +1,4 @@
-# Copyright 2023 EleutherAI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,12 +23,12 @@ from transformers import LlamaTokenizer, PersimmonConfig, PersimmonForCausalLM
 
 try:
     from transformers import LlamaTokenizerFast
+    LlamaTokenizer = LlamaTokenizerFast
 except ImportError as e:
     warnings.warn(e)
     warnings.warn(
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
-    LlamaTokenizerFast = None
 
 """
 Sample usage:

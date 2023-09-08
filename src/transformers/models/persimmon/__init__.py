@@ -1,4 +1,4 @@
-# Copyright 2023 EleutherAI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 AdeptAI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_sentencepiece_available,
-    is_tokenizers_available,
     is_torch_available,
 )
 
