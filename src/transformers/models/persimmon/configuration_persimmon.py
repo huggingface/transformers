@@ -75,7 +75,7 @@ class PersimmonConfig(PretrainedConfig):
             Whether or not to normalize the Queries and Keys after projecting the hidden states
         hidden_dropout (`float`, *optional*, default to 0.0):
             The dropout ratio after applying the MLP to the hidden states.
-        activation_dropout (`float`, *optional*, default to 0.0):
+        attention_dropout (`float`, *optional*, default to 0.0):
             The dropout ratio after computing the attention scores.
         rotary_dim (`float`, *optinal*, default to 0.5):
             Percentage of the query and keys which will have rotary embedding.
@@ -116,7 +116,8 @@ class PersimmonConfig(PretrainedConfig):
         rope_theta=25000.0,
         rope_scaling=None,
         qk_layernorm=True,
-        hidden_dropout=0.6,
+        hidden_dropout=0.0,
+        attention_dropout=0.0,
         rotary_dim=0.5,
         **kwargs,
     ):
@@ -134,6 +135,7 @@ class PersimmonConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self.hidden_dropout = hidden_dropout
+        self.attention_dropout = attention_dropout
         self.rotary_dim = rotary_dim
         self._rope_scaling_validation()
 

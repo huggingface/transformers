@@ -217,7 +217,7 @@ class PersimmonAttention(nn.Module):
             self.k_layernorm = nn.LayerNorm(
                 config.hidden_size // self.num_heads, eps=config.layer_norm_eps, elementwise_affine=True
             )
-
+        self.attention_dropout = nn.Dropoput(config.attention_dropout)
         self._init_rope()
 
     def _init_rope(self):
@@ -284,7 +284,7 @@ class PersimmonAttention(nn.Module):
             query_states = self.q_layernorm(query_states)
             key_states = self.k_layernorm(key_states)
 
-        # [batch_size, num_heads, seq_length, head_dim]
+        # [batch_size, num_heads, seq_length, head_dim] -> [batch_size, seq_length, num_heads, head_dim]
         query_states = query_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -303,9 +303,10 @@ class PersimmonAttention(nn.Module):
             key_states[..., : self.rotary_emb.dim],
             key_states[..., self.rotary_emb.dim :],
         )
-
+        # [batch_size, seq_length, num_heads, head_dim // config.rotary_dim]
         query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
-        # [sq, b, np, hn]
+
+        # [batch_size, seq_length, num_heads, head_dim]
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
@@ -333,7 +334,7 @@ class PersimmonAttention(nn.Module):
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query_states.dtype)
-        # TODO add attention_dropout
+        attn_weights = self.attention_dropout(attn_weights)
 
         attn_output = torch.matmul(attn_weights, value_states)
 
@@ -362,7 +363,7 @@ class PersimmonDecoderLayer(nn.Module):
         self.mlp = PersimmonMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)  # TODO To add to config
+        self.dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(
         self,
