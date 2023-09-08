@@ -299,6 +299,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(EXPECTED_TOKENS, encoding)
         self.assertEqual(target_text, decoding)
 
+
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "openai/whisper-small.en"
 
