@@ -34,7 +34,8 @@ class PersimmonConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PersimmonModel`]. It is used to instantiate an
     Persimmon model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Persimmon-7B.
+    configuration with the defaults will yield a similar configuration to that of the
+    [persimmon-8b-base](https://huggingface.co/ArthurZ/persimmon-8b-base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
