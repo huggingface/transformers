@@ -113,7 +113,7 @@ def main():
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
-    spm_path = os.path.join(args.input_dir, "tokenizer.model")
+    spm_path = os.path.join(args.input_dir, "adept_vocab.model")
 
     convert_persimmon_checkpoint(
         pytorch_dump_folder_path=args.output_dir,

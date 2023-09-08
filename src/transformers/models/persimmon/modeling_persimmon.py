@@ -288,8 +288,8 @@ class PersimmonAttention(nn.Module):
         (query_states, key_states, value_states) = self._split_heads(fused_qkv)
 
         if self.qk_layernorm:
-            query_states = self.q_layernorm(query_states.permute(1,0,3,2)).permute(1,0,3,2)
-            key_states = self.k_layernorm(key_states.permute(1,0,3,2)).permute(1,0,3,2)
+            query_states = self.q_layernorm(query_states)
+            key_states = self.k_layernorm(key_states)
 
         # [batch_size, num_heads, seq_length, head_dim]
         query_states = query_states.transpose(1, 2)
