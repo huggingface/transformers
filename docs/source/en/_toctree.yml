@@ -283,6 +283,8 @@
         title: CANINE
       - local: model_doc/codegen
         title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -311,6 +313,8 @@
         title: ErnieM
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/falcon
+        title: Falcon
       - local: model_doc/flan-t5
         title: FLAN-T5
       - local: model_doc/flan-ul2
@@ -556,6 +560,8 @@
         title: Vision Transformer (ViT)
       - local: model_doc/vit_hybrid
         title: ViT Hybrid
+      - local: model_doc/vitdet
+        title: ViTDet
       - local: model_doc/vit_mae
         title: ViTMAE
       - local: model_doc/vit_msn
@@ -601,6 +607,8 @@
         title: UniSpeech-SAT
       - local: model_doc/univnet
         title: UnivNet
+      - local: model_doc/vits
+        title: VITS
       - local: model_doc/wav2vec2
         title: Wav2Vec2
       - local: model_doc/wav2vec2-conformer

@@ -300,6 +300,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
     @require_torch
+    @slow
     def test_return_timestamps_in_preprocess(self):
         pipe = pipeline(
             task="automatic-speech-recognition",
@@ -901,6 +902,26 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
 
+    @slow
+    @require_torch_gpu
+    def test_wav2vec2_conformer_float16(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/wav2vec2-conformer-rope-large-960h-ft",
+            device="cuda:0",
+            torch_dtype=torch.float16,
+            framework="pt",
+        )
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        output = speech_recognizer(sample)
+        self.assertEqual(
+            output,
+            {"text": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL"},
+        )
+
     @require_torch
     def test_chunking_fast(self):
         speech_recognizer = pipeline(
@@ -1150,7 +1171,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # CTC models must specify return_timestamps type - cannot set `return_timestamps=True` blindly
         with self.assertRaisesRegex(
             ValueError,
-            "^CTC can either predict character (char) level timestamps, or word level timestamps."
+            "^CTC can either predict character level timestamps, or word level timestamps."
             "Set `return_timestamps='char'` or `return_timestamps='word'` as required.$",
         ):
             _ = speech_recognizer(audio, return_timestamps=True)
