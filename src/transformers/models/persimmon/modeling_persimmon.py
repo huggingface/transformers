@@ -794,13 +794,13 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
         >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base").to(torch_device)
         >>> tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-base")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> prompt = "human: Hey, what should I eat for dinner?"
         >>> inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "human: Hey, are you conscious? Can you talk to me?\n\nadept: Yes, I'm conscious.\n\nhuman: Can you talk to me"
+        'human: Hey, what should I eat for dinner?\n\ncat: 🐱\n\nhuman: 😐\n\n'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

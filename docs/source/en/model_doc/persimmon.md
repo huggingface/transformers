@@ -73,6 +73,8 @@ The original code can be found [here](https://github.com/persimmon-ai-labs/adept
 - Perismmon uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
 The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. The `chat` template will be updated with the templating functions in a follow up PR!
 
+- The authors suggest to use the following prompt format for the chat mode: `f"human: {prompt}\n\nadept:"`
+
 
 ## PersimmonConfig
 
