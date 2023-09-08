@@ -66,8 +66,8 @@ class LlamaConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Llama 1 supports up to 2048 tokens,
+            Llama 2 up to 4096, CodeLlama up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -77,6 +77,8 @@ class LlamaConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
             strategies: linear and dynamic. Their scaling factor must be an float greater than 1. The expected format
@@ -121,6 +123,7 @@ class LlamaConfig(PretrainedConfig):
         eos_token_id=2,
         pretraining_tp=1,
         tie_word_embeddings=False,
+        rope_theta=10000.0,
         rope_scaling=None,
         **kwargs,
     ):
@@ -141,6 +144,7 @@ class LlamaConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
+        self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
 
@@ -161,14 +165,14 @@ class LlamaConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `name` and `factor`, "
+                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
                 f"got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)
         if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
             raise ValueError(
-                f"`rope_scaling`'s name field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
+                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")

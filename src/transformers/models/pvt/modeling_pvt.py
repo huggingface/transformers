@@ -55,8 +55,8 @@ PVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.convnext.modeling_convnext.drop_path
-def drop_path(input, drop_prob: float = 0.0, training: bool = False, scale_by_keep=True):
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 

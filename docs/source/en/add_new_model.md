@@ -101,7 +101,7 @@ own regarding how code should be written :-)
 1. The forward pass of your model should be fully written in the modeling file while being fully independent of other
    models in the library. If you want to reuse a block from another model, copy the code and paste it with a
    `# Copied from` comment on top (see [here](https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/roberta/modeling_roberta.py#L160)
-   for a good example).
+   for a good example and [there](pr_checks#check-copies) for more documentation on Copied from). 
 2. The code should be fully understandable, even by a non-native English speaker. This means you should pick
    descriptive variable names and avoid abbreviations. As an example, `activation` is preferred to `act`.
    One-letter variable names are strongly discouraged unless it's an index in a for loop.
@@ -361,7 +361,7 @@ We expect that every model added to 🤗 Transformers passes a couple of integra
 model and the reimplemented version in 🤗 Transformers have to give the exact same output up to a precision of 0.001!
 Since it is normal that the exact same model written in different libraries can give a slightly different output
 depending on the library framework, we accept an error tolerance of 1e-3 (0.001). It is not enough if the model gives
-nearly the same output, they have to be the almost identical. Therefore, you will certainly compare the intermediate
+nearly the same output, they have to be almost identical. Therefore, you will certainly compare the intermediate
 outputs of the 🤗 Transformers version multiple times against the intermediate outputs of the original implementation of
 *brand_new_bert* in which case an **efficient** debugging environment of the original repository is absolutely
 important. Here is some advice is to make your debugging environment as efficient as possible.

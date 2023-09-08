@@ -268,6 +268,11 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     input_name = "input_features"
 
+    # TODO (ydshieh): undo skip once a fix is done on TF side.
+    @unittest.skip("Skip for now as TF 2.13 breaks it on GPU")
+    def test_xla_generate_slow(self):
+        super().test_xla_generate_slow()
+
     def setUp(self):
         self.model_tester = TFWhisperModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)

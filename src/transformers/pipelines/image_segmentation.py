@@ -89,6 +89,8 @@ class ImageSegmentationPipeline(Pipeline):
             postprocess_kwargs["mask_threshold"] = kwargs["mask_threshold"]
         if "overlap_mask_area_threshold" in kwargs:
             postprocess_kwargs["overlap_mask_area_threshold"] = kwargs["overlap_mask_area_threshold"]
+        if "timeout" in kwargs:
+            preprocess_kwargs["timeout"] = kwargs["timeout"]
 
         return preprocess_kwargs, {}, postprocess_kwargs
 
@@ -116,6 +118,9 @@ class ImageSegmentationPipeline(Pipeline):
                 Threshold to use when turning the predicted masks into binary values.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.5):
                 Mask overlap threshold to eliminate small, disconnected segments.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
@@ -133,8 +138,8 @@ class ImageSegmentationPipeline(Pipeline):
         """
         return super().__call__(images, **kwargs)
 
-    def preprocess(self, image, subtask=None):
-        image = load_image(image)
+    def preprocess(self, image, subtask=None, timeout=None):
+        image = load_image(image, timeout=timeout)
         target_size = [(image.height, image.width)]
         if self.model.config.__class__.__name__ == "OneFormerConfig":
             if subtask is None:

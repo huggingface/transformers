@@ -105,8 +105,8 @@ def window_reverse(windows, window_size, height, width):
     return windows
 
 
-# Copied from transformers.models.swin.modeling_swin.drop_path
-def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -903,7 +903,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values,
+        pixel_values: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

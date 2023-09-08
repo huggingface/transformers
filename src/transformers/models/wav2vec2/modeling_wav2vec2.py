@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -1273,7 +1273,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             raise ValueError(f"Cannot load_adapter for {target_lang} if `config.adapter_attn_dim` is not defined.")
 
         if target_lang == self.target_lang and not force_load:
-            logger.warn(f"Adapter weights are already set to {target_lang}.")
+            logger.warning(f"Adapter weights are already set to {target_lang}.")
             return
 
         cache_dir = kwargs.pop("cache_dir", None)

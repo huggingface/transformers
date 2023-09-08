@@ -530,6 +530,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
             batch_size = input_ids.shape[0]
@@ -603,7 +604,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 
         hidden_states = self.drop(hidden_states)
 
-        output_shape = input_shape + (hidden_states.size(-1),)
+        output_shape = (-1,) + input_shape[1:] + (hidden_states.size(-1),)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -786,7 +787,7 @@ DECISION_TRANSFORMER_INPUTS_DOCSTRING = r"""
             The returns for each state in the trajectory
         timesteps (`torch.LongTensor` of shape `(batch_size, episode_length)`):
             The timestep for each step in the trajectory
-        attention_mask (`torch.LongTensor` of shape `(batch_size, episode_length)`):
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, episode_length)`):
             Masking, used to mask the actions when performing autoregressive prediction
 """
 
@@ -829,16 +830,16 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     @replace_return_docstrings(output_type=DecisionTransformerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        states=None,
-        actions=None,
-        rewards=None,
-        returns_to_go=None,
-        timesteps=None,
-        attention_mask=None,
-        output_hidden_states=None,
-        output_attentions=None,
-        return_dict=None,
-    ) -> Union[Tuple, DecisionTransformerOutput]:
+        states: Optional[torch.FloatTensor] = None,
+        actions: Optional[torch.FloatTensor] = None,
+        rewards: Optional[torch.FloatTensor] = None,
+        returns_to_go: Optional[torch.FloatTensor] = None,
+        timesteps: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], DecisionTransformerOutput]:
         r"""
         Returns:
 

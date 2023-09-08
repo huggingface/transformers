@@ -56,6 +56,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
         ("clipseg", "CLIPSegConfig"),
+        ("code_llama", "LlamaConfig"),
         ("codegen", "CodeGenConfig"),
         ("conditional_detr", "ConditionalDetrConfig"),
         ("convbert", "ConvBertConfig"),
@@ -109,6 +110,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
+        ("idefics", "IdeficsConfig"),
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
@@ -161,6 +163,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pix2struct", "Pix2StructConfig"),
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
+        ("pop2piano", "Pop2PianoConfig"),
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
         ("qdqbert", "QDQBertConfig"),
@@ -215,6 +218,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "ViTHybridConfig"),
         ("vit_mae", "ViTMAEConfig"),
         ("vit_msn", "ViTMSNConfig"),
+        ("vitdet", "VitDetConfig"),
+        ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
@@ -311,6 +316,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("idefics", "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("informer", "INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("instructblip", "INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -359,6 +365,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("pix2struct", "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("plbart", "PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("pop2piano", "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("prophetnet", "PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pvt", "PVT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -403,6 +410,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_msn", "VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vitdet", "VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vits", "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vivit", "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2-conformer", "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -454,6 +463,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("clap", "CLAP"),
         ("clip", "CLIP"),
         ("clipseg", "CLIPSeg"),
+        ("code_llama", "CodeLlama"),
         ("codegen", "CodeGen"),
         ("conditional_detr", "Conditional DETR"),
         ("convbert", "ConvBERT"),
@@ -514,6 +524,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("herbert", "HerBERT"),
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
+        ("idefics", "IDEFICS"),
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
@@ -575,6 +586,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pix2struct", "Pix2Struct"),
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
+        ("pop2piano", "Pop2Piano"),
         ("prophetnet", "ProphetNet"),
         ("pvt", "PVT"),
         ("qdqbert", "QDQBert"),
@@ -632,6 +644,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vit_hybrid", "ViT Hybrid"),
         ("vit_mae", "ViTMAE"),
         ("vit_msn", "ViTMSN"),
+        ("vitdet", "VitDet"),
+        ("vits", "VITS"),
         ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
@@ -1001,6 +1015,11 @@ class AutoConfig:
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        code_revision = kwargs.pop("code_revision", None)
+
+        revision = kwargs.pop("revision", None)
+        kwargs["revision"] = sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code)
+
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
@@ -1010,10 +1029,11 @@ class AutoConfig:
 
         if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
-            config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            config_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
+            )
             if os.path.isdir(pretrained_model_name_or_path):
                 config_class.register_for_auto_class()
-            _ = kwargs.pop("code_revision", None)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
@@ -1032,7 +1052,7 @@ class AutoConfig:
         )
 
     @staticmethod
-    def register(model_type, config):
+    def register(model_type, config, exist_ok=False):
         """
         Register a new configuration for this class.
 
@@ -1046,4 +1066,25 @@ class AutoConfig:
                 f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "
                 "match!"
             )
-        CONFIG_MAPPING.register(model_type, config)
+        CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
+
+
+def sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code):
+    if revision in ["main", None] and not trust_remote_code:
+        revision_dict = {
+            "tiiuae/falcon-7b": "4e2d06f0a7c6370ebabbc30c6f59377ae8f73d76",
+            "tiiuae/falcon-7b-instruct": "f8dac3fff96d5debd43edf56fb4e1abcfffbef28",
+            "tiiuae/falcon-40b": "f1ba7d328c06aa6fbb4a8afd3c756f46d7e6b232",
+            "tiiuae/falcon-40b-instruct": "7475ff8cfc36ed9a962b658ae3c33391566a85a5",
+        }
+
+        if isinstance(pretrained_model_name_or_path, str) and pretrained_model_name_or_path.lower() in revision_dict:
+            revision = revision_dict.get(pretrained_model_name_or_path.lower())
+            logger.warning(
+                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
+                f"transformers library implementation. {pretrained_model_name_or_path}'s revision is set to a version that doesn't "
+                f"leverage remote code ({revision}).\n\nIn order to override this, please set a revision manually or set "
+                "`trust_remote_code=True`."
+            )
+
+    return revision

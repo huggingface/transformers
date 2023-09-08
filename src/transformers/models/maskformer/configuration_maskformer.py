@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ MaskFormer model configuration"""
-import copy
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -200,16 +199,3 @@ class MaskFormerConfig(PretrainedConfig):
             decoder_config=decoder_config,
             **kwargs,
         )
-
-    def to_dict(self) -> Dict[str, any]:
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["backbone_config"] = self.backbone_config.to_dict()
-        output["decoder_config"] = self.decoder_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

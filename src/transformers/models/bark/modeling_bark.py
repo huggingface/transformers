@@ -1077,18 +1077,25 @@ class BarkFineModel(BarkPreTrainedModel):
         # one lm_head for each codebook
         self.lm_heads = new_output_embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens):
+    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
         old_embeddings_list = self.get_input_embeddings()
         new_embeddings_list = nn.ModuleList(
-            [self._get_resized_embeddings(old_embeddings, new_num_tokens) for old_embeddings in old_embeddings_list]
+            [
+                self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
+                for old_embeddings in old_embeddings_list
+            ]
         )
         self.set_input_embeddings(new_embeddings_list)
+        new_num_tokens = [embed.weight.shape[0] for embed in new_embeddings_list]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head_list = self.get_output_embeddings()
             new_lm_head_list = nn.ModuleList(
-                [self._get_resized_lm_head(old_lm_head, new_num_tokens) for old_lm_head in old_lm_head_list]
+                [
+                    self._get_resized_lm_head(old_lm_head, new_num_token)
+                    for old_lm_head, new_num_token in zip(old_lm_head_list, new_num_tokens)
+                ]
             )
             self.set_output_embeddings(new_lm_head_list)
 
@@ -1224,13 +1231,6 @@ class BarkFineModel(BarkPreTrainedModel):
             attentions=all_self_attentions,
         )
 
-    def can_generate(self) -> bool:
-        """
-        Returns True. Despite being an autoencoder, BarkFineModel shares some characteristics with generative models
-        due to the way audio are generated.
-        """
-        return True
-
     def generate(
         self,
         coarse_output: torch.Tensor,
@@ -1336,7 +1336,7 @@ class BarkFineModel(BarkPreTrainedModel):
             input_buffer = fine_input[:, start_idx : start_idx + max_fine_input_length, :]
             for n_inner in range(n_coarse, fine_generation_config.n_fine_codebooks):
                 logits = self.forward(n_inner, input_buffer).logits
-                if temperature is None:
+                if temperature is None or temperature == 1.0:
                     relevant_logits = logits[:, rel_start_fill_idx:, :codebook_size]
                     codebook_preds = torch.argmax(relevant_logits, -1)
                 else:
@@ -1499,8 +1499,8 @@ class BarkModel(BarkPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, BarkModel
 
-        >>> processor = AutoProcessor.from_pretrained("ylacombe/bark-small")
-        >>> model = BarkModel.from_pretrained("ylacombe/bark-small")
+        >>> processor = AutoProcessor.from_pretrained("suno/bark-small")
+        >>> model = BarkModel.from_pretrained("suno/bark-small")
 
         >>> # To add a voice preset, you can pass `voice_preset` to `BarkProcessor.__call__(...)`
         >>> voice_preset = "v2/en_speaker_6"
@@ -1587,10 +1587,3 @@ class BarkModel(BarkPreTrainedModel):
             self.codec_model_hook.offload()
 
         return audio
-
-    def can_generate(self) -> bool:
-        """
-        Returns True. Despite not having a `self.generate` method, this model can `generate` and thus needs a
-        BarkGenerationConfig.
-        """
-        return True

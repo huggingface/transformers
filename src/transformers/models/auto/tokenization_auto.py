@@ -60,6 +60,7 @@ else:
                 ),
             ),
             ("align", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             (
                 "barthez",
@@ -119,6 +120,13 @@ else:
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "code_llama",
+                (
+                    "CodeLlamaTokenizer" if is_sentencepiece_available() else None,
+                    "CodeLlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("codegen", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -130,6 +138,7 @@ else:
             ),
             ("cpmant", ("CpmAntTokenizer", None)),
             ("ctrl", ("CTRLTokenizer", None)),
+            ("data2vec-audio", ("Wav2Vec2CTCTokenizer", None)),
             ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("deberta", ("DebertaTokenizer", "DebertaTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -168,6 +177,7 @@ else:
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("jukebox", ("JukeboxTokenizer", None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
@@ -224,6 +234,7 @@ else:
                     "MT5TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("musicgen", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("mvp", ("MvpTokenizer", "MvpTokenizerFast" if is_tokenizers_available() else None)),
             ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -336,6 +347,7 @@ else:
             ),
             ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("vits", ("VitsTokenizer", None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
             ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),
             ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer", None)),
@@ -571,7 +583,7 @@ class AutoTokenizer:
             inputs (additional positional arguments, *optional*):
                 Will be passed along to the Tokenizer `__init__()` method.
             config ([`PretrainedConfig`], *optional*)
-                The configuration object used to dertermine the tokenizer class to instantiate.
+                The configuration object used to determine the tokenizer class to instantiate.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
@@ -754,7 +766,7 @@ class AutoTokenizer:
             f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING.keys())}."
         )
 
-    def register(config_class, slow_tokenizer_class=None, fast_tokenizer_class=None):
+    def register(config_class, slow_tokenizer_class=None, fast_tokenizer_class=None, exist_ok=False):
         """
         Register a new tokenizer in this mapping.
 
@@ -795,4 +807,4 @@ class AutoTokenizer:
             if fast_tokenizer_class is None:
                 fast_tokenizer_class = existing_fast
 
-        TOKENIZER_MAPPING.register(config_class, (slow_tokenizer_class, fast_tokenizer_class))
+        TOKENIZER_MAPPING.register(config_class, (slow_tokenizer_class, fast_tokenizer_class), exist_ok=exist_ok)

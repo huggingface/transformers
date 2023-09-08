@@ -18,7 +18,6 @@ import math
 from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -1853,8 +1852,8 @@ class ClapTextModel(ClapPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = input_ids.size()
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+            input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
@@ -1956,8 +1955,8 @@ class ClapModel(ClapPreTrainedModel):
         text_config = config.text_config
         audio_config = config.audio_config
 
-        self.logit_scale_a = nn.Parameter(torch.tensor(np.log(config.logit_scale_init_value)))
-        self.logit_scale_t = nn.Parameter(torch.tensor(np.log(config.logit_scale_init_value)))
+        self.logit_scale_a = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
+        self.logit_scale_t = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
 
         self.projection_dim = config.projection_dim
 

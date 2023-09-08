@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..deepspeed import is_deepspeed_zero3_enabled
+from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
     MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
@@ -33,12 +33,11 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ModelOutput, logging
+from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
 from .logits_process import (
-    ClassifierFreeGuidanceLogitsProcessor,
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
     EpsilonLogitsWarper,
@@ -64,6 +63,7 @@ from .logits_process import (
     TopKLogitsWarper,
     TopPLogitsWarper,
     TypicalLogitsWarper,
+    UnbatchedClassifierFreeGuidanceLogitsProcessor,
 )
 from .stopping_criteria import (
     MaxLengthCriteria,
@@ -79,6 +79,9 @@ if TYPE_CHECKING:
     from .streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
+
+if is_accelerate_available():
+    from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
 
 @dataclass
@@ -468,6 +471,23 @@ ContrastiveSearchOutput = Union[ContrastiveSearchEncoderDecoderOutput, Contrasti
 GenerateOutput = Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, ContrastiveSearchOutput]
 
 
+class GenerationMode(ExplicitEnum):
+    """
+    Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
+    """
+
+    # Non-beam methods
+    CONTRASTIVE_SEARCH = "contrastive_search"
+    GREEDY_SEARCH = "greedy_search"
+    SAMPLE = "sample"
+    ASSISTED_GENERATION = "assisted_generation"
+    # Beam methods
+    BEAM_SEARCH = "beam_search"
+    BEAM_SAMPLE = "beam_sample"
+    CONSTRAINED_BEAM_SEARCH = "constrained_beam_search"
+    GROUP_BEAM_SEARCH = "group_beam_search"
+
+
 class GenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
@@ -561,12 +581,6 @@ class GenerationMixin:
         inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
         return inputs, input_name, model_kwargs
 
-    def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
-        """
-        Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in the generate method.
-        """
-        return logits
-
     def _maybe_initialize_input_ids_for_generation(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -620,8 +634,11 @@ class GenerationMixin:
         encoder = self.get_encoder()
         # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
         # as the inputs.
-        if hasattr(encoder, "_hf_hook"):
-            encoder._hf_hook.io_same_device = True
+        if hasattr(self, "hf_device_map"):
+            if hasattr(encoder, "_hf_hook"):
+                encoder._hf_hook.io_same_device = True
+            else:
+                add_hook_to_module(encoder, AlignDevicesHook(io_same_device=True))
 
         # 2. Prepare encoder args and encoder kwargs from model kwargs.
         irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
@@ -829,6 +846,46 @@ class GenerationMixin:
             warpers.append(LogitNormalization())
         return warpers
 
+    def _get_generation_mode(
+        self, generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"]
+    ) -> GenerationMode:
+        """
+        Returns the generation mode triggered by a [`GenerationConfig`] instance.
+        """
+        if generation_config.constraints is not None or generation_config.force_words_ids is not None:
+            generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
+        elif generation_config.num_beams == 1:
+            if generation_config.do_sample is False:
+                if (
+                    generation_config.top_k is not None
+                    and generation_config.top_k > 1
+                    and generation_config.penalty_alpha is not None
+                    and generation_config.penalty_alpha > 0
+                ):
+                    generation_mode = GenerationMode.CONTRASTIVE_SEARCH
+                else:
+                    generation_mode = GenerationMode.GREEDY_SEARCH
+            else:
+                generation_mode = GenerationMode.SAMPLE
+        else:
+            if generation_config.num_beam_groups > 1:
+                generation_mode = GenerationMode.GROUP_BEAM_SEARCH
+            elif generation_config.do_sample is True:
+                generation_mode = GenerationMode.BEAM_SAMPLE
+            else:
+                generation_mode = GenerationMode.BEAM_SEARCH
+
+        # Assisted generation may extend some generation modes
+        if assistant_model is not None:
+            if generation_mode in ("greedy_search", "sample"):
+                generation_mode = GenerationMode.ASSISTED_GENERATION
+            else:
+                raise ValueError(
+                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "is only supported with Greedy Search and Sample."
+                )
+        return generation_mode
+
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,
@@ -836,6 +893,9 @@ class GenerationMixin:
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         logits_processor: Optional[LogitsProcessorList],
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        negative_prompt_ids: Optional[torch.Tensor] = None,
+        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -844,6 +904,16 @@ class GenerationMixin:
         # instantiate processors list
         processors = LogitsProcessorList()
 
+        if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
+            processors.append(
+                UnbatchedClassifierFreeGuidanceLogitsProcessor(
+                    generation_config.guidance_scale,
+                    self,
+                    unconditional_ids=negative_prompt_ids,
+                    unconditional_attention_mask=negative_prompt_attention_mask,
+                    use_cache=model_kwargs["use_cache"],
+                )
+            )
         if generation_config.sequence_bias is not None:
             processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
 
@@ -941,8 +1011,6 @@ class GenerationMixin:
             )
         if generation_config.forced_decoder_ids is not None:
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
-        if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
-            processors.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -1183,6 +1251,52 @@ class GenerationMixin:
         #         " generate arguments will also show up in this list)"
         #     )
 
+    def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
+        """Performs validation related to the resulting generated length"""
+
+        # 1. Max length warnings related to poor parameterization
+        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
+            # 20 is the default max_length of the generation config
+            warnings.warn(
+                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) to control the"
+                "generation length. We recommend setting `max_new_tokens` to control the maximum length of the "
+                "generation.",
+                UserWarning,
+            )
+        if input_ids_length >= generation_config.max_length:
+            input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+            warnings.warn(
+                f"Input length of {input_ids_string} is {input_ids_length}, but `max_length` is set to"
+                f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
+                " increasing `max_new_tokens`.",
+                UserWarning,
+            )
+
+        # 2. Min length warnings due to unfeasible parameter combinations
+        min_length_error_suffix = (
+            " Generation will stop at the defined maximum length. You should decrease the minimum length and/or "
+            "increase the maximum length."
+        )
+        if has_default_max_length:
+            min_length_error_suffix += (
+                f" Note that `max_length` is set to {generation_config.max_length}, its default value."
+            )
+        if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
+            warnings.warn(
+                f"Unfeasible length constraints: `min_length` ({generation_config.min_length}) is larger than"
+                f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix,
+                UserWarning,
+            )
+        if generation_config.min_new_tokens is not None:
+            min_length = generation_config.min_new_tokens + input_ids_length
+            if min_length > generation_config.max_length:
+                warnings.warn(
+                    f"Unfeasible length constraints: `min_new_tokens` ({generation_config.min_new_tokens}), when "
+                    f"added to the prompt length ({input_ids_length}), is larger than"
+                    f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix,
+                    UserWarning,
+                )
+
     @torch.no_grad()
     def generate(
         self,
@@ -1194,6 +1308,8 @@ class GenerationMixin:
         synced_gpus: Optional[bool] = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,
+        negative_prompt_ids: Optional[torch.Tensor] = None,
+        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -1251,6 +1367,11 @@ class GenerationMixin:
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
+            negative_prompt_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                The negative prompt needed for some processors such as CFG. The batch size must match the input batch
+                size. This is an experimental feature, subject to breaking API changes in future versions.
+            negative_prompt_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Attention_mask for `negative_prompt_ids`.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1389,16 +1510,9 @@ class GenerationMixin:
             streamer.put(input_ids.cpu())
 
         # 6. Prepare `max_length` depending on other stopping criteria.
-        input_ids_seq_length = input_ids.shape[-1]
+        input_ids_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length != 20:
-            # 20 is the default max_length of the generation config
-            warnings.warn(
-                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
-                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
-                UserWarning,
-            )
-        elif generation_config.max_new_tokens is not None:
+        if generation_config.max_new_tokens is not None:
             if not has_default_max_length:
                 logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
@@ -1406,84 +1520,11 @@ class GenerationMixin:
                     "Please refer to the documentation for more information. "
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-
-        if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
-            raise ValueError(
-                f"Unfeasible length constraints: the minimum length ({generation_config.min_length}) is larger than"
-                f" the maximum length ({generation_config.max_length})"
-            )
-        if input_ids_seq_length >= generation_config.max_length:
-            input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-            logger.warning(
-                f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
-                f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
-                " increasing `max_new_tokens`."
-            )
+            generation_config.max_length = generation_config.max_new_tokens + input_ids_length
+        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
-        is_constraint_gen_mode = (
-            generation_config.constraints is not None or generation_config.force_words_ids is not None
-        )
-
-        is_contrastive_search_gen_mode = (
-            (generation_config.num_beams == 1)
-            and generation_config.top_k is not None
-            and generation_config.top_k > 1
-            and generation_config.do_sample is False
-            and generation_config.penalty_alpha is not None
-            and generation_config.penalty_alpha > 0
-        )
-
-        is_greedy_gen_mode = (
-            (generation_config.num_beams == 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is False
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_sample_gen_mode = (
-            (generation_config.num_beams == 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is True
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_beam_gen_mode = (
-            (generation_config.num_beams > 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is False
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_beam_sample_gen_mode = (
-            (generation_config.num_beams > 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is True
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_group_beam_gen_mode = (
-            (generation_config.num_beams > 1)
-            and (generation_config.num_beam_groups > 1)
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_assisted_gen_mode = False
-        if assistant_model is not None:
-            if not (is_greedy_gen_mode or is_sample_gen_mode):
-                raise ValueError(
-                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
-                    "is only supported with Greedy Search and Sample."
-                )
-            is_assisted_gen_mode = True
-
-        if generation_config.num_beam_groups > generation_config.num_beams:
-            raise ValueError("`num_beam_groups` has to be smaller or equal to `num_beams`")
-        if is_group_beam_gen_mode and generation_config.do_sample is True:
-            raise ValueError(
-                "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
-            )
+        generation_mode = self._get_generation_mode(generation_config, assistant_model)
 
         if streamer is not None and (generation_config.num_beams > 1):
             raise ValueError(
@@ -1504,10 +1545,13 @@ class GenerationMixin:
         # 8. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
-            input_ids_seq_length=input_ids_seq_length,
+            input_ids_seq_length=input_ids_length,
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
+            model_kwargs=model_kwargs,
+            negative_prompt_ids=negative_prompt_ids,
+            negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
 
         # 9. prepare stopping criteria
@@ -1515,7 +1559,7 @@ class GenerationMixin:
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
         # 10. go into different generation modes
-        if is_assisted_gen_mode:
+        if generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing assisted generate, "
@@ -1553,13 +1597,7 @@ class GenerationMixin:
                 streamer=streamer,
                 **model_kwargs,
             )
-        if is_greedy_gen_mode:
-            if generation_config.num_return_sequences > 1:
-                raise ValueError(
-                    "num_return_sequences has to be 1 when doing greedy search, "
-                    f"but is {generation_config.num_return_sequences}."
-                )
-
+        if generation_mode == GenerationMode.GREEDY_SEARCH:
             # 11. run greedy search
             return self.greedy_search(
                 input_ids,
@@ -1574,12 +1612,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_contrastive_search_gen_mode:
-            if generation_config.num_return_sequences > 1:
-                raise ValueError(
-                    "num_return_sequences has to be 1 when doing contrastive search, "
-                    f"but is {generation_config.num_return_sequences}."
-                )
+        elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
 
@@ -1599,7 +1632,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_sample_gen_mode:
+        elif generation_mode == GenerationMode.SAMPLE:
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
@@ -1626,13 +1659,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_beam_gen_mode:
-            if generation_config.num_return_sequences > generation_config.num_beams:
-                raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
-
-            if stopping_criteria.max_length is None:
-                raise ValueError("`max_length` needs to be a stopping_criteria for now.")
-
+        elif generation_mode == GenerationMode.BEAM_SEARCH:
             # 11. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
@@ -1664,26 +1691,25 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_beam_sample_gen_mode:
+        elif generation_mode == GenerationMode.BEAM_SAMPLE:
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
-            if stopping_criteria.max_length is None:
-                raise ValueError("`max_length` needs to be a stopping_criteria for now.")
             # 12. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
-                batch_size=batch_size * generation_config.num_return_sequences,
+                batch_size=batch_size,
                 num_beams=generation_config.num_beams,
                 device=inputs_tensor.device,
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
+                num_beam_hyps_to_keep=generation_config.num_return_sequences,
                 max_length=generation_config.max_length,
             )
 
             # 13. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
-                expand_size=generation_config.num_beams * generation_config.num_return_sequences,
+                expand_size=generation_config.num_beams,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 **model_kwargs,
             )
@@ -1703,25 +1729,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_group_beam_gen_mode:
-            if generation_config.num_return_sequences > generation_config.num_beams:
-                raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
-
-            if generation_config.num_beams % generation_config.num_beam_groups != 0:
-                raise ValueError("`num_beams` should be divisible by `num_beam_groups` for group beam search.")
-
-            if generation_config.diversity_penalty == 0.0:
-                raise ValueError(
-                    "`diversity_penalty` should be greater than `0.0`, otherwise your beam groups will be identical."
-                )
-
-            if stopping_criteria.max_length is None:
-                raise ValueError("`max_length` needs to be a stopping_criteria for now.")
-
-            has_default_typical_p = kwargs.get("typical_p") is None and generation_config.typical_p == 1.0
-            if not has_default_typical_p:
-                raise ValueError("Decoder argument `typical_p` is not supported with beam groups.")
-
+        elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
             # 11. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
@@ -1754,22 +1762,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_constraint_gen_mode:
-            if generation_config.num_return_sequences > generation_config.num_beams:
-                raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
-
-            if stopping_criteria.max_length is None:
-                raise ValueError("`max_length` needs to be a stopping_criteria for now.")
-
-            if generation_config.num_beams <= 1:
-                raise ValueError("`num_beams` needs to be greater than 1 for constrained generation.")
-
-            if generation_config.do_sample:
-                raise ValueError("`do_sample` needs to be false for constrained generation.")
-
-            if generation_config.num_beam_groups is not None and generation_config.num_beam_groups > 1:
-                raise ValueError("`num_beam_groups` not supported yet for constrained generation.")
-
+        elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
             final_constraints = []
             if generation_config.constraints is not None:
                 final_constraints = generation_config.constraints
@@ -3036,9 +3029,6 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
@@ -3364,9 +3354,6 @@ class GenerationMixin:
 
             next_token_logits = outputs.logits[:, -1, :]
 
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
@@ -3727,9 +3714,6 @@ class GenerationMixin:
                 # select outputs of beams of current group only
                 next_token_logits = outputs.logits[batch_group_indices, -1, :]
 
-                # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-                # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-                next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
                 next_token_scores = nn.functional.log_softmax(
                     next_token_logits, dim=-1
                 )  # (batch_size * group_size, vocab_size)
@@ -4086,9 +4070,6 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)

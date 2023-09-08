@@ -462,16 +462,12 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             `question_encoder_last_hidden_state` and `retrieved_doc_embeds`, see examples for more information.
         context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
             Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
-            retriever.
-
-            If the model has is not initialized with a `retriever` ``context_input_ids` has to be provided to the
-            forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`]. context_attention_mask
-            (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*,
-            returned when *output_retrieved=True*): Attention mask post-processed from the retrieved documents and the
-            question encoder `input_ids` by the retriever.
-
-            If the model has is not initialized with a `retriever` `context_attention_mask` has to be provided to the
-            forward pass. `context_attention_mask` are returned by [`~RagRetriever.__call__`].
+            retriever. If the model was not initialized with a `retriever` ``context_input_ids` has to be provided to
+            the forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
+        context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`,*optional*, returned when *output_retrieved=True*):
+            Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
+            retriever. If the model has is not initialized with a `retriever` `context_attention_mask` has to be
+            provided to the forward pass. `context_attention_mask` are returned by [`~RagRetriever.__call__`].
         use_cache (`bool`, *optional*, defaults to `True`):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -545,7 +541,7 @@ class RagModel(RagPreTrainedModel):
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
-        context_attention_mask=None,
+        context_attention_mask: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

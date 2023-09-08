@@ -45,7 +45,7 @@ class GPTSanJapaneseTester:
         is_training=True,
         hidden_size=32,
         ext_size=42,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_ext_layers=2,
         num_attention_heads=4,
         num_experts=2,

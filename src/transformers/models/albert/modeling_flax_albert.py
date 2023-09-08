@@ -173,7 +173,6 @@ class FlaxAlbertEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
-    # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbeddings.__call__
     def __call__(self, input_ids, token_type_ids, position_ids, deterministic: bool = True):
         # Embed
         inputs_embeds = self.word_embeddings(input_ids.astype("i4"))

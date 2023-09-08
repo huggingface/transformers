@@ -53,6 +53,12 @@ class TrainerState:
             During training, represents the number of update steps completed.
         max_steps (`int`, *optional*, defaults to 0):
             The number of update steps to do during the current training.
+        logging_steps (`int`, *optional*, defaults to 500):
+            Log every X updates steps
+        eval_steps (`int`, *optional*):
+            Run an evaluation every X steps.
+        save_steps (`int`, *optional*, defaults to 500):
+            Save checkpoint every X updates steps.
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
@@ -77,6 +83,9 @@ class TrainerState:
     epoch: Optional[float] = None
     global_step: int = 0
     max_steps: int = 0
+    logging_steps: int = 500
+    eval_steps: int = 500
+    save_steps: int = 500
     num_train_epochs: int = 0
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
@@ -421,13 +430,13 @@ class DefaultFlowCallback(TrainerCallback):
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
-        if args.logging_strategy == IntervalStrategy.STEPS and state.global_step % args.logging_steps == 0:
+        if args.logging_strategy == IntervalStrategy.STEPS and state.global_step % state.logging_steps == 0:
             control.should_log = True
 
         # Evaluate
         if (
             args.evaluation_strategy == IntervalStrategy.STEPS
-            and state.global_step % args.eval_steps == 0
+            and state.global_step % state.eval_steps == 0
             and args.eval_delay <= state.global_step
         ):
             control.should_evaluate = True
@@ -435,8 +444,8 @@ class DefaultFlowCallback(TrainerCallback):
         # Save
         if (
             args.save_strategy == IntervalStrategy.STEPS
-            and args.save_steps > 0
-            and state.global_step % args.save_steps == 0
+            and state.save_steps > 0
+            and state.global_step % state.save_steps == 0
         ):
             control.should_save = True
 

@@ -68,7 +68,7 @@ class TvltModelTester:
         num_audio_channels=1,
         num_frames=2,
         hidden_size=32,
-        num_hidden_layers=3,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=128,
         hidden_act="gelu",

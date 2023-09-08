@@ -39,7 +39,7 @@ try:
     from xformers import ops as xops
 except ImportError:
     xops = None
-    logger.warn(
+    logger.warning(
         "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
     )
 
@@ -246,18 +246,26 @@ class OpenLlamaAttention(nn.Module):
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = OpenLlamaRotaryEmbedding(
-                self.head_dim, max_position_embeddings=self.max_position_embeddings
+                self.head_dim,
+                max_position_embeddings=self.max_position_embeddings,
+                base=self.rope_theta,
             )
         else:
             scaling_type = self.config.rope_scaling["type"]
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
                 self.rotary_emb = OpenLlamaLinearScalingRotaryEmbedding(
-                    self.head_dim, max_position_embeddings=self.max_position_embeddings, scaling_factor=scaling_factor
+                    self.head_dim,
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                    base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
                 self.rotary_emb = OpenLlamaDynamicNTKScalingRotaryEmbedding(
-                    self.head_dim, max_position_embeddings=self.max_position_embeddings, scaling_factor=scaling_factor
+                    self.head_dim,
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                    base=self.rope_theta,
                 )
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")

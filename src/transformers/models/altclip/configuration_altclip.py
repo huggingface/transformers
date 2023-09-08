@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ AltCLIP model configuration"""
-import copy
 import os
 from typing import Union
 
@@ -291,7 +290,6 @@ class AltCLIPConfig(PretrainedConfig):
     ```"""
 
     model_type = "altclip"
-    is_composition = True
 
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=768, logit_scale_init_value=2.6592, **kwargs
@@ -392,16 +390,3 @@ class AltCLIPConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

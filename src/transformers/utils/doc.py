@@ -122,6 +122,11 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
     if i < len(lines):
         params_docstring = "\n".join(lines[(i + 1) :])
         params_docstring = _convert_output_args_doc(params_docstring)
+    else:
+        raise ValueError(
+            f"No `Args` or `Parameters` section is found in the docstring of `{output_type.__name__}`. Make sure it has"
+            "docstring and contain either `Args` or `Parameters`."
+        )
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
