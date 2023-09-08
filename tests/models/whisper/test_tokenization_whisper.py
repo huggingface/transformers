@@ -59,7 +59,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[0], "!")
         self.assertEqual(vocab_keys[1], '"')
         self.assertEqual(vocab_keys[-1], "<|30.00|>")
-        self.assertEqual(len(vocab_keys), 50365)
+        self.assertEqual(len(vocab_keys), 51865)
 
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 50258)
