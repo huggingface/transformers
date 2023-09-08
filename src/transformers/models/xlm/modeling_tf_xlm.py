@@ -649,9 +649,8 @@ XLM_INPUTS_DOCSTRING = r"""
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`Dict[str, tf.Tensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding.
+            Dictionary string to `tf.Tensor` that contains precomputed hidden states (key and values in the attention
+            blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential decoding.
 
             The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
@@ -700,20 +699,20 @@ class TFXLMModel(TFXLMPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
+        langs: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        lengths: tf.Tensor | None = None,
+        cache: Dict[str, tf.Tensor] | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool = False,
+    ) -> TFBaseModelOutput | Tuple[tf.Tensor]:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
