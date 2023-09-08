@@ -425,18 +425,18 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             [
                 {
                     "text": (
-                        " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles"
+                        "<|0.00|> Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles<|7.20|>"
                     ),
                     "timestamp": (0.0, 7.2),
                 },
                 {
                     "text": (
-                        " are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the"
+                        "<|7.20|> are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the<|15.16|>"
                     ),
                     "timestamp": (7.2, 15.16),
                 },
                 {
-                    "text": " same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his",
+                    "text": "<|15.16|> same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his<|21.70|>",
                     "timestamp": (15.16, 21.7),
                 },
             ],
@@ -463,7 +463,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         self.assertEqual(
             output[0],
             {
-                "text": " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles",
+                "text": "<|0.00|> Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles<|7.20|>",
                 "timestamp": (0.0, 7.2),
             },
         )
