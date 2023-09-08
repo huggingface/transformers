@@ -1399,8 +1399,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        print(vision_outputs.shape)
-        
+        print(vision_outputs)
+
         image_embeds = vision_outputs[0]
 
         print(image_embeds.shape)
