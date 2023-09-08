@@ -62,7 +62,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "self_attention": "self_attn",
     "language_model.encoder": "model",
     "word_embeddings_for_head": "lm_head",
-    "embedding": "embed_tokens",
+    "language_model.embedding.word_embeddings": "model.embed_tokens",
     # final layer norm?
 }
 
