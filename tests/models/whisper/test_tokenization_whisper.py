@@ -58,8 +58,8 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(vocab_keys[0], "!")
         self.assertEqual(vocab_keys[1], '"')
-        self.assertEqual(vocab_keys[-1], "<|notimestamps|>")
-        self.assertEqual(len(vocab_keys), 50364)
+        self.assertEqual(vocab_keys[-1], "<|30.00|>")
+        self.assertEqual(len(vocab_keys), 50365)
 
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 50258)
@@ -120,12 +120,12 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("TODO @Sanchit. Let's make the CI green in the mean time")
     def test_output_offsets(self):
         tokenizer = self.get_tokenizer()
-        previous_sequence = [51492, 406, 3163, 1953, 466, 13, 51612, 51612]
+        previous_sequence = [51492, 406, 3163, 1953, 466, 13, 51612]
         self.assertEqual(
             tokenizer.decode(previous_sequence, output_offsets=True),
             {
-                "text": " not worth thinking about.",
-                "offsets": [{"text": " not worth thinking about.", "timestamp": (22.56, 24.96)}],
+                "text": "<|22.56|> not worth thinking about.<|24.96|>",
+                "offsets": [{"text": "<|22.56|> not worth thinking about.<|24.96|>", "timestamp": (22.56, 24.96)}],
             },
         )
 
@@ -137,13 +137,16 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.decode(next_sequences_1, output_offsets=True),
             {
                 "text": (
-                    " of spectators, retrievality is not worth thinking about. His instant panic was followed by a"
-                    " small, sharp blow high on his chest.<|endoftext|>"
+                    "<|0.00|> of spectators, retrievality is not worth thinking about.<|5.00|><|5.00|> His instant "
+                    "panic was followed by a small, sharp blow high on his chest.<|9.40|><|endoftext|>"
                 ),
                 "offsets": [
-                    {"text": " of spectators, retrievality is not worth thinking about.", "timestamp": (0.0, 5.0)},
                     {
-                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
+                        "text": "<|0.00|> of spectators, retrievality is not worth thinking about.<|5.00|>",
+                        "timestamp": (0.0, 5.0),
+                    },
+                    {
+                        "text": "<|5.00|> His instant panic was followed by a small, sharp blow high on his chest.<|9.40|>",
                         "timestamp": (5.0, 9.4),
                     },
                 ],
