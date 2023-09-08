@@ -40,85 +40,87 @@ class PatchTSMixerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        prediction_length (`int`):
-            The prediction length for the decoder. In other words, the prediction horizon of the model.
-        context_length (`int`, *optional*, defaults to `prediction_length`):
-            The context length for the encoder. If unset, the context length will be the same as the
-            `prediction_length`.
-        distribution_output (`string`, *optional*, defaults to `"student_t"`):
-            The distribution emission head for the model. Could be either "student_t", "normal" or "negative_binomial".
-        loss (`string`, *optional*, defaults to `"nll"`):
-            The loss function for the model corresponding to the `distribution_output` head. For parametric
-            distributions it is the negative log likelihood (nll) - which currently is the only supported one.
-        input_size (`int`, *optional*, defaults to 1):
-            The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
-            multivariate targets.
-        lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
-            The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
-            5, 6, 7]`.
-        scaling (`bool`, *optional* defaults to `True`):
-            Whether to scale the input targets.
-        num_time_features (`int`, *optional*, defaults to 0):
-            The number of time features in the input time series.
-        num_dynamic_real_features (`int`, *optional*, defaults to 0):
-            The number of dynamic real valued features.
-        num_static_categorical_features (`int`, *optional*, defaults to 0):
-            The number of static categorical features.
-        num_static_real_features (`int`, *optional*, defaults to 0):
-            The number of static real valued features.
-        cardinality (`list[int]`, *optional*):
-            The cardinality (number of different values) for each of the static categorical features. Should be a list
-            of integers, having the same length as `num_static_categorical_features`. Cannot be `None` if
-            `num_static_categorical_features` is > 0.
-        embedding_dimension (`list[int]`, *optional*):
-            The dimension of the embedding for each of the static categorical features. Should be a list of integers,
-            having the same length as `num_static_categorical_features`. Cannot be `None` if
-            `num_static_categorical_features` is > 0.
-        d_model (`int`, *optional*, defaults to 64):
-            Dimensionality of the transformer layers.
-        encoder_layers (`int`, *optional*, defaults to 2):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 2):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 2):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 2):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 32):
-            Dimension of the "intermediate" (often named feed-forward) layer in encoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 32):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and decoder. If string, `"gelu"` and
-            `"relu"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the encoder, and decoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the attention and fully connected layers for each encoder layer.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the attention and fully connected layers for each decoder layer.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability used between the two layers of the feed-forward networks.
-        num_parallel_samples (`int`, *optional*, defaults to 100):
-            The number of samples to generate in parallel for each time step of inference.
+        seq_len (`int`, *optional*, defaults to 32):
+            The context/history length for the input sequence.
+        patch_len (`int`, *optional*, defaults to 8):
+            The patch length for the `PatchTSMixer` model. Try to set it as a divisor of `seq_len`.
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of input variables.
+        stride (`int`, *optional*, defaults to 8):
+            Determines the overlap between two consecutive patches. 
+        num_features (`int`, *optional*, defaults to 8):
+            Hidden dimension of the model. Larger value indicates more complex model.
+        expansion_factor (`int`, *optional*, defaults to 2):
+            Expansion factor to use inside MLP. Larger value indicates more complex model.
+        num_layers (`int`, *optional*, defaults to 2):
+            Number of layers to use. Larger value indicates more complex model.
+        dropout (`float`, *optional*, defaults to 0.2):
+            The dropout probability the `PatchTSMixer` backbone.
+        mode (`str`, *optional*, defaults to "common_channel"):
+            Mixer Mode. Determines how to process the channels. Allowed values: "flatten", "common_channel", "mix_channel". 
+            In "flatten" mode, patch embedding encodes the patch information across all channels.
+            In "common_channel" mode, patch embedding is independent of channels (Channel Independece). 
+            In "mix_channel" mode, we follow channel independence, but in addition to patch and feature mixing, 
+            we also do channel mixing.
+        gated_attn (`bool`, *optional*, defaults to `True`):
+            Enable Gated Attention. 
+        norm_mlp (`str`, *optional*, defaults to "LayerNorm"):
+            Normalization layer (BatchNorm or LayerNorm).
+        self_attn (`bool`, *optional*, defaults to `False`):
+            Enable Tiny self attention in addition to MLP mixing.
+        self_attn_heads (`int`, *optional*, defaults to 1):
+            Number of self-attention heads. Works only when `self_attn` is set to `True`.
+        use_pe (`bool`, *optional*, defaults to `False`):
+            Enable the use of positional embedding for the tiny self-attention layers. 
+            Works only when `self_attn` is set to `True`.
+        pe (`str`, *optional*, defaults to "zeros"):
+            Type of positional encoding. Allowed values are `None`, "zeros", "normal", "uniform", "sincos".
+        learn_pe (`bool`, *optional*, defaults to `False`):
+            Whether to learn the positional encoding.
+        mask_type (`str`, *optional*, defaults to "random"):
+            Type of masking for pretraining. Allowed values are "random", "forecast".  
+        mask_ratio (`float`, *optional*, defaults to 0.5):
+            Masking ratio. Higher value indicates more masking.
+        mask_patches (`list`, *optional*, defaults to [2, 3]): 
+            List of patch lengths to mask in the end of the data.
+        mask_patch_ratios (`list`, *optional*, defaults to [1, 1]):  
+            List of weights to use for each patch length. For Example, if `mask_patches` is [2,3] and 
+            `mask_patch_ratios` is [1,1], then equal weights to both patch lengths.
+        mask_value (`float`, *optional*, defaults to 0.0):
+            Mask value to use.
+        masked_loss (`bool`, *optional*, defaults to `False`):
+            Whether to compute pretraining loss only at the masked portions, or on the entire output.
+        channel_consistent_masking (`bool`, *optional*, defaults to `True`):
+            When true, masking will be same across all channels of a timeseries. 
+            Otherwise, masking positions will vary across channels. 
+        revin (`bool`, *optional*, defaults to `True`):
+            Whether to apply [Reversible Instance Normalization](https://openreview.net/pdf?id=cGDAkQo1C0p). 
+        head_dropout (`float`, *optional*, defaults to 0.2):
+            The dropout probability the `PatchTSMixer` head. 
+        forecast_len (`int`, *optional*, defaults to 16):
+            Number of time steps to forecast for a forecasting task. Also known as the Forecast Horizon.
+        forecast_channel_indices (`list`, *optional*, defaults to `None`):
+            List of channel indices to forecast. If None, forecast all channels.
+        n_classes (`int`, *optional*, defaults to 3):
+            Number of classes for a classification task.
+        n_targets (`int`, *optional*, defaults to 3):
+            Number of targets (dimensionality of the regressed variable) for a regression task. 
+        output_range (`list`, *optional*, defaults to `None`):
+            Output range to restrict. Defaults to None.
+        head_agg (`str`, *optional*, defaults to "max_pool"):
+            Aggregation mode. Allowed values are `None`, "use_last", "max_pool", "avg_pool".
+        is_encoder_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as an encoder/decoder or not. Allowed value is `False`.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
-        label_length (`int`, *optional*, defaults to 10):
-            Start token length of the PatchTSMixer decoder, which is used for direct multi-step prediction (i.e.
-            non-autoregressive generation).
-        moving_average (`int`, defaults to 25):
-            The window size of the moving average. In practice, it's the kernel size in AvgPool1d of the Decomposition
-            Layer.
-        autocorrelation_factor (`int`, defaults to 3):
-            "Attention" (i.e. AutoCorrelation mechanism) factor which is used to find top k autocorrelations delays.
-            It's recommended in the paper to set it to a number between 1 and 5.
-
-
-        Example:
+        seed_number (`int`, *optional*, defaults to 42):
+            Random seed.
+        post_init (`bool`, *optional*, defaults to `False`):
+            Whether to use custom weight initialization from `transformers` library, 
+            or the default initialization in `PyTorch`. Setting it to `False` performs
+            `PyTorch` weight initialization.
+        
+    Example:
 
     ```python
     >>> from transformers import PatchTSMixerConfig, PatchTSMixerModel

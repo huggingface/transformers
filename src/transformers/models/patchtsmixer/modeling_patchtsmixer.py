@@ -34,7 +34,7 @@ from ...utils import add_start_docstrings, logging
 from .configuration_patchtsmixer import PatchTSMixerConfig
 
 from .layers import (InjectRevinStatistics4D, LinearHead, PatchTSMixer, Patch,
-                     PatchMasking, ForecastHead, PretrainHead, RevIN)
+                     PatchMasking, ForecastHead, PretrainHead, RevIN, set_seed)
 
 logger = logging.get_logger(__name__)
 
@@ -65,143 +65,36 @@ PATCHTSMIXER_START_DOCSTRING = r"""
 
 PATCHTSMIXER_INPUTS_DOCSTRING = r"""
     Args:
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Past values of the time series, that serve as context in order to predict the future. These values may
-            contain lags, i.e. additional values from the past which are added in order to serve as "extra context".
-            The `past_values` is what the Transformer encoder gets as input (with optional additional features, such as
-            `static_categorical_features`, `static_real_features`, `past_time_features`).
+        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, in_channels)`):
+            Context values of the time series. For a pretraining task, this denotes the input time series
+            to predict the masked portion. For a forecasting task, this denotes the history/past time
+            series values. Similarly, for classification or regression tasks, it denotes the appropriate
+            context values of the time series. 
 
-            The sequence length here is equal to `context_length` + `max(config.lags_sequence)`.
+            For univariate time series, `in_channels` dimension should be 1. For multivariate time 
+            series, it is > 1.
+            
+        target_values (`torch.FloatTensor` of shape `(batch_size, target_len, in_channels)` or 
+            `(batch_size, forecast_length, len(forecast_channel_indices))` or
+            `(batch_size, n_targets)`, or `(batch_size,)` *optional*):
+            Target values of the time series, that serve as labels for the model. The `target_values` is what the
+            Transformer needs during training to learn to output, given the `context_values`. Note that, this is 
+            NOT required for a pretraining task.
 
-            Missing values need to be replaced with zeros.
+            For a forecasting task, the shape can be `(batch_size, target_len, in_channels)` or 
+            `(batch_size, forecast_length, len(forecast_channel_indices))`. Here, `target_len = forcast_len`,
+            and output channels can be `in_channels` or `len(forecast_channel_indices)`.
 
-        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
-            Optional time features, which the model internally will add to `past_values`. These could be things like
-            "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
-            could also be so-called "age" features, which basically help the model know "at which point in life" a
-            time-series is. Age features have small values for distant past time steps and increase monotonically the
-            more we approach the current time step.
+            For a classification task, it has a shape of `(batch_size,)`.
 
-            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
-            the position encodings are learned from scratch internally as parameters of the model, the Time Series
-            Transformer requires to provide additional time features.
+            For a regression task, it has a shape of `(batch_size, n_targets)`.
 
-            The PatchTSMixer only learns additional embeddings for `static_categorical_features`.
-
-        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
-            `[0, 1]`:
-
-            - 1 for values that are **observed**,
-            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-
-        static_categorical_features (`torch.LongTensor` of shape `(batch_size, number of static categorical features)`, *optional*):
-            Optional static categorical features for which the model will learn an embedding, which it will add to the
-            values of the time series.
-
-            Static categorical features are features which have the same value for all time steps (static over time).
-
-            A typical example of a static categorical feature is a time series ID.
-
-        static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
-            Optional static real features which the model will add to the values of the time series.
-
-            Static real features are features which have the same value for all time steps (static over time).
-
-            A typical example of a static real feature is promotion information.
-
-        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)`):
-            Future values of the time series, that serve as labels for the model. The `future_values` is what the
-            Transformer needs to learn to output, given the `past_values`.
-
-            See the demo notebook and code snippets for details.
-
-            Missing values need to be replaced with zeros.
-
-        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
-            Optional time features, which the model internally will add to `future_values`. These could be things like
-            "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
-            could also be so-called "age" features, which basically help the model know "at which point in life" a
-            time-series is. Age features have small values for distant past time steps and increase monotonically the
-            more we approach the current time step.
-
-            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
-            the position encodings are learned from scratch internally as parameters of the model, the Time Series
-            Transformer requires to provide additional features.
-
-            The PatchTSMixer only learns additional embeddings for `static_categorical_features`.
-
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on certain token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Mask to avoid performing attention on certain token indices. By default, a causal mask will be used, to
-            make sure the model can only look at previous inputs in order to predict the future.
-
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
         output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return the hidden states of all layers. 
+
+        return_loss (`bool`,  *optional*):
+            Whether to return the loss in the `forward` call.
 """
-
-
-def set_seed(x=42):
-    random.seed(x)
-    np.random.seed(x)
-    torch.manual_seed(x)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(x)
-
 
 class PatchTSMixerPreTrainedModel(PreTrainedModel):
     # Weight initialization
@@ -226,16 +119,14 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-
-
 class PatchTSMixerEncoderOutputWithNoAttention(ModelOutput):
     """
-    Base class for PatchTSMixerEncoderOutput, with potential hidden states.
+    Base class for `PatchTSMixerEncoderOutput`, with potential hidden states.
     Args:
-        last_hidden_state (`torch.FloatTensor`  of shape `(batch_size, num_channels, height, width)`):
+        last_hidden_state (`torch.FloatTensor`  of shape `(batch_size, num_channels, height, width)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the model.
-        patched_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_len)`): 
-            Patched input data
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
     """
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None,
@@ -268,7 +159,11 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
-    def forward(self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False) -> PatchTSMixerEncoderOutputWithNoAttention:
+    def forward(
+            self, 
+            context_values: torch.Tensor, 
+            output_hidden_states: Optional[bool] = False
+        ) -> PatchTSMixerEncoderOutputWithNoAttention:
         """
         context_values: [bs  x n_vars x num_patches x patch_len]
         return: [bs x n_vars x num_patches x num_features]
@@ -290,6 +185,8 @@ class PatchTSMixerModelOutputWithNoAttention(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor`  of shape `(batch_size, num_channels, height, width)`):
             Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         patched_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_len)`): 
             Patched input data
         mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`,*optional*): 
@@ -406,16 +303,17 @@ class PatchTSMixerPretrainHead(nn.Module):
 
 class PatchTSMixerForPreTrainingOutputWithNoAttention(ModelOutput):
     """
-    Output type of [`PatchTSMixerForPreTrainingOutput`].
+    Output type of [`PatchTSMixerForPreTrainingOutputWithNoAttention`].
 
-    Args:
-        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-            Total loss
+    Args: 
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, patch_len)`):
             Prediction output from the pretrain head.
-
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
+        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+            Total loss
     """
 
     prediction_logits: torch.FloatTensor = None
@@ -503,13 +401,14 @@ class PatchTSMixerForForecastOutputWithNoAttention(ModelOutput):
     Output type of [`PatchTSMixerForForecastOutput`].
 
     Args:
-        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-            Total loss
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, forecast_len, in_channels)`):
             Prediction output from the forecast head.
-
-        backbone_embeddings (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+            Total loss.
     """
 
     prediction_logits: torch.FloatTensor = None
@@ -604,13 +503,14 @@ class PatchTSMixerForClassificationOutputWithNoAttention(ModelOutput):
     Output type of [`PatchTSMixerForClassificationOutput`].
 
     Args:
-        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-            Total loss
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, n_classes)`):
-            Prediction output from the classification head.
-
-        backbone_embeddings (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, forecast_len, in_channels)`):
+            Prediction output from the forecast head.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+            Total loss.
     """
 
     prediction_logits: torch.FloatTensor = None
@@ -709,13 +609,14 @@ class PatchTSMixerForRegressionOutputWithNoAttention(ModelOutput):
     Output type of [`PatchTSMixerForRegressionOutputWithNoAttention`].
 
     Args:
-        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-            Total loss
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, n_targets)`):
-            Prediction output from the regression head.
-
-        backbone_embeddings (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, forecast_len, in_channels)`):
+            Prediction output from the forecast head.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+            Total loss.
     """
 
     prediction_logits: torch.FloatTensor = None
