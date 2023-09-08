@@ -23,13 +23,13 @@ from transformers import LlamaTokenizer, PersimmonConfig, PersimmonForCausalLM
 
 try:
     from transformers import LlamaTokenizerFast
-
-    LlamaTokenizer = LlamaTokenizerFast
+    tokenizer_class = LlamaTokenizerFast
 except ImportError as e:
     warnings.warn(e)
     warnings.warn(
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
+    tokenizer_class = LlamaTokenizer
 
 """
 Sample usage:
@@ -121,7 +121,7 @@ def main():
         safe_serialization=args.safe_serialization,
         ada_lib_path=args.ada_lib_path,
     )
-    tokenizer = LlamaTokenizer(spm_path, bos_token="|ENDOFTEXT", eos_token=None)
+    tokenizer = tokenizer_class(spm_path, bos_token="|ENDOFTEXT", eos_token=None)
     tokenizer.save_pretrained(args.output_dir)
 
 
