@@ -77,7 +77,7 @@ class PersimmonConfig(PretrainedConfig):
             The dropout ratio after applying the MLP to the hidden states.
         attention_dropout (`float`, *optional*, default to 0.0):
             The dropout ratio after computing the attention scores.
-        rotary_dim (`float`, *optinal*, default to 0.5):
+        rotary_dim (`float`, *optional*, default to 0.5):
             Percentage of the query and keys which will have rotary embedding.
 
         Example:
