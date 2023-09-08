@@ -222,8 +222,8 @@ class PersimmonAttention(nn.Module):
         self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
         
         if self.qk_layernorm:
-            self.q_layernorm = nn.LayerNorm(config.hidden_size // self.num_heads, elementwise_affine = True)
-            self.k_layernorm = nn.LayerNorm(config.hidden_size // self.num_heads, elementwise_affine = True)
+            self.q_layernorm = nn.LayerNorm(config.hidden_size // self.num_heads, eps=config.layer_norm_eps ,elementwise_affine = True)
+            self.k_layernorm = nn.LayerNorm(config.hidden_size // self.num_heads, eps=config.layer_norm_eps ,elementwise_affine = True)
 
         self._init_rope()
 
@@ -370,8 +370,8 @@ class PersimmonDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = PersimmonAttention(layer_id, config=config)
         self.mlp = PersimmonMLP(config)
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout) # TODO To add to config
 
     def forward(
@@ -563,7 +563,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([PersimmonDecoderLayer(layer_id, config) for layer_id in range(config.num_hidden_layers)])
-        self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -787,8 +787,8 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, PersimmonForCausalLM
 
-        >>> model = PersimmonForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-base")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -796,7 +796,7 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        "human: Hey, are you conscious? Can you talk to me?\n\nadept: Yes, I'm conscious.\n\nhuman: Can you talk to me"
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

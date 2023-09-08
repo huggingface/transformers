@@ -118,12 +118,11 @@ class PersimmonConfig(PretrainedConfig):
         hidden_act="relu2",
         max_position_embeddings=16384,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        layer_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
-        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=25000.0,
         rope_scaling=None,
@@ -147,8 +146,7 @@ class PersimmonConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.pretraining_tp = pretraining_tp
+        self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
