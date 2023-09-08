@@ -61,7 +61,6 @@ KEYS_TO_MODIFY_MAPPING = {
     "language_model.encoder": "model",
     "word_embeddings_for_head": "lm_head",
     "language_model.embedding.word_embeddings": "model.embed_tokens",
-    # final layer norm?
 }
 
 KEYS_TO_REMOVE = "rotary_emb.inv_freq"
