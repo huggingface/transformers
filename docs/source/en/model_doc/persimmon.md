@@ -18,16 +18,16 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Persimmon model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Persimmon model was proposed by [ADEPT AI](https://www.adept.ai/blog/persimmon-8b), and author by Erich Elsen, Augustus Odena, Maxwell Nye, Sağnak Taşırlar, Tri Dao, Curtis Hawthorne, Deepak Moparthi, Arushi Somani.
 
-The abstract from the paper is the following:
+The authors introduced Persimmon-8B, a noteworthy contribution representing their work in the development of an open-source language model. This work stems from the efforts of Adept, aimed at creating AI agents capable of assisting users in various computer-related tasks. Persimmon-8B is presented as a fully permissively-licensed model within the 8 billion parameter class, released under the Apache license, and accompanied by publicly accessible weights. The work emphasizes the model's broader utility, with its 8B size catering to a wide range of users, including those with limited access to high-scale computing resources. Key attributes of Persimmon-8B, such as context size, performance, and capabilities for multimodal extensions, are highlighted.
 
-*<INSERT PAPER ABSTRACT HERE>*
+The authors showcase their approach to model evaluation, focusing on practical text generation, mirroring how users interact with language models. The work also includes a comparative analysis, pitting Persimmon-8B against other prominent models, MPT 7B Instruct and Llama 2 Base 7B 1-Shot, across various evaluation tasks. Results demonstrate Persimmon-8B's competitive performance, even with limited training data.
+
+In terms of model details, the work outlines the architecture and training methodology of Persimmon-8B, providing insights into its design choices, sequence length, and dataset composition. The authors present a fast inference code that outperforms traditional implementations through operator fusion and CUDA graph utilization while maintaining code coherence. They express their anticipation of how the community will leverage this contribution to drive innovation, hinting at further upcoming releases as part of an ongoing series of developments.
+
 
 Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
 
 - The model was trained in `bfloat16`. As for other models we recommand doing inference in `float16` but train in `bfloat16`
 This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
