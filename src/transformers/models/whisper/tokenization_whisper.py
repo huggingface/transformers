@@ -626,11 +626,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
             decoder_start_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
             token_ids = self._strip_prompt(token_ids, prompt_token_id, decoder_start_token_id)
 
-        # soft condition to check whether the tokenizer contains the timestamp tokens as part of the vocab
-        timestamp_tokens_added = len(self.all_special_ids) != len(self.added_tokens_encoder) + 1
-        if not decode_with_timestamps and timestamp_tokens_added:
-            timestamp_begin = self.all_special_ids[-1] + 1
-            token_ids = [token for token in token_ids if token < timestamp_begin]
+        if not decode_with_timestamps:
+            timestamp_ids = [self.convert_tokens_to_ids("<|%.2f|>" % (i * 0.02)) for  i in range(1500 + 1)]
+            token_ids = [token for token in token_ids if token not in timestamp_ids]
 
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
