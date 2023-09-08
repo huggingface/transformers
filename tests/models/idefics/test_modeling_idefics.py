@@ -74,8 +74,6 @@ class IdeficsModelTester:
         num_labels=3,
         scope=None,
         modality_type_vocab_size=2,
-        add_multiple_images=False,
-        num_images=-1,
         vision_embed_dim=32,
         vision_patch_size=2,
         vision_image_size=30,
@@ -113,8 +111,6 @@ class IdeficsModelTester:
         self.num_labels = num_labels
         self.scope = scope
         self.modality_type_vocab_size = modality_type_vocab_size
-        self.add_multiple_images = add_multiple_images
-        self.num_images = num_images
 
         self.vision_embed_dim = vision_embed_dim
         self.vision_patch_size = vision_patch_size
@@ -150,32 +146,10 @@ class IdeficsModelTester:
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
 
-    def prepare_config_and_inputs(self):
-        # self.seq_length = 42
-
+    def prepare_config_and_inputs(self, num_images=1, interpolate_pos_encoding=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        num_images = 2 if self.add_multiple_images else 1
-        pixel_values = floats_tensor(
-            [self.batch_size, num_images, self.num_channels, self.image_size, self.image_size]
-        )
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
-
-        config = self.get_config()
-        interpolate_pos_encoding = False
-        return (config, input_ids, input_mask, pixel_values, image_attention_mask, interpolate_pos_encoding)
-
-    def prepare_config_and_inputs_for_image_pos_embeddings_interpolation(self):
-        # self.seq_length = 42
-
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        num_images = 2 if self.add_multiple_images else 1
-        expand_image_size = 2
+        expand_image_size = 0 if not interpolate_pos_encoding else 2
         pixel_values = floats_tensor(
             [
                 self.batch_size,
@@ -192,7 +166,6 @@ class IdeficsModelTester:
         image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
 
         config = self.get_config()
-        interpolate_pos_encoding = True
         return (config, input_ids, input_mask, pixel_values, image_attention_mask, interpolate_pos_encoding)
 
     def get_config(self):
@@ -214,7 +187,6 @@ class IdeficsModelTester:
             initializer_range=self.initializer_range,
             num_labels=self.num_labels,
             modality_type_vocab_size=self.modality_type_vocab_size,
-            num_images=self.num_images,
             vision_config=self.vision_config,
         )
 
@@ -301,12 +273,16 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+    def test_model_single_image(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_images=1, interpolate_pos_encoding=False)
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_multiple_images(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_images=2, interpolate_pos_encoding=False)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_with_image_pos_embeddings_interpolation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_image_pos_embeddings_interpolation()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_images=1, interpolate_pos_encoding=False)
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_training(self):
@@ -454,7 +430,8 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(
-            self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2
+            self,
+            modality_type_vocab_size=3,
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
