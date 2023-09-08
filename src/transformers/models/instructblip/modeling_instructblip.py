@@ -1398,7 +1398,12 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        print(vision_outputs.shape)
+        
         image_embeds = vision_outputs[0]
+
+        print(image_embeds.shape)
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
