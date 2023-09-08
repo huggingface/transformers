@@ -120,8 +120,6 @@ class PersimmonConfig(PretrainedConfig):
         rotary_dim=0.5,
         **kwargs,
     ):
-        # untie_embeddings TODO
-        #     "apply_query_key_layer_scaling": true,
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
