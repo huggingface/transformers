@@ -716,7 +716,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
 
 # Partly copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->PERSIMMON,Llama->Persimmon
 class PersimmonForCausalLM(PersimmonPreTrainedModel):
-    _tied_weights_keys = ['lm_head.weight']
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

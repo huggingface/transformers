@@ -271,14 +271,14 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification) if is_torch_available() else ()
     )
     pipeline_model_mapping = (
-    {
-        "feature-extraction": PersimmonModel,
-        "text-classification": PersimmonForSequenceClassification,
-        "text-generation": PersimmonForCausalLM,
-        "zero-shot": PersimmonForSequenceClassification,
-    }
-    if is_torch_available()
-    else {}
+        {
+            "feature-extraction": PersimmonModel,
+            "text-classification": PersimmonForSequenceClassification,
+            "text-generation": PersimmonForCausalLM,
+            "zero-shot": PersimmonForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     all_generative_model_classes = (PersimmonForCausalLM,) if is_torch_available() else ()
@@ -397,8 +397,8 @@ class PersimmonIntegrationTest(unittest.TestCase):
     @slow
     def test_model_8b_chat_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi"""
-        prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-chat", use_fast = False)
+        prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
+        tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-chat", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
         model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-chat").to(torch_device)
 
