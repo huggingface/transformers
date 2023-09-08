@@ -273,6 +273,31 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(expected_tokens, output_rust[1])
         self.assertEqual(expected_indices, output_rust[2])
 
+    def test_timestamp_encoding(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        input_text = "<|0.00|> Whisper can do timestamps?<|2.60|>"
+        target_text = "<|startoftranscript|><|notimestamps|><|0.00|> Whisper can do timestamps?<|2.60|><|endoftext|>"
+
+        # fmt: off
+        EXPECTED_TOKENS = [
+            START_OF_TRANSCRIPT, NOTIMESTAMPS, NOTIMESTAMPS + 1, 2471, 271, 610,
+            393, 360, 220, 31208, 377, 23150, 30, 50494, END_OF_TRANSCRIPT,
+        ]
+        # fmt: on
+
+        encoding = tokenizer(input_text, split_special_tokens=False).input_ids
+        decoding = tokenizer.decode(encoding)
+
+        self.assertEqual(EXPECTED_TOKENS, encoding)
+        self.assertEqual(target_text, decoding)
+
+        encoding = rust_tokenizer(input_text, split_special_tokens=False)
+        decoding = rust_tokenizer.decode(encoding)
+
+        self.assertEqual(EXPECTED_TOKENS, encoding)
+        self.assertEqual(target_text, decoding)
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "openai/whisper-small.en"
