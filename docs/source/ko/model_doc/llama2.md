@@ -22,7 +22,7 @@ Llama2 모델은 Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Al
 
 논문의 초록은 다음과 같습니다:
 
-*이 연구에서 우리는 70억에서 700억 파라미터의 범위에서 사전 훈련 및 미세 조정된 대규모 언어 모델(LLMs)의 모음인 Llama 2를 개발하고 출시했습니다. Llama 2-Chat라고 불리는 미세 조정된 LLMs은 대화 사용 사례에 최적화되었습니다. 우리의 모델은 테스트한 대부분의 벤치마크에서 오픈 소스 채팅 모델보다 성능이 뛰어나며, 유용성과 안전성에 대한 인적 평가를 바탕으로 비공개 소스 모델을 대체할 수 있는 적절한 대안이 될 수 있습니다. 우리는 Llama 2-Chat의 미세 조정 및 안전성 향상의 접근 방식에 대한 자세한 설명을 제공하여 커뮤니티가 우리의 작업을 기반으로 LLMs의 책임있는 개발에 기여할 수 있도록 합니다.*
+*이 연구에서 우리는 70억에서 700억 파라미터의 범위에서 사전 훈련 및 미세 조정된 대규모 언어 모델(LLMs)의 모음인 Llama 2를 개발 및 공개합니다. Llama 2-Chat라고 불리는 미세 조정된 LLMs은 대화 사용 사례에 최적화되었습니다. 우리의 모델은 테스트한 대부분의 벤치마크에서 오픈 소스 채팅 모델보다 성능이 뛰어나며, 유용성과 안전성에 대한 인적 평가를 바탕으로 비공개 소스 모델을 대체할 수 있는 적절한 대안이 될 수 있습니다. 우리는 Llama 2-Chat의 미세 조정 및 안전성 향상의 접근 방식에 대한 자세한 설명을 제공하여 커뮤니티가 우리의 작업을 기반으로 LLMs의 책임있는 개발에 기여할 수 있도록 합니다.*
 
 [여기](https://huggingface.co/models?search=llama2)에서 모든 Llama2 모델을 확인할 수 있습니다.
 
@@ -30,7 +30,7 @@ Llama2 모델은 Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Al
 
 `Llama2` 모델은 `bfloat16`을 사용하여 훈련되었지만, 원래 추론은 `float16`을 사용합니다. 허브에 업로드된 체크포인트는 `torch_dtype = 'float16'`을 사용하며, 이는 `AutoModel` API에 의해 체크포인트를 `torch.float32`에서 `torch.float16`으로 캐스팅하는 데 사용됩니다. 
 
-온라인 가중치의 `dtype`은 `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`를 사용하여 모델을 초기화할 때 `torch_dtype="auto"`를 사용하지 않는 한 대부분 관련이 없습니다. 그 이유는 모델이 먼저 다운로드될 것이고 (온라인 체크포인트의 `dtype`을 사용하여) 그다음에 기본 `dtype`인 `torch`로 캐스팅하고(`torch.float32`가 됨), 마지막으로 구성(configuration)에서 제공된 `torch_dtype`이 있는 경우 이를 사용합니다. 
+온라인 가중치의 `dtype`은 `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`를 사용하여 모델을 초기화할 때 `torch_dtype="auto"`를 사용하지 않는 한 대부분 관련이 없습니다. 그 이유는 모델이 먼저 다운로드될 것이고 (온라인 체크포인트의 `dtype`을 사용하여) 그다음에 기본 `dtype`인 `torch`로 캐스팅하고(`torch.float32`가 됨), 마지막으로 구성(configuration)에서 제공된 `torch_dtype`이 있는 경우 이를 사용하기 때문입니다.
 
 모델을 `float16`에서 훈련하는 것은 권장되지 않으며 `nan`을 생성하는 것으로 알려져 있습니다. 따라서 모델은 `bfloat16`에서 훈련되어야 합니다.
 
@@ -58,7 +58,7 @@ tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 model = LlamaForCausalLM.from_pretrained("/output/path")
 ```
 
-스크립트를 실행하려면 모델을 float16 정밀도로 전체 RAM에 호스트할 수 있을 만큼 충분한 CPU RAM이 필요합니다 (가장 큰 버전이 여러 체크포인트로 제공되더라도 각 체크포인트는 모델 가중치의 일부만을 포함하므로 모두 RAM에 로드해야 합니다). 75B 모델의 경우, 따라서 145GB의 RAM이 필요합니다.
+스크립트를 실행하려면 모델을 float16 정밀도로 전부 호스트할 수 있을 만큼 충분한 CPU RAM이 필요합니다 (가장 큰 버전이 여러 체크포인트로 제공되더라도 각 체크포인트는 모델 가중치의 일부만을 포함하므로 모두 RAM에 로드해야 합니다). 75B 모델의 경우, 총 145GB의 RAM이 필요합니다.
 
 - LLaMA 토크나이저는 [sentencepiece](https://github.com/google/sentencepiece)를 기반으로 한 BPE 모델입니다. sentencepiece의 특징 중 하나는 시퀀스를 디코딩할 때 첫 번째 토큰이 단어의 시작이면 (예: "Banana") 토크나이저는 문자열 앞에 접두사 공간을 추가하지 않는 것입니다.
 
