@@ -20,7 +20,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import PersimmonConfig, is_torch_available, set_seed
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -396,14 +396,15 @@ class PersimmonIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(out.cpu()[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
     @slow
+    @require_torch_gpu
     def test_model_8b_chat_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = """human: Simply put, the theory of relativity states that "nothing can travel faster than the speed of light in a vacuum." This theory was proposed by Albert Einstein in 1905. Einstein\'s theory also states that time slows down for a moving object.\n\n1. Einstein\'s theory\n2. 1905\n3. nothing can travel faster than the speed of light in a vacuum\n4. Albert Einstein\n'"""
+        EXPECTED_TEXT_COMPLETION = """human: Simply put, the theory of relativity states that?\n\nadept: The theory of relativity states that the laws of physics are the same for all observers, regardless of their relative motion."""
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
         tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-chat", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
         model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-chat").to(torch_device)
 
         # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        generated_ids = model.generate(input_ids, max_new_tokens=64)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

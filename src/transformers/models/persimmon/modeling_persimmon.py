@@ -778,7 +778,8 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, PersimmonForCausalLM, torch_device
+        >>> from transformers import AutoTokenizer, PersimmonForCausalLM
+        >>> from transformers.testing_utils import torch_device
 
         >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base").to(torch_device)
         >>> tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-base")
