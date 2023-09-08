@@ -93,10 +93,10 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
-    is_torch_bf16_available,
+    is_torch_bf16_available_on_device,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
-    is_torch_fp16_available,
+    is_torch_fp16_available_on_device,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tensorrt_fx_available,
@@ -692,16 +692,16 @@ def require_torch_accelerator(test_case):
 
 def require_torch_fp16(test_case):
     """Decorator marking a test that requires a device that supports fp16"""
-    return unittest.skipUnless(is_torch_fp16_available(torch_device), "test requires device with fp16 support")(
-        test_case
-    )
+    return unittest.skipUnless(
+        is_torch_fp16_available_on_device(torch_device), "test requires device with fp16 support"
+    )(test_case)
 
 
 def require_torch_bf16(test_case):
     """Decorator marking a test that requires a device that supports bf16"""
-    return unittest.skipUnless(is_torch_bf16_available(torch_device), "test requires device with bf16 support")(
-        test_case
-    )
+    return unittest.skipUnless(
+        is_torch_bf16_available_on_device(torch_device), "test requires device with bf16 support"
+    )(test_case)
 
 
 def require_torch_bf16_gpu(test_case):
@@ -2134,7 +2134,7 @@ def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], 
 
 # Mappings from device names to callable functions to support device agnostic
 # testing.
-ACCELERATOR_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": None, "default": torch.manual_seed}
+ACCELERATOR_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": torch.manual_seed, "default": torch.manual_seed}
 ACCELERATOR_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
 ACCELERATOR_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
 
@@ -2165,7 +2165,7 @@ if "TRANSFORMERS_TEST_DEVICE_SPEC" in os.environ:
     try:
         import_name = device_spec_path[: device_spec_path.index(".py")]
     except ValueError as e:
-        raise ValueError("Provided device spec file was not a Python file! Received '{device_spec_path}") from e
+        raise ValueError(f"Provided device spec file was not a Python file! Received '{device_spec_path}") from e
 
     device_spec_module = importlib.import_module(import_name)
 
