@@ -31,7 +31,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from packaging import version
 from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, Identity
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -149,20 +149,6 @@ def no_init_weights(_enable=True):
         yield
     finally:
         _init_weights = old_init_weights
-
-
-try:
-    from torch.nn import Identity
-except ImportError:
-    # Older PyTorch compatibility
-    class Identity(nn.Module):
-        r"""A placeholder identity operator that is argument-insensitive."""
-
-        def __init__(self, *args, **kwargs):
-            super().__init__()
-
-        def forward(self, input):
-            return input
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
@@ -1451,10 +1437,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             add_hook_to_module(new_embeddings, hook)
         self.set_input_embeddings(new_embeddings)
 
+        # Update new_num_tokens with the actual size of new_embeddings
+        if pad_to_multiple_of is not None:
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                with deepspeed.zero.GatheredParameters(new_embeddings.weight, modifier_rank=None):
+                    new_num_tokens = new_embeddings.weight.shape[0]
+            else:
+                new_num_tokens = new_embeddings.weight.shape[0]
+
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head = self.get_output_embeddings()
-            new_lm_head = self._get_resized_lm_head(old_lm_head, new_embeddings.weight.shape[0])
+            new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
             if hasattr(old_lm_head, "_hf_hook"):
                 hook = old_lm_head._hf_hook
                 add_hook_to_module(new_lm_head, hook)
@@ -2560,7 +2556,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.warning(
                 "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
                 "`quantization_config` attribute and has already quantized weights. However, loading attributes"
-                " (e.g. disable_exllama, use_cuda_fp16) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+                " (e.g. disable_exllama, use_cuda_fp16, max_input_length) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
             )
         if (
             quantization_method_from_args == QuantizationMethod.GPTQ
@@ -2570,7 +2566,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise RuntimeError("GPU is required to quantize or run quantize model.")
             elif not (is_optimum_available() and is_auto_gptq_available()):
                 raise ImportError(
-                    "Loading GPTQ quantized model requires optimum library : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
+                    "Loading a GPTQ quantized model requires optimum (`pip install optimum`) and auto-gptq library (`pip install auto-gptq`)"
+                )
+            elif version.parse(importlib.metadata.version("auto_gptq")) < version.parse("0.4.2"):
+                raise ImportError(
+                    "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq`"
                 )
             else:
                 # Need to protect the import
@@ -2578,11 +2578,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if quantization_method_from_config == QuantizationMethod.GPTQ:
                 quantization_config = GPTQConfig.from_dict(config.quantization_config)
                 config.quantization_config = quantization_config
-            logger.info(
-                f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
-                "requirements of `auto-gptq` to enable model quantization "
-            )
-            torch_dtype = torch.float16
+            if torch_dtype is None:
+                torch_dtype = torch.float16
+            else:
+                logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
+
             quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict())
 
         if (
