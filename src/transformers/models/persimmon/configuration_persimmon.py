@@ -71,7 +71,7 @@ class PersimmonConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalPersimmon/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This
             is an experimental feature, subject to breaking API changes in future versions.
-        q_layer_norm (`bool`, *optional*, default to `True`):
+        qk_layer_norm (`bool`, *optional*, default to `True`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states
         hidden_dropout (`float`, *optional*, default to 0.0):
             The dropout ratio after applying the MLP to the hidden states.
