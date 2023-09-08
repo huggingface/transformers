@@ -120,12 +120,12 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("TODO @Sanchit. Let's make the CI green in the mean time")
     def test_output_offsets(self):
         tokenizer = self.get_tokenizer()
-        previous_sequence = [51492, 406, 3163, 1953, 466, 13, 51612]
+        previous_sequence = [51492, 406, 3163, 1953, 466, 13, 51612, 51612]
         self.assertEqual(
             tokenizer.decode(previous_sequence, output_offsets=True),
             {
-                "text": "<|22.56|> not worth thinking about.<|24.96|>",
-                "offsets": [{"text": "<|22.56|> not worth thinking about.<|24.96|>", "timestamp": (22.56, 24.96)}],
+                "text": " not worth thinking about.",
+                "offsets": [{"text": " not worth thinking about.", "timestamp": (22.56, 24.96)}],
             },
         )
 
@@ -137,16 +137,13 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.decode(next_sequences_1, output_offsets=True),
             {
                 "text": (
-                    "<|0.00|> of spectators, retrievality is not worth thinking about.<|5.00|><|5.00|> His instant "
-                    "panic was followed by a small, sharp blow high on his chest.<|9.40|><|endoftext|>"
+                    " of spectators, retrievality is not worth thinking about. His instant panic was followed by a"
+                    " small, sharp blow high on his chest.<|endoftext|>"
                 ),
                 "offsets": [
+                    {"text": " of spectators, retrievality is not worth thinking about.", "timestamp": (0.0, 5.0)},
                     {
-                        "text": "<|0.00|> of spectators, retrievality is not worth thinking about.<|5.00|>",
-                        "timestamp": (0.0, 5.0),
-                    },
-                    {
-                        "text": "<|5.00|> His instant panic was followed by a small, sharp blow high on his chest.<|9.40|>",
+                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
                         "timestamp": (5.0, 9.4),
                     },
                 ],
@@ -425,18 +422,18 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             [
                 {
                     "text": (
-                        "<|0.00|> Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles<|7.20|>"
+                        " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles"
                     ),
                     "timestamp": (0.0, 7.2),
                 },
                 {
                     "text": (
-                        "<|7.20|> are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the<|15.16|>"
+                        " are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the"
                     ),
                     "timestamp": (7.2, 15.16),
                 },
                 {
-                    "text": "<|15.16|> same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his<|21.70|>",
+                    "text": " same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his",
                     "timestamp": (15.16, 21.7),
                 },
             ],

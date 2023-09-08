@@ -307,6 +307,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             token_ids,
             skip_special_tokens=skip_special_tokens,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            decode_with_timestamps=decode_with_timestamps,
             **kwargs,
         )
         if decode_with_timestamps:
@@ -320,11 +321,17 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             return {"text": text, "offsets": offsets}
         return text
 
-    def _decode(self, *args, normalize: bool = False, **kwargs) -> str:
+    def _decode(self, *args, normalize: bool = False, decode_with_timestamps: bool = False, **kwargs) -> str:
         if kwargs["skip_special_tokens"]:
             prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
             decoder_start_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
             kwargs["token_ids"] = self._strip_prompt(kwargs["token_ids"], prompt_token_id, decoder_start_token_id)
+
+        # soft condition to check whether the tokenizer contains the timestamp tokens as part of the vocab
+        timestamp_tokens_added = len(self.all_special_ids) != len(self.added_tokens_encoder) + 1
+        if decode_with_timestamps and timestamp_tokens_added:
+            timestamp_begin = self.all_special_ids[-1] + 1
+            kwargs["token_ids"] = [token for token in kwargs["token_ids"] if token < timestamp_begin]
 
         text = super()._decode(*args, **kwargs)
 
