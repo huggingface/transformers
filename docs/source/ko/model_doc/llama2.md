@@ -14,9 +14,9 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Llama2
+# Llama2 [[llama]]
 
-## 개요
+## 개요 [[overview]]
 
 Llama2 모델은 Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Ya1smine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, Dan Bikel, Lukas Blecher, Cristian Canton Ferrer, Moya Chen, Guillem Cucurull, David Esiobu, Jude Fernandes, Jeremy Fu, Wenyin Fu, Brian Fuller, Cynthia Gao, Vedanuj Goswami, Naman Goyal, Anthony Hartshorn, Saghar Hosseini, Rui Hou, Hakan Inan, Marcin Kardas, Viktor Kerkez Madian Khabsa, Isabel Kloumann, Artem Korenev, Punit Singh Koura, Marie-Anne Lachaux, Thibaut Lavril, Jenya Lee, Diana Liskovich, Yinghai Lu, Yuning Mao, Xavier Martinet, Todor Mihaylov, Pushkar Mishra, Igor Molybog, Yixin Nie, Andrew Poulton, Jeremy Reizenstein, Rashi Rungta, Kalyan Saladi, Alan Schelten, Ruan Silva, Eric Michael Smith, Ranjan Subramanian, Xiaoqing EllenTan, Binh Tang, Ross Taylor, Adina Williams, Jian Xiang Kuan, Puxin Xu, Zheng Yan, Iliyan Zarov, Yuchen Zhang, Angela Fan, Melanie Kambadur, Sharan Narang, Aurelien Rodriguez, Robert Stojnic, Sergey Edunov, Thomas Scialom의 논문 [LLaMA: Open Foundation and Fine-Tuned Chat Models](https://ai.meta.com/research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/)에서 제안되었습니다. 채팅 어플리케이션에 맞게 미세 조정된 체크포인트를 포함된 7B에서 70B 범위의 매개변수를 가진 기초 언어 모델 모음입니다!
 
@@ -64,7 +64,7 @@ model = LlamaForCausalLM.from_pretrained("/output/path")
 
 이 모델은 [Arthur Zucker](https://huggingface.co/ArthurZ)가 [Lysandre Debut](https://huggingface.co/lysandre)의 도움을 받아 제공하였습니다. Hugging Face에서의 구현 코드는 [여기](https://github.com/EleutherAI/gpt-neox)의 GPT-NeoX 를 기반으로 합니다. 저자의 원래 코드는 [여기](https://github.com/facebookresearch/llama)에서 찾을 수 있습니다.
 
-## 리소스
+## 리소스 [[resources]]
 
 LLaMA2를 시작하는 데 도움이 될 Hugging Face의 공식 및 커뮤니티(🌎로 표시) 리소스 목록입니다. 여기에 새로운 리소스를 추가하기 위해서 Pull Request를 열어 주시면 검토하겠습니다! 리소스는 기존 리소스와 중복되지 않는 새로운 것을 보여주는 것이 이상적입니다.
 
@@ -90,12 +90,12 @@ LLaMA2를 시작하는 데 도움이 될 Hugging Face의 공식 및 커뮤니티
 - [Amazon SageMaker에서 Llama 2 7B/13B/70B 배포하기](https://www.philschmid.de/sagemaker-llama-llm), 안전하고 확장 가능한 배포를 위해 Hugging Face의 LLM DLC 컨테이너를 사용하는 방법에 대한 가이드입니다.
 
 
-## LlamaConfig
+## LlamaConfig [[llamaconfig]]
 
 [[autodoc]] LlamaConfig
 
 
-## LlamaTokenizer
+## LlamaTokenizer [[llamatokenizer]]
 
 [[autodoc]] LlamaTokenizer
     - build_inputs_with_special_tokens
@@ -103,7 +103,7 @@ LLaMA2를 시작하는 데 도움이 될 Hugging Face의 공식 및 커뮤니티
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## LlamaTokenizerFast
+## LlamaTokenizerFast [[llamatokenizerfast]]
 
 [[autodoc]] LlamaTokenizerFast
     - build_inputs_with_special_tokens
@@ -112,18 +112,18 @@ LLaMA2를 시작하는 데 도움이 될 Hugging Face의 공식 및 커뮤니티
     - update_post_processor
     - save_vocabulary
 
-## LlamaModel
+## LlamaModel [[llamamodel]]
 
 [[autodoc]] LlamaModel
     - forward
 
 
-## LlamaForCausalLM
+## LlamaForCausalLM [[llamaforcausallm]]
 
 [[autodoc]] LlamaForCausalLM
     - forward
 
-## LlamaForSequenceClassification
+## LlamaForSequenceClassification [[llamaforsequenceclassification]]
 
 [[autodoc]] LlamaForSequenceClassification
     - forward
