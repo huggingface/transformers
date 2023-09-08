@@ -270,6 +270,17 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     all_model_classes = (
         (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification) if is_torch_available() else ()
     )
+    pipeline_model_mapping = (
+    {
+        "feature-extraction": PersimmonModel,
+        "text-classification": PersimmonForSequenceClassification,
+        "text-generation": PersimmonForCausalLM,
+        "zero-shot": PersimmonForSequenceClassification,
+    }
+    if is_torch_available()
+    else {}
+    )
+
     all_generative_model_classes = (PersimmonForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
