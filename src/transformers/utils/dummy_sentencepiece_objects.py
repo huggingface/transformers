@@ -86,6 +86,13 @@ class GPTSw3Tokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
+class Kosmos2Tokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
 class LayoutXLMTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
