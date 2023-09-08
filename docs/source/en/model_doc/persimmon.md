@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Persimmon model was proposed by [ADEPT AI](https://www.adept.ai/blog/persimmon-8b), and author by Erich Elsen, Augustus Odena, Maxwell Nye, Sağnak Taşırlar, Tri Dao, Curtis Hawthorne, Deepak Moparthi, Arushi Somani.
+The Persimmon model was proposed by [ADEPT](https://www.adept.ai/blog/persimmon-8b), and authored by Erich Elsen, Augustus Odena, Maxwell Nye, Sağnak Taşırlar, Tri Dao, Curtis Hawthorne, Deepak Moparthi, Arushi Somani.
 
 The authors introduced Persimmon-8B, a noteworthy contribution representing their work in the development of an open-source language model. This work stems from the efforts of Adept, aimed at creating AI agents capable of assisting users in various computer-related tasks. Persimmon-8B is presented as a fully permissively-licensed model within the 8 billion parameter class, released under the Apache license, and accompanied by publicly accessible weights. The work emphasizes the model's broader utility, with its 8B size catering to a wide range of users, including those with limited access to high-scale computing resources. Key attributes of Persimmon-8B, such as context size, performance, and capabilities for multimodal extensions, are highlighted.
 
@@ -30,8 +30,8 @@ In terms of model details, the work outlines the architecture and training metho
 Tips:
 
 - The model was trained in `bfloat16`. As for other models we recommand doing inference in `float16` but train in `bfloat16`
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ).
+The original code can be found [here](https://github.com/persimmon-ai-labs/adept-inference).
 
 
 ## PersimmonConfig

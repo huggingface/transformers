@@ -383,7 +383,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
     def test_model_8b_chat_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-chat", device_map="auto")
-        out = model(torch.tensor(input_ids))
+        out = model(torch.tensor([input_ids])).logits
 
         EXPECTED_MEAN = torch.tensor(
             [[-4.2327, -3.3360, -4.6665, -4.7631, -1.8180, -3.4170, -1.4211, -3.1810]], dtype=torch.float32
@@ -398,7 +398,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
     def test_model_8b_chat_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi"""
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-chat")
+        tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-chat", use_fast = False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
         model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-chat").to(torch_device)
 
