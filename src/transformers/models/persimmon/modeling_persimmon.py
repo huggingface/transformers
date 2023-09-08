@@ -778,13 +778,13 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, PersimmonForCausalLM
+        >>> from transformers import AutoTokenizer, PersimmonForCausalLM, torch_device
 
-        >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base")
+        >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base").to(torch_device)
         >>> tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-base")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
