@@ -15,6 +15,7 @@ import argparse
 import os
 import warnings
 
+import flatdict
 import torch
 
 from transformers import LlamaTokenizer, PersimmonConfig, PersimmonForCausalLM
@@ -51,9 +52,6 @@ tokenizer = PersimmonTokenizer.from_pretrained("/output/path")
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
 """
-
-# ! need to git clone their repo to have the tool_use folder
-import flatdict
 
 
 KEYS_TO_MODIFY_MAPPING = {

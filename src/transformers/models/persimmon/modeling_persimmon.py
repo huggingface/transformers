@@ -91,7 +91,7 @@ class PersimmonRotaryEmbedding(torch.nn.Module):
         self.max_seq_len_cached = seq_len
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq.to(dtype))
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
@@ -103,8 +103,8 @@ class PersimmonRotaryEmbedding(torch.nn.Module):
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
-            self.cos_cached[:, :, :seq_len, ...].to(dtype=torch.bfloat16),
-            self.sin_cached[:, :, :seq_len, ...].to(dtype=torch.bfloat16),
+            self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
+            self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
         )
 
 
@@ -534,7 +534,7 @@ PERSIMMON_INPUTS_DOCSTRING = r"""
     "The bare Persimmon Model outputting raw hidden-states without any specific head on top.",
     PERSIMMON_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->PERSIMMON,Llama->Persimmon,LlamaRMSLayerNorm->LayerNorm,norm->final_layer_norm
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->PERSIMMON,Llama->Persimmon,PersimmonRMSNorm->nn.LayerNorm,norm->final_layernorm,rms_final_layernorm_eps->layer_norm_eps
 class PersimmonModel(PersimmonPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PersimmonDecoderLayer`]
@@ -878,8 +878,8 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
     """
     The LLaMa Model transformer with a sequence classification head on top (linear layer).
 
-    [`PersimmonForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
+    [`PersimmonForSequenceClassification`] uses the last token in order to do the classification, as other causal
+    models (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If

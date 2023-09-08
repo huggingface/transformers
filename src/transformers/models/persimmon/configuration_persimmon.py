@@ -32,9 +32,9 @@ PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PersimmonConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PersimmonModel`]. It is used to instantiate an Persimmon
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Persimmon-7B.
+    This is the configuration class to store the configuration of a [`PersimmonModel`]. It is used to instantiate an
+    Persimmon model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Persimmon-7B.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -42,8 +42,8 @@ class PersimmonConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 262144):
-            Vocabulary size of the Persimmon model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PersimmonModel`]
+            Vocabulary size of the Persimmon model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`PersimmonModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 16384):
@@ -73,8 +73,8 @@ class PersimmonConfig(PretrainedConfig):
             is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
-            https://www.reddit.com/r/LocalPersimmon/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-            experimental feature, subject to breaking API changes in future versions.
+            https://www.reddit.com/r/LocalPersimmon/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This
+            is an experimental feature, subject to breaking API changes in future versions.
         q_layer_norm (`bool`, *optional*, default to `True`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states
         hidden_dropout (`float`, *optional*, default to 0.0):

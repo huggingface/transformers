@@ -408,7 +408,6 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
-    "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -470,6 +469,7 @@ _import_structure = {
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
+    "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2072,9 +2072,6 @@ else:
     _import_structure["models.llama"].extend(
         ["LlamaForCausalLM", "LlamaForSequenceClassification", "LlamaModel", "LlamaPreTrainedModel"]
     )
-    _import_structure["models.persimmon"].extend(
-        ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
-    )
     _import_structure["models.longformer"].extend(
         [
             "LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2435,6 +2432,9 @@ else:
             "PerceiverModel",
             "PerceiverPreTrainedModel",
         ]
+    )
+    _import_structure["models.persimmon"].extend(
+        ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
     )
     _import_structure["models.pix2struct"].extend(
         [
