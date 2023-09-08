@@ -23,6 +23,7 @@ from transformers import LlamaTokenizer, PersimmonConfig, PersimmonForCausalLM
 
 try:
     from transformers import LlamaTokenizerFast
+
     LlamaTokenizer = LlamaTokenizerFast
 except ImportError as e:
     warnings.warn(e)
