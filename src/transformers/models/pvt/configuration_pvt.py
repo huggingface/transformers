@@ -49,7 +49,7 @@ class PvtConfig(PretrainedConfig):
             The input image size
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_encoder_blocks (`[int]`, *optional*, defaults to 4):
+        num_encoder_blocks (`int`, *optional*, defaults to 4):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
         depths (`List[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
