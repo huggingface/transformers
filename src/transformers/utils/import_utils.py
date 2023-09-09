@@ -74,6 +74,8 @@ _bitsandbytes_available = _is_package_available("bitsandbytes")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
+# `importlib.metadata.util` doesn't work with `opencv-python-headless`.
+_cv2_available = importlib.metadata.version("opencv-python-headless") is not None
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
@@ -238,6 +240,10 @@ if _torch_available:
 
 def is_kenlm_available():
     return _kenlm_available
+
+
+def is_cv2_available():
+    return _cv2_available
 
 
 def is_torch_available():
@@ -808,6 +814,16 @@ def is_jinja_available():
 
 
 # docstyle-ignore
+CV2_IMPORT_ERROR = """
+{0} requires the OpenCV library but it was not found in your environment. You can install it with:
+```
+pip install opencv-python
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
+
+# docstyle-ignore
 DATASETS_IMPORT_ERROR = """
 {0} requires the 🤗 Datasets library but it was not found in your environment. You can install it with:
 ```
@@ -1108,6 +1124,7 @@ jinja2`. Please note that you may need to restart your runtime after installatio
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
+        ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),

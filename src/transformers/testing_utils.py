@@ -55,6 +55,7 @@ from .utils import (
     is_auto_gptq_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_cv2_available,
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
@@ -308,6 +309,16 @@ def require_bs4(test_case):
     Decorator marking a test that requires BeautifulSoup4. These tests are skipped when BeautifulSoup4 isn't installed.
     """
     return unittest.skipUnless(is_bs4_available(), "test requires BeautifulSoup4")(test_case)
+
+
+def require_cv2(test_case):
+    """
+    Decorator marking a test that requires OpenCV.
+
+    These tests are skipped when OpenCV isn't installed.
+
+    """
+    return unittest.skipUnless(is_cv2_available(), "test requires OpenCV")(test_case)
 
 
 def require_accelerate(test_case):

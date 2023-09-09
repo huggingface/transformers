@@ -16,7 +16,6 @@
 
 from typing import Dict, Iterable, List, Optional, Union
 
-import cv2
 import numpy as np
 from PIL import Image
 
@@ -42,10 +41,14 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import TensorType, logging
-from ...utils.import_utils import is_vision_available
+from ...utils.import_utils import is_cv2_available, is_vision_available
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_cv2_available():
+    import cv2
 
 
 if is_vision_available():
@@ -153,12 +156,7 @@ class NougatImageProcessor(BaseImageProcessor):
         data = (data - min_val) / (max_val - min_val) * 255
         gray = 255 * (data < 200).astype(np.uint8)
 
-        # Find all non-zero points (text), returns (x,y)
-        # below: equivalent implementation of coords = cv2.findNonZero(gray)
-        coords = np.argwhere(gray)  # Numpy returns (y,x) so we need to swap the columns
-        coords[:, [0, 1]] = coords[:, [1, 0]]
-        coords = np.expand_dims(coords, axis=1)
-
+        coords = cv2.findNonZero(gray)  # Find all non-zero points (text)
         a, b, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
 
         return image.crop((a, b, w + a, h + b))
