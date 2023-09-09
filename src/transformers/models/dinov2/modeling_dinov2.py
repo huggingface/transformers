@@ -17,6 +17,7 @@
 
 import collections.abc
 import math
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple, Union
 
 import torch
@@ -62,6 +63,36 @@ DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dinov2-base",
     # See all DINOv2 models at https://huggingface.co/models?filter=dinov2
 ]
+
+
+@dataclass
+class Dinov2BackboneOutput(BackboneOutput):
+    """
+    DINOv2-specific class for its backbone outputs.
+
+    Args:
+        feature_maps (`tuple(torch.FloatTensor)` of shape `(batch_size, num_channels, height, width)`):
+            Feature maps of the stages.
+        cls_tokens (`tuple(torch.FloatTensor)` of shape `(batch_size, hidden_size)`):
+            Features of the CLS tokens.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, num_channels, height, width)`,
+            depending on the backbone.
+
+            Hidden-states of the model at the output of each stage plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Only applicable if the backbone uses attention.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    feature_maps: Tuple[torch.FloatTensor] = None
+    cls_tokens: Tuple[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class Dinov2Embeddings(nn.Module):
@@ -781,14 +812,14 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
         return self.embeddings.patch_embeddings
 
     @add_start_docstrings_to_model_forward(DINOV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Dinov2BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.Tensor,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> BackboneOutput:
+    ) -> Dinov2BackboneOutput:
         """
         Returns:
 
@@ -830,16 +861,20 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
         hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         feature_maps = ()
+        cls_tokens = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
+                cls_token = hidden_state[:, 0]
+                cls_tokens += (cls_token,)
+                hidden_state = hidden_state[:, 1:]
                 if self.config.reshape_hidden_states:
-                    batch_size, _, height, width = pixel_values.shape
+                    # this was actually a bug in the original implementation that we copied here,
+                    # cause normally the order is height, width
+                    batch_size, _, width, height = pixel_values.shape
                     patch_size = self.config.patch_size
-                    hidden_state = hidden_state[:, 1:, :].reshape(
-                        batch_size, width // patch_size, height // patch_size, -1
-                    )
+                    hidden_state = hidden_state.reshape(batch_size, width // patch_size, height // patch_size, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 
@@ -850,8 +885,9 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                 output = (feature_maps,) + outputs[2:]
             return output
 
-        return BackboneOutput(
+        return Dinov2BackboneOutput(
             feature_maps=feature_maps,
+            cls_tokens=cls_tokens,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions if output_attentions else None,
         )

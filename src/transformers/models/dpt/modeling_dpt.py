@@ -626,7 +626,7 @@ class DPTReassembleStage(nn.Module):
                     nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor], cls_tokens: List[torch.Tensor]) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
@@ -636,12 +636,17 @@ class DPTReassembleStage(nn.Module):
 
         for i, hidden_state in enumerate(hidden_states):
             if i not in self.neck_ignore_stages:
-                # reshape to (B, C, H, W)
-                hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
-                batch_size, sequence_length, num_channels = hidden_state.shape
-                size = int(math.sqrt(sequence_length))
-                hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
-                hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+                if hidden_state.ndim == 3:
+                    # reshape to (B, C, H, W)
+                    hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
+                    batch_size, sequence_length, num_channels = hidden_state.shape
+                    print("Shape of hidden state: ", hidden_state.shape)
+                    size = int(math.sqrt(sequence_length))
+                    hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
+                    hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+
+                if cls_tokens is not None:
+                    cls_token = cls_tokens[i]
 
                 feature_shape = hidden_state.shape
                 if self.config.readout_type == "project":
@@ -999,7 +1004,7 @@ class DPTNeck(nn.Module):
         # fusion
         self.fusion_stage = DPTFeatureFusionStage(config)
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor], cls_tokens: List[torch.Tensor]) -> List[torch.Tensor]:
         if not isinstance(hidden_states, (tuple, list)):
             raise ValueError("hidden_states should be a tuple or list of tensors")
 
@@ -1008,7 +1013,7 @@ class DPTNeck(nn.Module):
 
         # postprocess hidden states
         if self.reassemble_stage is not None:
-            hidden_states = self.reassemble_stage(hidden_states)
+            hidden_states = self.reassemble_stage(hidden_states, cls_tokens)
 
         features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
@@ -1137,6 +1142,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
                 pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
             )
             hidden_states = outputs.feature_maps
+            cls_tokens = outputs.cls_tokens if "cls_tokens" in outputs else None
         else:
             outputs = self.dpt(
                 pixel_values,
@@ -1162,7 +1168,12 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
                 hidden_states = backbone_hidden_states
 
-        hidden_states = self.neck(hidden_states)
+        print("Backbone features:")
+        for i in hidden_states:
+            print(i.shape)
+            # print("First values:", i[0,:3,:3])
+
+        hidden_states = self.neck(hidden_states, cls_tokens)
 
         predicted_depth = self.head(hidden_states)
 

@@ -23,7 +23,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
+from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation
 from transformers.utils import logging
 
 
@@ -33,11 +33,16 @@ logger = logging.get_logger(__name__)
 
 def get_dpt_config(model_name):
     if "small" in model_name:
-        backbone_config = Dinov2Config.from_pretrained("facebook/dinov2-small", out_indices=[2, 5, 8, 11])
+        # equivalent to stage 3, stage 6, stage 9, stage 12
+        backbone_config = Dinov2Config.from_pretrained(
+            "facebook/dinov2-small", out_indices=[3, 5, 9, 12], apply_layernorm=False, reshape_hidden_states=True
+        )
 
     neck_hidden_sizes = [48, 96, 192, 384]
     config = DPTConfig(
-        backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes, use_bias_in_fusion_residual=False
+        backbone_config=backbone_config,
+        neck_hidden_sizes=neck_hidden_sizes,
+        use_bias_in_fusion_residual=False,
     )
 
     return config
@@ -200,18 +205,27 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # load HuggingFace model
     model = DPTForDepthEstimation(config)
-    model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
     model.eval()
 
     # Check outputs on an image
     # TODO image_size
-    image_size = 512
-    processor = DPTImageProcessor(
-        size={"height": image_size, "width": image_size}, keep_aspect_ratio=True, ensure_multiple_of=32
-    )
+    # image_size = 512
+    # processor = DPTImageProcessor(
+    #     size={"height": image_size, "width": image_size}, keep_aspect_ratio=True, ensure_multiple_of=32
+    # )
 
-    image = prepare_img()
-    pixel_values = processor(image, return_tensors="pt").pixel_values
+    # image = prepare_img()
+    # pixel_values = processor(image, return_tensors="pt").pixel_values
+
+    from huggingface_hub import hf_hub_download
+
+    hf_hub_download(repo_id="lysandre/arxiv-nlp", filename="config.json")
+
+    filepath = hf_hub_download(repo_id="nielsr/dinov2-test-batch", filename="pixel_values.pt", repo_type="dataset")
+    pixel_values = torch.load(filepath)
 
     # forward pass
     with torch.no_grad():
@@ -231,12 +245,12 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model and processor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        processor.save_pretrained(pytorch_dump_folder_path)
+        # processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing model and processor to hub...")
         model.push_to_hub(repo_id=f"nielsr/{model_name}")
-        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        # processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
