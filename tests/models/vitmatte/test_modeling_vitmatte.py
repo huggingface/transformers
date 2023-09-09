@@ -64,7 +64,7 @@ class VitMatteModelTester:
         initializer_range=0.02,
         scope=None,
         out_features=["stage1"],
-        fusion_out=[128, 64, 32, 16],
+        fusion_hidden_sizes=[128, 64, 32, 16],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -81,7 +81,7 @@ class VitMatteModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.out_features = out_features
-        self.fusion_out = fusion_out
+        self.fusion_hidden_sizes = fusion_hidden_sizes
 
         self.seq_length = (self.image_size // self.patch_size) ** 2
 
@@ -113,7 +113,7 @@ class VitMatteModelTester:
         return VitMatteConfig(
             backbone_config=self.get_backbone_config(),
             hidden_size=self.hidden_size,
-            fusion_out=self.fusion_out,
+            fusion_hidden_sizes=self.fusion_hidden_sizes,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
