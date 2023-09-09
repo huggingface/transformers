@@ -559,6 +559,34 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return offsets
 
+    def _preprocess_token_ids(
+        self, token_ids, skip_special_tokens: bool = False, decode_with_timestamps: bool = False
+    ):
+        """
+        Args:
+        Pre-process the token ids for decoding by removing any special token ids, prompt tokens ids, and timestamp
+        token ids.
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Typically, obtained using the `__call__` method of the tokenizer.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens from the token ids. If `True`, both special token ids and
+                prompt token ids will be removed.
+            decode_with_timestamps (`bool`, *optional*, defaults to `False`):
+                Whether or not to decode with timestamps included in the raw text. If `False`, timestamps will be
+                filtered out from the token ids.
+        """
+        if skip_special_tokens:
+            prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
+            decoder_start_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
+            token_ids = self._strip_prompt(token_ids, prompt_token_id, decoder_start_token_id)
+
+        if not decode_with_timestamps:
+            # filter timestamp tokens if they are contained in the vocab
+            timestamp_ids = self.convert_tokens_to_ids([("<|%.2f|>" % (i * 0.02)) for i in range(1500 + 1)])
+            token_ids = [token for token in token_ids if token not in timestamp_ids]
+
+        return token_ids
+
     def decode(
         self,
         token_ids,
@@ -593,8 +621,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Returns:
             `str`: The decoded sentence.
         """
+        filtered_ids = self._preprocess_token_ids(
+            token_ids, skip_special_tokens=skip_special_tokens, decode_with_timestamps=decode_with_timestamps
+        )
+
         text = super().decode(
-            token_ids,
+            filtered_ids,
             skip_special_tokens=skip_special_tokens,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             decode_with_timestamps=decode_with_timestamps,
@@ -606,7 +638,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             )
         # retrieve offsets
         if output_offsets:
-            offsets = None
             offsets = self._compute_offsets(token_ids, time_precision=time_precision)
             return {"text": text, "offsets": offsets}
         return text
@@ -620,17 +651,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
-        if skip_special_tokens:
-            prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
-            decoder_start_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
-            token_ids = self._strip_prompt(token_ids, prompt_token_id, decoder_start_token_id)
-
-        if not decode_with_timestamps:
-            # filter timestamp tokens if they are contained in the vocab
-            timestamp_ids = self.convert_tokens_to_ids([("<|%.2f|>" % (i * 0.02)) for i in range(1500 + 1)])
-            token_ids = [token for token in token_ids if token not in timestamp_ids]
-
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT
