@@ -640,7 +640,6 @@ class DPTReassembleStage(nn.Module):
                     # reshape to (B, C, H, W)
                     hidden_state, cls_token = hidden_state[:, 1:], hidden_state[:, 0]
                     batch_size, sequence_length, num_channels = hidden_state.shape
-                    print("Shape of hidden state: ", hidden_state.shape)
                     size = int(math.sqrt(sequence_length))
                     hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
@@ -1011,11 +1010,25 @@ class DPTNeck(nn.Module):
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
+        print("Backbone features:")
+        for i in hidden_states:
+            print(i.shape)
+
         # postprocess hidden states
         if self.reassemble_stage is not None:
             hidden_states = self.reassemble_stage(hidden_states, cls_tokens)
 
+        print("Backbone features after reassembling:")
+        for i in hidden_states:
+            print(i.shape)
+            print("First values:", i[0,0,:3,:3])
+
         features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
+
+        print("Backbone features after convs:")
+        for i in features:
+            print(i.shape)
+            print("First values:", i[0,0,:3,:3])
 
         # fusion blocks
         output = self.fusion_stage(features)
@@ -1137,6 +1150,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        cls_tokens = None
         if self.backbone is not None:
             outputs = self.backbone.forward_with_filtered_kwargs(
                 pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
@@ -1167,11 +1181,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
                 )
 
                 hidden_states = backbone_hidden_states
-
-        print("Backbone features:")
-        for i in hidden_states:
-            print(i.shape)
-            # print("First values:", i[0,:3,:3])
 
         hidden_states = self.neck(hidden_states, cls_tokens)
 
@@ -1326,7 +1335,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
             hidden_states = backbone_hidden_states
 
-        hidden_states = self.neck(hidden_states)
+        hidden_states = self.neck(hidden_states, None)
 
         logits = self.head(hidden_states)
 
