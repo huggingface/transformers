@@ -496,7 +496,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
-    def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
+    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -510,7 +510,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 outputs.append([])
             else:
                 outputs[-1].append(token)
-        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
+        outputs = [
+            s if isinstance(s, str) else self.decode(s, skip_special_tokens=skip_special_tokens) for s in outputs
+        ]
         return "".join(outputs)
 
     def _compute_offsets(self, token_ids, time_precision=0.02):
@@ -564,13 +566,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
     ):
         """
         Args:
-        Pre-process the token ids for decoding by removing any special token ids, prompt tokens ids, and timestamp
-        token ids.
+        Pre-process the token ids for decoding by removing the prompt tokens ids and timestamp token ids.
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Typically, obtained using the `__call__` method of the tokenizer.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens from the token ids. If `True`, both special token ids and
-                prompt token ids will be removed.
+                Whether or not to remove special tokens from the token ids. If `True`, the prompt token ids will be
+                removed.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
                 Whether or not to decode with timestamps included in the raw text. If `False`, timestamps will be
                 filtered out from the token ids.
@@ -639,7 +640,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         )
         if decode_with_timestamps:
             # legacy method to decode timestamps when not included in the tokenizer vocabulary
-            text = self._decode_with_timestamps(filtered_ids, time_precision=time_precision)
+            text = self._decode_with_timestamps(
+                filtered_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
+            )
         # retrieve offsets
         if output_offsets:
             offsets = self._compute_offsets(token_ids, time_precision=time_precision)
