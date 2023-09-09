@@ -496,7 +496,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
-    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
+    def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -510,9 +510,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 outputs.append([])
             else:
                 outputs[-1].append(token)
-        outputs = [
-            s if isinstance(s, str) else self.decode(s, skip_special_tokens=skip_special_tokens) for s in outputs
-        ]
+        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
         return "".join(outputs)
 
     def _compute_offsets(self, token_ids, time_precision=0.02):
@@ -546,6 +544,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             if len(sliced_tokens) > 1:
                 start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+                # strip timestamp tokens from the text output
+                sliced_tokens = self._preprocess_token_ids(sliced_tokens, decode_with_timestamps=False)
                 offsets.append(
                     {
                         "text": self._decode(sliced_tokens),
@@ -560,7 +560,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return offsets
 
     def _preprocess_token_ids(
-        self, token_ids, skip_special_tokens: bool = False, decode_with_timestamps: bool = False
+        self, token_ids, skip_special_tokens: bool = False, decode_with_timestamps: bool = False, time_precision=0.02
     ):
         """
         Args:
@@ -574,6 +574,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
                 Whether or not to decode with timestamps included in the raw text. If `False`, timestamps will be
                 filtered out from the token ids.
+            time_precision (`float`, `optional`, defaults to 0.02):
+                The time ratio to convert from token to time.
         """
         if skip_special_tokens:
             prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
@@ -582,7 +584,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         if not decode_with_timestamps:
             # filter timestamp tokens if they are contained in the vocab
-            timestamp_ids = self.convert_tokens_to_ids([("<|%.2f|>" % (i * 0.02)) for i in range(1500 + 1)])
+            timestamp_ids = self.convert_tokens_to_ids([("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)])
             token_ids = [token for token in token_ids if token not in timestamp_ids]
 
         return token_ids
@@ -622,7 +624,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
             `str`: The decoded sentence.
         """
         filtered_ids = self._preprocess_token_ids(
-            token_ids, skip_special_tokens=skip_special_tokens, decode_with_timestamps=decode_with_timestamps
+            token_ids,
+            skip_special_tokens=skip_special_tokens,
+            decode_with_timestamps=decode_with_timestamps,
+            time_precision=time_precision,
         )
 
         text = super().decode(
@@ -633,9 +638,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         if decode_with_timestamps:
-            text = self._decode_with_timestamps(
-                token_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
-            )
+            # legacy method to decode timestamps when not included in the tokenizer vocabulary
+            text = self._decode_with_timestamps(filtered_ids, time_precision=time_precision)
         # retrieve offsets
         if output_offsets:
             offsets = self._compute_offsets(token_ids, time_precision=time_precision)
