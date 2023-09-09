@@ -698,16 +698,14 @@ class DPTFeatureFusionStage(nn.Module):
             self.layers.append(DPTFeatureFusionLayer(config))
 
     def forward(self, hidden_states):
-        # reversing the hidden_states, we start from the last
-        hidden_states = hidden_states[::-1]
-
         fused_hidden_states = []
         # first layer only uses the last hidden_state
-        fused_hidden_state = self.layers[0](hidden_states[0])
+        fused_hidden_state = self.layers[0](hidden_states[-1])
         fused_hidden_states.append(fused_hidden_state)
         # looping from the last layer to the second
-        for hidden_state, layer in zip(hidden_states[1:], self.layers[1:]):
-            fused_hidden_state = layer(fused_hidden_state, hidden_state)
+        for i in range(1, len(self.layers)):
+            print("-----------FUSION LAYER-----------")
+            fused_hidden_state = self.layers[i](fused_hidden_state, hidden_states[-(i + 1)])
             fused_hidden_states.append(fused_hidden_state)
 
         return fused_hidden_states
@@ -802,6 +800,9 @@ class DPTFeatureFusionLayer(nn.Module):
             hidden_state, scale_factor=2, mode="bilinear", align_corners=self.align_corners
         )
         hidden_state = self.projection(hidden_state)
+
+        print("Hidden state after fusion:", hidden_state.shape)
+        print("First values of hidden state after fusion:", hidden_state[0, 0, :3, :3])
 
         return hidden_state
 
@@ -1010,21 +1011,26 @@ class DPTNeck(nn.Module):
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
+        # print("Backbone features:")
+        # for i in hidden_states:
+        #     print(i.shape)
+        #     print("First values:", i[0,0,:3,:3])
+
         # postprocess hidden states
         if self.reassemble_stage is not None:
             hidden_states = self.reassemble_stage(hidden_states, cls_tokens)
 
-        print("Backbone features after reassembling:")
-        for i in hidden_states:
-            print(i.shape)
-            print("First values:", i[0,0,:3,:3])
+        # print("Backbone features after reassembling:")
+        # for i in hidden_states:
+        #     print(i.shape)
+        #     print("First values:", i[0,0,:3,:3])
 
         features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
-        print("Backbone features after convs:")
-        for i in features:
-            print(i.shape)
-            print("First values:", i[0,0,:3,:3])
+        # print("Backbone features after convs:")
+        # for i in features:
+        #     print(i.shape)
+        #     print("First values:", i[0,0,:3,:3])
 
         # fusion blocks
         output = self.fusion_stage(features)
@@ -1032,7 +1038,7 @@ class DPTNeck(nn.Module):
         print("Fused features:")
         for i in output:
             print(i.shape)
-        print("First values of fused features:", output[-1][0,:3,:3])
+        print("First values of fused features:", output[-1][0, :3, :3])
 
         return output
 
@@ -1049,6 +1055,10 @@ class DPTDepthEstimationHead(nn.Module):
 
         self.config = config
 
+        self.projection = None
+        if config.add_projection:
+            self.projection = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+
         features = config.fusion_hidden_size
         self.head = nn.Sequential(
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
@@ -1062,6 +1072,10 @@ class DPTDepthEstimationHead(nn.Module):
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
         # use last features
         hidden_states = hidden_states[self.config.head_in_index]
+
+        if self.projection is not None:
+            hidden_states = self.projection(hidden_states)
+            hidden_states = ACT2FN["relu"](hidden_states)
 
         predicted_depth = self.head(hidden_states)
 

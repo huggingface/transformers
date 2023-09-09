@@ -109,6 +109,8 @@ class DPTConfig(PretrainedConfig):
             [`AutoBackbone`] API.
         use_bias_in_fusion_residual (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the pre-activate residual units of the fusion blocks.
+        add_projection (`bool`, *optional*, defaults to `False`):
+            Whether to add a projection layer before the depth estimation head.
 
     Example:
 
@@ -156,6 +158,7 @@ class DPTConfig(PretrainedConfig):
         semantic_classifier_dropout=0.1,
         backbone_featmap_shape=[1, 1024, 24, 24],
         neck_ignore_stages=[0, 1],
+        add_projection=False,
         backbone_config=None,
         **kwargs,
     ):
@@ -232,6 +235,7 @@ class DPTConfig(PretrainedConfig):
         self.head_in_index = head_in_index
         self.use_batch_norm_in_fusion_residual = use_batch_norm_in_fusion_residual
         self.use_bias_in_fusion_residual = use_bias_in_fusion_residual
+        self.add_projection = add_projection
 
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head

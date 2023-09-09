@@ -35,7 +35,7 @@ def get_dpt_config(model_name):
     if "small" in model_name:
         # equivalent to stage 3, stage 6, stage 9, stage 12
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-small", out_indices=[3, 5, 9, 12], apply_layernorm=False, reshape_hidden_states=True
+            "facebook/dinov2-small", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=True
         )
 
     neck_hidden_sizes = [48, 96, 192, 384]
@@ -43,6 +43,7 @@ def get_dpt_config(model_name):
         backbone_config=backbone_config,
         neck_hidden_sizes=neck_hidden_sizes,
         use_bias_in_fusion_residual=False,
+        add_projection=True,
     )
 
     return config
@@ -80,6 +81,9 @@ def create_rename_keys_dpt(config):
         rename_keys.append((f"decode_head.convs.{i}.conv.weight", f"neck.convs.{i}.weight"))
 
     # head
+    rename_keys.append(("decode_head.project.conv.weight", "head.projection.weight"))
+    rename_keys.append(("decode_head.project.conv.bias", "head.projection.bias"))
+
     for i in range(0, 5, 2):
         rename_keys.append((f"decode_head.conv_depth.head.{i}.weight", f"head.head.{i}.weight"))
         rename_keys.append((f"decode_head.conv_depth.head.{i}.bias", f"head.head.{i}.bias"))
@@ -208,6 +212,10 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
+    assert missing_keys == [
+        "neck.fusion_stage.layers.0.residual_layer1.convolution1.weight",
+        "neck.fusion_stage.layers.0.residual_layer1.convolution2.weight",
+    ]
     model.eval()
 
     # Check outputs on an image
