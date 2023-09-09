@@ -575,13 +575,12 @@ class Trainer:
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
                         "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
-        if args.fp16 or args.bf16:
-            if args.half_precision_backend == "auto":
-                if args.device == torch.device("cpu"):
-                    if args.fp16:
-                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
-                    else:
-                        args.half_precision_backend = "cpu_amp"
+        if (args.fp16 or args.bf16) and args.half_precision_backend == "auto":
+            if args.device == torch.device("cpu"):
+                if args.fp16:
+                    raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+                else:
+                    args.half_precision_backend = "cpu_amp"
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         if (args.fp16 or args.bf16) and not (self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
