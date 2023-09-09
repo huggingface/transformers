@@ -1,3 +1,4 @@
+import numpy as np
 import requests
 from PIL import Image
 
@@ -11,6 +12,9 @@ trimap = Image.open(requests.get(url, stream=True).raw)
 
 image = image.resize((33, 58))
 trimap = trimap.resize((33, 58)).convert("L")
+
+print(np.array(image).shape)
+print(np.array(trimap).shape)
 
 processor = VitMatteImageProcessor()
 

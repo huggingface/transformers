@@ -194,7 +194,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
         size_divisibility = size_divisibility if size_divisibility is not None else self.size_divisibility
 
         images = make_list_of_images(images)
-        trimaps = make_list_of_images(trimaps)
+        trimaps = make_list_of_images(trimaps, expected_ndims=2)
 
         if not valid_images(images):
             raise ValueError(

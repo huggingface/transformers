@@ -19,12 +19,18 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
+if is_torch_available():
+    import torch
+
+
 if is_vision_available():
+    from PIL import Image
+
     from transformers import VitMatteImageProcessor
 
 
@@ -66,10 +72,9 @@ class VitMatteImageProcessingTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
+            "do_pad": self.do_pad,
+            "size_divisibility": self.size_divisibility,
         }
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -104,6 +109,83 @@ class VitMatteImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
         self.assertTrue(hasattr(image_processing, "do_pad"))
         self.assertTrue(hasattr(image_processing, "size_divisibility"))
+
+    def test_call_numpy(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, np.ndarray)
+
+        # Test not batched input (image processor does not support batched inputs)
+        image = image_inputs[0]
+        trimap = np.random.randint(0, 3, size=image.shape[:2])
+        encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
+
+        # Verify that width and height can be divided by size_divisibility
+        self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
+        self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+
+    def test_call_pytorch(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random PyTorch tensors
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+
+        # Test not batched input (image processor does not support batched inputs)
+        image = image_inputs[0]
+        trimap = np.random.randint(0, 3, size=image.shape[:2])
+        encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
+
+        # Verify that width and height can be divided by size_divisibility
+        self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
+        self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+
+    def test_call_pil(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random PIL images
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        for image in image_inputs:
+            self.assertIsInstance(image, Image.Image)
+
+        # Test not batched input (image processor does not support batched inputs)
+        image = image_inputs[0]
+        trimap = np.random.randint(0, 3, size=image.size[::-1])
+        encoded_images = image_processing(images=image, trimaps=trimap, return_tensors="pt").pixel_values
+
+        # Verify that width and height can be divided by size_divisibility
+        self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
+        self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
+
+    def test_call_numpy_4_channels(self):
+        # Test that can process images which have an arbitrary number of channels
+        # Initialize image_processing
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+
+        # create random numpy tensors
+        self.image_processor_tester.num_channels = 4
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+
+        # Test not batched input (image processor does not support batched inputs)
+        image = image_inputs[0]
+        trimap = np.random.randint(0, 3, size=image.shape[:2])
+        encoded_images = image_processor(
+            images=image,
+            trimaps=trimap,
+            input_data_format="channels_first",
+            image_mean=0,
+            image_std=1,
+            return_tensors="pt",
+        ).pixel_values
+
+        # Verify that width and height can be divided by size_divisibility
+        self.assertTrue(encoded_images.shape[-1] % self.image_processor_tester.size_divisibility == 0)
+        self.assertTrue(encoded_images.shape[-2] % self.image_processor_tester.size_divisibility == 0)
 
     def test_padding(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
