@@ -36,7 +36,9 @@ def get_dpt_config(model_name):
         backbone_config = Dinov2Config.from_pretrained("facebook/dinov2-small", out_indices=[2, 5, 8, 11])
 
     neck_hidden_sizes = [48, 96, 192, 384]
-    config = DPTConfig(backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes, use_bias_in_fusion_residual=False)
+    config = DPTConfig(
+        backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes, use_bias_in_fusion_residual=False
+    )
 
     return config
 
@@ -133,16 +135,16 @@ def read_in_q_k_v(state_dict, config):
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         hidden_size = config.backbone_config.hidden_size
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: hidden_size, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: hidden_size]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
         state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             hidden_size : hidden_size * 2, :
         ]
         state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
             hidden_size : hidden_size * 2
         ]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size :, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size :]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
 
 
 def rename_key(dct, old, new):
@@ -170,7 +172,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # define DPT configuration based on URL
     checkpoint_url = name_to_url[model_name]
     config = get_dpt_config(model_name)
-    
+
     # load original DPT state_dict from URL
     dpt_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
     for name, param in dpt_state_dict.items():
@@ -202,6 +204,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model.eval()
 
     # Check outputs on an image
+    # TODO image_size
+    image_size = 512
     processor = DPTImageProcessor(
         size={"height": image_size, "width": image_size}, keep_aspect_ratio=True, ensure_multiple_of=32
     )
