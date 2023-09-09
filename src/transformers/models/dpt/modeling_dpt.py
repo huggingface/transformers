@@ -582,6 +582,12 @@ class DPTReassembleStage(nn.Module):
 
         self.neck_ignore_stages = config.neck_ignore_stages
 
+    def get_backbone_hidden_size(self):
+        if self.config.backbone_config is not None and self.config.is_hybrid is False:
+            return self.config.backbone_config.hidden_size
+        else:
+            return self.config.hidden_size
+
     def _init_reassemble_dpt_hybrid(self, config):
         r""" "
         For DPT-Hybrid the first 2 reassemble layers are set to `nn.Identity()`, please check the official
@@ -599,12 +605,13 @@ class DPTReassembleStage(nn.Module):
 
         # When using DPT-Hybrid the readout type is set to "project". The sanity check is done on the config file
         self.readout_projects = nn.ModuleList()
+        hidden_size = self.get_backbone_hidden_size()
         for i in range(len(config.neck_hidden_sizes)):
             if i <= 1:
                 self.readout_projects.append(nn.Sequential(nn.Identity()))
             elif i > 1:
                 self.readout_projects.append(
-                    nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
+                    nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
     def _init_reassemble_dpt(self, config):
@@ -613,9 +620,10 @@ class DPTReassembleStage(nn.Module):
 
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
+            hidden_size = self.get_backbone_hidden_size()
             for _ in range(len(config.neck_hidden_sizes)):
                 self.readout_projects.append(
-                    nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
+                    nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
@@ -657,7 +665,11 @@ class DPTReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
         super().__init__()
         # projection
-        self.projection = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
+        if config.backbone_config is not None and config.is_hybrid is False:
+            hidden_size = config.backbone_config.hidden_size
+        else:
+            hidden_size = config.hidden_size
+        self.projection = nn.Conv2d(in_channels=hidden_size, out_channels=channels, kernel_size=1)
 
         # up/down sampling depending on factor
         if factor > 1:
@@ -710,6 +722,7 @@ class DPTPreActResidualLayer(nn.Module):
         super().__init__()
 
         self.use_batch_norm = config.use_batch_norm_in_fusion_residual
+
         self.activation1 = ACT2FN["relu"]
         self.convolution1 = nn.Conv2d(
             config.fusion_hidden_size,
@@ -717,7 +730,7 @@ class DPTPreActResidualLayer(nn.Module):
             kernel_size=3,
             stride=1,
             padding=1,
-            bias=not self.use_batch_norm,
+            bias=config.use_bias_in_fusion_residual,
         )
 
         self.activation2 = ACT2FN["relu"]
@@ -727,7 +740,7 @@ class DPTPreActResidualLayer(nn.Module):
             kernel_size=3,
             stride=1,
             padding=1,
-            bias=not self.use_batch_norm,
+            bias=config.use_bias_in_fusion_residual,
         )
 
         if self.use_batch_norm:
@@ -973,8 +986,12 @@ class DPTNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        # postprocessing
-        self.reassemble_stage = DPTReassembleStage(config)
+        # postprocessing: only required in case of a non-hierarchical backbone (e.g. ViT, BEiT)
+        if config.backbone_config is not None and config.backbone_config.model_type in ["swinv2"]:
+            self.reassemble_stage = None
+        else:
+            self.reassemble_stage = DPTReassembleStage(config)
+
         self.convs = nn.ModuleList()
         for channel in config.neck_hidden_sizes:
             self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))
@@ -983,16 +1000,17 @@ class DPTNeck(nn.Module):
         self.fusion_stage = DPTFeatureFusionStage(config)
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
-        if not isinstance(hidden_states, list):
-            raise ValueError("hidden_states should be a list of tensors")
+        if not isinstance(hidden_states, (tuple, list)):
+            raise ValueError("hidden_states should be a tuple or list of tensors")
 
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
         # postprocess hidden states
-        features = self.reassemble_stage(hidden_states)
+        if self.reassemble_stage is not None:
+            hidden_states = self.reassemble_stage(hidden_states)
 
-        features = [self.convs[i](feature) for i, feature in enumerate(features)]
+        features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
         # fusion blocks
         output = self.fusion_stage(features)
@@ -1043,7 +1061,11 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.dpt = DPTModel(config, add_pooling_layer=False)
+        self.backbone = None
+        if config.backbone_config is not None and config.is_hybrid is False:
+            self.backbone = AutoBackbone.from_config(config.backbone_config)
+        else:
+            self.dpt = DPTModel(config, add_pooling_layer=False)
 
         # Neck
         self.neck = DPTNeck(config)
@@ -1110,29 +1132,35 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.dpt(
-            pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=True,  # we need the intermediate hidden states
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
-
-        # only keep certain features based on config.backbone_out_indices
-        # note that the hidden_states also include the initial embeddings
-        if not self.config.is_hybrid:
-            hidden_states = [
-                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
-            ]
-        else:
-            backbone_hidden_states = outputs.intermediate_activations if return_dict else list(outputs[-1])
-            backbone_hidden_states.extend(
-                feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices[2:]
+        if self.backbone is not None:
+            outputs = self.backbone.forward_with_filtered_kwargs(
+                pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
             )
+            hidden_states = outputs.feature_maps
+        else:
+            outputs = self.dpt(
+                pixel_values,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=True,  # we need the intermediate hidden states
+                return_dict=return_dict,
+            )
+            hidden_states = outputs.hidden_states if return_dict else outputs[1]
+            # only keep certain features based on config.backbone_out_indices
+            # note that the hidden_states also include the initial embeddings
+            if not self.config.is_hybrid:
+                hidden_states = [
+                    feature for idx, feature in enumerate(hidden_states[1:]) if idx in self.config.backbone_out_indices
+                ]
+            else:
+                backbone_hidden_states = outputs.intermediate_activations if return_dict else list(outputs[-1])
+                backbone_hidden_states.extend(
+                    feature
+                    for idx, feature in enumerate(hidden_states[1:])
+                    if idx in self.config.backbone_out_indices[2:]
+                )
 
-            hidden_states = backbone_hidden_states
+                hidden_states = backbone_hidden_states
 
         hidden_states = self.neck(hidden_states)
 
