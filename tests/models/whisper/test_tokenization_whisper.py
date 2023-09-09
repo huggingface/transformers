@@ -400,7 +400,6 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         transcription = multilingual_tokenizer.batch_decode(batch_encoding, skip_special_tokens=True)
         self.assertListEqual(batch, transcription)
 
-
     @unittest.skip("TODO @Sanchit. Let's make the CI green in the mean time")
     def test_offset_decoding(self):
         multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
