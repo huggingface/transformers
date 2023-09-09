@@ -1010,10 +1010,6 @@ class DPTNeck(nn.Module):
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
-        print("Backbone features:")
-        for i in hidden_states:
-            print(i.shape)
-
         # postprocess hidden states
         if self.reassemble_stage is not None:
             hidden_states = self.reassemble_stage(hidden_states, cls_tokens)
@@ -1032,6 +1028,11 @@ class DPTNeck(nn.Module):
 
         # fusion blocks
         output = self.fusion_stage(features)
+
+        print("Fused features:")
+        for i in output:
+            print(i.shape)
+        print("First values of fused features:", output[-1][0,:3,:3])
 
         return output
 
