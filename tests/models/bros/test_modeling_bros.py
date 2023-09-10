@@ -414,7 +414,7 @@ def prepare_bros_batch_inputs():
 class BrosModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return BrosProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa") if is_vision_available() else None
+        return BrosProcessor.from_pretrained("naver-clova-ocr/bros-base-uncased") if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
