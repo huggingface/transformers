@@ -1423,6 +1423,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         print("query_attention_mask shape",query_attention_mask.shape)
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
+        
+        #expand qformer_attention_mask along dim = 0 to match query_attention_mask[0]
+
+        qformer_attention_mask = qformer_attention_mask.expand(query_attention_mask.shape[0], -1, -1)
+        
 
         print("qformer_attention_mask shape",qformer_attention_mask.shape)
 
