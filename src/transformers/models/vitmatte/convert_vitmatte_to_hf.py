@@ -73,7 +73,15 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     config = get_config(model_name)
 
     # load original state dict
-    filepath = hf_hub_download(repo_id="nielsr/vitmatte-checkpoints", filename="ViTMatte_S_Com.pth", repo_type="model")
+    model_name_to_filename = {
+        "vitmatte-small-composition-1k": "ViTMatte_S_Com.pth",
+        "vitmatte-base-composition-1k": "ViTMatte_B_Com.pth",
+        "vitmatte-small-distinctions-646": "ViTMatte_S_DIS.pth",
+        "vitmatte-base-distinctions-646": "ViTMatte_B_DIS.pth",
+    }
+
+    filename = model_name_to_filename[model_name]
+    filepath = hf_hub_download(repo_id="nielsr/vitmatte-checkpoints", filename=filename, repo_type="model")
     state_dict = torch.load(filepath, map_location="cpu")
 
     # rename keys
@@ -113,7 +121,14 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     with torch.no_grad():
         alphas = model(pixel_values).alphas
 
-    expected_slice = torch.tensor([[0.9977, 0.9987, 0.9990], [0.9980, 0.9998, 0.9998], [0.9983, 0.9998, 0.9998]])
+    if model_name == "vitmatte-small-composition-1k":
+        expected_slice = torch.tensor([[0.9977, 0.9987, 0.9990], [0.9980, 0.9998, 0.9998], [0.9983, 0.9998, 0.9998]])
+    elif model_name == "vitmatte-base-composition-1k":
+        expected_slice = torch.tensor([[0.9972, 0.9971, 0.9981], [0.9948, 0.9987, 0.9994], [0.9963, 0.9992, 0.9995]])
+    elif model_name == "vitmatte-small-distinctions-646":
+        expected_slice = torch.tensor([[0.9880, 0.9970, 0.9972], [0.9960, 0.9996, 0.9997], [0.9963, 0.9996, 0.9997]])
+    elif model_name == "vitmatte-base-distinctions-646":
+        expected_slice = torch.tensor([[0.9963, 0.9998, 0.9999], [0.9995, 1.0000, 1.0000], [0.9992, 0.9999, 1.0000]])
 
     assert torch.allclose(alphas[0, 0, :3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
@@ -125,8 +140,8 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
 
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to hub")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"hustvl/{model_name}")
+        processor.push_to_hub(f"hustvl/{model_name}")
 
 
 if __name__ == "__main__":

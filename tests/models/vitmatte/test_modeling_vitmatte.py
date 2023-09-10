@@ -243,9 +243,8 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 class VitMatteModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        # TODO update organization
-        processor = VitMatteImageProcessor.from_pretrained("nielsr/vitmatte-small-composition-1k")
-        model = VitMatteForImageMatting.from_pretrained("nielsr/vitmatte-small-composition-1k").to(torch_device)
+        processor = VitMatteImageProcessor.from_pretrained("hustvl/vitmatte-small-composition-1k")
+        model = VitMatteForImageMatting.from_pretrained("hustvl/vitmatte-small-composition-1k").to(torch_device)
 
         filepath = hf_hub_download(
             repo_id="hf-internal-testing/image-matting-fixtures", filename="image.png", repo_type="dataset"
