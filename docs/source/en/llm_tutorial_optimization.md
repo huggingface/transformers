@@ -444,6 +444,14 @@ Let's free the peak memory.
 For comparison, let's run the same function, but enable Flash Attention instead.
 To do so, we convert the model to [BetterTransformers](https://huggingface.co/docs/optimum/bettertransformer/overview) and by doing so enabling PyTorch's [SDPA self-attention](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) which in turn is based on Flash Attention.
 
+Make sure to have `optimum` installed.
+
+```bash
+!pip install optimum
+```
+
+so that you can convert the model into one that uses *SDPA*:
+
 ```python
 >>> model.to_bettertransformer()
 ```
