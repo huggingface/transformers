@@ -179,11 +179,11 @@ There are various quantization techniques, which we won't discuss in detail here
 
 In a nutshell, this means that *inputs-weight matrix* multiplications, with $X$ being the *inputs*, $W$ being a weight matrix and $Y$ being the output:
 
-$Y = X * W$
+\\( Y = X * W )\\
 
 are changed to
 
-$ Y = X * \text{dequantize}(W); \text{quantize}(W) $
+\\( Y = X * \text{dequantize}(W); \text{quantize}(W) )\\
 
 for every matrix multiplication. Dequantization and re-quantization is performed sequentially for all weight matrices as the inputs run through the network graph.
 
@@ -302,7 +302,7 @@ While this is not really noticeable for shorter input sequences (of up to 1000 i
 
 Let's take a closer look. The formula to compute the output $\mathbf{O}$ of a self-attention layer for an input $\mathbf{X}$ of length $N$ is:
 
-$$ \textbf{O} = \text{Attn}(\mathbf{X}) = \mathbf{V} \times \text{Softmax}(\mathbf{QK}^T) \text{ with } \mathbf{Q} = \mathbf{W}_q \mathbf{X}, \mathbf{V} = \mathbf{W}_v \mathbf{X}, \mathbf{K} = \mathbf{W}_k \mathbf{X} $$
+\\( \textbf{O} = \text{Attn}(\mathbf{X}) = \mathbf{V} \times \text{Softmax}(\mathbf{QK}^T) \text{ with } \mathbf{Q} = \mathbf{W}_q \mathbf{X}, \mathbf{V} = \mathbf{W}_v \mathbf{X}, \mathbf{K} = \mathbf{W}_k \mathbf{X} )\\
 
 $\mathbf{X} = (\mathbf{x}_1, ... \mathbf{x}_{N})$ is thereby the input sequence to the attention layer. The projections $\mathbf{Q}$ and $\mathbf{K}$ will each consist of $N$ vectors resulting in the $\mathbf{QK}^T$ being of size $N^2$.
 
@@ -317,7 +317,7 @@ How can we get rid of the exorbitant memory requirements for large input lengths
 
 In a nutshell, Flash Attention breaks the $ \mathbf{V} \times \text{Softmax}(\mathbf{QK}^T) $ computation apart and instead computes smaller chunks of the output by iterating oven multiple softmax computation steps:
 
-$$ \textbf{O}_i \leftarrow s^a_{ij} * \textbf{O}_i + s^b_{ij} * \mathbf{V}_{j} \times \text{Softmax}(\mathbf{QK}^T_{i,j}) \text{ for multiple } i, j \text{ iterations} $$
+\\( \textbf{O}_i \leftarrow s^a_{ij} * \textbf{O}_i + s^b_{ij} * \mathbf{V}_{j} \times \text{Softmax}(\mathbf{QK}^T_{i,j}) \text{ for multiple } i, j \text{ iterations} )//
 
 with $s^a_{ij}$ and $s^b_{ij}$ being some softmax normalization statistics that need to be recomputed for every $i$ and $j$.
 
@@ -521,7 +521,7 @@ Both *RoPE* and *ALiBi* argue that it's best to cue the LLM about sentence order
 
 Without going into too many details, *RoPE* notes that positional information can be encoded into query-key pairs, *e.g.* $\mathbf{q}_i$ and $\mathbf{x}_j$ by rotating each vector by an angle $\theta * i$ and $\theta * j$ respectively with $i, j$ describing each vectors sentence position:
 
-$$ \mathbf{\hat{q}}_i^T \mathbf{\hat{x}}_j = \mathbf{{q}}_i^T \mathbf{R}_{\theta, i -j} \mathbf{{x}}_j. $$
+\\( \mathbf{\hat{q}}_i^T \mathbf{\hat{x}}_j = \mathbf{{q}}_i^T \mathbf{R}_{\theta, i -j} \mathbf{{x}}_j. )\\
 
 $R_{\theta, i - j}$ thereby represents a rotational matrix. $\theta$ is *not* learned during training, but instead set to a pre-defined value that depends on the maximum input sequence length during training.
 
@@ -651,7 +651,7 @@ There is however one catch. While the required peak memory for the $\mathbf{QK}^
 Let's compute the number of float values that need to be stored in the key-value cache for the LLM `bigcode/octocoder` that we used before.
 The number of float values amounts to:
 
-$$ 2 \times (\text{seq_len} - 1) \times \text{num_attn_heads} \times \text{attn_head_dim} \times \text{num_layers} $$
+\\( 2 \times (\text{seq_len} - 1) \times \text{num_attn_heads} \times \text{attn_head_dim} \times \text{num_layers} )\\
 
 Computing this for our LLM at a hypothetical input sequence length of 16000 gives:
 
