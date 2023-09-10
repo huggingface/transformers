@@ -1403,8 +1403,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         image_embedsX = vision_outputs[0]
 
-        all_input_embeds = []
-        all_attention_mask = []
+        all_inputs = []
+        all_masks = []
 
         for i in range(len(image_embedsX)):
             image_embeds = image_embedsX[i].unsqueeze(0)
@@ -1467,29 +1467,28 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
                 language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
             )
 
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             
-            # if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
+           
             
-            all_input_embeds.append(inputs_embeds)
-            all_attention_mask.append(attention_mask)
 
+            all_inputs.append(language_model_inputs)
+            all_masks.append(language_model_attention_mask)
 
-
-
-        inputs_embeds = torch.cat(all_input_embeds, dim=0)
-
-        attention_mask = torch.cat(all_attention_mask, dim=0)
-
-        print("one input_embeds",all_input_embeds[0].shape)
-        print("combined inputs_embeds",inputs_embeds.shape)
-        print("one attention_mask",all_attention_mask[0].shape)
-        print("combined attention_mask",attention_mask.shape)
-
+        language_model_inputs = torch.cat(all_inputs, dim=1)
+        language_model_attention_mask = torch.cat(all_masks, dim=1)
+        
+        inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
+        
+        
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
         attention_mask = torch.cat([language_model_attention_mask.to(attention_mask.device), attention_mask], dim=1)
 
+
+
+        
 
         if self.config.use_decoder_only_language_model:
             outputs = self.language_model(
