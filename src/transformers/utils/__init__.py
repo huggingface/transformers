@@ -129,6 +129,7 @@ from .import_utils import (
     is_librosa_available,
     is_natten_available,
     is_ninja_available,
+    is_nltk_available,
     is_onnx_available,
     is_openai_available,
     is_optimum_available,

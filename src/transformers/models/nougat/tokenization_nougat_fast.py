@@ -21,13 +21,15 @@ from multiprocessing import Pool
 from typing import List, Union
 
 import numpy as np
-from nltk.corpus import words
 
-from ...utils import is_levensthein_available
+from ...utils import is_levensthein_available, is_nltk_available
 
 
 if is_levensthein_available():
     from Levenshtein import ratio
+
+if is_nltk_available():
+    from nltk.corpus import words
 
 from transformers.tokenization_utils_base import INIT_TOKENIZER_DOCSTRING
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast

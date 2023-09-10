@@ -99,6 +99,7 @@ _keras_nlp_available = _is_package_available("keras_nlp")
 _levensthein_available = _is_package_available("python-Levenshtein")
 _librosa_available = _is_package_available("librosa")
 _natten_available = _is_package_available("natten")
+_nltk_available = _is_package_available("nltk")
 _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
@@ -759,6 +760,10 @@ def is_natten_available():
     return _natten_available
 
 
+def is_nltk_available():
+    return _nltk_available
+
+
 def is_torchaudio_available():
     return _torchaudio_available
 
@@ -1043,6 +1048,14 @@ shi-labs.com/natten . You can also install it with pip (may take longer to build
 `pip install natten`. Please note that you may need to restart your runtime after installation.
 """
 
+
+# docstyle-ignore
+NLTK_IMPORT_ERROR = """
+{0} requires the NLTK library but it was not found in your environment. You can install it by referring to:
+https://www.nltk.org/install.html. Please note that you may need to restart your runtime after installation.
+"""
+
+
 # docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
@@ -1149,6 +1162,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
+        ("nltk", (is_nltk_available, NLTK_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
