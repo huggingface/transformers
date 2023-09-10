@@ -389,11 +389,8 @@ class BrosSelfAttention(nn.Module):
         # bbox positional encoding
         batch_size, n_head, seq_length, d_head = query_layer.shape
         bbox_pos_emb = bbox_pos_emb.view(seq_length, seq_length, batch_size, d_head)
-
-        bbox_pos_emb = bbox_pos_emb.permute([2, 0, 3, 1])
-        bbox_pos_scores = torch.matmul(
-            query_layer.unsqueeze(3), bbox_pos_emb.unsqueeze(1)
-        ).squeeze()  # equivalent of torch.einsum("bnid,bidj->bnij", (query_layer, bbox_pos_emb))
+        bbox_pos_emb = bbox_pos_emb.permute([2, 0, 1, 3])
+        bbox_pos_scores = torch.einsum("bnid,bijd->bnij", (query_layer, bbox_pos_emb))
 
         attention_scores = attention_scores + bbox_pos_scores
 
