@@ -757,8 +757,7 @@ def main():
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
-    per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
-    eval_batch_size = per_device_eval_batch_size * jax.device_count()
+    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
     steps_per_epoch = len(train_dataset) // train_batch_size
     total_train_steps = steps_per_epoch * num_epochs
 

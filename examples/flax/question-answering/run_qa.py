@@ -889,8 +889,7 @@ def main():
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.local_device_count()
-    per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
-    eval_batch_size = per_device_eval_batch_size * jax.local_device_count()
+    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.local_device_count()
     # endregion
 
     # region Load model
