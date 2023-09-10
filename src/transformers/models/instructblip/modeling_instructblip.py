@@ -1407,7 +1407,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         all_attention_mask = []
 
         for i in range(len(image_embedsX)):
-            image_embeds = image_embedsX[i]
+            image_embeds = image_embedsX[i].unsqueeze(0)
+            
 
             print("image_embeds shape",image_embeds.shape)
             # d1, d2, d3 = image_embeds.shape
