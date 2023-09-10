@@ -1469,15 +1469,23 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
+            # if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
             
             all_input_embeds.append(inputs_embeds)
             all_attention_mask.append(attention_mask)
 
 
+
+
         inputs_embeds = torch.cat(all_input_embeds, dim=0)
+
         attention_mask = torch.cat(all_attention_mask, dim=0)
+
+        print("one input_embeds",all_input_embeds[0].shape)
+        print("combined inputs_embeds",inputs_embeds.shape)
+        print("one attention_mask",all_attention_mask[0].shape)
+        print("combined attention_mask",attention_mask.shape)
 
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
         attention_mask = torch.cat([language_model_attention_mask.to(attention_mask.device), attention_mask], dim=1)
