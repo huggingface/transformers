@@ -1399,24 +1399,38 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # print(vision_outputs)
+        print("vision_outputs shape",vision_outputs[0].shape)
 
         image_embeds = vision_outputs[0]
 
+        print("image_embeds shape",image_embeds.shape)
         # d1, d2, d3 = image_embeds.shape
-
         # image_embeds = image_embeds.view(1, -1, d3)
         # print(image_embeds.shape)
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
+        print("image_attention_mask shape",image_attention_mask.shape)
+
         # difference with BLIP-2 here: we also feed the instruction prompt to the Q-Former
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+
+        print("query_tokens shape",query_tokens.shape)
+        
         query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
+        print("query_attention_mask shape",query_attention_mask.shape)
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
+
+        print("qformer_attention_mask shape",qformer_attention_mask.shape)
+
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+
+
+        print("qformer_attention_mask shape",qformer_attention_mask.shape)
+
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
             attention_mask=qformer_attention_mask,
@@ -1428,17 +1442,17 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             return_dict=return_dict,
         )
 
+        print("query_outputs[0] shape",query_outputs[0].shape)
 
-        print("1",query_outputs[0].shape)
         query_output = query_outputs[0][:, : query_tokens.size(1), :]
+        
+        print("query_output shape",query_output.shape)
 
-        print("2",query_output)
         # step 3: use the language model, conditioned on the query outputs and the prompt
         language_model_inputs = self.language_projection(query_output)
 
+        print("language_model_inputs shape",language_model_inputs.shape)
         
-        print("3",language_model_inputs.shape)
-
         language_model_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
