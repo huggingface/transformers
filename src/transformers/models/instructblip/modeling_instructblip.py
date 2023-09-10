@@ -1594,6 +1594,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
                 encoder_attention_mask=image_attention_mask,
                 return_dict=True,
             )
+
+            qformer_attention_mask = None
             query_output = query_outputs.last_hidden_state[:, : query_tokens.size(1), :]
 
             language_model_inputs = self.language_projection(query_output)
