@@ -1403,9 +1403,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         image_embeds = vision_outputs[0]
 
-        d1, d2, d3 = image_embeds.shape
+        # d1, d2, d3 = image_embeds.shape
 
-        image_embeds = image_embeds.view(1, -1, d3)
+        # image_embeds = image_embeds.view(1, -1, d3)
         # print(image_embeds.shape)
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
@@ -1427,10 +1427,18 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+
+        print("1",query_output[0].shape)
         query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
+        print("2",query_output)
         # step 3: use the language model, conditioned on the query outputs and the prompt
         language_model_inputs = self.language_projection(query_output)
+
+        
+        print("3",language_model_inputs.shape)
+
         language_model_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
@@ -1527,9 +1535,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         image_embeds = self.vision_model(pixel_values, return_dict=True).last_hidden_state
 
         
-        d1, d2, d3 = image_embeds.shape
+        # d1, d2, d3 = image_embeds.shape
 
-        image_embeds = image_embeds.view(1, -1, d3)
+        # image_embeds = image_embeds.view(1, -1, d3)
         
 
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
