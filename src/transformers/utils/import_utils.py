@@ -75,7 +75,7 @@ _bitsandbytes_available = _is_package_available("bitsandbytes")
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
 # `importlib.metadata.util` doesn't work with `opencv-python-headless`.
-_cv2_available = importlib.metadata.version("opencv-python-headless") is not None
+_cv2_available = importlib.util.find_spec("cv2") is not None
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
