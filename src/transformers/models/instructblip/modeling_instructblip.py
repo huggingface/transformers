@@ -1450,6 +1450,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
                 return_dict=return_dict,
             )
 
+            del qformer_attention_mask
+
             print("query_outputs[0] shape",query_outputs[0].shape)
 
             query_output = query_outputs[0][:, : query_tokens.size(1), :]
