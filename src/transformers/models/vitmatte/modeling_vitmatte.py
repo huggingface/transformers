@@ -287,21 +287,30 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, VitMatteForImageMatting
+        >>> from transformers import VitMatteImageProcessor, VitMatteForImageMatting
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub import hf_hub_download
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> processor = AutoImageProcessor.from_pretrained("hustvl/vitmatte-small-composition-1k")
+        >>> processor = VitMatteImageProcessor.from_pretrained("hustvl/vitmatte-small-composition-1k")
         >>> model = VitMatteForImageMatting.from_pretrained("hustvl/vitmatte-small-composition-1k")
 
-        >>> inputs = processor(image, return_tensors="pt")
-        >>> outputs = model(**inputs)
+        >>> filepath = hf_hub_download(
+        ...     repo_id="hf-internal-testing/image-matting-fixtures", filename="image.png", repo_type="dataset"
+        ... )
+        >>> image = Image.open(filepath).convert("RGB")
+        >>> filepath = hf_hub_download(
+        ...     repo_id="hf-internal-testing/image-matting-fixtures", filename="trimap.png", repo_type="dataset"
+        ... )
+        >>> trimap = Image.open(filepath).convert("L")
 
-        >>> alphas = outputs.alphas
+        >>> # prepare image + trimap for the model
+        >>> inputs = processor(images=image, trimaps=trimap, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     alphas = model(**inputs).alphas
+        >>> print(alphas.shape)
+        torch.Size([1, 1, 640, 960])
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
