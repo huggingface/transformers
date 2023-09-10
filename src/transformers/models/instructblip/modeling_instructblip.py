@@ -1429,7 +1429,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         )
 
 
-        print("1",query_output[0].shape)
+        print("1",query_outputs[0].shape)
         query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
         print("2",query_output)
