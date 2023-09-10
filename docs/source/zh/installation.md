@@ -49,7 +49,7 @@ source .env/bin/activate
 .env/Scripts/activate
 ```
 
-现在你可以使用以下命令下载 🤗 Transformers：
+现在你可以使用以下命令安装 🤗 Transformers：
 
 ```bash
 pip install transformers
@@ -71,7 +71,7 @@ pip install 'transformers[tf-cpu]'
 
 M1 / ARM用户
     
-在下载TensorFLow 2.0前，你们需要安装以下库
+在安装TensorFLow 2.0前，你们需要安装以下库
 ```
 brew install cmake
 brew install pkg-config
