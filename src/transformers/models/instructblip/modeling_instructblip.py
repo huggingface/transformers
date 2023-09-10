@@ -1426,7 +1426,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         
         #expand qformer_attention_mask along dim = 0 to match query_attention_mask[0]
 
-        qformer_attention_mask = qformer_attention_mask.expand(query_attention_mask.shape[0], -1, -1)
+        qformer_attention_mask = qformer_attention_mask.expand(query_attention_mask.shape[0], -1)
         
 
         print("qformer_attention_mask shape",qformer_attention_mask.shape)
