@@ -183,7 +183,7 @@ In a nutshell, this means that *inputs-weight matrix* multiplications, with $X$ 
 
 are changed to
 
-\\( Y = X * \text{dequantize}(W); \text{quantize}(W) )\\
+\\( Y = X * \textbf{dequantize}(W); \text{quantize}(W) )\\
 
 for every matrix multiplication. Dequantization and re-quantization is performed sequentially for all weight matrices as the inputs run through the network graph.
 
@@ -489,7 +489,9 @@ Let's go over each component in more detail
 Self-attention puts each token in relation to each other's tokens.
 As an example, the $\text{Softmax}(\mathbf{QK}^T)$ matrix of the text input sequence *"Hello", "I", "love", "you"* could look as follows:
 
-![](https://raw.githubusercontent.com/patrickvonplaten/scientific_images/master/self_attn_tokens.png)
+<div class="flex justify-center">
+    <img scale="50 %" align="center" src="https://raw.githubusercontent.com/patrickvonplaten/scientific_images/master/self_attn_tokens.png"/>
+</div>
 
 Each word token is given a probability mass at which it attends all other word tokens and, therefore is put into relation with all other word tokens. E.g. the word *"love"* attends to the word *"Hello"* with 0.05%, to *"I"* with 0.3%, and to itself with 0.65%.
 
@@ -539,7 +541,9 @@ By doing so, the propability score between $\mathbf{q}_i$ and $\mathbf{q}_j$ is 
 
 As an alternative, *ALiBi* proposes a much simpler relative position encoding scheme. The relative distance that input tokens have to each other is added as a negative integer scaled by a pre-defined value `m` to each query-key entry of the $\mathbf{QK}^T$ matrix right before the softmax computation.
 
-![](https://raw.githubusercontent.com/patrickvonplaten/scientific_images/master/alibi.png)
+<div class="flex justify-center">
+    <img scale="50 %" align="center" src="https://raw.githubusercontent.com/patrickvonplaten/scientific_images/master/alibi.png"/>
+</div>
 
 As shown in the [ALiBi](https://arxiv.org/abs/2108.12409) paper, this simple relative positional encoding allows the model to retain a high performance even at very long text input sequences.
 
@@ -589,8 +593,8 @@ As we can see every time we increase the text input tokens by the just sampled t
 
 With very few exceptions, LLMs are trained using the [causal language modeling objective](https://huggingface.co/docs/transformers/tasks/language_modeling#causal-language-modeling) and therefore mask the upper triangle matrix of the attention score - this is why in the two diagrams above the attention scores are left blank (*a.k.a* have 0 probability). For a quick recap on causal language modeling you can refer to the [*Illustrated Self Attention blog*](https://jalammar.github.io/illustrated-gpt2/#part-2-illustrated-self-attention).
 
-As a consequence, tokens *never* depend on previous tokens, more specifically the $\mathbf{q}_i$ vector is never put in relation with any key, values vectors $\mathbf{k}_j, \mathbf{v}_j$ if $j > i$. 
-Instead $\mathbf{q}_i$ only attends to previous key-value vectors $\mathbf{k}_{m < i}, \mathbf{v}_{m < i}$, for $m$ in $\{0, \ldots i - 1 \} $. 
+As a consequence, tokens *never* depend on previous tokens, more specifically the $\mathbf{q}_i$ vector is never put in relation with any key, values vectors $\mathbf{k}_j, \mathbf{v}_j$ where $j > i$. 
+Instead $\mathbf{q}_i$ only attends to previous and current key-value vectors $\mathbf{k}_m, \mathbf{v}_m$, for $m$ in $\(0, \ldots, i\)$ . 
 In order to reduce unnecessary computation, one can therefore cache each layer's key-value vectors for all previous timesteps.
 
 In the following, we will tell the LLM to make user of the key-value cache by retrieving and forwarding it for each forward pass.
@@ -648,7 +652,8 @@ Two things should be noted here:
 - 1. Keeping all the context is crucial for LLMs deployed in chat so that the LLM understands all the previous context of the conversation. E.g. for the example above the LLM needs to understand that the user refers to the population when asking `"And how many are in Germany"`.
 - 2. The key-value cache is extremely useful for chat as it allows us to continuously grow the encoded chat history instead of having to re-encode the chat history again from scratch (as e.g. would be the case when using an encoder-decoder architecture).
 
-There is however one catch. While the required peak memory for the $\mathbf{QK}^T$ matrix is significantly reduced, holding the key-value cache in memory can become very memory expensive for long input sequence or multi-turn chat. Remember that the key-value cache needs to store the key-value vectors for all previous input vectors $\mathbf{x}_i \text{, for } i \in \{1, \ldots, c - 1\}$ for all self-attention layers and for all attention heads.
+There is however one catch. While the required peak memory for the $\mathbf{QK}^T$ matrix is significantly reduced, holding the key-value cache in memory can become very memory expensive for long input sequence or multi-turn chat. 
+Remember that the key-value cache needs to store the key-value vectors for all previous input vectors $\mathbf{x}_i$, for  $i \in \(1, \ldots, c - 1 \)$ for all self-attention layers and for all attention heads.
 
 Let's compute the number of float values that need to be stored in the key-value cache for the LLM `bigcode/octocoder` that we used before.
 The number of float values amounts to:
