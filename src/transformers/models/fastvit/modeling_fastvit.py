@@ -15,7 +15,8 @@
 """ PyTorch FastViT model."""
 
 
-import collections.abc
+import collections.abc 
+from collections import OrderedDict
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
 
@@ -105,23 +106,24 @@ class FastViTPatchEmbeddings(nn.Module):
         self.inference_mode = config.inference_mode
         self.config = config
 
-        self.projection_first_conv = FastViTConvLayer(
+        self.projection = nn.Sequential(
+            FastViTConvLayer(
             in_channels=num_channels, 
             out_channels=hidden_size, 
             kernel_size=3,
             stride=2,
             padding=1,
             groups=1,
-            inference_mode = self.inference_mode)
-        self.projection_second_conv = FastViTConvLayer(
+            inference_mode = self.inference_mode),
+            FastViTConvLayer(
             in_channels=hidden_size, 
             out_channels=hidden_size, 
             kernel_size=3,
             stride=2,
             padding=1,
             groups=hidden_size,
-            inference_mode = self.inference_mode)
-        self.projection_third_conv = FastViTConvLayer(
+            inference_mode = self.inference_mode),
+            FastViTConvLayer(
             in_channels=hidden_size, 
             out_channels=hidden_size, 
             kernel_size=1,
@@ -129,6 +131,7 @@ class FastViTPatchEmbeddings(nn.Module):
             padding=0,
             groups=1,
             inference_mode = self.inference_mode)
+        )
 
     def forward(self,
         pixel_values: torch.Tensor,
@@ -148,9 +151,7 @@ class FastViTPatchEmbeddings(nn.Module):
                     f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
 
-        embeddings = self.projection_first_conv(pixel_values)
-        embeddings = self.projection_second_conv(embeddings)
-        embeddings = self.projection_third_conv(embeddings)
+        embeddings = self.projection(pixel_values)
 
         return embeddings
 
@@ -219,8 +220,8 @@ class FastViTConvLayer(nn.Module):
             # Conv branches
             self.rbr_scale = None
             if kernel_size > 1 and self.use_scale_branch:
-                self.rbr_scale = nn.Sequential(
-                    nn.Conv2d(
+                self.rbr_scale = nn.Sequential(collections.OrderedDict({
+                    'conv': nn.Conv2d(
                         in_channels=in_channels,
                         out_channels=out_channels,
                         kernel_size=1,
@@ -229,13 +230,14 @@ class FastViTConvLayer(nn.Module):
                         groups=groups,
                         bias=False,
                     ),
-                    nn.BatchNorm2d(num_features=out_channels)
+                    'bn': nn.BatchNorm2d(num_features=out_channels),
+                })
                 )
 
             self.rbr_conv = None
             if num_conv_branches > 0:
-                self.rbr_conv = nn.Sequential(
-                    nn.Conv2d(
+                self.rbr_conv = nn.Sequential(collections.OrderedDict({
+                    'conv': nn.Conv2d(
                         in_channels=in_channels,
                         out_channels=out_channels,
                         kernel_size=kernel_size,
@@ -244,7 +246,8 @@ class FastViTConvLayer(nn.Module):
                         groups=groups,
                         bias=False,
                     ),
-                    nn.BatchNorm2d(num_features=out_channels)
+                    'bn': nn.BatchNorm2d(num_features=out_channels)
+                })
                 )
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
@@ -369,8 +372,8 @@ class FastViTReparamLKConv(nn.Module):
                 bias=True,
             )
         else:
-            self.lkb_origin = nn.Sequential(
-                    nn.Conv2d(
+            self.large_conv = nn.Sequential(collections.OrderedDict({
+                    "conv": nn.Conv2d(
                         in_channels=in_channels,
                         out_channels=out_channels,
                         kernel_size=kernel_size,
@@ -379,7 +382,8 @@ class FastViTReparamLKConv(nn.Module):
                         groups=groups,
                         bias=False,
                     ),
-                    nn.BatchNorm2d(num_features=out_channels)
+                    "bn": nn.BatchNorm2d(num_features=out_channels)
+            })
                 )
 
             if small_kernel is not None:
@@ -387,8 +391,8 @@ class FastViTReparamLKConv(nn.Module):
                     small_kernel <= kernel_size
                 ), "The kernel size for re-param cannot be larger than the large kernel!"
                 
-                self.small_conv = nn.Sequential(
-                    nn.Conv2d(
+                self.small_conv = nn.Sequential(collections.OrderedDict({
+                    "conv": nn.Conv2d(
                         in_channels=in_channels,
                         out_channels=out_channels,
                         kernel_size=small_kernel,
@@ -397,7 +401,8 @@ class FastViTReparamLKConv(nn.Module):
                         groups=groups,
                         bias=False,
                     ),
-                    nn.BatchNorm2d(num_features=out_channels)
+                    "bn": nn.BatchNorm2d(num_features=out_channels)
+                })
                 )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -405,7 +410,7 @@ class FastViTReparamLKConv(nn.Module):
         if self.inference_mode:
             out = self.lkb_reparam(x)
         else:
-            out = self.lkb_origin(x)
+            out = self.large_conv(x)
             if hasattr(self, "small_conv"):
                 out += self.small_conv(x)
 
@@ -548,7 +553,7 @@ class FastViTConvFFN(nn.Module):
             groups=hidden_size,
             bias=False,
         )
-        self.batch_norm = nn.BatchNorm2d(num_features=hidden_size)
+        self.bn = nn.BatchNorm2d(num_features=hidden_size)
         self.fc1 = nn.Conv2d(
             in_channels=hidden_size,
             out_channels=mlp_hidden_dim,
@@ -563,7 +568,7 @@ class FastViTConvFFN(nn.Module):
         self.drop = nn.Dropout(dropout_rate)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv(x)
-        x = self.batch_norm(x)
+        x = self.bn(x)
         x = self.fc1(x)
         x = self.act(x)
         x = self.drop(x)
@@ -579,7 +584,7 @@ class FastViTDownsample(nn.Module):
         hidden_size_next = config.hidden_sizes[stage+1]
         inference_mode = config.inference_mode
 
-        self.reparam_LargeKernel_conv = FastViTReparamLKConv(
+        self.reparam_large_conv = FastViTReparamLKConv(
             in_channels=hidden_size,
             out_channels=hidden_size_next,
             kernel_size=7,
@@ -599,7 +604,7 @@ class FastViTDownsample(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.reparam_LargeKernel_conv(x)
+        x = self.reparam_large_conv(x)
         x = self.conv(x)
         return x
 
@@ -1068,7 +1073,7 @@ class FastViTModel(FastViTPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection_first_conv.rbr_scale[0].weight.dtype
+        expected_dtype = self.embeddings.patch_embeddings.projection[0].rbr_scale[0].weight.dtype
         if pixel_values.dtype != expected_dtype:
             pixel_values = pixel_values.to(expected_dtype)
 
@@ -1122,7 +1127,7 @@ class FastViTForImageClassification(FastViTPreTrainedModel):
         # Classifier head
         hidden_size = config.hidden_sizes[-1]
         self.gap = nn.AdaptiveAvgPool2d(output_size=1)
-        self.conv_exp = FastViTConvLayer(
+        self.final_conv = FastViTConvLayer(
                 in_channels=hidden_size,
                 out_channels=int(hidden_size * 2),
                 kernel_size=3,
@@ -1171,7 +1176,7 @@ class FastViTForImageClassification(FastViTPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        sequence_output = self.conv_exp(sequence_output)
+        sequence_output = self.final_conv(sequence_output)
         sequence_output = self.gap(sequence_output)
 
         logits = self.classifier(sequence_output[:, :, 0].flatten(1))
