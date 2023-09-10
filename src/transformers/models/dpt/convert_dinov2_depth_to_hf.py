@@ -23,7 +23,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation
+from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
 from transformers.utils import logging
 
 
@@ -163,7 +163,7 @@ def rename_key(dct, old, new):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url = "https://dl.fbaipublicfiles.com/dinov2/images/example.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -219,18 +219,22 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model.eval()
 
     # Check outputs on an image
-    # TODO image_size
-    # image_size = 512
-    # processor = DPTImageProcessor(
-    #     size={"height": image_size, "width": image_size}, keep_aspect_ratio=True, ensure_multiple_of=32
-    # )
+    # TODO image processor
 
-    # image = prepare_img()
-    # pixel_values = processor(image, return_tensors="pt").pixel_values
+    processor = DPTImageProcessor(
+        do_resize=False,
+        do_rescale=False,
+        do_pad=True,
+        pad_multiple_of=14,
+        do_normalize=True,
+        image_mean=(123.675, 116.28, 103.53),
+        image_std=(58.395, 57.12, 57.375),
+    )
+
+    image = prepare_img()
+    pixel_values = processor(image, return_tensors="pt").pixel_values.float()
 
     from huggingface_hub import hf_hub_download
-
-    hf_hub_download(repo_id="lysandre/arxiv-nlp", filename="config.json")
 
     filepath = hf_hub_download(repo_id="nielsr/dinov2-test-batch", filename="pixel_values.pt", repo_type="dataset")
     pixel_values = torch.load(filepath)

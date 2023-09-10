@@ -395,6 +395,9 @@ def normalize(
         std = [std] * num_channels
     std = np.array(std, dtype=image.dtype)
 
+    print(image.shape)
+    print(mean)
+
     if input_data_format == ChannelDimension.LAST:
         image = (image - mean) / std
     else:
