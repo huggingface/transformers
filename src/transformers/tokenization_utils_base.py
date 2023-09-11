@@ -819,7 +819,6 @@ class SpecialTokensMixin:
         "mask_token",
         "additional_special_tokens",
     ]
-    _added_tokens_encoder = {}
 
     def __init__(self, verbose=True, **kwargs):
         self._bos_token = None
@@ -1014,7 +1013,6 @@ class SpecialTokensMixin:
 
         nb_added_tokens = self._add_tokens(new_tokens, special_tokens=special_tokens)
         # update the cached mapping
-        self._added_tokens_encoder = {k.content: v for v, k in self.added_tokens_decoder.items()}
         return nb_added_tokens
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
@@ -1659,9 +1657,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def added_tokens_encoder(self) -> Dict[str, int]:
         """
         Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
-        optimisation.
+        optimisation in `self._added_tokens_encoder` for the slow tokenizers.
         """
-        return dict(sorted(self._added_tokens_encoder.items(), key=lambda item: item[1]))
+        return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[1])}
 
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:

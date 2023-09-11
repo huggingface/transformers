@@ -346,6 +346,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
+    _added_tokens_encoder: Dict[str, int] = {}
+
     def __init__(self, **kwargs):
         # 1. Init the parent class
         super().__init__(**kwargs)
@@ -362,7 +364,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
-        self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
+        self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
         self._decode_use_source_tokenizer = False
 
@@ -382,8 +384,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 raise ValueError(
                     f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
                 )
+
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
-        self._added_tokens_encoder = {k.content: v for v, k in self._added_tokens_decoder.items()}
+            self._added_tokens_encoder[str(token)] = index
 
     @property
     def is_fast(self) -> bool:
@@ -403,14 +406,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         something we should change. Returns:
             `Dict[str, int]`: The added tokens.
         """
-        return self.added_tokens_encoder
+        return self._added_tokens_encoder
 
     def __len__(self):
         """
         Size of the full vocabulary with the added tokens. Counts the `keys` and not the `values` because otherwise if
         there is a hole in the vocab, we will add tokenizers at a wrong index.
         """
-        return max(set(self.get_vocab().values()))
+        return len(set(self.get_vocab().keys()))
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
@@ -445,7 +448,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added_tokens = 0
         if new_tokens is None:
             return added_tokens
-
+        current_vocab = self.get_vocab()
         new_idx = len(self)  # only call this once, len gives the last index + 1
         for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
@@ -459,29 +462,22 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 continue
             if special_tokens:
                 token.special = True
-            if token.content == self.unk_token:
-                # unk_token and this token have the same pointer, let's update it even if it is already part of the vocab
-                if self.convert_tokens_to_ids(token.content) is None:
-                    self._added_tokens_decoder[new_idx + added_tokens] = token
-                    added_tokens += 1
-                else:
-                    self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
-            elif self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
-                if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
-                    # Normalize if requested
-                    token.content = token.content.lower()
-                self._added_tokens_decoder[new_idx + added_tokens] = token
+            if token.content not in current_vocab or self.unk_token is None:
+                token_index = new_idx + added_tokens
                 added_tokens += 1
-            elif self.convert_tokens_to_ids(token.content) is not None:
-                self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
             else:
-                self._added_tokens_decoder[new_idx + added_tokens] = token
-                added_tokens += 1
+                token_index = current_vocab[token.content]
+            if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
+                # Normalize if requested
+                token.content = token.content.lower()
 
             # if we are adding this as an additional special token (no need to store the added tokens object)
             if token.special and str(token) not in self.all_special_tokens:
                 self._additional_special_tokens.append(token)
 
+            # the setter automatically updates the reverse map
+            self._added_tokens_decoder[token_index] = token
+            self._added_tokens_encoder[token.content] = current_vocab[token.content] = token_index
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 
@@ -631,8 +627,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if token is None:
             return None
 
-        if token in self.added_tokens_encoder:
-            return self.added_tokens_encoder[token]
+        if token in self._added_tokens_encoder:
+            return self._added_tokens_encoder[token]
         return self._convert_token_to_id(token)
 
     def _convert_token_to_id(self, token):
@@ -954,7 +950,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             index = int(index)
             if skip_special_tokens and index in self.all_special_ids:
                 continue
-            if index in self.added_tokens_decoder:
+            if index in self._added_tokens_decoder:
                 tokens.append(self._added_tokens_decoder[index].content)
             else:
                 tokens.append(self._convert_id_to_token(index))
