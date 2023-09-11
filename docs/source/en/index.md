@@ -380,6 +380,7 @@ Flax), PyTorch, and/or TensorFlow.
 |             LeViT             |       ✅        |         ❌         |      ❌      |
 |             LiLT              |       ✅        |         ❌         |      ❌      |
 |             LLaMA             |       ✅        |         ❌         |      ❌      |
+|             Llava             |       ❌        |         ❌         |      ❌      |
 |          Longformer           |       ✅        |         ✅         |      ❌      |
 |            LongT5             |       ✅        |         ❌         |      ✅      |
 |             LUKE              |       ✅        |         ❌         |      ❌      |

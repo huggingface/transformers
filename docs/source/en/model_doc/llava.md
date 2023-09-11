@@ -29,7 +29,7 @@ Checkout all HF friendly Llava models [here](https://huggingface.co/models?searc
 
 Tips:
 
-- Weights for the Llava models can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-7B-hf/tree/main)
+- Weights for the Llava models can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-7B-hf/)
 - The architecture is very similar to the first Llama, with the addition of Grouped Query Attention (GQA) following this [paper](https://arxiv.org/pdf/2305.13245.pdf)
 
 ```python
@@ -49,6 +49,10 @@ This model was contributed by [Shauray Singh](https://huggingface.co/shauray) Th
 ## LlavaConfig
 
 [[autodoc]] LlavaConfig
+
+## LlamaConfig
+
+[[autodoc]] LlamaConfig
 
 ## LlavaLlamaConfig
 
