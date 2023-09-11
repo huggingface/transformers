@@ -146,6 +146,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 all_size_2 = len(tokenizer)
 
                 self.assertNotEqual(vocab_size_2, 0)
+                self.assertEqual(vocab_size + 3, vocab_size_2 + 3)
                 self.assertEqual(added_toks, len(new_toks))
                 self.assertEqual(all_size_2, all_size + len(new_toks))
 

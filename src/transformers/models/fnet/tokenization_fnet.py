@@ -237,7 +237,11 @@ class FNetTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> str:
         text = super()._decode(
-            token_ids, skip_special_tokens, clean_up_tokenization_spaces, spaces_between_special_tokens, **kwargs
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            spaces_between_special_tokens=spaces_between_special_tokens,
+            **kwargs,
         )
         # Mimic the behavior of the Rust tokenizer:
         # No space after <unk>

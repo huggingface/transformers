@@ -855,13 +855,11 @@ class SpecialTokensMixin:
 
     def sanitize_special_tokens(self) -> int:
         """
-        The `sanitize_special_tokens` is now deprecated and does not do anything. It is only kept for backward
-        compatibility and will be removed in transformers v5.
+        The `sanitize_special_tokens` is now deprecated kept for backward compatibility and will be removed in
+        transformers v5.
         """
-        logger.warning_once(
-            "The `sanitize_special_tokens` does not do anything and is only kept for backward compatibility. It will be removed in transformers v5."
-        )
-        return 0
+        logger.warning_once("The `sanitize_special_tokens` will be removed in transformers v5.")
+        return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
     def add_special_tokens(
         self, special_tokens_dict: Dict[str, Union[str, AddedToken]], replace_additional_special_tokens=True
@@ -936,13 +934,13 @@ class SpecialTokensMixin:
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
 
-                to_add = []
+                to_add = set()
                 for token in value:
                     if isinstance(token, (str)):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
                         token = AddedToken(token, normalized=False, rstrip=True, lstrip=True)
-                    if str(token) not in self.additional_special_tokens and str(token) not in to_add:
-                        to_add.append(token)
+                    if str(token) not in self.additional_special_tokens:
+                        to_add.add(token)
                 if replace_additional_special_tokens:
                     setattr(self, key, to_add)
                 else:
@@ -1112,57 +1110,59 @@ class SpecialTokensMixin:
 
     @bos_token.setter
     def bos_token(self, value):
-        self._bos_token = (
-            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
-            if isinstance(value, str) and value != ""
-            else value
-        )
+        if isinstance(value, str) and value != "":
+            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
+        elif not isinstance(value, AddedToken) and value is not None:
+            raise ValueError("Cannot set a non-string value as the BOS token")
+        self._bok_token = value
 
     @eos_token.setter
     def eos_token(self, value):
-        self._eos_token = (
-            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
-            if isinstance(value, str) and value != ""
-            else value
-        )
+        if isinstance(value, str) and value != "":
+            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
+        elif not isinstance(value, AddedToken) and value is not None:
+            raise ValueError("Cannot set a non-string value as the EOS token")
+        self._eos_token = value
 
     @unk_token.setter
     def unk_token(self, value):
-        self._unk_token = (
-            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
-            if isinstance(value, str) and value != ""
-            else value
-        )
+        if isinstance(value, str) and value != "":
+            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
+        elif not isinstance(value, AddedToken) and value is not None:
+            raise ValueError("Cannot set a non-string value as the UNK token")
+        self._unk_token = value
 
     @sep_token.setter
     def sep_token(self, value):
-        self._sep_token = (
-            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
-            if isinstance(value, str) and value != ""
-            else value
-        )
+        if isinstance(value, str) and value != "":
+            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
+        elif not isinstance(value, AddedToken) and value is not None:
+            raise ValueError("Cannot set a non-string value as the SEP token")
+        self._sep_token = value
 
     @pad_token.setter
     def pad_token(self, value):
-        self._pad_token = (
-            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
-            if isinstance(value, str) and value != ""
-            else value
-        )
+        if isinstance(value, str) and value != "":
+            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
+        elif not isinstance(value, AddedToken) and value is not None:
+            raise ValueError("Cannot set a non-string value as the PAD token")
+        self._pad_token = value
 
     @cls_token.setter
     def cls_token(self, value):
-        self._cls_token = (
-            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
-            if isinstance(value, str) and value != ""
-            else value
-        )
+        if isinstance(value, str) and value != "":
+            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
+        elif not isinstance(value, AddedToken) and value is not None:
+            raise ValueError("Cannot set a non-string value as the CLS token")
+        self._cls_token = value
 
     @mask_token.setter
     def mask_token(self, value):
-        self._mask_token = (
-            AddedToken(value, normalized=False, rstrip=True, lstrip=True) if isinstance(value, str) else value
-        )
+        if isinstance(value, str) and value != "":
+            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
+        elif not isinstance(value, AddedToken) and value is not None:
+            raise ValueError("Cannot set a non-string value as the MASK token")
+        self._mask_token = value
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):

@@ -375,7 +375,7 @@ class SPMTokenizer:
             text = "".join(words[word_start:word_end])
             return text
 
-    # TODO is this ever used?
+    # TODO add a deprecation cycle as this can have different behaviour from our API
     def add_special_token(self, token):
         if token not in self.special_tokens:
             self.special_tokens.append(token)

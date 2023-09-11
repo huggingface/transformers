@@ -213,7 +213,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             if len(token) > 1:
                 unique_no_split_tokens.append(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
 
-        # TODO are these tokens special?
         self.add_tokens(unique_no_split_tokens)
 
     def set_target_lang(self, target_lang: str):

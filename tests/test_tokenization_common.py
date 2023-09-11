@@ -927,7 +927,7 @@ class TokenizerTesterMixin:
                 self.assertGreaterEqual(len(tokens), 6)
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[0], tokens[1])
-                # seems like the added token has lstrip=False, failing this shitty tes
+
                 self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[-2], tokens[-3])
                 self.assertEqual(tokens[0], tokenizer.eos_token_id)

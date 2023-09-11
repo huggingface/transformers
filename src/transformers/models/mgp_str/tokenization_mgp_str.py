@@ -78,7 +78,7 @@ class MgpstrTokenizer(PreTrainedTokenizer):
         return len(self.vocab)
 
     def get_vocab(self):
-        vocab = dict(self.vocab.copy()) or {}
+        vocab = dict(self.vocab).copy()
         vocab.update(self.added_tokens_encoder)
         return vocab
 

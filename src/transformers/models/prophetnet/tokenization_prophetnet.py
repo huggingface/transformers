@@ -354,11 +354,6 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
         strip_accents: Optional[bool] = None,
         **kwargs,
     ):
-        # self.unique_no_split_tokens.append(x_sep_token)
-        # TODO x_sep_token is an added token, should be in additional special tokens.
-        # unless what we are looking for is just tokens that are part of the vocab but will be split
-        # by the tokenization mecanism. In that case, better to control how we split no?
-
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"

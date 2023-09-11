@@ -175,10 +175,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         self.fairseq_offset = 12
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
-        # TODO
-        # fairseq tokens should not be split? Why? if indeed they are not added tokens, could make sense, but they are added.....
-        # for k in self.fairseq_tokens_to_ids.keys():
-        #     self.unique_no_split_tokens.append(k)
+        # TODO ArthurZ fairseq_ids_to_tokens should be removed
 
         super().__init__(
             bos_token=bos_token,
