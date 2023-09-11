@@ -248,10 +248,16 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     print("Shape of predicted depth:", predicted_depth.shape)
     print("First values of predicted depth:", predicted_depth[0, :3, :3])
 
-    # TODO assert logits
-    # assert predicted_depth.shape == torch.Size(expected_shape)
-    # assert torch.allclose(predicted_depth[0, :3, :3], expected_slice)
-    # print("Looks ok!")
+    # assert logits
+    if model_name == "dpt-dinov2-small-nyu":
+        expected_shape = torch.Size([1, 576, 736])
+        expected_slice = torch.tensor([[3.3576, 3.4741, 3.4345], [3.4324, 3.5012, 3.2775], [3.2560, 3.3563, 3.2354]])
+    else:
+        raise NotImplementedError("Model not yet supported")
+
+    assert predicted_depth.shape == torch.Size(expected_shape)
+    assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-5)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
