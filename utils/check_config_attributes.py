@@ -190,6 +190,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "use_cache",
         "out_features",
         "out_indices",
+        "sampling_rate",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 

@@ -21,7 +21,6 @@ https://huggingface.co/models?filter=fill-mask
 """
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 
-import dataclasses
 import json
 import logging
 import math
@@ -367,7 +366,7 @@ def main():
     # If we have ref files, need to avoid it removed by trainer
     has_ref = data_args.train_ref_file or data_args.validation_ref_file
     if has_ref:
-        training_args = dataclasses.replace(training_args, remove_unused_columns=False)
+        training_args.remove_unused_columns = False
 
     # Data collator
     # This one will take care of randomly masking the tokens.

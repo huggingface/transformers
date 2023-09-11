@@ -463,6 +463,17 @@ def is_torch_compile_available():
     return hasattr(torch, "compile")
 
 
+def is_torchdynamo_compiling():
+    if not is_torch_available():
+        return False
+    try:
+        import torch._dynamo as dynamo  # noqa: F401
+
+        return dynamo.is_compiling()
+    except Exception:
+        return False
+
+
 def is_torch_tensorrt_fx_available():
     if importlib.util.find_spec("torch_tensorrt") is None:
         return False
@@ -526,6 +537,25 @@ def is_ipex_available():
         )
         return False
     return True
+
+
+@lru_cache
+def is_torch_xpu_available(check_device=False):
+    "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
+    if not is_ipex_available():
+        return False
+
+    import intel_extension_for_pytorch  # noqa: F401
+    import torch
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no XPU  is found
+            _ = torch.xpu.device_count()
+            return torch.xpu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "xpu") and torch.xpu.is_available()
 
 
 def is_bitsandbytes_available():

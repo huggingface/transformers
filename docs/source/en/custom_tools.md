@@ -25,7 +25,7 @@ If you are not aware of what tools and agents are in the context of transformers
 
 <Tip warning={true}>
 
-Transformers Agent is an experimental API that is subject to change at any time. Results returned by the agents
+Transformers Agents is an experimental API that is subject to change at any time. Results returned by the agents
 can vary as the APIs or underlying models are prone to change.
 
 </Tip>

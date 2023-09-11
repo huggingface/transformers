@@ -25,7 +25,7 @@ Apprentissage automatique de pointe pour [PyTorch](https://pytorch.org/), [Tenso
 🗣️ **Audio**: reconnaissance automatique de la parole et classification audio.<br>
 🐙 **Multimodalité**: système de question-réponse avec des tableaux ou images, reconnaissance optique de caractères, extraction d'information depuis des documents scannés et classification de vidéo.
 
-🤗 Transformers prend en charge l'interopérabilité entre PyTorch, TensorFlow et JAX. Cela permet d'utiliser un framework différent à chaque étape de la vie d'un modèle, par example entraîner un modèle en trois lignes de code avec un framework, et le charger pour l'inférence avec un autre. Les modèles peuvent également être exportés dans un format comme ONNX et TorchScript pour être déployés dans des environnements de production.
+🤗 Transformers prend en charge l'interopérabilité entre PyTorch, TensorFlow et JAX. Cela permet d'utiliser un framework différent à chaque étape de la vie d'un modèle, par exemple entraîner un modèle en trois lignes de code avec un framework, et le charger pour l'inférence avec un autre. Les modèles peuvent également être exportés dans un format comme ONNX et TorchScript pour être déployés dans des environnements de production.
 
 Rejoignez la communauté grandissante sur le [Hub](https://huggingface.co/models), le [forum](https://discuss.huggingface.co/) ou [Discord](https://discord.com/invite/JfAtkvEtRb) dès aujourd'hui !
 

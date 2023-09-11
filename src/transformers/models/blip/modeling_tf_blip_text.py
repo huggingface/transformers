@@ -27,6 +27,7 @@ from ...modeling_tf_outputs import (
     TFCausalLMOutputWithCrossAttentions,
 )
 from ...modeling_tf_utils import (
+    TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
     get_tf_activation,
@@ -668,22 +669,22 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
     @unpack_inputs
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        is_decoder=False,
-        training=None,
-    ):
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        encoder_embeds: tf.Tensor | None = None,
+        encoder_hidden_states: tf.Tensor | None = None,
+        encoder_attention_mask: tf.Tensor | None = None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        is_decoder: bool = False,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor] | TFBaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         encoder_hidden_states  (`tf.Tensor`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
