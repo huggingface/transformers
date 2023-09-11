@@ -55,6 +55,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"Helsinki-NLP/opus-mt-en-de": 512}
 PRETRAINED_INIT_CONFIGURATION = {}
 
+SPIECE_UNDERLINE = "▁"
+
 # Example URL https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json
 
 
@@ -267,6 +269,9 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
+        if tokens[0].startswith(SPIECE_UNDERLINE):
+            tokens[0] = tokens[0][1:]
+
         sp_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
         current_sub_tokens = []
         out_string = ""
