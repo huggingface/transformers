@@ -210,7 +210,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
             "{% set system_message = messages[0]['content'] %}"
-            "{% elif USE_DEFAULT_PROMPT == true % and not '<<SYS>>' in messages[0]['content']}"
+            "{% elif USE_DEFAULT_PROMPT == true and not '<<SYS>>' in messages[0]['content'] %}"
             "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
             "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
             "{% else %}"
