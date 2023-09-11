@@ -1521,6 +1521,27 @@ class GroundingDINODecoderLayer(nn.Module):
 
         return outputs
 
+class GroundingDINOContrastiveEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.max_text_len = config.max_text_len
+
+    def forward(
+            self, 
+            vision_hidden_state: torch.FloatTensor, 
+            text_hiddend_state: torch.FloatTensor, 
+            text_token_mask: torch.BoolTensor
+        ) -> torch.FloatTensor:
+
+
+        output = vision_hidden_state @ text_hiddend_state.transpose(-1, -2)
+        output.masked_fill_(~text_token_mask[:, None, :], float("-inf"))
+
+        # padding to max_text_len
+        new_output = torch.full((*output.shape[:-1], self.max_text_len), float("-inf"), device=output.device)
+        new_output[..., : output.shape[-1]] = output
+
+        return new_output
 
 # Copied from transformers.models.detr.modeling_detr.DetrClassificationHead
 class GroundingDINOClassificationHead(nn.Module):
@@ -1836,6 +1857,12 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
 
         self.dropout = config.dropout
         self.layers = nn.ModuleList([GroundingDINODecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.reference_points_head = GroundingDINOMLPPredictionHead(
+            config.query_dim // 2 * config.d_model,
+            config.d_model,
+            config.d_model,
+            2
+        )
         self.gradient_checkpointing = False
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
@@ -1846,6 +1873,45 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_proposal_pos_embed(self, proposals: torch.FloatTensor) -> torch.FloatTensor:
+        """Get the position embedding of the proposals."""
+        num_pos_feats = self.config.d_model // 2
+        temperature = 10000
+        scale = 2 * math.pi
+
+        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
+        # batch_size, num_queries
+        pos_x = proposals[:, :, 0] * scale
+        pos_y = proposals[:, :, 1] * scale
+        # batch_size, num_queries, num_pos_feats
+        pos_x = pos_x[:, :, None] / dim_t
+        pos_y = pos_y[:, :, None] / dim_t
+        # batch_size, num_queries, num_pos_feats 
+        pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
+        pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
+
+        if proposals.size(-1) == 2:
+            # batch_size, num_queries, num_pos_feats * 2
+            pos = torch.cat((pos_y, pos_x), dim=2)
+        elif proposals.size(-1) == 4:
+            w_embed = proposals[:, :, 2] * scale
+            pos_w = w_embed[:, :, None] / dim_t
+            # batch_size, num_queries, num_pos_feats
+            pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
+
+            h_embed = proposals[:, :, 3] * scale
+            pos_h = h_embed[:, :, None] / dim_t
+            # batch_size, num_queries, num_pos_feats
+            pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
+            # batch_size, num_queries, num_pos_feats * 4
+            pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
+        else:
+            raise ValueError("Unknown proposals shape(-1):{}".format(proposals.size(-1)))
+        return pos
+
+
+
     def forward(
         self,
         inputs_embeds,
@@ -1853,7 +1919,6 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         vision_encoder_attention_mask=None,
         text_encoder_hidden_states=None,
         text_encoder_attention_mask=None,
-        position_embeddings=None,
         reference_points=None,
         spatial_shapes=None,
         level_start_index=None,
@@ -1875,8 +1940,6 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                 in `[0, 1]`:
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
             reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
             spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
@@ -1921,6 +1984,8 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                 if reference_points.shape[-1] != 2:
                     raise ValueError("Reference points' last dimension must be of size 2")
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
+            query_pos = self.get_proposal_pos_embed(reference_points_input[:, :, 0, :])
+            query_pos = self.reference_points_head(query_pos)
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1943,7 +2008,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states=hidden_states,
-                    position_embeddings=position_embeddings,
+                    position_embeddings=query_pos,
                     reference_points=reference_points_input,
                     spatial_shapes=spatial_shapes,
                     level_start_index=level_start_index,
@@ -2034,8 +2099,6 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         backbone = GroundingDINOConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = GroundingDINOConvModel(backbone, position_embeddings)
-        # Create text backbone
-        self.text_backbone = GroundingDINOTextModel(config.text_backbone_config)
 
         # Create input projection layers
         if config.num_feature_levels > 1:
@@ -2057,9 +2120,9 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
                     )
                 )
                 in_channels = config.d_model
-            self.input_proj = nn.ModuleList(input_proj_list)
+            self.input_proj_vision = nn.ModuleList(input_proj_list)
         else:
-            self.input_proj = nn.ModuleList(
+            self.input_proj_vision = nn.ModuleList(
                 [
                     nn.Sequential(
                         nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1),
@@ -2068,8 +2131,12 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
                 ]
             )
 
-        if not config.two_stage:
-            self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model * 2)
+        # Create text backbone
+        self.text_backbone = GroundingDINOTextModel(config.text_backbone_config)
+        self.input_proj_text = nn.Linear(config.text_backbone_config.hidden_size, config.d_model)
+
+        if config.embedding_init_target or not config.two_stage:
+            self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
 
         self.encoder = GroundingDINOEncoder(config)
         self.decoder = GroundingDINODecoder(config)
@@ -2079,10 +2146,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
             self.enc_output_norm = nn.LayerNorm(config.d_model)
-            self.pos_trans = nn.Linear(config.d_model * 2, config.d_model * 2)
-            self.pos_trans_norm = nn.LayerNorm(config.d_model * 2)
         else:
-            self.reference_points = nn.Linear(config.d_model, 2)
+            self.reference_points = nn.Embedding(config.num_queries, 4)
 
         self.post_init()
 
@@ -2164,6 +2229,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
             proposals.append(proposal)
             _cur += height * width
+
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
         output_proposals = torch.log(output_proposals / (1 - output_proposals))  # inverse sigmoid
@@ -2181,12 +2247,15 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
     @replace_return_docstrings(output_type=GroundingDINOModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values,
-        pixel_mask=None,
-        decoder_attention_mask=None,
+        pixel_values: Tensor,
+        input_ids: Tensor,
+        attention_mask: Tensor,
+        token_type_ids: Tensor,
+        text_token_mask: Tensor,
+        text_self_attention_masks: Tensor,
+        position_ids: Tensor,
+        pixel_mask: Optional[Tensor]=None,
         encoder_outputs=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -2221,6 +2290,10 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # Extract text features from text backbone
+        text_features = self.text_backbone(input_ids, attention_mask, token_type_ids, position_ids)["last_hidden_state"]
+        text_features = self.input_proj_text(text_features)
+
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
@@ -2230,13 +2303,13 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # which is a list of tuples
-        features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
+        vision_features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
 
         # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         sources = []
         masks = []
-        for level, (source, mask) in enumerate(features):
-            sources.append(self.input_proj[level](source))
+        for level, (source, mask) in enumerate(vision_features):
+            sources.append(self.input_proj_vision[level](source))
             masks.append(mask)
             if mask is None:
                 raise ValueError("No attention mask was provided")
@@ -2246,9 +2319,9 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             _len_sources = len(sources)
             for level in range(_len_sources, self.config.num_feature_levels):
                 if level == _len_sources:
-                    source = self.input_proj[level](features[-1][0])
+                    source = self.input_proj_vision[level](vision_features[-1][0])
                 else:
-                    source = self.input_proj[level](sources[-1])
+                    source = self.input_proj_vision[level](sources[-1])
                 mask = nn.functional.interpolate(pixel_mask[None].float(), size=source.shape[-2:]).to(torch.bool)[0]
                 pos_l = self.backbone.position_embedding(source, mask).to(source.dtype)
                 sources.append(source)
@@ -2257,7 +2330,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
 
         # Create queries
         query_embeds = None
-        if not self.config.two_stage:
+        if self.config.embedding_init_target or self.config.two_stage:
             query_embeds = self.query_position_embeddings.weight
 
         # Prepare encoder inputs (by flattening)
@@ -2288,26 +2361,35 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         # Also provide spatial_shapes, level_start_index and valid_ratios
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                inputs_embeds=source_flatten,
-                attention_mask=mask_flatten,
-                position_embeddings=lvl_pos_embed_flatten,
+                vision_features=source_flatten,
+                vision_attention_mask=mask_flatten,
+                vision_position_embedding=lvl_pos_embed_flatten,
                 spatial_shapes=spatial_shapes,
                 level_start_index=level_start_index,
                 valid_ratios=valid_ratios,
+                text_features=text_features,
+                text_attention_mask=text_token_mask,
+                text_position_embedding=None,
+                text_self_attention_masks=text_self_attention_masks,
+                text_position_ids=position_ids,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=return_dict
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+        # If the user passed a tuple for encoder_outputs, we wrap it in a GroundingDINOEncoderOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, GroundingDINOEncoderOutput):
+            encoder_outputs = GroundingDINOEncoderOutput(
+                last_hidden_state_vision=encoder_outputs[0],
+                last_hidden_state_text=encoder_outputs[1],
+                hidden_states_vision=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                hidden_states_text=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
+                attentions_vision=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
+                attentions_text=encoder_outputs[5] if len(encoder_outputs) > 5 else None,
+                cross_attentions_vision=encoder_outputs[6] if len(encoder_outputs) > 6 else None,
+                cross_attentions_text=encoder_outputs[7] if len(encoder_outputs) > 7 else None,
             )
 
         # Fifth, prepare decoder inputs
-        batch_size, _, num_channels = encoder_outputs[0].shape
         enc_outputs_class = None
         enc_outputs_coord_logits = None
         if self.config.two_stage:
@@ -2318,14 +2400,19 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             # hack implementation for two-stage Deformable DETR
             # apply a detection head to each pixel (A.4 in paper)
             # linear projection for bounding box binary classification (i.e. foreground and background)
-            enc_outputs_class = self.decoder.class_embed[-1](object_query_embedding)
+            enc_outputs_class = self.decoder.class_embed[-1](
+                object_query_embedding, 
+                encoder_outputs[1], 
+                text_token_mask
+            )
             # 3-layer FFN to predict bounding boxes coordinates (bbox regression branch)
             delta_bbox = self.decoder.bbox_embed[-1](object_query_embedding)
             enc_outputs_coord_logits = delta_bbox + output_proposals
 
             # only keep top scoring `config.two_stage_num_proposals` proposals
             topk = self.config.two_stage_num_proposals
-            topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
+            topk_logits = enc_outputs_class.max(-1)[0]
+            topk_proposals = torch.topk(topk_logits, topk, dim=1)[1]
             topk_coords_logits = torch.gather(
                 enc_outputs_coord_logits, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
             )
@@ -2333,27 +2420,31 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             topk_coords_logits = topk_coords_logits.detach()
             reference_points = topk_coords_logits.sigmoid()
             init_reference_points = reference_points
-            pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_logits)))
-            query_embed, target = torch.split(pos_trans_out, num_channels, dim=2)
+            if query_embeds:
+                target = query_embeds.unsqueeze(0).repeat(batch_size, 1, 1)
+            else:
+                target = torch.gather(
+                    object_query_embedding, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, self.d_model)
+                ).detach()
         else:
-            query_embed, target = torch.split(query_embeds, num_channels, dim=1)
-            query_embed = query_embed.unsqueeze(0).expand(batch_size, -1, -1)
-            target = target.unsqueeze(0).expand(batch_size, -1, -1)
-            reference_points = self.reference_points(query_embed).sigmoid()
+            target = query_embeds.unsqueeze(0).repeat(batch_size, 1, 1)
+            reference_points = self.reference_points.weight.unsqueeze(0).repeat(batch_size, 1, 1).sigmoid()
             init_reference_points = reference_points
 
         decoder_outputs = self.decoder(
             inputs_embeds=target,
-            position_embeddings=query_embed,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=mask_flatten,
+            vision_encoder_hidden_states=encoder_outputs[0],
+            vision_encoder_attention_mask=mask_flatten,
+            text_encoder_hidden_states=encoder_outputs[1],
+            text_encoder_attention_mask=text_token_mask,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
             valid_ratios=valid_ratios,
+            self_attn_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=return_dict
         )
 
         if not return_dict:
@@ -2396,14 +2487,11 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         self.model = GroundingDINOModel(config)
 
         # Detection heads on top
-        self.class_embed = nn.Linear(config.d_model, config.num_labels)
+        self.class_embed = GroundingDINOContrastiveEmbedding(config)
         self.bbox_embed = GroundingDINOMLPPredictionHead(
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
 
-        prior_prob = 0.01
-        bias_value = -math.log((1 - prior_prob) / prior_prob)
-        self.class_embed.bias.data = torch.ones(config.num_labels) * bias_value
         nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
         nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
 
