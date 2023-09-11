@@ -362,7 +362,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
-        self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
+        self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
         self._decode_use_source_tokenizer = False
 
@@ -410,7 +410,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Size of the full vocabulary with the added tokens. Counts the `keys` and not the `values` because otherwise if
         there is a hole in the vocab, we will add tokenizers at a wrong index.
         """
-        return len(set(self.get_vocab().keys()))
+        return max(set(self.get_vocab().keys()))
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
