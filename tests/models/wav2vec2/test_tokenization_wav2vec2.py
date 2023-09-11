@@ -473,7 +473,7 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         with open(vocab_file, "w") as f:
             json.dump(vocab_dict, f)
 
-        tokenizer = Wav2Vec2CTCTokenizer(vocab_file, unk_token="<unk>")
+        tokenizer = Wav2Vec2CTCTokenizer(vocab_file)  # , unk_token="<unk>")
 
         expected_sent = tokenizer.decode(tokenizer(sent).input_ids, spaces_between_special_tokens=True)
         self.assertEqual(sent, expected_sent)
