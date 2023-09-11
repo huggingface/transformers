@@ -383,7 +383,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
                 )
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
-        self._added_tokens_encoder = {k.content:v for v,k in self._added_tokens_decoder.items()}
+        self._added_tokens_encoder = {k.content: v for v, k in self._added_tokens_decoder.items()}
 
     @property
     def is_fast(self) -> bool:
