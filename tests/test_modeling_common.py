@@ -2801,6 +2801,36 @@ class ModelTesterMixin:
 
                 self.assertTrue(torch.allclose(logits_fa, logits, atol=1e-3, rtol=1e-3))
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    def test_flash_attn_2_generate(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=True
+                ).to(torch_device)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=False).to(
+                    torch_device
+                )
+
+                dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[0, 1, 1]]).to(torch_device)
+
+                out = model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1)
+                out_fa = model_fa.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1)
+
+                self.assertTrue(torch.equal(out, out_fa))
+
 
 global_rng = random.Random()
 
