@@ -151,6 +151,7 @@ class CircleCIJob:
         pytest_flags.append(
             f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
         )
+        pytest_flags.append(f"--disable-pytest-warnings --junitxml=test-results/junit.xml")
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
