@@ -981,7 +981,7 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 new_toks = [
                     # These are added tokens, they will be normalized....
-                    AddedToken("[ABC]", normalized=True, lstrip=True, rstrip=True), 
+                    AddedToken("[ABC]", normalized=True, lstrip=True, rstrip=True),
                     AddedToken("[DEF]", normalized=True, lstrip=True, rstrip=True),
                     AddedToken("GHI IHG", normalized=True, lstrip=True, rstrip=True),
                 ]

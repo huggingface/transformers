@@ -1169,7 +1169,7 @@ class SpecialTokensMixin:
         if value is None:
             self._additional_special_tokens = value
             return
-        
+
         # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
         for token in value:
             if isinstance(token, str) and token != "":
