@@ -302,7 +302,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            for k, v in inputs.items():
             loss = model(**inputs).loss
             loss.backward()
 
