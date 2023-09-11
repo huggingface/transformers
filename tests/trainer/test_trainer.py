@@ -2359,7 +2359,7 @@ class TrainerHyperParameterMultiObjectOptunaIntegrationTest(unittest.TestCase):
                 compute_metrics=AlmostAccuracy(),
             )
             trainer.hyperparameter_search(
-                directions=["minimize", "maximize"],
+                direction=["minimize", "maximize"],
                 hp_space=hp_space,
                 hp_name=hp_name,
                 n_trials=4,
