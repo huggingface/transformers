@@ -298,7 +298,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 
 # Note: Publishing of this dataset is under internal review. The dataset is not yet downloadable.
-def prepare_batch(repo_id="ibm/etth1", file="train-batch.pt"):
+def prepare_batch(repo_id="ibm/etth-forecast-dev", file="train-batch.pt"):
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
     batch = torch.load(file, map_location=torch_device)
     return batch
@@ -310,7 +310,7 @@ def prepare_batch(repo_id="ibm/etth1", file="train-batch.pt"):
 class PatchTSTModelIntegrationTests(unittest.TestCase):
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_pretrain_head(self):
-        model = PatchTSTForMaskPretraining.from_pretrained("ibm/patchtst_pretrained_etth1").to(torch_device)
+        model = PatchTSTForMaskPretraining.from_pretrained("ibm/patchtst-etth-pretrain-dev").to(torch_device)
         batch = prepare_batch()
 
         torch.manual_seed(0)
@@ -323,13 +323,13 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-0.0170]], [[0.0163]], [[0.0090]], [[0.0139]], [[0.0067]], [[0.0246]], [[0.0090]]], device=torch_device
+            [[[0.0100]], [[0.0242]], [[0.0128]], [[0.0125]], [[-0.0160]], [[0.0395]], [[0.0135]]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
 
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_prediction_head(self):
-        model = PatchTSTForPrediction.from_pretrained("ibm/patchtst_prediction_etth1").to(torch_device)
+        model = PatchTSTForForecasting.from_pretrained("ibm/patchtst-etth-forecasting-dev").to(torch_device)
 
         batch = prepare_batch(file="test-batch.pt")
 
@@ -338,12 +338,12 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             output = model(
                 past_values=batch["past_values"].to(torch_device),
                 future_values=batch["future_values"].to(torch_device),
-            ).prediction_output
+            ).forecast_outputs
         expected_shape = torch.Size([64, model.config.prediction_length, model.config.num_input_channels])
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.8200, 0.3741, -0.7543, 0.3971, -0.6659, -0.0124, -0.8308]],
+            [[0.2781, 0.4699, 0.4292, 0.4278, -0.2669, 0.4660, -0.8898]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))

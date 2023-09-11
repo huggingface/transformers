@@ -23,10 +23,10 @@ import torch
 from torch import nn
 from torch.nn.modules.activation import MultiheadAttention
 
-from transformers.modeling_outputs import BaseModelOutputWithNoAttention
-from transformers.modeling_utils import PreTrainedModel
-from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
-from transformers.utils import ModelOutput, add_start_docstrings, logging
+from ...modeling_outputs import BaseModelOutputWithNoAttention
+from ...modeling_utils import PreTrainedModel
+from ...utils import ModelOutput, add_start_docstrings, logging
+from .configuration_patchtst import PatchTSTConfig
 
 
 logger = logging.get_logger(__name__)
@@ -519,10 +519,11 @@ class ChannelAttentionTSTEncoder(nn.Module):
             Tensor [bs x nvars x sequence_length x d_model]
         """
         all_hidden_states = []
-        for mod in self.layers:
-            src = mod(src)
-            all_hidden_states.append(src)
+
         if output_hidden_states:
+            for mod in self.layers:
+                src = mod(src)
+                all_hidden_states.append(src)
             return src, all_hidden_states
         return src, None
 
