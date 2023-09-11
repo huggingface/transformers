@@ -548,18 +548,19 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
+        added_tokens_encoder = self.added_tokens_encoder
         if split_special_tokens:
             no_split_token = []
             tokens = [text]
         else:
-            no_split_token = set(self.added_tokens_encoder.keys())  # don't split on any of the added tokens
+            no_split_token = set(added_tokens_encoder.keys())  # don't split on any of the added tokens
             # "This is something<special_token_1>  else"
             tokens = self.tokens_trie.split(text)
 
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
             if token in no_split_token:
-                tok_extended = self.added_tokens_decoder.get(self.added_tokens_encoder[token], None)
+                tok_extended = self.added_tokens_decoder.get(added_tokens_encoder[token], None)
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
                 if isinstance(tok_extended, AddedToken):
@@ -993,8 +994,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         for token in filtered_tokens:
             if skip_special_tokens and token in self.all_special_ids:
                 continue
-            # set(self.added_tokens_encoder) - set(self.all_special_tokens) gives the added tokens from pervious versions. Kept for legacy. -> Currently does not exactly work see REFORM llama and LlamaCode issue
-            # we should probably just fix this to use all tokens in all_special_tokens? (MLuke actually uses this to fix the extra space added by our encoding)
             if token in legacy_added_tokens:
                 if current_sub_text:
                     sub_texts.append(self.convert_tokens_to_string(current_sub_text))

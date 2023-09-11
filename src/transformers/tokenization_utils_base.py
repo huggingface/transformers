@@ -805,8 +805,8 @@ class SpecialTokensMixin:
             A special token representing a masked token (used by masked-language modeling pretraining objectives, like
             BERT).
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
-            A tuple or a list of additional special tokens, which will also be skipped when decoding if
-            `skip_special_tokens` is set to `True`
+            A tuple or a list of additional tokens, which will be marked as `special`, meaning that they will be
+            skipped when decoding if `skip_special_tokens` is set to `True`.
     """
 
     SPECIAL_TOKENS_ATTRIBUTES = [
@@ -854,12 +854,12 @@ class SpecialTokensMixin:
                     raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
 
     def sanitize_special_tokens(self) -> int:
-        """additional_special_tokens
-        The `sanitize_special_tokens` is now deprectaed and does not do anything. It iss only kept for backward
-        compatibility. It will be removed in transformers v5
+        """
+        The `sanitize_special_tokens` is now deprecated and does not do anything. It is only kept for backward
+        compatibility and will be removed in transformers v5.
         """
         logger.warning_once(
-            "The `sanitize_special_tokens` does not do anything and is only kept for backward compatibility. It will be removed in transformers v5"
+            "The `sanitize_special_tokens` does not do anything and is only kept for backward compatibility. It will be removed in transformers v5."
         )
         return 0
 
@@ -878,8 +878,8 @@ class SpecialTokensMixin:
 
         Using `add_special_tokens` will ensure your special tokens can be used in several ways:
 
-        - Special tokens are carefully handled by the tokenizer (they are never split), similarly to `AddedTokens`.
         - Special tokens can be skipped when decoding using `skip_special_tokens = True`.
+        - Special tokens are carefully handled by the tokenizer (they are never split), similarly to `AddedTokens`.
         - You can easily refer to special tokens using tokenizer class attributes like `tokenizer.cls_token`. This
           makes it easy to develop model-agnostic training and fine-tuning scripts.
 
@@ -899,7 +899,7 @@ class SpecialTokensMixin:
                 `special_tokens_dict`. Otherwise, `self._additional_special_tokens` is just extended. In the former
                 case, the tokens will NOT be removed from the tokenizer's full vocabulary - they are only being flagged
                 as non-special tokens. Remember, this only affects which tokens are skipped during decoding, not the
-                `added_tokens_encode` and `added_tokens_decoder`. This means that the previous
+                `added_tokens_encoder` and `added_tokens_decoder`. This means that the previous
                 `additional_special_tokens` are still added tokens, and will not be split by the model.
 
         Returns:
@@ -939,7 +939,7 @@ class SpecialTokensMixin:
                 to_add = []
                 for token in value:
                     if isinstance(token, (str)):
-                        # for legacy purpose we default to stripping. test_add_tokens_tokenizer depends on this
+                        # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
                         token = AddedToken(token, normalized=False, rstrip=True, lstrip=True)
                     if str(token) not in self.additional_special_tokens and str(token) not in to_add:
                         to_add.append(token)
@@ -953,7 +953,7 @@ class SpecialTokensMixin:
                 if not isinstance(value, (str, AddedToken)):
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
-                    # for legacy purpose we default to stripping. test_add_tokens_tokenizer depends on this
+                    # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
                     value = AddedToken(value, normalized=False, rstrip=True, lstrip=True)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
@@ -1164,7 +1164,7 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        # We store the actual tokens to allow adding tokens via `tokenizer.add_special_tokens`
+        # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
         if value is not None:
             for token in value:
                 if str(token) not in self.all_special_tokens:
@@ -1329,9 +1329,9 @@ class SpecialTokensMixin:
     @property
     def all_special_tokens_extended(self) -> List[Union[str, AddedToken]]:
         """
-        `List[Union[str, tokenizers.AddedToken]]`: All the special tokens (`'<unk>'`, `'<cls>'`, etc.) The order has
+        `List[Union[str, tokenizers.AddedToken]]`: All the special tokens (`'<unk>'`, `'<cls>'`, etc.), the order has
         nothing to do with the index of each tokens. If you want to know the correct indices, check
-        `self.added_tokens_encoder`.
+        `self.added_tokens_encoder`. We can't create an order anymore as the keys are `AddedTokens` and not `Strings`.
 
         Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
         special tokens are tokenized.
@@ -1366,7 +1366,8 @@ ENCODE_KWARGS_DOCSTRING = r"""
             add_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to add special tokens when encoding the sequences. This will use the underlying
                 `PretrainedTokenizerBase.build_inputs_with_special_tokens` function, which defines which tokens are
-                automatically added to the input ids.
+                automatically added to the input ids. This is usefull if you want to add `bos` or `eos` tokens
+                automatically.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
@@ -1652,7 +1653,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def added_tokens_encoder(self) -> Dict[str, int]:
-        return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[1])}
+        """
+        Returns the mapping from string to index. It is based on the `added_tokens_decoder` and is always re-computed,
+        which might not be optimal in terms of performances.
+        """
+        return {k.content: v for v, k in self.added_tokens_decoder.items()}
 
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
@@ -1823,7 +1828,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                "tokenizer_file": FULL_TOKENIZER_FILE,  # used to initialize a slow from a fast. Properly copyu the `addedTokens` instead of adding in random orders
+                # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
+                "tokenizer_file": FULL_TOKENIZER_FILE,
             }
             vocab_files = {**cls.vocab_files_names, **additional_files_names}
             if "tokenizer_file" in vocab_files:
@@ -2354,9 +2360,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         save_directory = str(save_directory)
-
-        # TODO always save for now, for forward compatibility?
-        # -> as much as possible, but outputs with special won't match one to one
 
         added_tokens_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE

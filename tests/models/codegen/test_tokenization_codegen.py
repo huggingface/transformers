@@ -258,7 +258,7 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         truncation_pattern = ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
         decoded_text = tokenizer.decode(input_ids, truncate_before_pattern=truncation_pattern)
         self.assertEqual(decoded_text, expected_trucated_text)
-        # TODO @ArthurZ outputs of the fast tokenizer are different in this case
+        # TODO @ArthurZ outputs of the fast tokenizer are different in this case, un-related to the PR
 
     # tokenizer has no padding token
     def test_padding_different_model_input_name(self):
