@@ -173,6 +173,8 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
             
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. 
+        
+        Returns:
         """
 
         # context_values: [bs  x n_vars x num_patches x patch_len]
@@ -263,6 +265,9 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. 
+        
+        
+        Returns:
 
         """
         
