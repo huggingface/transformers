@@ -303,8 +303,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             for k, v in inputs.items():
-                if isinstance(v, torch.Tensor):
-                    print(k, v.shape)
             loss = model(**inputs).loss
             loss.backward()
 
