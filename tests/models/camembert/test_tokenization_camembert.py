@@ -52,7 +52,7 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
         token = "<pad>"
-        token_id = 1  # 1 is the offsetted id, but in the spm vocab it's 3
+        token_id = 1  # 1 is the offset id, but in the spm vocab it's 3
 
         self.assertEqual(self.get_tokenizer().convert_tokens_to_ids(token), token_id)
         self.assertEqual(self.get_tokenizer().convert_ids_to_tokens(token_id), token)

@@ -328,7 +328,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if self.vocab_file:
             logger.info(f"building vocab from {self.vocab_file}")
             self._build_from_file(self.vocab_file)
-            logger.info(f"final vocab size {len(self.sym2idx)}")
+            logger.info(f"Final vocab size {len(self.sym2idx)}")
         else:
             logger.info(f"building vocab with min_freq={self.min_freq}, max_size={self.max_size}")
             self.idx2sym = []
@@ -342,7 +342,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                     break
                 self.add_symbol(sym)
 
-            logger.info(f"final vocab size {len(self.sym2idx)} from {len(self.counter)} unique tokens")
+            logger.info(f"Final vocab size {len(self.sym2idx)} from {len(self.counter)} unique tokens")
 
     @torch_only_method
     def encode_file(self, path, ordered=False, verbose=False, add_eos=True, add_double_eos=False):

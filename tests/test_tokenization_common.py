@@ -227,7 +227,7 @@ class TokenizerTesterMixin:
         return input_txt, input_txt
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
-        # the lenght of the tokenizer does not always reprensent the tokens that it can encode no? What if there are holes?
+        # the length of the tokenizer does not always represent the tokens that it can encode: what if there are holes?
         toks = [
             (i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in set(tokenizer.get_vocab().values())
         ]
@@ -392,7 +392,7 @@ class TokenizerTesterMixin:
                 SPECIAL_TOKEN_1 = "[SPECIAL_TOKEN_1]"
                 SPECIAL_TOKEN_2 = "[SPECIAL_TOKEN_2]"
 
-                # both method should add the token to `_additional_special_tokens` and `added_tokens_decoder`
+                # Both methods should add the token to `_additional_special_tokens` and `added_tokens_decoder`
                 tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
                 tokenizer.add_special_tokens(
                     {"additional_special_tokens": [SPECIAL_TOKEN_2]}, replace_additional_special_tokens=False
@@ -980,9 +980,8 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 new_toks = [
-                    AddedToken(
-                        "[ABC]", normalized=True, lstrip=True, rstrip=True
-                    ),  # these are added tokens, they will be normalized....
+                    # These are added tokens, they will be normalized....
+                    AddedToken("[ABC]", normalized=True, lstrip=True, rstrip=True), 
                     AddedToken("[DEF]", normalized=True, lstrip=True, rstrip=True),
                     AddedToken("GHI IHG", normalized=True, lstrip=True, rstrip=True),
                 ]

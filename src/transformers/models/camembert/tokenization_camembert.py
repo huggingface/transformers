@@ -174,7 +174,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        # the length of the vocabulary without added tokens is len(self.sp_model) but the added tokens are added at the beginning.
+        # The length of the vocabulary without added tokens is len(self.sp_model) but the added tokens are added at the beginning.
         return len(self.sp_model)
 
     def get_vocab(self):

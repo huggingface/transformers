@@ -879,7 +879,7 @@ class SpecialTokensMixin:
         Using `add_special_tokens` will ensure your special tokens can be used in several ways:
 
         - Special tokens can be skipped when decoding using `skip_special_tokens = True`.
-        - Special tokens are carefully handled by the tokenizer (they are never split), similarly to `AddedTokens`.
+        - Special tokens are carefully handled by the tokenizer (they are never split), similar to `AddedTokens`.
         - You can easily refer to special tokens using tokenizer class attributes like `tokenizer.cls_token`. This
           makes it easy to develop model-agnostic training and fine-tuning scripts.
 
@@ -938,7 +938,7 @@ class SpecialTokensMixin:
 
                 to_add = []
                 for token in value:
-                    if isinstance(token, (str)):
+                    if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
                         token = AddedToken(token, normalized=False, rstrip=True, lstrip=True)
                     if str(token) not in self.additional_special_tokens and str(token) not in to_add:
@@ -1011,8 +1011,8 @@ class SpecialTokensMixin:
         if not isinstance(new_tokens, (list, tuple)):
             new_tokens = [new_tokens]
 
-        nb_added_tokens = self._add_tokens(new_tokens, special_tokens=special_tokens)
         # update the cached mapping
+        nb_added_tokens = self._add_tokens(new_tokens, special_tokens=special_tokens)
         return nb_added_tokens
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
@@ -1166,19 +1166,17 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
-        if value is not None:
-            for token in value:
-                if str(token) not in self.all_special_tokens:
-                    token = (
-                        AddedToken(token, normalized=False, rstrip=True, lstrip=True)
-                        if isinstance(token, str) and token != ""
-                        else token
-                    )
-                    self._additional_special_tokens.append(token)
-
-        else:
+        if value is None:
             self._additional_special_tokens = value
+            return
+        
+        # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
+        for token in value:
+            if isinstance(token, str) and token != "":
+                token = AddedToken(token, normalized=False, rstrip=True, lstrip=True)
+            elif not isinstance(token, AddedToken):
+                raise ValueError(f"Cannot add instance of type {type(value)} to additional_special_tokens!")
+            self._additional_special_tokens.append(token)
 
     @property
     def bos_token_id(self) -> Optional[int]:
