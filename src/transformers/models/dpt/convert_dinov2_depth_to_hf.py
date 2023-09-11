@@ -37,6 +37,8 @@ def get_dpt_config(model_name):
         backbone_config = Dinov2Config.from_pretrained(
             "facebook/dinov2-small", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=True
         )
+    else:
+        raise NotImplementedError("To do")
 
     neck_hidden_sizes = [48, 96, 192, 384]
     config = DPTConfig(
@@ -168,15 +170,23 @@ def prepare_img():
     return im
 
 
+name_to_url = {
+        "dpt-dinov2-small-nyu": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_nyu_dpt_head.pth",
+        "dpt-dinov2-small-kitti": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_kitti_dpt_head.pth",
+        "dpt-dinov2-base-nyu": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_nyu_dpt_head.pth",
+        "dpt-dinov2-base-kitti": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitb14/dinov2_vitb14_kitti_dpt_head.pth",
+        "dpt-dinov2-large-nyu": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_nyu_dpt_head.pth",
+        "dpt-dinov2-large-kitti": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitl14/dinov2_vitl14_kitti_dpt_head.pth",
+        "dpt-dinov2-giant-nyu": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitg14/dinov2_vitg14_nyu_dpt_head.pth",
+        "dpt-dinov2-giant-kitti": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vitg14/dinov2_vitg14_kitti_dpt_head.pth",
+    }
+
+
 @torch.no_grad()
 def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
-
-    name_to_url = {
-        "dpt-dinov2-small-nyu": "https://dl.fbaipublicfiles.com/dinov2/dinov2_vits14/dinov2_vits14_nyu_dpt_head.pth",
-    }
 
     # define DPT configuration based on URL
     checkpoint_url = name_to_url[model_name]
@@ -278,7 +288,7 @@ if __name__ == "__main__":
         "--model_name",
         default="dpt-dinov2-small-nyu",
         type=str,
-        choices=["dpt-dinov2-small-nyu"],
+        choices=name_to_url.keys(),
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(

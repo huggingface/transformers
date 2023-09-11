@@ -68,7 +68,7 @@ DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class Dinov2BackboneOutput(BackboneOutput):
     """
-    DINOv2-specific class for its backbone outputs.
+    Class for the outputs of [`Dinov2Backbone`].
 
     Args:
         feature_maps (`tuple(torch.FloatTensor)` of shape `(batch_size, num_channels, height, width)` or `(batch_size, sequence_length, hidden_size)`):

@@ -698,13 +698,16 @@ class DPTFeatureFusionStage(nn.Module):
             self.layers.append(DPTFeatureFusionLayer(config))
 
     def forward(self, hidden_states):
+        # reversing the hidden_states, we start from the last
+        hidden_states = hidden_states[::-1]
+
         fused_hidden_states = []
         # first layer only uses the last hidden_state
-        fused_hidden_state = self.layers[0](hidden_states[-1])
+        fused_hidden_state = self.layers[0](hidden_states[0])
         fused_hidden_states.append(fused_hidden_state)
         # looping from the last layer to the second
-        for i in range(1, len(self.layers)):
-            fused_hidden_state = self.layers[i](fused_hidden_state, hidden_states[-(i + 1)])
+        for hidden_state, layer in zip(hidden_states[1:], self.layers[1:]):
+            fused_hidden_state = layer(fused_hidden_state, hidden_state)
             fused_hidden_states.append(fused_hidden_state)
 
         return fused_hidden_states

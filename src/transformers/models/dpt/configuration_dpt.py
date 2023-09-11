@@ -92,6 +92,10 @@ class DPTConfig(PretrainedConfig):
             The index of the features to use in the heads.
         use_batch_norm_in_fusion_residual (`bool`, *optional*, defaults to `False`):
             Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
+        use_bias_in_fusion_residual (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the pre-activate residual units of the fusion blocks.
+        add_projection (`bool`, *optional*, defaults to `False`):
+            Whether to add a projection layer before the depth estimation head.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
             Whether to use an auxiliary head during training.
         auxiliary_loss_weight (`float`, *optional*, defaults to 0.4):
@@ -105,12 +109,8 @@ class DPTConfig(PretrainedConfig):
         neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
-            The configuration of the backbone model. Only used in case `is_hybrid` or in case you want to leverage the
+            The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to leverage the
             [`AutoBackbone`] API.
-        use_bias_in_fusion_residual (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the pre-activate residual units of the fusion blocks.
-        add_projection (`bool`, *optional*, defaults to `False`):
-            Whether to add a projection layer before the depth estimation head.
 
     Example:
 
@@ -152,13 +152,13 @@ class DPTConfig(PretrainedConfig):
         head_in_index=-1,
         use_batch_norm_in_fusion_residual=False,
         use_bias_in_fusion_residual=True,
+        add_projection=False,
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
         semantic_loss_ignore_index=255,
         semantic_classifier_dropout=0.1,
         backbone_featmap_shape=[1, 1024, 24, 24],
         neck_ignore_stages=[0, 1],
-        add_projection=False,
         backbone_config=None,
         **kwargs,
     ):
