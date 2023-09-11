@@ -17,6 +17,7 @@
 import math
 import random
 from typing import Optional, Tuple
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -796,6 +797,7 @@ PATCHTST_INPUTS_DOCSTRING = r"""
 """
 
 
+@dataclass
 @add_start_docstrings(
     "The bare PatchTST Model outputting raw hidden-states without any specific head.",
     PATCHTST_START_DOCSTRING,
@@ -817,7 +819,7 @@ class PatchTSTModelOutputWithNoAttention(ModelOutput):
             Bool masked tensor indicating which patches are masked
         revin_mean: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*)
             mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
-        revin_std: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*)
+        revin_stdev: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*)
             std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
     """
 
@@ -826,7 +828,7 @@ class PatchTSTModelOutputWithNoAttention(ModelOutput):
     patched_input: torch.FloatTensor = None
     mask: torch.FloatTensor = None
     revin_mean: torch.FloatTensor = None
-    revin_std: torch.FloatTensor = None
+    revin_stdev: torch.FloatTensor = None
 
 
 class RevIN(nn.Module):
@@ -966,6 +968,7 @@ class MaskPretrainHead(nn.Module):
         return x
 
 
+@dataclass
 class PatchTSTOutput(ModelOutput):
     """
     Output type of [`PatchTSTForPredictiontion`].
@@ -1091,6 +1094,7 @@ class ClassificationHead(nn.Module):
         return y
 
 
+@dataclass
 class PatchTSTForClassificationOutput(ModelOutput):
     """
     Output type of [`PatchTSTForClassification`].
@@ -1189,6 +1193,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=model_output.hidden_states)
 
 
+@dataclass
 class PatchTSTForForecastingOutput(ModelOutput):
     """
     Output type of [`PatchTSTForPredictiontion`].
