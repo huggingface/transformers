@@ -283,6 +283,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             else:
                 current_sub_tokens.append(token)
         out_string += sp_model.decode_pieces(current_sub_tokens)
+        out_string = out_string.replace(SPIECE_UNDERLINE, " ")
         return out_string.strip()
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
