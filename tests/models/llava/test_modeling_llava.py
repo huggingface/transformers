@@ -20,7 +20,7 @@ from typing import Union, Optional
 from parameterized import parameterized
 import inspect
 
-from transformers import LlamaConfig, is_torch_available, set_seed,LlavaConfig
+from transformers import LlamaConfig, is_torch_available, set_seed, LlavaConfig
 from transformers.models.llava.configuration_llava import LlavaLlamaConfig
 
 
@@ -43,7 +43,6 @@ if is_torch_available():
 
     from transformers import (
         LlavaLlamaForCausalLM,
-        LlamaForSequenceClassification,
         LlamaModel,
         LlamaTokenizer,
     )
