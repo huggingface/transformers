@@ -197,16 +197,18 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         Assistant messages do not have special tokens, because LLaMA chat models are generally trained with strict
         user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
         rather than needing special tokens. The system message is partly 'embedded' in the first user message, which
-        gets an unusual token ordering when it is present. This template should definitely be changed if you wish to
-        fine-tune a model with more flexible role ordering!
+        results in an unusual token ordering when it is present. This template should definitely be changed if you wish
+        to fine-tune a model with more flexible role ordering!
 
+        The output should look something like: <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST]
         """
 
         template = (
-            "{% if messages[0]['role'] == 'system' %}"  
+            "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
             "{% set system_message = messages[0]['content'] %}"
-            "{% elif USE_DEFAULT_PROMPT == true % and not '<<SYS>>' in messages[0]['content']}"  
+            "{% elif USE_DEFAULT_PROMPT == true % and not '<<SYS>>' in messages[0]['content']}"
             "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
             "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
             "{% else %}"
@@ -214,7 +216,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             "{% set system_message = false %}"
             "{% endif %}"
             "{% for message in loop_messages %}"  # Loop over all non-system messages
-            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"  
+            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
             "{% set temp_var = 0/0 %}"  # Raise an error if roles don't alternate user/assistant/user/assistant/...
             "{% endif %}"
             "{% if loop.index0 == 0 and system_message != false %}"  # Embed system message in first message
