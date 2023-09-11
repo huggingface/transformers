@@ -893,12 +893,12 @@ class LlamaModel(LlamaPreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, past_key_value, output_attentions, padding_mask=padding_mask)
 
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer), hidden_states, attention_mask, position_ids, padding_mask
+                    create_custom_forward(decoder_layer), hidden_states, attention_mask, position_ids
                 )
             else:
                 layer_outputs = decoder_layer(

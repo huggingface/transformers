@@ -45,8 +45,8 @@ from .configuration_falcon import FalconConfig
 
 if is_flash_attn_available():
     from einops import rearrange
-    from flash_attn import flash_attn_func, flash_attn_varlen_func, index_first_axis
-    from flash_attn.bert_padding import pad_input, unpad_input  # noqa
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import pad_input, unpad_input, index_first_axis  # noqa
 
 logger = logging.get_logger(__name__)
 
