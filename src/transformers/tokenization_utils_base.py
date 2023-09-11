@@ -27,6 +27,7 @@ from collections import OrderedDict, UserDict
 from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -1566,6 +1567,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Stores a Jinja template that formats chat histories into tokenizable strings
         self.chat_template = kwargs.pop("chat_template", None)
+        self._jinja_env = None
 
         super().__init__(**kwargs)
 
@@ -1680,11 +1682,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
         """
-
         try:
             from jinja2.sandbox import ImmutableSandboxedEnvironment
         except ImportError:
             raise ImportError("apply_chat_template requires jinja2 to be installed.")
+        if self._jinja_env is None:  # Lazily initialize Jinja environment only when needed
+            self._jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
 
         if hasattr(conversation, "messages"):
             # Indicates it's a Conversation object
@@ -1697,10 +1700,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             else:
                 chat_template = self.default_chat_template
 
-        jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
-        # Compilation is slower than tokenization/rendering, so if performance becomes an issue here
-        # we should cache compiled templates.
-        compiled_template = jinja_env.from_string(chat_template)
+        # Compilation function uses a cache to avoid recompiling the same template
+        compiled_template = self._compile_jinja_template(chat_template)
         rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
 
         if padding is True:
@@ -1717,6 +1718,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
         else:
             return rendered
+
+    @lru_cache
+    def _compile_jinja_template(self, chat_template):
+        return self._jinja_env.from_string(chat_template)
 
     @property
     def default_chat_template(self):
