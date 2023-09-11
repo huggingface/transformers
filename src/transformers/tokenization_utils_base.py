@@ -1014,7 +1014,7 @@ class SpecialTokensMixin:
 
         nb_added_tokens = self._add_tokens(new_tokens, special_tokens=special_tokens)
         # update the cached mapping
-        self._added_tokens_encoder = {k.content: v for v, k in self._added_tokens_decoder.items()}
+        self._added_tokens_encoder = {k.content: v for v, k in self.added_tokens_decoder.items()}
         return nb_added_tokens
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
