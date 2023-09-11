@@ -20,11 +20,15 @@ import unittest
 from datasets import load_dataset
 from packaging import version
 
-from transformers import DonutProcessor, TrOCRProcessor
+from huggingface_hub import hf_hub_download
+
+from transformers import DonutProcessor, TrOCRProcessor, NougatProcessor
 from transformers.testing_utils import (
     require_sentencepiece,
     require_torch,
     require_vision,
+    require_cv2,
+    require_levenshtein,
     slow,
     to_2tuple,
     torch_device,
@@ -998,3 +1002,68 @@ class DonutModelIntegrationTest(unittest.TestCase):
                 outputs.scores[0][0, :3], torch.tensor([-17.6490, -4.8381, -15.7577], device=torch_device), atol=1e-4
             )
         )
+
+
+@require_cv2
+@require_vision
+@require_torch
+@require_levenshtein
+@slow
+class NougatModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        return NougatProcessor.from_pretrained("nielsr/nougat") if is_vision_available() else None
+
+    @cached_property
+    def default_model(self):
+        return VisionEncoderDecoderModel.from_pretrained("nielsr/nougat").to(torch_device)
+    
+    @cached_property
+    def default_image(self):
+        filepath = hf_hub_download(repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_pdf.png", repo_type="dataset")
+        image = Image.open(filepath).convert("RGB")
+        return image
+
+    def test_forward_pass(self):
+        processor = self.default_processor
+        model = self.default_model
+        image = self.default_image
+        pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+
+        decoder_input_ids = torch.tensor([[0]]).to(torch_device)
+        outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = torch.Size((1, 1, model.decoder.config.vocab_size))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [ 1.6253, -4.2179,  5.8532, -2.7911, -5.0609, -4.7397, -4.2890, -5.1073,
+        -4.8908, -4.9729]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-4))
+
+    def test_generation(self):
+        processor = self.default_processor
+        model = self.default_model
+        image = self.default_image
+        pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+
+        outputs = model.generate(pixel_values,
+                          min_length=1,
+                          max_length=200,
+                          pad_token_id=processor.tokenizer.pad_token_id,
+                          eos_token_id=processor.tokenizer.eos_token_id,
+                          use_cache=True,
+                          bad_words_ids=[[processor.tokenizer.unk_token_id]],
+                          return_dict_in_generate=True,
+        )
+
+        generated = processor.batch_decode(outputs.sequences, skip_special_tokens=True)[0]
+        generated = processor.post_process_generation(generated, fix_markdown=False)
+
+        expected_generation = "# Nougat: Neural Optical Understanding for Academic Documents Lukas BlecherCorrespondence to: lblecher@meta.comGuillem CucurullThomas ScialomRobert StojnicMeta AIThe paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc###### AbstractScientific knowledge is predominantly stored in books and scientific journals, often in the form of PDFs. However, the PDF format leads to a loss of semantic information, particularly for mathematical expressions. We propose Nougat (**N**eural **O**ptical **U**nderstanding for **A**cademic Documents), a Visual Transformer model that performs an _Optical Character Recognition_ (OCR) task for processing scientific documents into a mark"
+
+        self.assertTrue(generated.replace("\n", "").strip() == expected_generation)

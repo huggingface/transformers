@@ -96,7 +96,7 @@ _jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
 _kenlm_available = _is_package_available("kenlm")
 _keras_nlp_available = _is_package_available("keras_nlp")
-_levensthein_available = _is_package_available("python-Levenshtein")
+_levenshtein_available = _is_package_available("Levenshtein")
 _librosa_available = _is_package_available("librosa")
 _natten_available = _is_package_available("natten")
 _nltk_available = _is_package_available("nltk")
@@ -626,8 +626,8 @@ def is_auto_gptq_available():
     return _auto_gptq_available
 
 
-def is_levensthein_available():
-    return _levensthein_available
+def is_levenshtein_available():
+    return _levenshtein_available
 
 
 def is_optimum_neuron_available():
@@ -1147,7 +1147,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
-        ("levensthein", (is_levensthein_available, LEVENSHTEIN_IMPORT_ERROR)),
+        ("levenshtein", (is_levenshtein_available, LEVENSHTEIN_IMPORT_ERROR)),
         ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),

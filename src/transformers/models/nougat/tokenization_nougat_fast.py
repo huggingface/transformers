@@ -22,10 +22,10 @@ from typing import List, Union
 
 import numpy as np
 
-from ...utils import is_levensthein_available, is_nltk_available
+from ...utils import is_levenshtein_available, is_nltk_available, requires_backends
 
 
-if is_levensthein_available():
+if is_levenshtein_available():
     from Levenshtein import ratio
 
 if is_nltk_available():
@@ -516,6 +516,8 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             Union[str, List[str]]: The postprocessed text or list of postprocessed texts.
         """
+        requires_backends(self, ["nltk", "levenshtein"])
+
         if isinstance(generation, list):
             if num_workers is not None and isinstance(num_workers, int):
                 with Pool(num_workers) as p:

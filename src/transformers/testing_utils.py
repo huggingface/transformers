@@ -69,6 +69,7 @@ from .utils import (
     is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
+    is_levenshtein_available,
     is_librosa_available,
     is_natten_available,
     is_onnx_available,
@@ -319,6 +320,16 @@ def require_cv2(test_case):
 
     """
     return unittest.skipUnless(is_cv2_available(), "test requires OpenCV")(test_case)
+
+
+def require_levenshtein(test_case):
+    """
+    Decorator marking a test that requires Levenshtein.
+
+    These tests are skipped when Levenshtein isn't installed.
+
+    """
+    return unittest.skipUnless(is_levenshtein_available(), "test requires Levenshtein")(test_case)
 
 
 def require_accelerate(test_case):
