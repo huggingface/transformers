@@ -382,8 +382,8 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             raise ValueError("Last message must be from user")
 
         dialogue = list(conversation.iter_texts())
-        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
-            [not is_user for is_user, msg in dialogue[1::2]]
+        if not all(is_user for is_user, msg in dialogue[::2]) or not all(
+            not is_user for is_user, msg in dialogue[1::2]
         ):
             raise ValueError(
                 "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"

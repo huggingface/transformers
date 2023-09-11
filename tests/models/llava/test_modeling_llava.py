@@ -15,25 +15,20 @@
 """ Testing suite for the PyTorch LLaMA model. """
 
 
-import unittest
-from typing import Union, Optional
-from parameterized import parameterized
 import inspect
+import unittest
+from typing import Optional, Union
 
-from transformers import LlamaConfig, is_torch_available, set_seed, LlavaConfig
+from transformers import LlamaConfig, LlavaConfig, is_torch_available
 from transformers.models.llava.configuration_llava import LlavaLlamaConfig
+from transformers.testing_utils import require_torch, slow, torch_device
 
-
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
-
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
     ids_tensor,
     random_attention_mask,
-    floats_tensor,
-    _config_zero_init
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -42,9 +37,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        LlavaLlamaForCausalLM,
         LlamaModel,
-        LlamaTokenizer,
+        LlavaLlamaForCausalLM,
     )
 
 
@@ -100,7 +94,6 @@ class LlamaModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_mask = None
         if self.use_input_mask:
@@ -139,50 +132,49 @@ class LlamaModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
-             config,
-             input_ids,
-             token_type_ids,
-             input_mask,
-             sequence_labels,
-             token_labels,
-             choice_labels,
-         ) = config_and_inputs
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
 
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, input_ids
+
 
 class LlavaModelTester:
     def __init__(
         self,
         parent,
-        d_model:int = 32,
-        emb_pdrop:int = 0,
-        embedding_fraction:float = 1.0,
-        expansion_ratio:int = 4,
-        freeze_mm_mlp_adapter:bool = False,
-        init_device:str = "cpu",
-        learned_pos_emb:bool = True,
+        d_model: int = 32,
+        emb_pdrop: int = 0,
+        embedding_fraction: float = 1.0,
+        expansion_ratio: int = 4,
+        freeze_mm_mlp_adapter: bool = False,
+        init_device: str = "cpu",
+        learned_pos_emb: bool = True,
         logit_scale: Optional[Union[float, str]] = None,
-        max_seq_len:int = 7,
-        mm_hidden_size:int = 30,
-        mm_use_im_start_end:bool = True,
-        mm_vision_select_layer:int = -2,
-        mm_vision_tower:str = "openai/clip-vit-large-patch14",
-        model_type:str = "llava_mpt",
-        n_heads:int = 4,
-        n_layers:int = 2,
-        no_bias:bool = True,
-        norm_type:str = "low_precision_layernorm",
-        resid_pdrop:int = 0,
-        sep_image_conv_front:bool = False,
-          tune_mm_mlp_adapter:bool = False,
-        use_cache:bool = True,
-        use_mm_proj:bool = True,
-        verbose:int = 0,
-        vocab_size:int = 99,
+        max_seq_len: int = 7,
+        mm_hidden_size: int = 30,
+        mm_use_im_start_end: bool = True,
+        mm_vision_select_layer: int = -2,
+        mm_vision_tower: str = "openai/clip-vit-large-patch14",
+        model_type: str = "llava_mpt",
+        n_heads: int = 4,
+        n_layers: int = 2,
+        no_bias: bool = True,
+        norm_type: str = "low_precision_layernorm",
+        resid_pdrop: int = 0,
+        sep_image_conv_front: bool = False,
+        tune_mm_mlp_adapter: bool = False,
+        use_cache: bool = True,
+        use_mm_proj: bool = True,
+        verbose: int = 0,
+        vocab_size: int = 99,
         **kwargs,
     ):
-
         self.freeze_mm_mlp_adapter = freeze_mm_mlp_adapter
         self.mm_hidden_size = mm_hidden_size
         self.mm_use_im_start_end = mm_use_im_start_end
@@ -205,29 +197,28 @@ class LlavaModelTester:
         self.verbose = verbose
         self.embedding_fraction = embedding_fraction
         self.norm_type = norm_type
-        #self.layer_norm_epsilon = layer_norm_epsilon
+        # self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         self.image_size = 30
-        self.batch_size=13
-        self.num_channels=3
+        self.batch_size = 13
+        self.num_channels = 3
 
     def prepare_config_and_inputs(self):
-
         pixel_values = floats_tensor([self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
         return config, pixel_values
 
     def get_config(self):
         return LlavaConfig(
-          vocab_size = self.vocab_size,
-          image_size = self.image_size,
-          batch_size = self.batch_size,
-          num_channels = self.num_channels,
-          d_model = self.d_model,
-          max_seq_len = self.max_seq_len,
-          mm_hidden_size = self.mm_hidden_size,
-          n_heads = self.n_heads,
-          n_layers = self.n_layers,
+            vocab_size=self.vocab_size,
+            image_size=self.image_size,
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            d_model=self.d_model,
+            max_seq_len=self.max_seq_len,
+            mm_hidden_size=self.mm_hidden_size,
+            n_heads=self.n_heads,
+            n_layers=self.n_layers,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -257,55 +248,61 @@ class LlavaLlamaModelTester:
         self.llava_model_tester = LlavaModelTester(parent, **llava_kwargs)
 
     def prepare_config_and_inputs(self):
-
         (
-             config,
-             input_ids,
-             token_type_ids,
-             input_mask,
-             sequence_labels,
-             token_labels,
-             choice_labels,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
         ) = self.llama_model_tester.prepare_config_and_inputs()
         _, pixel_values = self.llava_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
-        return config, input_ids, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return LlavaLlamaConfig.from_llava_llama_configs(
-            llama_config = self.llama_model_tester.get_config(),
-            llava_config = self.llava_model_tester.get_config(),
+            llama_config=self.llama_model_tester.get_config(),
+            llava_config=self.llava_model_tester.get_config(),
         )
 
     def create_and_check_model(
-         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-     ):
-         model = LlamaModel(config=config.llama_model)
-         model.to(torch_device)
-         model.eval()
-         result = model(input_ids, attention_mask=input_mask)
-         result = model(input_ids)
-         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = LlamaModel(config=config.llama_model)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
-        self,
-        config, 
-        input_ids, 
-        pixel_values, 
-        token_type_ids, 
-        input_mask, 
-        sequence_labels, 
-        token_labels, 
-        choice_labels
+        self, config, input_ids, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = LlavaLlamaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.llama_model_tester.batch_size,
-        self.llama_model_tester.seq_length, self.llama_model_tester.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (
+                self.llama_model_tester.batch_size,
+                self.llama_model_tester.seq_length,
+                self.llama_model_tester.vocab_size,
+            ),
+        )
 
     @unittest.skip(reason="Llava does not have input/output embeddings")
     def create_and_check_decoder_model_past_large_inputs(
@@ -316,19 +313,18 @@ class LlavaLlamaModelTester:
     ):
         pass
 
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
-          config,
-          input_ids,
-          pixel_values,
-          token_type_ids,
-          input_mask,
-          sequence_labels,
-          token_labels,
-          choice_labels,
-        )= config_and_inputs
+            config,
+            input_ids,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -341,8 +337,8 @@ class LlavaLlamaModelTester:
 
 
 @require_torch
-class LlavaLlamaModelTest(ModelTesterMixin,PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LlavaLlamaForCausalLM, ) if is_torch_available() else ()
+class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (LlavaLlamaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "text-generation": LlavaLlamaForCausalLM,
@@ -350,7 +346,7 @@ class LlavaLlamaModelTest(ModelTesterMixin,PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else {}
     )
-  
+
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -382,7 +378,7 @@ class LlavaLlamaModelTest(ModelTesterMixin,PipelineTesterMixin, unittest.TestCas
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
     def test_forward_signature(self):
-        config, _= self.model_tester.prepare_config_and_inputs_for_common()
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
             signature = inspect.signature(model.forward)
@@ -404,17 +400,14 @@ class LlavaLlamaModelTest(ModelTesterMixin,PipelineTesterMixin, unittest.TestCas
         text_features = model(**inputs_dict)
         self.assertEqual(text_features[0].shape, (1, 10, self.model_tester.llama_model_tester.vocab_size))
 
-    #won't work without input ids
-    def test_get_image_features(self):                                                            
+    # won't work without input ids
+    def test_get_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = LlavaLlamaForCausalLM(config).to(torch_device)
         model.eval()
         image_features = model.generate(**inputs_dict)
-        self.assertEqual(
-            image_features.shape,
-            (self.model_tester.llama_model_tester.batch_size,20)
-        )
-    
+        self.assertEqual(image_features.shape, (self.model_tester.llama_model_tester.batch_size, 20))
+
     # override from common to deal with nested configurations (`vision_config`, `text_config` and `qformer_config`)
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -427,13 +420,14 @@ class LlavaLlamaModelTest(ModelTesterMixin,PipelineTesterMixin, unittest.TestCas
                 if param.requires_grad:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
-                         [0.0, 1.0],
+                        [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
     @unittest.skip("LLaMA buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
+
 
 @require_torch
 class LlamaIntegrationTest(unittest.TestCase):
@@ -466,4 +460,3 @@ class LlamaIntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([-8.1406, -8.0547, 2.7461, -1.2344, -0.1448, -1.8262, -1.0020, -1.8154, -1.6895, -1.8516, -2.3574, -0.9277, 3.7598, 6.5742, -1.2998, -0.1177, -8.1406, -2.9688, -2.9199, -3.1699, -3.5254, -2.3555, -2.7988, -3.4141, -2.8262, -4.5195, -3.3379, -3.3164, -2.7832, -3.0273])
         # fmt: on
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
-

@@ -14,10 +14,12 @@
 # limitations under the License.
 """ LLaVA model configuration"""
 
+import os
+from typing import Optional, Union
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from typing import Optional, Union
-import os
+
 
 logger = logging.get_logger(__name__)
 
@@ -194,6 +196,7 @@ class LlamaConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
+
 class LlavaConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
@@ -252,18 +255,6 @@ class LlavaConfig(PretrainedConfig):
 
     Example:
 
-    ```python
-    >>> from transformers import MptConfig, MptModel
-
-    >>> # Initializing a Mpt configuration
-    >>> configuration = MptConfig()
-
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = MptModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
     """
 
     model_type = "llava"
@@ -275,35 +266,34 @@ class LlavaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        d_model:int = 4096,
-        emb_pdrop:int = 0,
-        embedding_fraction:float = 1.0,
-        expansion_ratio:int = 4,
-        freeze_mm_mlp_adapter:bool = False,
-        init_device:str = "cpu",
-        learned_pos_emb:bool = True,
+        d_model: int = 4096,
+        emb_pdrop: int = 0,
+        embedding_fraction: float = 1.0,
+        expansion_ratio: int = 4,
+        freeze_mm_mlp_adapter: bool = False,
+        init_device: str = "cpu",
+        learned_pos_emb: bool = True,
         logit_scale: Optional[Union[float, str]] = None,
-        max_seq_len:int = 2048,
-        mm_hidden_size:int = 1024,
-        mm_use_im_start_end:bool = True,
-        mm_vision_select_layer:int = -2,
-        mm_vision_tower:str = "openai/clip-vit-large-patch14",
-        model_type:str = "llava_mpt",
-        n_heads:int = 32,
-        n_layers:int = 32,
-        no_bias:bool = True,
-        norm_type:str = "low_precision_layernorm",
-        resid_pdrop:int = 0,
-        sep_image_conv_front:bool = False,
-        torch_dtype:str = "float16",
-        tune_mm_mlp_adapter:bool = False,
-        use_cache:bool = True,
-        use_mm_proj:bool = True,
-        verbose:int = 0,
-        vocab_size:int = 50282,
+        max_seq_len: int = 2048,
+        mm_hidden_size: int = 1024,
+        mm_use_im_start_end: bool = True,
+        mm_vision_select_layer: int = -2,
+        mm_vision_tower: str = "openai/clip-vit-large-patch14",
+        model_type: str = "llava_mpt",
+        n_heads: int = 32,
+        n_layers: int = 32,
+        no_bias: bool = True,
+        norm_type: str = "low_precision_layernorm",
+        resid_pdrop: int = 0,
+        sep_image_conv_front: bool = False,
+        torch_dtype: str = "float16",
+        tune_mm_mlp_adapter: bool = False,
+        use_cache: bool = True,
+        use_mm_proj: bool = True,
+        verbose: int = 0,
+        vocab_size: int = 50282,
         **kwargs,
     ):
-
         self.freeze_mm_mlp_adapter = freeze_mm_mlp_adapter
         self.mm_hidden_size = mm_hidden_size
         self.mm_use_im_start_end = mm_use_im_start_end
@@ -326,7 +316,7 @@ class LlavaConfig(PretrainedConfig):
         self.verbose = verbose
         self.embedding_fraction = embedding_fraction
         self.norm_type = norm_type
-        #self.layer_norm_epsilon = layer_norm_epsilon
+        # self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         super().__init__(**kwargs)
 
@@ -351,25 +341,18 @@ class LlavaConfig(PretrainedConfig):
 
 class LlavaLlamaConfig(PretrainedConfig):
     r"""
-    [`InstructBlipConfig`] is the configuration class to store the configuration of a
-    [`InstructBlipForConditionalGeneration`]. It is used to instantiate a InstructBLIP model according to the specified
-    arguments, defining the vision model, Q-Former model and language model configs. Instantiating a configuration with
-    the defaults will yield a similar configuration to that of the InstructBLIP
-    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
+    [`LlavaLlamaConfig`] is the configuration class to store the configuration of a
+    [`LlavaLlamaForCausalLM`]. It is used to instantiate a LlavaLlama model according to the specified
+    arguments, defining the llama model and a llava model configs. Instantiating a configuration with
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`InstructBlipVisionConfig`].
-        qformer_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`InstructBlipQFormerConfig`].
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
-        num_query_tokens (`int`, *optional*, defaults to 32):
-            The number of query tokens passed through the Transformer.
-
+        llava_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`LlavaConfig`].
+        llama_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`LlamaConfig`].
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -377,45 +360,41 @@ class LlavaLlamaConfig(PretrainedConfig):
 
     ```python
     >>> from transformers import (
-    ...     InstructBlipVisionConfig,
-    ...     InstructBlipQFormerConfig,
-    ...     OPTConfig,
-    ...     InstructBlipConfig,
-    ...     InstructBlipForConditionalGeneration,
+    ...     LlavaConfig,
+    ...     LlamaConfig,
+    ...     LlavaLlamaConfig,
     ... )
 
-    >>> # Initializing a InstructBlipConfig with Salesforce/instruct-blip-flan-t5 style configuration
-    >>> configuration = InstructBlipConfig()
+    >>> # Initializing a LlavaLlamaConfig with shauray/Llava-Llama-2-7B-hf style configuration
+    >>> configuration = LlavaLlamaConfig()
 
-    >>> # Initializing a InstructBlipForConditionalGeneration (with random weights) from the Salesforce/instruct-blip-flan-t5 style configuration
-    >>> model = InstructBlipForConditionalGeneration(configuration)
+    >>> # Initializing a LlavaLlamaForCausalLM (with random weights) from the shauray/Llava-Llama-2-7B-hf style configuration
+    >>> model = LlavaLlamaForCausalLM(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a InstructBlipConfig from a InstructBlipVisionConfig, InstructBlipQFormerConfig and any PretrainedConfig
+    >>> # We can also initialize a InstructBlipConfig from a LlamaConfig, LlavaConfig and any PretrainedConfig
 
-    >>> # Initializing InstructBLIP vision, InstructBLIP Q-Former and language model configurations
-    >>> vision_config = InstructBlipVisionConfig()
-    >>> qformer_config = InstructBlipQFormerConfig()
-    >>> text_config = OPTConfig()
+    >>> # Initializing Llava, Llama configurations
+    >>> llava_config = LlavaConfig()
+    >>> llama_config = LlamaConfig()
 
-    >>> config = InstructBlipConfig.from_text_vision_configs(vision_config, qformer_config, text_config)
+    >>> config = LlavaLlamaConfig.from_llava_llama_configs(llava_config, llama_config,)
     ```"""
 
     model_type = "llavallama"
 
-    def __init__(self, llama_config=None, llava_config=None,  **kwargs):
+    def __init__(self, llama_config=None, llava_config=None, **kwargs):
         super().__init__(**kwargs)
 
         if llama_config is None:
             llama_config = {}
-            logger.info("vision_config is None. initializing the InstructBlipVisionConfig with default values.")
+            logger.info("llama_config is None. initializing the LlamaConfig with default values.")
 
         if llava_config is None:
             llava_config = {}
-            logger.info("qformer_config is None. Initializing the InstructBlipQFormerConfig with default values.")
-
+            logger.info("llava_config is None. Initializing the LlavaConfig with default values.")
 
         self.llama_config = LlamaConfig(**llama_config)
         self.llava_config = LlavaConfig(**llava_config)
@@ -431,11 +410,10 @@ class LlavaLlamaConfig(PretrainedConfig):
         **kwargs,
     ):
         r"""
-        Instantiate a [`InstructBlipConfig`] (or a derived class) from a InstructBLIP vision model, Q-Former and
-        language model configurations.
+        Instantiate a [`LlavaLlamaConfig`] (or a derived class) from a Llama and a Llava model,
 
         Returns:
-            [`InstructBlipConfig`]: An instance of a configuration object
+            [`LlavaLlamaConfig`]: An instance of a configuration object
         """
 
         return cls(

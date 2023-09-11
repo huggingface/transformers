@@ -20,13 +20,13 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_llava import LlamaConfig,LlavaConfig,LlavaLlamaConfig
+from .configuration_llava import LlamaConfig, LlavaLlamaConfig
 
 
 logger = logging.get_logger(__name__)
@@ -770,12 +770,16 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         images: Optional[torch.FloatTensor] = None,
         IGNORE_INDEX=-100,
-        IMAGE_TOKEN_INDEX = 200,
-        DEFAULT_IMAGE_TOKEN = "<image>",
+        IMAGE_TOKEN_INDEX=200,
+        DEFAULT_IMAGE_TOKEN="<image>",
     ):
         if images is None or input_ids.shape[1] == 1:
             if past_key_values is not None and images is not None and input_ids.shape[1] == 1:
-                attention_mask = torch.ones((attention_mask.shape[0], past_key_values[-1][-1].shape[-2] + 1), dtype=attention_mask.dtype, device=attention_mask.device)
+                attention_mask = torch.ones(
+                    (attention_mask.shape[0], past_key_values[-1][-1].shape[-2] + 1),
+                    dtype=attention_mask.dtype,
+                    device=attention_mask.device,
+                )
             return input_ids, attention_mask, past_key_values, None, labels
 
         new_input_embeds = []
@@ -786,11 +790,14 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
                 # multimodal LLM, but the current sample is not multimodal
                 cur_input_embeds = self.get_model().embed_tokens(cur_input_ids)
-                dummy_feature = torch.zeros(1, self.config.llava_config.mm_hidden_size,
-                device=image_features.device,
-                dtype=image_features.dtype)
+                dummy_feature = torch.zeros(
+                    1,
+                    self.config.llava_config.mm_hidden_size,
+                    device=image_features.device,
+                    dtype=image_features.dtype,
+                )
                 inter = self.model.mm_projector(dummy_feature)
-                cur_input_embeds = cur_input_embeds + (0. * inter).sum()
+                cur_input_embeds = cur_input_embeds + (0.0 * inter).sum()
 
                 new_input_embeds.append(cur_input_embeds)
 
@@ -807,31 +814,51 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             while image_token_indices.numel() > 0:
                 cur_image_features = image_features[cur_image_idx]
                 image_token_start = image_token_indices[0]
-                if getattr(self.config.llava_config, 'tune_mm_mlp_adapter', False) and getattr(self.config.llava_config, 'mm_use_im_start_end', False):
-                    cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids[:image_token_start-1]).detach())
-                    cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids[image_token_start-1:image_token_start]))
+                if getattr(self.config.llava_config, "tune_mm_mlp_adapter", False) and getattr(
+                    self.config.llava_config, "mm_use_im_start_end", False
+                ):
+                    cur_new_input_embeds.append(
+                        self.get_model().embed_tokens(cur_input_ids[: image_token_start - 1]).detach()
+                    )
+                    cur_new_input_embeds.append(
+                        self.get_model().embed_tokens(cur_input_ids[image_token_start - 1 : image_token_start])
+                    )
                     cur_new_input_embeds.append(cur_image_features)
-                    cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids[image_token_start+1:image_token_start+2]))
+                    cur_new_input_embeds.append(
+                        self.get_model().embed_tokens(cur_input_ids[image_token_start + 1 : image_token_start + 2])
+                    )
                     if labels is not None:
                         cur_new_labels.append(cur_labels[:image_token_start])
-                        cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=labels.device, dtype=labels.dtype))
-                        cur_new_labels.append(cur_labels[image_token_start:image_token_start+1])
-                        cur_labels = cur_labels[image_token_start+2:]
+                        cur_new_labels.append(
+                            torch.full(
+                                (cur_image_features.shape[0],), IGNORE_INDEX, device=labels.device, dtype=labels.dtype
+                            )
+                        )
+                        cur_new_labels.append(cur_labels[image_token_start : image_token_start + 1])
+                        cur_labels = cur_labels[image_token_start + 2 :]
                 else:
                     cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids[:image_token_start]))
                     cur_new_input_embeds.append(cur_image_features)
                     if labels is not None:
                         cur_new_labels.append(cur_labels[:image_token_start])
-                        cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=labels.device, dtype=labels.dtype))
-                        cur_labels = cur_labels[image_token_start+1:]
+                        cur_new_labels.append(
+                            torch.full(
+                                (cur_image_features.shape[0],), IGNORE_INDEX, device=labels.device, dtype=labels.dtype
+                            )
+                        )
+                        cur_labels = cur_labels[image_token_start + 1 :]
                 cur_image_idx += 1
-                if getattr(self.config.llava_config, 'tune_mm_mlp_adapter', False) and getattr(self.config.llava_config, 'mm_use_im_start_end', False):
-                    cur_input_ids = cur_input_ids[image_token_start+2:]
+                if getattr(self.config.llava_config, "tune_mm_mlp_adapter", False) and getattr(
+                    self.config.llava_config, "mm_use_im_start_end", False
+                ):
+                    cur_input_ids = cur_input_ids[image_token_start + 2 :]
                 else:
-                    cur_input_ids = cur_input_ids[image_token_start+1:]
+                    cur_input_ids = cur_input_ids[image_token_start + 1 :]
                 image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
             if cur_input_ids.numel() > 0:
-                if getattr(self.config.llava_config, 'tune_mm_mlp_adapter', False) and getattr(self.config.llava_config, 'mm_use_im_start_end', False):
+                if getattr(self.config.llava_config, "tune_mm_mlp_adapter", False) and getattr(
+                    self.config.llava_config, "mm_use_im_start_end", False
+                ):
                     cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids).detach())
                 else:
                     cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids))
@@ -849,7 +876,17 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
 
             new_input_embeds_align = []
             for cur_new_embed in new_input_embeds:
-                cur_new_embed = torch.cat((cur_new_embed, torch.zeros((max_len - cur_new_embed.shape[0], cur_new_embed.shape[1]), dtype=cur_new_embed.dtype, device=cur_new_embed.device)), dim=0)
+                cur_new_embed = torch.cat(
+                    (
+                        cur_new_embed,
+                        torch.zeros(
+                            (max_len - cur_new_embed.shape[0], cur_new_embed.shape[1]),
+                            dtype=cur_new_embed.dtype,
+                            device=cur_new_embed.device,
+                        ),
+                    ),
+                    dim=0,
+                )
                 new_input_embeds_align.append(cur_new_embed)
             new_input_embeds = torch.stack(new_input_embeds_align, dim=0)
 
@@ -857,32 +894,60 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
                 new_labels_align = []
                 _new_labels = new_labels
                 for cur_new_label in new_labels:
-                    cur_new_label = torch.cat((cur_new_label, torch.full((max_len - cur_new_label.shape[0],), IGNORE_INDEX, dtype=cur_new_label.dtype, device=cur_new_label.device)), dim=0)
+                    cur_new_label = torch.cat(
+                        (
+                            cur_new_label,
+                            torch.full(
+                                (max_len - cur_new_label.shape[0],),
+                                IGNORE_INDEX,
+                                dtype=cur_new_label.dtype,
+                                device=cur_new_label.device,
+                            ),
+                        ),
+                        dim=0,
+                    )
                     new_labels_align.append(cur_new_label)
                 new_labels = torch.stack(new_labels_align, dim=0)
 
             if attention_mask is not None:
                 new_attention_mask = []
-                for cur_attention_mask, cur_new_labels, cur_new_labels_align in zip(attention_mask, _new_labels, new_labels):
-                    new_attn_mask_pad_left = torch.full((cur_new_labels.shape[0] - labels.shape[1],), True, dtype=attention_mask.dtype, device=attention_mask.device)
-                    new_attn_mask_pad_right = torch.full((cur_new_labels_align.shape[0] - cur_new_labels.shape[0],), False, dtype=attention_mask.dtype, device=attention_mask.device)
-                    cur_new_attention_mask = torch.cat((new_attn_mask_pad_left, cur_attention_mask, new_attn_mask_pad_right), dim=0)
+                for cur_attention_mask, cur_new_labels, cur_new_labels_align in zip(
+                    attention_mask, _new_labels, new_labels
+                ):
+                    new_attn_mask_pad_left = torch.full(
+                        (cur_new_labels.shape[0] - labels.shape[1],),
+                        True,
+                        dtype=attention_mask.dtype,
+                        device=attention_mask.device,
+                    )
+                    new_attn_mask_pad_right = torch.full(
+                        (cur_new_labels_align.shape[0] - cur_new_labels.shape[0],),
+                        False,
+                        dtype=attention_mask.dtype,
+                        device=attention_mask.device,
+                    )
+                    cur_new_attention_mask = torch.cat(
+                        (new_attn_mask_pad_left, cur_attention_mask, new_attn_mask_pad_right), dim=0
+                    )
                     new_attention_mask.append(cur_new_attention_mask)
                 attention_mask = torch.stack(new_attention_mask, dim=0)
                 assert attention_mask.shape == new_labels.shape
         else:
             new_input_embeds = torch.stack(new_input_embeds, dim=0)
             if labels is not None:
-                new_labels  = torch.stack(new_labels, dim=0)
+                new_labels = torch.stack(new_labels, dim=0)
 
             if attention_mask is not None:
-                new_attn_mask_pad_left = torch.full((attention_mask.shape[0], new_input_embeds.shape[1] - input_ids.shape[1]), True, dtype=attention_mask.dtype, device=attention_mask.device)
+                new_attn_mask_pad_left = torch.full(
+                    (attention_mask.shape[0], new_input_embeds.shape[1] - input_ids.shape[1]),
+                    True,
+                    dtype=attention_mask.dtype,
+                    device=attention_mask.device,
+                )
                 attention_mask = torch.cat((new_attn_mask_pad_left, attention_mask), dim=1)
                 assert attention_mask.shape == new_input_embeds.shape[:2]
 
         return None, attention_mask, past_key_values, new_input_embeds, new_labels
-
-
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -901,14 +966,15 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
-            input_ids
-            pixel_values
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            input_ids (`torch.LongTensor` of shape (batch_size, sequence_length)):
+                The sequence used as a prompt for the generation.
+            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width), *optional* ):
+                Input images to be processed.
+            attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
+                Mask to avoid performing attention on padding token indices.
 
         Returns:
+            captions (list): A list of strings of length batch_size * num_captions.
 
         Example:
 
@@ -927,14 +993,18 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        "The photograph shows a wooden dock floating on the water, with mountains in the background. It is an idyllic scene that captures both nature and human-made structures at their finest moments of beauty or tranquility depending upon one's perspective as they gaze into it"
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.llava_config.output_attentions
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.config.llava_config.output_attentions
+        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.llava_config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.llava_config.use_return_dict
-        input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(input_ids, attention_mask, past_key_values, labels, pixel_values)
+        input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(
+            input_ids, attention_mask, past_key_values, labels, pixel_values
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -945,7 +1015,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
         hidden_states = outputs[0]
@@ -997,4 +1067,3 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
-

@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlavaConfig","LlavaLlamaConfig"],
+    "configuration_llava": ["LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlavaConfig", "LlavaLlamaConfig"],
     "processing_llava": ["LlavaProcessor"],
 }
 
@@ -40,7 +40,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_llava import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig, LlavaLlamaConfig
-
 
     try:
         if not is_torch_available():
