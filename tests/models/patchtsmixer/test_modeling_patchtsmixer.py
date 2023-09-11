@@ -40,7 +40,7 @@ if is_torch_available():
 
     from transformers.models.patchtsmixer.modeling_patchtsmixer import (
         PatchTSMixerEncoder,
-        PatchTSMixerPretrainHead,
+        PatchTSMixerMaskedPretrainHead,
         PatchTSMixerForecastHead,
         PatchTSMixerClassificationHead,
         PatchTSMixerRegressionHead,
@@ -589,7 +589,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_pretrainhead(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = PatchTSMixerPretrainHead(config)
+        head = PatchTSMixerMaskedPretrainHead(config)
         output = head(self.__class__.enc_output)
         
         self.assertEqual(output.shape, self.__class__.correct_pretrain_output.shape)
