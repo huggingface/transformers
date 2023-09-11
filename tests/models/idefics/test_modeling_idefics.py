@@ -149,7 +149,7 @@ class IdeficsModelTester:
     def prepare_config_and_inputs(self, num_images=1, interpolate_pos_encoding=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        expand_image_size = 0 if not interpolate_pos_encoding else 2
+        expand_image_size = 2 if interpolate_pos_encoding else 0
         pixel_values = floats_tensor(
             [
                 self.batch_size,
