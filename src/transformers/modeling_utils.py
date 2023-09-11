@@ -1726,7 +1726,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.apply(partial(self._set_gradient_checkpointing, value=True))
 
         if getattr(self, "_hf_peft_config_loaded", False):
-            # When using PEFT + gradient checkpointing we need to make sure the input has requires_grad=True
+            # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
             # we do it also on PEFT: https://github.com/huggingface/peft/blob/85013987aa82aa1af3da1236b6902556ce3e483e/src/peft/peft_model.py#L334
             self.enable_input_require_grads()
 
