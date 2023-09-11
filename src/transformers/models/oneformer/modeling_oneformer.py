@@ -193,13 +193,13 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     height_and_width = inputs.shape[1]
 
     criterion = nn.BCEWithLogitsLoss(reduction="none")
-    cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
-    cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
+    # Prevent overflow when using torch 16bit autocast
+    cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs)) / height_and_width
+    cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs)) / height_and_width
 
     loss_pos = torch.matmul(cross_entropy_loss_pos, labels.T)
     loss_neg = torch.matmul(cross_entropy_loss_neg, (1 - labels).T)
     loss = loss_pos + loss_neg
-    loss = loss / height_and_width
     return loss
 
 
@@ -625,7 +625,10 @@ class OneFormerLoss(nn.Module):
 
         if num_random_points > 0:
             point_coordinates = torch.cat(
-                [point_coordinates, torch.rand(num_boxes, num_random_points, 2, device=logits.device)],
+                [
+                    point_coordinates,
+                    torch.rand(num_boxes, num_random_points, 2, device=logits.device),
+                ],
                 dim=1,
             )
         return point_coordinates
