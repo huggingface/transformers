@@ -446,9 +446,11 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         Assistant messages do not have special tokens, because LLaMA chat models are generally trained with strict
         user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
         rather than needing special tokens. The system message is partly 'embedded' in the first user message, which
-        gets an unusual token ordering when it is present. This template should definitely be changed if you wish to
-        fine-tune a model with more flexible role ordering!
+        results in an unusual token ordering when it is present. This template should definitely be changed if you wish
+        to fine-tune a model with more flexible role ordering!
 
+        The output should look something like: <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST]
         """
 
         template = (
