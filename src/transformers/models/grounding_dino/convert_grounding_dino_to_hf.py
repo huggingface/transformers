@@ -248,6 +248,15 @@ def create_rename_keys(state_dict, config):
 
     #TODO convert additional layers
     ########################################## Additional - START
+    for layer_name, params in state_dict.items():
+        #### INPUT PROJ - PROJECT OUTPUT FEATURES FROM VISION BACKBONE
+        if "module.input_proj" in layer_name:
+            rename_keys.append((layer_name, layer_name.replace("module.input_proj", "model.input_proj_vision")))
+            #### INPUT PROJ - PROJECT OUTPUT FEATURES FROM TEXT BACKBONE
+        if "module.feat_map" in layer_name:
+            rename_keys.append((layer_name, layer_name.replace("module.feat_map", "model.input_proj_text")))
+    #### 
+
     ########################################## Additional - END
 
     # fmt: on

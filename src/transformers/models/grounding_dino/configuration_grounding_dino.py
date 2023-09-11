@@ -130,6 +130,18 @@ class GroundingDINOConfig(PretrainedConfig):
         disable_custom_kernels (`bool`, *optional*, defaults to `False`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
+        max_text_len (`int`, *optional*, defaults to 256):
+            The maximum length of the text input.
+        sub_sentence_present (`bool`, *optional*, defaults to `True`):
+            Whether to use sub-sentence present in the text input.
+        text_enhancer_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the text enhancer.
+        fusion_droppath (`float`, *optional*, defaults to 0.1):
+            The droppath ratio for the fusion module.
+        fusion_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the fusion module.
+        embedding_init_target (`bool`, *optional*, defaults to `True`):
+            Whether to initialize the target with Embedding weights.
 
     Examples:
 
@@ -202,6 +214,7 @@ class GroundingDINOConfig(PretrainedConfig):
         text_enhancer_dropout = 0.0,
         fusion_droppath = 0.1,
         fusion_dropout = 0.0,
+        embedding_init_target = True,
         **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
@@ -269,6 +282,7 @@ class GroundingDINOConfig(PretrainedConfig):
         # Fusion
         self.fusion_droppath = fusion_droppath
         self.fusion_dropout = fusion_dropout
+        self.embedding_init_target = embedding_init_target
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
