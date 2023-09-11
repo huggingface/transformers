@@ -942,10 +942,10 @@ class SpecialTokensMixin:
                     if str(token) not in self.additional_special_tokens:
                         to_add.add(token)
                 if replace_additional_special_tokens:
-                    setattr(self, key, to_add)
+                    setattr(self, key, list(to_add))
                 else:
                     self._additional_special_tokens.extend(to_add)
-                added_tokens.extend(to_add)
+                added_tokens += to_add
 
             else:
                 if not isinstance(value, (str, AddedToken)):
@@ -1009,9 +1009,7 @@ class SpecialTokensMixin:
         if not isinstance(new_tokens, (list, tuple)):
             new_tokens = [new_tokens]
 
-        # update the cached mapping
-        nb_added_tokens = self._add_tokens(new_tokens, special_tokens=special_tokens)
-        return nb_added_tokens
+        return self._add_tokens(new_tokens, special_tokens=special_tokens)
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         raise NotImplementedError
@@ -1114,7 +1112,7 @@ class SpecialTokensMixin:
             value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
         elif not isinstance(value, AddedToken) and value is not None:
             raise ValueError("Cannot set a non-string value as the BOS token")
-        self._bok_token = value
+        self._bos_token = value
 
     @eos_token.setter
     def eos_token(self, value):
