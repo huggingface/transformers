@@ -35,7 +35,6 @@ from ...image_utils import (
     get_channel_dimension_axis,
     get_image_size,
     infer_channel_dimension_format,
-    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -77,9 +76,6 @@ class NougatImageProcessor(BaseImageProcessor):
             Whether to pad the image. If `random_padding` is set to `True` in `preprocess`, each image is padded with a
             random amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
             padded to the largest image size in the batch.
-        do_rescale (`bool`, *optional*, defaults to `False`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
-            the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
@@ -103,8 +99,6 @@ class NougatImageProcessor(BaseImageProcessor):
         do_thumbnail: bool = True,
         do_align_long_axis: bool = False,
         do_pad: bool = True,
-        do_rescale: bool = False,
-        rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -113,9 +107,6 @@ class NougatImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
 
         size = size if size is not None else {"height": 896, "width": 672}
-        if isinstance(size, (tuple, list)):
-            # The previous feature extractor size parameter was in (width, height) format
-            size = size[::-1]
         size = get_size_dict(size)
 
         self.do_crop_margin = do_crop_margin
@@ -125,33 +116,40 @@ class NougatImageProcessor(BaseImageProcessor):
         self.do_thumbnail = do_thumbnail
         self.do_align_long_axis = do_align_long_axis
         self.do_pad = do_pad
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    def crop_margin(self, image: Image.Image) -> Image.Image:
+    def crop_margin(
+        self,
+        image: np.array,
+        data_format: Optional[ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
         """
         Crops the margin of the image.
 
         Args:
-            image (`Image.Image`):
+            image (`np.array`):
                 The image to be cropped.
-
-        Returns:
-            `Image.Image`: The cropped image.
+            data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the output image. If unset, will use the inferred format from the
+                input.
+            input_data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If unset, will use the inferred format from the input.
         """
 
-        if not isinstance(image, Image.Image):
-            image = Image.fromarray(image)
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
 
-        data = np.array(image.convert("L"))
-        data = data.astype(np.uint8)
+        image = image if input_data_format == ChannelDimension.LAST else np.moveaxis(image, 0, -1)
+        image = Image.fromarray(image)
+
+        data = np.array(image.convert("L")).astype(np.uint8)
         max_val = data.max()
         min_val = data.min()
         if max_val == min_val:
-            return image
+            return np.array(image)
 
         data = (data - min_val) / (max_val - min_val) * 255
         gray = 255 * (data < 200).astype(np.uint8)
@@ -159,7 +157,16 @@ class NougatImageProcessor(BaseImageProcessor):
         coords = cv2.findNonZero(gray)  # Find all non-zero points (text)
         a, b, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
 
-        return image.crop((a, b, w + a, h + b))
+        image = image.crop((a, b, w + a, h + b))
+        image = np.array(image).astype(np.uint8)
+
+        image = image if input_data_format == ChannelDimension.LAST else np.moveaxis(image, -1, 0)
+
+        image = (
+            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+        )
+
+        return image
 
     def align_long_axis(
         self,
@@ -404,8 +411,6 @@ class NougatImageProcessor(BaseImageProcessor):
         do_align_long_axis: bool = None,
         do_pad: bool = None,
         random_padding: bool = False,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -419,8 +424,7 @@ class NougatImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
             do_crop_margin (`bool`, *optional*, defaults to `self.do_crop_margin`):
                 Whether to crop the image margins.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
@@ -442,10 +446,6 @@ class NougatImageProcessor(BaseImageProcessor):
             random_padding (`bool`, *optional*, defaults to `self.random_padding`):
                 Whether to use random padding when padding the image. If `True`, each image in the batch with be padded
                 with a random amount of padding on each side up to the size of the largest image in the batch.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image pixel values.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
@@ -482,8 +482,6 @@ class NougatImageProcessor(BaseImageProcessor):
         do_thumbnail = do_thumbnail if do_thumbnail is not None else self.do_thumbnail
         do_align_long_axis = do_align_long_axis if do_align_long_axis is not None else self.do_align_long_axis
         do_pad = do_pad if do_pad is not None else self.do_pad
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -499,31 +497,21 @@ class NougatImageProcessor(BaseImageProcessor):
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")
 
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
         if do_pad and size is None:
             raise ValueError("Size must be specified if do_pad is True.")
 
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        # First crop the margins.
-        if do_crop_margin:
-            images = [self.crop_margin(image) for image in images]
-
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
+
+        if do_crop_margin:
+            images = [self.crop_margin(image, input_data_format=input_data_format) for image in images]
 
         if do_align_long_axis:
             images = [self.align_long_axis(image, size=size, input_data_format=input_data_format) for image in images]
@@ -550,13 +538,6 @@ class NougatImageProcessor(BaseImageProcessor):
                 self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
                 for image in images
             ]
-
-        # TODO remove do_rescale?
-        # if do_rescale:
-        #     images = [
-        #         self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-        #         for image in images
-        #     ]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
