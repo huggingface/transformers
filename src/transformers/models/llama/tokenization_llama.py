@@ -383,8 +383,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
         results in an unusual token ordering when it is present. This template should definitely be changed if you wish
         to fine-tune a model with more flexible role ordering!
 
-        The output should look something like: <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST]
+        The output should look something like:
+
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST]
         """
 
         template = (
