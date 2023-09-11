@@ -673,6 +673,8 @@ class FlaxWhisperEncoder(nn.Module):
         hidden_states = jax.nn.gelu(self.conv2(hidden_states), approximate=False)
 
         embed_positions = self.embed_positions(jnp.arange(self.config.max_source_positions))
+        # freeze the sinusoidal embeddings by stopping the back-prop
+        embed_positions = jax.lax.stop_gradient(embed_positions)
         hidden_states = hidden_states + embed_positions
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
