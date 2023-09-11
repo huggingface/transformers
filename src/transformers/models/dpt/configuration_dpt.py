@@ -109,8 +109,8 @@ class DPTConfig(PretrainedConfig):
         neck_ignore_stages (`List[int]`, *optional*, defaults to `[0, 1]`):
             Used only for the `hybrid` embedding type. The stages of the readout layers to ignore.
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
-            The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to leverage the
-            [`AutoBackbone`] API.
+            The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
+            leverage the [`AutoBackbone`] API.
 
     Example:
 
