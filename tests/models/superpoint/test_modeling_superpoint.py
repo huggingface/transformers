@@ -1,0 +1,190 @@
+import inspect
+import unittest
+from typing import List
+
+from transformers.utils import is_torch_available
+
+from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
+from tests.test_configuration_common import ConfigTester
+from tests.test_modeling_common import floats_tensor, ModelTesterMixin
+from transformers.models.superpoint.modeling_superpoint import SuperPointModel
+from transformers.testing_utils import torch_device, require_torch
+from transformers.utils import cached_property, is_torch_available, is_vision_available
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import SuperPointModel
+
+if is_vision_available():
+    from PIL import Image
+
+
+class SuperPointModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=1,
+        image_width=640,
+        image_height=480,
+        conv_layers_sizes: List[int] = [64, 64, 128, 128, 256],
+        descriptor_dim: int = 256,
+        keypoint_threshold: float = 0.005,
+        max_keypoints: int = -1,
+        nms_radius: int = 4,
+        border_removal_distance: int = 4,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.image_width = image_width
+        self.image_height = image_height
+        self.conv_layers_sizes = conv_layers_sizes
+        self.descriptor_dim = descriptor_dim
+        self.keypoint_threshold = keypoint_threshold
+        self.max_keypoints = max_keypoints
+        self.nms_radius = nms_radius
+        self.border_removal_distance = border_removal_distance
+
+    def prepare_config_and_inputs(self):
+        # SuperPoint expects a grayscale image as input
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_width, self.image_height])
+        config = self.get_config()
+        return config, pixel_values
+
+    def get_config(self):
+        return SuperPointConfig(
+            conv_layers_sizes=self.conv_layers_sizes,
+            descriptor_dim=self.descriptor_dim,
+            keypoint_threshold=self.keypoint_threshold,
+            max_keypoints=self.max_keypoints,
+            nms_radius=self.nms_radius,
+            border_removal_distance=self.border_removal_distance,
+        )
+
+    def create_and_check_model(self, config, pixel_values):
+        model = SuperPointModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.conv_layers_sizes[-2], self.image_width // 8, self.image_height // 8),
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (SuperPointModel,) if is_torch_available() else ()
+    all_generative_model_classes = () if is_torch_available() else ()
+
+    fx_compatible = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = SuperPointModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=SuperPointConfig, has_text_modality=False, hidden_size=37)
+
+    def test_config(self):
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+
+    def create_and_test_config_common_properties(self):
+        return
+
+    @unittest.skip(reason="SuperPointModel does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="SuperPointModel does not support input and output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="SuperPointModel does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="SuperPointModel is not trainable")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="SuperPointModel is not trainable")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            # SuperPoint's feature maps are of shape (batch_size, num_channels, width, height)
+            for i, conv_layer_size in enumerate(self.model_tester.conv_layers_sizes[:-2]):
+                self.assertListEqual(
+                    list(hidden_states[i].shape[-3:]),
+                    [
+                        conv_layer_size,
+                        self.model_tester.image_width // (2 ** (i + 1)),
+                        self.model_tester.image_height // (2 ** (i + 1)),
+                    ],
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+
+class SuperPointModelIntegrationTest(unittest.TestCase):
+    def default_model(self):
+        return SuperPointModel.from_pretrained("superpoint")
+
+    def test_inference(self):
+        model = SuperPointModel.from_pretrained("superpoint").to(torch_device)
