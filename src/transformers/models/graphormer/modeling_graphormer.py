@@ -311,7 +311,7 @@ class GraphormerMultiheadAttention(nn.Module):
         self.qkv_same_dim = self.kdim == config.embedding_dim and self.vdim == config.embedding_dim
 
         self.num_heads = config.num_attention_heads
-        self.dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
+        self.attention_dropout_module = torch.nn.Dropout(p=config.attention_dropout, inplace=False)
 
         self.head_dim = config.embedding_dim // config.num_attention_heads
         if not (self.head_dim * config.num_attention_heads == self.embedding_dim):
@@ -463,7 +463,7 @@ class GraphormerMultiheadAttention(nn.Module):
 
         attn_weights_float = torch.nn.functional.softmax(attn_weights, dim=-1)
         attn_weights = attn_weights_float.type_as(attn_weights)
-        attn_probs = self.dropout_module(attn_weights)
+        attn_probs = self.attention_dropout_module(attn_weights)
 
         if v is None:
             raise AssertionError("No value generated")
@@ -494,14 +494,13 @@ class GraphormerGraphEncoderLayer(nn.Module):
         # Initialize parameters
         self.embedding_dim = config.embedding_dim
         self.num_attention_heads = config.num_attention_heads
-        self.attention_dropout = config.attention_dropout
         self.q_noise = config.q_noise
         self.qn_block_size = config.qn_block_size
         self.pre_layernorm = config.pre_layernorm
 
         self.dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
 
-        self.activation_dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
+        self.activation_dropout_module = torch.nn.Dropout(p=config.activation_dropout, inplace=False)
 
         # Initialize blocks
         self.activation_fn = ACT2FN[config.activation_fn]
