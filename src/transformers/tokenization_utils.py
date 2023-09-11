@@ -449,7 +449,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if new_tokens is None:
             return added_tokens
         current_vocab = self.get_vocab()
-        new_idx = len(self)  # only call this once, len gives the last index + 1
+        new_idx = len(set(current_vocab.keys())) # only call this once, len gives the last index + 1
         for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
@@ -462,14 +462,15 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 continue
             if special_tokens:
                 token.special = True
-            if token.content not in current_vocab or self.unk_token is None:
+            if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
+                # Normalize if requested
+                token.content = token.content.lower()
+
+            if token.content not in current_vocab:
                 token_index = new_idx + added_tokens
                 added_tokens += 1
             else:
                 token_index = current_vocab[token.content]
-            if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
-                # Normalize if requested
-                token.content = token.content.lower()
 
             # if we are adding this as an additional special token (no need to store the added tokens object)
             if token.special and str(token) not in self.all_special_tokens:
