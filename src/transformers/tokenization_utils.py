@@ -371,14 +371,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
         """
-        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken. Results Returns:
+        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
+        
+        Returns:
             `Dict[str, int]`: The added tokens.
         """
         return dict(sorted(self._added_tokens_decoder.items(), key=lambda item: item[0]))
 
     @added_tokens_decoder.setter
     def added_tokens_decoder(self, value: Dict[int, Union[AddedToken, str]]) -> Dict[int, AddedToken]:
-        # Always raise an error if string because users should define the behavior
+        # Always raise an error if string because users should define the behaviour
         for index, token in value.items():
             if not isinstance(token, (str, AddedToken)) or not isinstance(index, int):
                 raise ValueError(
@@ -403,7 +405,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index. Results might be different from
         the fast call because for now we always add the tokens even if they are already in the vocabulary. This is
-        something we should change. Returns:
+        something we should change. 
+        
+        Returns:
             `Dict[str, int]`: The added tokens.
         """
         return self._added_tokens_encoder

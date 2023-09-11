@@ -150,7 +150,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         fairseq_language_code = FAIRSEQ_LANGUAGE_CODES[language_codes]
         self.lang_code_to_token = {lang_code: f"__{lang_code}__" for lang_code in fairseq_language_code}
 
-        additional_special_tokens = kwargs.pop("additional_special_tokens", None) or []
+        additional_special_tokens = kwargs.pop("additional_special_tokens", list())
         for lang_code in fairseq_language_code:
             token = self.get_lang_token(lang_code)
             if token not in additional_special_tokens and lang_code not in str(token) not in self.added_tokens_encoder:
