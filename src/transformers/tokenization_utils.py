@@ -383,6 +383,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
                 )
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
+        self._added_tokens_encoder = {k.content:v for v,k in self._added_tokens_decoder.items()}
 
     @property
     def is_fast(self) -> bool:
@@ -488,7 +489,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return added_tokens
 
     def _update_trie(self, unique_no_split_tokens: Optional[str] = []):
-        for token in self.added_tokens_decoder.values():
+        for token in self._added_tokens_decoder.values():
             if token not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token.content)
         # TODO unique_no_split_tokens for esm mostly
@@ -548,19 +549,18 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        added_tokens_encoder = self.added_tokens_encoder
         if split_special_tokens:
             no_split_token = []
             tokens = [text]
         else:
-            no_split_token = set(added_tokens_encoder.keys())  # don't split on any of the added tokens
+            no_split_token = set(self._added_tokens_encoder.keys())  # don't split on any of the added tokens
             # "This is something<special_token_1>  else"
             tokens = self.tokens_trie.split(text)
 
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
             if token in no_split_token:
-                tok_extended = self.added_tokens_decoder.get(added_tokens_encoder[token], None)
+                tok_extended = self._added_tokens_decoder.get(self._added_tokens_encoder[token], None)
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
                 if isinstance(tok_extended, AddedToken):
@@ -945,8 +945,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             `str` or `List[str]`: The decoded token(s).
         """
         if isinstance(ids, int):
-            if ids in self.added_tokens_decoder:
-                return self.added_tokens_decoder[ids].content
+            if ids in self._added_tokens_decoder:
+                return self._added_tokens_decoder[ids].content
             else:
                 return self._convert_id_to_token(ids)
         tokens = []
@@ -955,7 +955,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if skip_special_tokens and index in self.all_special_ids:
                 continue
             if index in self.added_tokens_decoder:
-                tokens.append(self.added_tokens_decoder[index].content)
+                tokens.append(self._added_tokens_decoder[index].content)
             else:
                 tokens.append(self._convert_id_to_token(index))
         return tokens
@@ -982,7 +982,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
             )
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-        legacy_added_tokens = set(self.added_tokens_encoder) - set(self.all_special_tokens) | {
+        legacy_added_tokens = set(self._added_tokens_encoder) - set(self.all_special_tokens) | {
             token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
         }
         # To avoid mixing byte-level and unicode for byte-level BPT
