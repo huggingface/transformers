@@ -786,7 +786,9 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
                 # multimodal LLM, but the current sample is not multimodal
                 cur_input_embeds = self.get_model().embed_tokens(cur_input_ids)
-                dummy_feature = torch.zeros(1, self.config.llava_config.mm_hidden_size, device="cuda", dtype=torch.float16)
+                dummy_feature = torch.zeros(1, self.config.llava_config.mm_hidden_size,
+                device=image_features.device,
+                dtype=image_features.dtype)
                 inter = self.model.mm_projector(dummy_feature)
                 cur_input_embeds = cur_input_embeds + (0. * inter).sum()
 
@@ -995,3 +997,4 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
+
