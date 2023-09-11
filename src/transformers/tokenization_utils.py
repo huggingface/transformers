@@ -410,7 +410,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Size of the full vocabulary with the added tokens. Counts the `keys` and not the `values` because otherwise if
         there is a hole in the vocab, we will add tokenizers at a wrong index.
         """
-        return max(set(self.get_vocab().keys()))
+        return max(set(self.get_vocab().values()))
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
