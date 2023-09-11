@@ -445,28 +445,45 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         LLaMA uses [INST] and [/INST] to indicate user messages, and <<SYS>> and <</SYS>> to indicate system messages.
         Assistant messages do not have special tokens, because LLaMA chat models are generally trained with strict
         user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
-        rather than needing special tokens. This template should definitely be changed if you wish to fine-tune a model
-        with more flexible role ordering!
+        rather than needing special tokens. The system message is partly 'embedded' in the first user message, which
+        gets an unusual token ordering when it is present. This template should definitely be changed if you wish to
+        fine-tune a model with more flexible role ordering!
+
         """
-        template = "{% for message in messages %}"
-        if self.use_default_system_prompt:
-            prompt = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
-            template += (
-                "{% if loop.index == 0 and message['role'] != 'system' %}"
-                "{{ '<<SYS>>\\n' + 'sys_prompt' + '\\n<</SYS>>\\n\\n' }}"
-                "{% endif %}"
-            )
-            template = template.replace("sys_prompt", prompt)  # Use replace to avoid f-string + Jinja interaction
-        template += (
-            "{% if message['role'] == 'user' %}"
-            "{{ bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}"
+
+        template = (
+            "{% if messages[0]['role'] == 'system' %}"  
+            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
+            "{% set system_message = messages[0]['content'] %}"
+            "{% elif USE_DEFAULT_PROMPT == true % and not '<<SYS>>' in messages[0]['content']}"  
+            "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
+            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
+            "{% else %}"
+            "{% set loop_messages = messages %}"
+            "{% set system_message = false %}"
+            "{% endif %}"
+            "{% for message in loop_messages %}"  # Loop over all non-system messages
+            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"  
+            "{% set temp_var = 0/0 %}"  # Raise an error if roles don't alternate user/assistant/user/assistant/...
+            "{% endif %}"
+            "{% if loop.index0 == 0 and system_message != false %}"  # Embed system message in first message
+            "{% set content = '<<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n' + message['content'] %}"
+            "{% else %}"
+            "{% set content = message['content'] %}"
+            "{% endif %}"
+            "{% if message['role'] == 'user' %}"  # After all of that, handle messages/roles in a fairly normal way
+            "{{ bos_token + '[INST] ' + content.strip() + ' [/INST]' }}"
             "{% elif message['role'] == 'system' %}"
-            "{{ '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}"
+            "{{ '<<SYS>>\\n' + content.strip() + '\\n<</SYS>>\\n\\n' }}"
             "{% elif message['role'] == 'assistant' %}"
-            "{{ ' '  + message['content'] + ' ' + eos_token }}"
+            "{{ ' '  + content.strip() + ' ' + eos_token }}"
             "{% endif %}"
             "{% endfor %}"
         )
+        template = template.replace("USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false")
+        default_message = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
+        template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
+
         return template
 
     def __getstate__(self):
