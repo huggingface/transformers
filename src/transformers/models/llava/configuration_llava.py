@@ -420,6 +420,9 @@ class LlavaLlamaConfig(PretrainedConfig):
         self.llama_config = LlamaConfig(**llama_config)
         self.llava_config = LlavaConfig(**llava_config)
 
+        self.initializer_factor = 1.0
+        self.initializer_range = 0.02
+
     @classmethod
     def from_llava_llama_configs(
         cls,

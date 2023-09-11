@@ -751,10 +751,10 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LlamaModel(config)
-        self.model.mm_projector = nn.Linear(config.mm_hidden_size, config.hidden_size)
+        self.model = LlamaModel(config.llama_config)
+        self.model.mm_projector = nn.Linear(config.llava_config.mm_hidden_size, config.llava_config.hidden_size)
 
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.llava_config.hidden_size, config.llava_config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -763,7 +763,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         return self.model
 
     def prepare_inputs_labels_for_multimodal(
-        self, 
+        self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -786,7 +786,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
                 # multimodal LLM, but the current sample is not multimodal
                 cur_input_embeds = self.get_model().embed_tokens(cur_input_ids)
-                dummy_feature = torch.zeros(1, self.config.mm_hidden_size, device="cuda", dtype=torch.float16)
+                dummy_feature = torch.zeros(1, self.config.llava_config.mm_hidden_size, device="cuda", dtype=torch.float16)
                 inter = self.model.mm_projector(dummy_feature)
                 cur_input_embeds = cur_input_embeds + (0. * inter).sum()
 
@@ -805,7 +805,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             while image_token_indices.numel() > 0:
                 cur_image_features = image_features[cur_image_idx]
                 image_token_start = image_token_indices[0]
-                if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):
+                if getattr(self.config.llava_config, 'tune_mm_mlp_adapter', False) and getattr(self.config.llava_config, 'mm_use_im_start_end', False):
                     cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids[:image_token_start-1]).detach())
                     cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids[image_token_start-1:image_token_start]))
                     cur_new_input_embeds.append(cur_image_features)
@@ -823,13 +823,13 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
                         cur_new_labels.append(torch.full((cur_image_features.shape[0],), IGNORE_INDEX, device=labels.device, dtype=labels.dtype))
                         cur_labels = cur_labels[image_token_start+1:]
                 cur_image_idx += 1
-                if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):
+                if getattr(self.config.llava_config, 'tune_mm_mlp_adapter', False) and getattr(self.config.llava_config, 'mm_use_im_start_end', False):
                     cur_input_ids = cur_input_ids[image_token_start+2:]
                 else:
                     cur_input_ids = cur_input_ids[image_token_start+1:]
                 image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
             if cur_input_ids.numel() > 0:
-                if getattr(self.config, 'tune_mm_mlp_adapter', False) and getattr(self.config, 'mm_use_im_start_end', False):
+                if getattr(self.config.llava_config, 'tune_mm_mlp_adapter', False) and getattr(self.config.llava_config, 'mm_use_im_start_end', False):
                     cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids).detach())
                 else:
                     cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids))
@@ -927,11 +927,11 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = output_attentions if output_attentions is not None else self.config.llava_config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.llava_config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.llava_config.use_return_dict
         input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(input_ids, attention_mask, past_key_values, labels, pixel_values)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -956,7 +956,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
+            shift_logits = shift_logits.view(-1, self.config.llava_config.vocab_size)
             shift_labels = shift_labels.view(-1)
             # Enable model/pipeline parallelism
             shift_labels = shift_labels.to(shift_logits.device)
@@ -995,4 +995,3 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
-

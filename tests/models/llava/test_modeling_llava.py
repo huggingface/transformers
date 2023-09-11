@@ -208,8 +208,8 @@ class LlavaModelTester:
         self.norm_type = norm_type
         #self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
-        self.image_size = 32
-        self.batch_size=13
+        self.image_size = 256
+        self.batch_size=1
         self.num_channels=3
 
     def prepare_config_and_inputs(self):
@@ -263,18 +263,18 @@ class LlavaLlamaModelTester:
 
         config = self.get_config()
 
-        return config, input_ids, pixel_values
+        return config, input_ids, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
         return LlavaLlamaConfig.from_llava_llama_configs(
             llama_config = self.llama_model_tester.get_config(),
-            llava_config = self.llava_model_tester.get_config()
+            llava_config = self.llava_model_tester.get_config(),
         )
 
     def create_and_check_model(                                                                   
          self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
      ):
-         model = LlamaModel(config=config)
+         model = LlamaModel(config=config.llama_model)
          model.to(torch_device)
          model.eval()
          result = model(input_ids, attention_mask=input_mask)
@@ -286,9 +286,8 @@ class LlavaLlamaModelTester:
         config,
         input_ids,
         pixel_values,
-        
     ):
-        model = LlavaLlamaForCausalLM(config=config)
+        model = LlavaLlamaForCausalLM(config=config.llama_model)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, pixel_values=pixel_values)
@@ -300,7 +299,6 @@ class LlavaLlamaModelTester:
         config,
         input_ids,
         pixel_values,
-        
     ):
         pass
 
@@ -308,19 +306,31 @@ class LlavaLlamaModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
-            config,
-            input_ids,
-            pixel_values,
-            
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "pixel_values": pixel_values}
+          config, 
+          input_ids, 
+          pixel_values, 
+          token_type_ids, 
+          input_mask, 
+          sequence_labels, 
+          token_labels, 
+          choice_labels,
+        )= config_and_inputs
+
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "labels": token_labels,
+     }
+        print("herehr eh re")
         return config, inputs_dict
 
 
 
 @require_torch
 class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_generative_model_classes = (LlavaLlamaForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (LlavaLlamaForCausalLM, ) if is_torch_available() else ()     
+    all_generative_model_classes = (LlavaLlamaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "text-generation": LlavaLlamaForCausalLM,
@@ -342,10 +352,9 @@ class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     #        self.assertIsNotNone(model)
     
     def test_forward_signature(self): 
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
+        config, _= self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class(config.llama_config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic       
             arg_names = [*signature.parameters.keys()]
@@ -356,38 +365,19 @@ class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_get_text_features(self):
         vocab_size=99
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
         inputs_dict = {
             "input_ids": torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]).to(torch_device),
             "attention_mask": torch.LongTensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).to(torch_device),
-            "decoder_input_ids": torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]).to(torch_device),
         }
-        model = LlavaLlamaForCausalLM(config).to(torch_device)
+        model = LlavaLlamaForCausalLM(config.llama_config).to(torch_device)
         model.eval()
-        text_features = model.get_text_features(**inputs_dict)
+        text_features = model(**inputs_dict)
         self.assertEqual(text_features[0].shape, (1, 10, vocab_size))
-
-    def test_get_image_features(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        keys_to_pop = ["input_ids"]
-
-        for key in keys_to_pop:
-            inputs_dict.pop(key)
-
-        model = LlavaLlamaForCausalLM(config).to(torch_device)
-        model.eval()
-        image_features = model.get_image_features(**inputs_dict)
-        self.assertEqual(
-            image_features[0].shape,
-            (
-                self.model_tester.llava_model_tester.batch_size,
-                self.model_tester.llava_model_tester.seq_length,
-                config.llava_config.hidden_size,
-            ),
-        )
 
     # override from common to deal with nested configurations (`vision_config`, `text_config` and `qformer_config`)
     def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
         for key in ["llama_config", "llava_config"]:
             setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
@@ -412,7 +402,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlavaLlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="auto")
+        model = LlavaLlamaForCausalLM.from_pretrained("shauray/Llava-Llama-2-7b-hf", device_map="auto")
         out = model(torch.tensor([input_ids]))
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-6.6550, -4.1227, -4.9859, -3.2406, 0.8262, -3.0033, 1.2964, -3.3699]])
@@ -427,7 +417,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     def test_model_13b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlavaLlamaForCausalLM.from_pretrained("meta-llama/Llama-2-13b-hf", device_map="auto")
+        model = LlavaLlamaForCausalLM.from_pretrained("shauray/Llava-Llama-2-13b-hf", device_map="auto")
         out = model(torch.tensor(input_ids))
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.0622, -1.2794, -1.1638, -0.9788, -1.4603, -1.0238, -1.7893, -1.4411]])
