@@ -50,6 +50,9 @@ This model was contributed by [Shauray Singh](https://huggingface.co/shauray) Th
 
 [[autodoc]] LlavaConfig
 
+## LlavaLlamaConfig
+
+[[autodoc]] LlavaLlamaConfig
 
 ## LlavaLlamaForCausalLM
 

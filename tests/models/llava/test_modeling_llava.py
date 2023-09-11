@@ -338,7 +338,7 @@ class LlavaLlamaModelTester:
 
 @require_torch
 class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LlavaLlamaForCausalLM, LlamaModel) if is_torch_available() else ()
+    all_model_classes = (LlavaLlamaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "text-generation": LlavaLlamaForCausalLM,
