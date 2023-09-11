@@ -1740,6 +1740,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self.supports_gradient_checkpointing:
             self.apply(partial(self._set_gradient_checkpointing, value=False))
 
+        if getattr(self, "_hf_peft_config_loaded", False):
+            self.disable_input_require_grads()
+
     @property
     def is_gradient_checkpointing(self) -> bool:
         """
