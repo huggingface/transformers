@@ -346,7 +346,7 @@ class PeftAdapterMixin:
         offload_index: Optional[int] = None,
     ) -> None:
         """
-        Optionnal re-dispatch the model and attach new hooks to the model in case the model has been loaded with
+        Optional re-dispatch the model and attach new hooks to the model in case the model has been loaded with
         accelerate (i.e. with `device_map=xxx`)
 
         Args:

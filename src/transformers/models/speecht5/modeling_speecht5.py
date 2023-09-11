@@ -2779,13 +2779,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def can_generate(self) -> bool:
-        """
-        Returns True. This model can `generate` and must therefore have this property set to True in order to be used
-        in the TTS pipeline.
-        """
-        return True
-
     @torch.no_grad()
     def generate(
         self,

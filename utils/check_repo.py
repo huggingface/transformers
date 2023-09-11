@@ -936,12 +936,6 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
-    "FalconConfig",  # TODO Matt Remove this and re-add the docs once TGI is ready
-    "FalconForCausalLM",
-    "FalconForQuestionAnswering",
-    "FalconForSequenceClassification",
-    "FalconForTokenClassification",
-    "FalconModel",
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
@@ -956,6 +950,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ConvNextBackbone",
     "ConvNextV2Backbone",
     "DinatBackbone",
+    "Dinov2Backbone",
     "FocalNetBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
@@ -965,6 +960,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "SwinBackbone",
     "TimmBackbone",
     "TimmBackboneConfig",
+    "VitDetBackbone",
 ]
 
 
