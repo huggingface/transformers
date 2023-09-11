@@ -199,6 +199,13 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 model.gradient_checkpointing_enable()
 
                 dummy_input = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device)
+                # To repro the Trainer issue
+                dummy_input.requires_grad = False
+
+                for name, param in model.named_parameters():
+                    if "lora" in name.lower():
+                        self.assertTrue(param.requires_grad)
+
                 logits = model(dummy_input).logits
                 loss = logits.mean()
                 loss.backward()
