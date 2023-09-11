@@ -45,29 +45,33 @@ class PatchTSMixerConfig(PretrainedConfig):
         patch_len (`int`, *optional*, defaults to 8):
             The patch length for the `PatchTSMixer` model. Try to set it as a divisor of `seq_len`.
         in_channels (`int`, *optional*, defaults to 3):
-            Number of input variables.
+            Number of input variables. For Univariate, set it to 1.
         stride (`int`, *optional*, defaults to 8):
-            Determines the overlap between two consecutive patches. 
+            Determines the overlap between two consecutive patches. Set it to patch_len (or greater), 
+            if we want non-overlapping patches.
         num_features (`int`, *optional*, defaults to 8):
-            Hidden dimension of the model. Larger value indicates more complex model.
+            Hidden dimension of the model. Recommended to set it as a multiple of patch_len (i.e. 2-5X of patch_len).
+            Larger value indicates more complex model.
         expansion_factor (`int`, *optional*, defaults to 2):
-            Expansion factor to use inside MLP. Larger value indicates more complex model.
+            Expansion factor to use inside MLP. Recommended range is 2-5. Larger value indicates more complex model.
         num_layers (`int`, *optional*, defaults to 2):
-            Number of layers to use. Larger value indicates more complex model.
+            Number of layers to use. Recommended range is 3-15. Larger value indicates more complex model.
         dropout (`float`, *optional*, defaults to 0.2):
-            The dropout probability the `PatchTSMixer` backbone.
+            The dropout probability the `PatchTSMixer` backbone. Recommended range is 0.2-0.7
         mode (`str`, *optional*, defaults to "common_channel"):
             Mixer Mode. Determines how to process the channels. Allowed values: "flatten", "common_channel", "mix_channel". 
-            In "flatten" mode, patch embedding encodes the patch information across all channels.
-            In "common_channel" mode, patch embedding is independent of channels (Channel Independece). 
-            In "mix_channel" mode, we follow channel independence, but in addition to patch and feature mixing, 
-            we also do channel mixing.
+            In "flatten" mode, patch embedding encodes the patch information across all channels. (not a preferred approach) 
+            In "common_channel" mode, we follow Channel-independent modelling with no explicit channel-mixing. Channel mixing happens in an implict
+            manner via shared weights across channels. (preferred first approach) 
+            In "mix_channel" mode, we follow explicit channel-mixing in addition to patch and feature mixer. (preferred approach when channel correlations
+            are very important to model)
         gated_attn (`bool`, *optional*, defaults to `True`):
-            Enable Gated Attention. 
+            Enable Gated Attention.
         norm_mlp (`str`, *optional*, defaults to "LayerNorm"):
             Normalization layer (BatchNorm or LayerNorm).
         self_attn (`bool`, *optional*, defaults to `False`):
-            Enable Tiny self attention in addition to MLP mixing.
+            Enable Tiny self attention across patches. This can be enabled when the output of Vanilla PatchTSMixer with gated attention is 
+            not satisfactory. Enabling this leads to explicit pair-wise attention and modelling across patches.
         self_attn_heads (`int`, *optional*, defaults to 1):
             Number of self-attention heads. Works only when `self_attn` is set to `True`.
         use_pe (`bool`, *optional*, defaults to `False`):
@@ -75,20 +79,23 @@ class PatchTSMixerConfig(PretrainedConfig):
             Works only when `self_attn` is set to `True`.
         pe (`str`, *optional*, defaults to "zeros"):
             Type of positional encoding. Allowed values are `None`, "zeros", "normal", "uniform", "sincos".
+            Works only when `use_pe` is set to `True`
         learn_pe (`bool`, *optional*, defaults to `False`):
             Whether to learn the positional encoding.
+            Works only when `use_pe` is set to `True`
         mask_type (`str`, *optional*, defaults to "random"):
-            Type of masking for pretraining. Allowed values are "random", "forecast".  
+            Type of masking to use for Masked Pretraining mode. Allowed values are "random", "forecast". 
+            In Random masking, points are maskes random. In Forecast masking, Points are masked towards the end.  
         mask_ratio (`float`, *optional*, defaults to 0.5):
-            Masking ratio. Higher value indicates more masking.
+            Masking ratio to use when `mask_type` is `random`. Higher value indicates more masking.
         mask_patches (`list`, *optional*, defaults to [2, 3]): 
-            List of patch lengths to mask in the end of the data.
+            List of patch lengths to mask in the end of the data, when `mask_type` is `forecast`.
         mask_patch_ratios (`list`, *optional*, defaults to [1, 1]):  
-            List of weights to use for each patch length. For Example, if `mask_patches` is [2,3] and 
+            List of weights to use for each patch length for forecast masking. For Example, if `mask_patches` is [2,3] and 
             `mask_patch_ratios` is [1,1], then equal weights to both patch lengths.
         mask_value (`float`, *optional*, defaults to 0.0):
             Mask value to use.
-        masked_loss (`bool`, *optional*, defaults to `False`):
+        masked_loss (`bool`, *optional*, defaults to `True`):
             Whether to compute pretraining loss only at the masked portions, or on the entire output.
         channel_consistent_masking (`bool`, *optional*, defaults to `True`):
             When true, masking will be same across all channels of a timeseries. 
@@ -101,14 +108,16 @@ class PatchTSMixerConfig(PretrainedConfig):
             Number of time steps to forecast for a forecasting task. Also known as the Forecast Horizon.
         forecast_channel_indices (`list`, *optional*, defaults to `None`):
             List of channel indices to forecast. If None, forecast all channels.
+            Target data is expected to have all channels and we explitly filter the channels in prediction and target before
+            loss computation. 
         n_classes (`int`, *optional*, defaults to 3):
             Number of classes for a classification task.
         n_targets (`int`, *optional*, defaults to 3):
             Number of targets (dimensionality of the regressed variable) for a regression task. 
         output_range (`list`, *optional*, defaults to `None`):
-            Output range to restrict. Defaults to None.
+            Output range to restrict for the regression task. Defaults to None.
         head_agg (`str`, *optional*, defaults to "max_pool"):
-            Aggregation mode. Allowed values are `None`, "use_last", "max_pool", "avg_pool".
+            Aggregation mode to enable for classification or regression task. Allowed values are `None`, "use_last", "max_pool", "avg_pool".
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as an encoder/decoder or not. Allowed value is `False`.
         init_std (`float`, *optional*, defaults to 0.02):
@@ -163,7 +172,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         mask_patches: list = [2, 3],
         mask_patch_ratios: list = [1, 1],
         mask_value=0,
-        masked_loss: bool = False,
+        masked_loss: bool = True,
         channel_consistent_masking: bool = True,
         revin: bool = True,
         head_dropout: float = 0.2,

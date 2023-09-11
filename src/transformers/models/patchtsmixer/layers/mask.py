@@ -41,12 +41,12 @@ class PatchMasking(nn.Module):
     def forward(self, x: Tensor):
         
         """
-        Input:
+        Args:
             x: patched input
                 4D: [bs x n_vars x num_patch  x patch_len]
                 6D: [bs x tsg1 x tsg2 x n_vars x num_patch  x patch_len]
         
-        Output:
+        Returns:
             x_mask: Masked patched input
                 4D: [bs x n_vars x num_patch  x patch_len]
                 6D: [bs x tsg1 x tsg2 x n_vars x num_patch  x patch_len]
