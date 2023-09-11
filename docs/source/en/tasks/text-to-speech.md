@@ -34,7 +34,7 @@ Here's an example of how you would use the `"text-to-speech"` pipeline with Bark
 >>> output = pipe(text)
 ```
 
-You can then listen to the result:
+Here's a code snippet you can use to listen to the resulting audio in a notebook: 
 
 ```python
 >>> from IPython.display import Audio
@@ -52,7 +52,7 @@ supports multiple speakers through x-vector speaker embeddings.
 The remainder of this guide illustrates how to:
 
 1. Fine-tune [SpeechT5](../model_doc/speecht5) that was originally trained on English speech on the Dutch (`nl`) language subset of the [VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) dataset.
-2. Use your fine-tuned model for inference.
+2. Use your refined model for inference in one of two ways: using a pipeline or directly.
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -559,7 +559,7 @@ Now you can pass the text and speaker embeddings to the pipeline, and it will ta
  'sampling_rate': 16000}
 ```
 
-Here's a code snippet you can use to listen to the resulting audio in a notebook: 
+You can then listen to the result:
 
 ```py
 >>> from IPython.display import Audio
