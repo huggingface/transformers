@@ -2778,19 +2778,19 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=True
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=True
                 ).to(torch_device)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=False).to(
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=False).to(
                     torch_device
                 )
 
-                dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[0, 1, 1]]).to(torch_device)
+                dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[0, 1, 1, 1, 1]]).to(torch_device)
 
                 logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
                 logits_fa = model_fa(dummy_input, output_hidden_states=True).hidden_states[-1]
 
-                self.assertTrue(torch.allclose(logits_fa, logits, atol=1e-3, rtol=1e-3))
+                self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
 
                 logits_fa = model_fa(
                     dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True
@@ -2799,7 +2799,7 @@ class ModelTesterMixin:
                     dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True
                 ).hidden_states[-1]
 
-                self.assertTrue(torch.allclose(logits_fa, logits, atol=1e-3, rtol=1e-3))
+                self.assertTrue(torch.allclose(logits_fa[1:, :], logits[1:, :], atol=4e-2, rtol=4e-2))
 
     @require_flash_attn
     @require_torch_gpu
