@@ -16,7 +16,7 @@ import unittest
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_jinja, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -474,6 +474,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
         self.assertEqual(output, [])
 
+    @require_jinja
     def test_tokenization_for_chat(self):
         multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
         # This is in English, but it's just here to make sure the chat control tokens are being added properly

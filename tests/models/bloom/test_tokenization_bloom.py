@@ -18,7 +18,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers import BloomTokenizerFast
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_jinja, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -134,6 +134,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
         self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
+    @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = self.get_rust_tokenizer()
         test_chats = [

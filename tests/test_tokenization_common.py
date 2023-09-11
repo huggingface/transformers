@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     check_json_file_has_correct_format,
     get_tests_dir,
     is_pt_tf_cross_test,
+    require_jinja,
     require_tf,
     require_tokenizers,
     require_torch,
@@ -1052,6 +1053,7 @@ class TokenizerTesterMixin:
                 if tokenizer.num_special_tokens_to_add(pair=True):
                     self.assertIn(None, output.sequence_ids())
 
+    @require_jinja
     def test_chat_template(self):
         dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
         dummy_conversation = [

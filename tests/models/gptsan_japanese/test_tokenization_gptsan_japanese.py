@@ -22,7 +22,7 @@ from transformers.models.gptsan_japanese.tokenization_gptsan_japanese import (
     VOCAB_FILES_NAMES,
     GPTSanJapaneseTokenizer,
 )
-from transformers.testing_utils import require_tokenizers, slow
+from transformers.testing_utils import require_jinja, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -194,6 +194,7 @@ class GPTSanJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # tokenizer has no padding token
         pass
 
+    @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = self.tokenizer_class.from_pretrained("Tanrei/GPTSAN-japanese")
         # This is in English, but it's just here to make sure the chat control tokens are being added properly

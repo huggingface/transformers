@@ -20,7 +20,7 @@ import unittest
 
 from transformers import AutoTokenizer, GPT2Tokenizer, GPT2TokenizerFast
 from transformers.models.gpt2.tokenization_gpt2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_jinja, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -275,6 +275,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 filtered_sequence = [x for x in filtered_sequence if x is not None]
                 self.assertEqual(encoded_sequence, filtered_sequence)
 
+    @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = GPT2Tokenizer.from_pretrained(self.tmpdirname)
         test_chats = [

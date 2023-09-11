@@ -32,6 +32,7 @@ from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
+    require_jinja,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -574,6 +575,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         # a dummy prefix space is not added by the sp_model as it was de-activated
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁▁", out_type=str))
 
+    @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
         # This is in English, but it's just here to make sure the chat control tokens are being added properly

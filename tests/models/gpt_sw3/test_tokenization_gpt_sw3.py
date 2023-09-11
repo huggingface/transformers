@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import GPTSw3Tokenizer
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import get_tests_dir, require_jinja, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -129,6 +129,7 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             sequences=sequences,
         )
 
+    @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB)
         # This is in English, but it's just here to make sure the chat control tokens are being added properly

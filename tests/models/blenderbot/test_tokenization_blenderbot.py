@@ -17,6 +17,7 @@
 import unittest
 
 from transformers import BlenderbotTokenizer, BlenderbotTokenizerFast
+from transformers.testing_utils import require_jinja
 from transformers.utils import cached_property
 
 
@@ -51,6 +52,7 @@ class Blenderbot3BTokenizerTests(unittest.TestCase):
         assert self.rust_tokenizer_3b.add_prefix_space
         assert self.rust_tokenizer_3b([" Sam", "Sam"]).input_ids == [[5502, 2], [5502, 2]]
 
+    @require_jinja
     def test_tokenization_for_chat(self):
         tok = self.tokenizer_3b
         test_chats = [
