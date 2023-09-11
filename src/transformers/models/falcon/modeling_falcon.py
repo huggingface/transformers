@@ -705,7 +705,7 @@ class FalconFlashAttention(nn.Module):
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
-            attn_output = flash_attn_func(query_layer, key_layer, value_layer, 0.0, causal=True)
+            attn_output = flash_attn_func(query_layer, key_layer, value_layer, 0.0, softmax_scale=None, causal=True)
 
         attn_weights = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.dense(attn_weights)
@@ -737,9 +737,10 @@ class FalconDecoderLayer(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
+
         self.self_attention = (
             FalconAttention(config)
-            if not getattr(config, "_use_flash_attn_2", False)
+            if not getattr(config, "_flash_attn_2_enabled", False)
             else FalconFlashAttention(config)
         )
         self.mlp = FalconMLP(config)
