@@ -164,7 +164,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer text-to-unit decoder.
         t2u_num_langs (`int`, *optional*, defaults to 32):
             Number of langs supported by the text-to-unit component.
-        t2u_offset_tgt_lang (`int`, *optional*, defaults to 5):
+        t2u_offset_tgt_lang (`int`, *optional*, defaults to 10005):
             Used to offset the target language id before passing it to the text decoder.
         pad_token_id (`int`, *optional*, defaults to 0):
             The id of the _padding_ text token. Only applied to the text-decoder model.
@@ -211,6 +211,8 @@ class SeamlessM4TConfig(PretrainedConfig):
             Kernel size of the duration predictor. Applies to the vocoder only.
         var_pred_dropout (`float`, *optional*, defaults to 0.5):
             The dropout probabilitiy of the duration predictor. Applies to the vocoder only.
+        control_symbol_vocoder_offset (`int`, *optional*, defaults to 4):
+            Offset the unit token ids by this number to account for symbol tokens. Applies to the vocoder only.
         Example:
 
     ```python
@@ -287,7 +289,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_decoder_ffn_dim=8192,
         t2u_decoder_attention_heads=16,
         t2u_num_langs=38,
-        t2u_offset_tgt_lang=5,
+        t2u_offset_tgt_lang=10005,
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
@@ -308,6 +310,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         vocoder_num_spkrs=200,
         variance_predictor_kernel_size=3,
         var_pred_dropout=0.5,
+        control_symbol_vocoder_offset = 4,
         **kwargs,
     ):
         # overall_config
@@ -390,10 +393,12 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
         self.t2u_offset_tgt_lang = t2u_offset_tgt_lang
+        self.control_symbol_vocoder_offset = control_symbol_vocoder_offset
 
         # for proper config init
         self.num_attention_heads = decoder_attention_heads
         self.num_hidden_layers = decoder_layers
+        
 
         super().__init__(
             pad_token_id=pad_token_id,
