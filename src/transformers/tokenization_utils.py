@@ -346,8 +346,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
-    _added_tokens_encoder: Dict[str, int] = {}
-
     def __init__(self, **kwargs):
         # 1. Init the parent class
         super().__init__(**kwargs)
@@ -356,11 +354,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # 2. init `_added_tokens_decoder` if child class did not
         if not hasattr(self, "_added_tokens_decoder"):
             self._added_tokens_decoder: Dict[int, AddedToken] = {}
+            self._added_tokens_encoder: Dict[str, int] = {}
 
         # 3. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer, we overwrite
         if "added_tokens_decoder" in kwargs:
             # overwriting the class's added_tokens_decoder. This is the source of truth!
             self._added_tokens_decoder.update(kwargs.get("added_tokens_decoder"))
+            self._added_tokens_encoder.update({k.content:v for v,k in kwargs.get("added_tokens_decoder").items()})
 
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
@@ -469,9 +469,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
                 # Normalize if requested
                 token.content = token.content.lower()
-
             if token.content not in current_vocab:
                 token_index = new_idx + added_tokens
+                current_vocab[token.content] = token_index
                 added_tokens += 1
             else:
                 token_index = current_vocab[token.content]
@@ -482,7 +482,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
             # the setter automatically updates the reverse map
             self._added_tokens_decoder[token_index] = token
-            self._added_tokens_encoder[token.content] = current_vocab[token.content] = token_index
+            self._added_tokens_encoder[token.content] = token_index
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 
@@ -493,7 +493,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         for token in self._added_tokens_decoder.values():
             if token not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token.content)
-        # TODO unique_no_split_tokens for esm mostly
         for token in unique_no_split_tokens:
             if token not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token)
@@ -550,7 +549,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             escaped_special_toks += [
                 re.escape(s_tok.content)
                 for s_tok in (self._added_tokens_decoder.values())
-                if not (s_tok.special or s_tok.normalized)
+                if not s_tok.special and s_tok.normalized
             ]
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
@@ -988,7 +987,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
             )
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-        legacy_added_tokens = set(self._added_tokens_encoder) - set(self.all_special_tokens) | {
+        legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
             token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
         }
         # To avoid mixing byte-level and unicode for byte-level BPT
