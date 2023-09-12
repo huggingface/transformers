@@ -1687,12 +1687,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             from jinja2.sandbox import ImmutableSandboxedEnvironment
         except ImportError:
             raise ImportError("apply_chat_template requires jinja2 to be installed.")
+
         if self._jinja_env is None:  # Lazily initialize Jinja environment only when needed
-            self._jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
 
             def raise_exception(message):
                 raise TemplateError(message)
 
+            self._jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
             self._jinja_env.globals["raise_exception"] = raise_exception
 
         if hasattr(conversation, "messages"):
@@ -1709,9 +1710,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
 
-        rendered = compiled_template.render(
-            messages=conversation, **self.special_tokens_map
-        )
+        rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
 
         if padding is True:
             padding = "max_length"  # There's only one sequence here, so "longest" makes no sense

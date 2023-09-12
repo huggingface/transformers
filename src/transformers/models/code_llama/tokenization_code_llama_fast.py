@@ -371,7 +371,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             "{% endif %}"
             "{% for message in loop_messages %}"  # Loop over all non-system messages
             "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
-            "{% raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') %}"
+            "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
             "{% endif %}"
             "{% if loop.index0 == 0 and system_message != false %}"  # Embed system message in first message
             "{% set content = '<<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n' + message['content'] %}"
