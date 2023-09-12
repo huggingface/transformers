@@ -1655,7 +1655,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
         optimisation in `self._added_tokens_encoder` for the slow tokenizers.
         """
-        return {k.content:v for v,k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
+        return {k.content: v for v, k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
 
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
