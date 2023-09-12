@@ -1,0 +1,517 @@
+CrossFormer(
+  (patch_embed): PatchEmbed(
+    (projs): ModuleList(
+      (0): Conv2d(3, 48, kernel_size=(4, 4), stride=(4, 4))
+      (1): Conv2d(3, 24, kernel_size=(8, 8), stride=(4, 4), padding=(2, 2))
+      (2): Conv2d(3, 12, kernel_size=(16, 16), stride=(4, 4), padding=(6, 6))
+      (3): Conv2d(3, 12, kernel_size=(32, 32), stride=(4, 4), padding=(14, 14))
+    )
+    (norm): LayerNorm((96,), eps=1e-05, elementwise_affine=True)
+  )
+  (pos_drop): Dropout(p=0.0, inplace=False)
+  (layers): ModuleList(
+    (0): Stage(
+      dim=96, input_resolution=(56, 56), depth=2
+      (blocks): ModuleList(
+        (0): CrossFormerBlock(
+          dim=96, input_resolution=(56, 56), num_heads=3, group_size=7, lsda_flag=0, mlp_ratio=4
+          (norm1): LayerNorm((96,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=96, group_size=(7, 7), num_heads=3
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=6, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((6,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=6, out_features=6, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((6,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=6, out_features=6, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((6,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=6, out_features=3, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=96, out_features=288, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=96, out_features=96, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): Identity()
+          (norm2): LayerNorm((96,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=96, out_features=384, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=384, out_features=96, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+        (1): CrossFormerBlock(
+          dim=96, input_resolution=(56, 56), num_heads=3, group_size=7, lsda_flag=1, mlp_ratio=4
+          (norm1): LayerNorm((96,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=96, group_size=(7, 7), num_heads=3
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=6, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((6,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=6, out_features=6, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((6,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=6, out_features=6, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((6,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=6, out_features=3, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=96, out_features=288, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=96, out_features=96, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.018)
+          (norm2): LayerNorm((96,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=96, out_features=384, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=384, out_features=96, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+      )
+      (downsample): PatchMerging(
+        input_resolution=(56, 56), dim=96
+        (reductions): ModuleList(
+          (0): Conv2d(96, 96, kernel_size=(2, 2), stride=(2, 2))
+          (1): Conv2d(96, 96, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        )
+        (norm): LayerNorm((96,), eps=1e-05, elementwise_affine=True)
+      )
+    )
+    (1): Stage(
+      dim=192, input_resolution=(28, 28), depth=2
+      (blocks): ModuleList(
+        (0): CrossFormerBlock(
+          dim=192, input_resolution=(28, 28), num_heads=6, group_size=7, lsda_flag=0, mlp_ratio=4
+          (norm1): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=192, group_size=(7, 7), num_heads=6
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=12, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((12,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=12, out_features=12, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((12,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=12, out_features=12, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((12,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=12, out_features=6, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=192, out_features=576, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=192, out_features=192, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.036)
+          (norm2): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=192, out_features=768, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=768, out_features=192, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+        (1): CrossFormerBlock(
+          dim=192, input_resolution=(28, 28), num_heads=6, group_size=7, lsda_flag=1, mlp_ratio=4
+          (norm1): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=192, group_size=(7, 7), num_heads=6
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=12, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((12,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=12, out_features=12, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((12,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=12, out_features=12, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((12,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=12, out_features=6, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=192, out_features=576, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=192, out_features=192, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.055)
+          (norm2): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=192, out_features=768, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=768, out_features=192, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+      )
+      (downsample): PatchMerging(
+        input_resolution=(28, 28), dim=192
+        (reductions): ModuleList(
+          (0): Conv2d(192, 192, kernel_size=(2, 2), stride=(2, 2))
+          (1): Conv2d(192, 192, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        )
+        (norm): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+      )
+    )
+    (2): Stage(
+      dim=384, input_resolution=(14, 14), depth=6
+      (blocks): ModuleList(
+        (0): CrossFormerBlock(
+          dim=384, input_resolution=(14, 14), num_heads=12, group_size=7, lsda_flag=0, mlp_ratio=4
+          (norm1): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=384, group_size=(7, 7), num_heads=12
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=24, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=12, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=384, out_features=1152, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=384, out_features=384, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.073)
+          (norm2): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=384, out_features=1536, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=1536, out_features=384, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+        (1): CrossFormerBlock(
+          dim=384, input_resolution=(14, 14), num_heads=12, group_size=7, lsda_flag=1, mlp_ratio=4
+          (norm1): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=384, group_size=(7, 7), num_heads=12
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=24, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=12, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=384, out_features=1152, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=384, out_features=384, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.091)
+          (norm2): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=384, out_features=1536, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=1536, out_features=384, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+        (2): CrossFormerBlock(
+          dim=384, input_resolution=(14, 14), num_heads=12, group_size=7, lsda_flag=0, mlp_ratio=4
+          (norm1): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=384, group_size=(7, 7), num_heads=12
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=24, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=12, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=384, out_features=1152, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=384, out_features=384, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.109)
+          (norm2): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=384, out_features=1536, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=1536, out_features=384, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+        (3): CrossFormerBlock(
+          dim=384, input_resolution=(14, 14), num_heads=12, group_size=7, lsda_flag=1, mlp_ratio=4
+          (norm1): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=384, group_size=(7, 7), num_heads=12
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=24, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=12, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=384, out_features=1152, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=384, out_features=384, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.127)
+          (norm2): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=384, out_features=1536, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=1536, out_features=384, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+        (4): CrossFormerBlock(
+          dim=384, input_resolution=(14, 14), num_heads=12, group_size=7, lsda_flag=0, mlp_ratio=4
+          (norm1): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=384, group_size=(7, 7), num_heads=12
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=24, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=12, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=384, out_features=1152, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=384, out_features=384, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.145)
+          (norm2): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=384, out_features=1536, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=1536, out_features=384, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+        (5): CrossFormerBlock(
+          dim=384, input_resolution=(14, 14), num_heads=12, group_size=7, lsda_flag=1, mlp_ratio=4
+          (norm1): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=384, group_size=(7, 7), num_heads=12
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=24, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=24, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((24,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=24, out_features=12, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=384, out_features=1152, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=384, out_features=384, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.164)
+          (norm2): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=384, out_features=1536, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=1536, out_features=384, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+      )
+      (downsample): PatchMerging(
+        input_resolution=(14, 14), dim=384
+        (reductions): ModuleList(
+          (0): Conv2d(384, 384, kernel_size=(2, 2), stride=(2, 2))
+          (1): Conv2d(384, 384, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        )
+        (norm): LayerNorm((384,), eps=1e-05, elementwise_affine=True)
+      )
+    )
+    (3): Stage(
+      dim=768, input_resolution=(7, 7), depth=2
+      (blocks): ModuleList(
+        (0): CrossFormerBlock(
+          dim=768, input_resolution=(7, 7), num_heads=24, group_size=7, lsda_flag=0, mlp_ratio=4
+          (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=768, group_size=(7, 7), num_heads=24
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=48, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=48, out_features=48, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=48, out_features=48, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=48, out_features=24, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=768, out_features=2304, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=768, out_features=768, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.182)
+          (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=768, out_features=3072, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=3072, out_features=768, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+        (1): CrossFormerBlock(
+          dim=768, input_resolution=(7, 7), num_heads=24, group_size=7, lsda_flag=0, mlp_ratio=4
+          (norm1): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (attn): Attention(
+            dim=768, group_size=(7, 7), num_heads=24
+            (pos): DynamicPosBias(
+              (pos_proj): Linear(in_features=2, out_features=48, bias=True)
+              (pos1): Sequential(
+                (0): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=48, out_features=48, bias=True)
+              )
+              (pos2): Sequential(
+                (0): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=48, out_features=48, bias=True)
+              )
+              (pos3): Sequential(
+                (0): LayerNorm((48,), eps=1e-05, elementwise_affine=True)
+                (1): ReLU(inplace=True)
+                (2): Linear(in_features=48, out_features=24, bias=True)
+              )
+            )
+            (qkv): Linear(in_features=768, out_features=2304, bias=True)
+            (attn_drop): Dropout(p=0.0, inplace=False)
+            (proj): Linear(in_features=768, out_features=768, bias=True)
+            (proj_drop): Dropout(p=0.0, inplace=False)
+            (softmax): Softmax(dim=-1)
+          )
+          (drop_path): DropPath(drop_prob=0.200)
+          (norm2): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+          (mlp): Mlp(
+            (fc1): Linear(in_features=768, out_features=3072, bias=True)
+            (act): GELU(approximate='none')
+            (fc2): Linear(in_features=3072, out_features=768, bias=True)
+            (drop): Dropout(p=0.0, inplace=False)
+          )
+        )
+      )
+    )
+  )
+  (norm): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+  (avgpool): AdaptiveAvgPool1d(output_size=1)
+  (head): Linear(in_features=768, out_features=1000, bias=True)
+)

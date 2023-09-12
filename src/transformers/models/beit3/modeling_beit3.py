@@ -61,10 +61,10 @@ BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values1 (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        image1_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        pixel_values2 (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        image2_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
         padding_mask (`torch.LongTensor` of shape `({0})`):
@@ -319,8 +319,8 @@ class Beit3VisionEmbedding(nn.Module):
 
         if masked_position is not None:
             mask_token = self.mask_token.expand(batch_size, seq_len, -1)
-            w = masked_position.unsqueeze(-1).type_as(mask_token)
-            hidden_states = hidden_states * (1 - w) + mask_token * w
+            mask_position = masked_position.unsqueeze(-1).type_as(mask_token)
+            hidden_states = hidden_states * (1 - mask_position) + mask_token * mask_position
 
         if self.cls_token is not None:
             cls_tokens = self.cls_token.expand(batch_size, -1, -1)
@@ -808,8 +808,8 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
     def forward(
         self,
         input_ids,
-        pixel_values1,
-        pixel_values2,
+        image1_values,
+        image2_values,
         padding_mask,
         output_hidden_states=None,
         return_dict=None,
@@ -818,7 +818,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         batch_size = input_ids.size()[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        vision_input = torch.cat((pixel_values1, pixel_values2), dim=0)
+        vision_input = torch.cat((image1_values, image2_values), dim=0)
         language_input = torch.cat((input_ids, input_ids), dim=0)
         padding_mask = torch.cat((padding_mask, padding_mask), dim=0)
 
@@ -886,8 +886,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 
         encoder_outputs = self.beit3(input_ids=None, pixel_values=pixel_values)
         encoder_out = encoder_outputs.encoder_out
-        t = encoder_out[:, 1:, :]
-        logits = self.classifier(self.fc_norm(t.mean(1)))
+        logits = self.classifier(self.fc_norm(encoder_out[:, 1:, :].mean(1)))
         loss = None
         if labels is not None:
             if self.config.problem_type is None:
@@ -1013,14 +1012,15 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             one_hot = one_hot * (1 - eps) + (1 - one_hot) * eps / (n_class - 1)
             log_prb = self.log_soft(logits)
             loss = self.kl(log_prb, one_hot).sum(1)
+            loss = loss.mean()
 
         if not return_dict:
             output = (logits,)
             output = output + (outputs.hidden_states,) if output_hidden_states else output
-            return ((loss.mean(),) + output) if loss is not None else output
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
-            loss=loss.mean() if loss is not None else None,
+            loss=loss if loss is not None else None,
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
@@ -1152,7 +1152,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         self.beit3 = Beit3Model(config)
         self.language_classifier = nn.Linear(embed_dim, embed_dim, bias=False)
         self.vision_classifier = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.logit_scale = nn.Parameter(torch.ones([]) * config.logit_scale_init_value)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING)
@@ -1160,7 +1160,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
-        padding_mask=None,
+        padding_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[Any], Beit3ImageTextMatchingModelOutput]:

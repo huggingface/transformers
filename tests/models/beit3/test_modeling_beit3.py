@@ -138,14 +138,14 @@ class Beit3ModelTester:
 
     def prepare_config_and_inputs_for_visual_reasoning(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_value1 = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
-        pixel_value2 = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
+        image1_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
+        image2_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
         padding_mask = torch.zeros((self.batch_size, self.seq_length))
         config = self.get_config()
         model_input = {
             "input_ids": input_ids,
-            "pixel_values1": pixel_value1,
-            "pixel_values2": pixel_value2,
+            "image1_values": image1_values,
+            "image2_values": image2_values,
             "padding_mask": padding_mask,
         }
         labels = ids_tensor([self.batch_size], self.num_labels)
@@ -243,8 +243,8 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 inputs_dict_to_return["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            inputs_dict_to_return["pixel_values1"] = inputs_dict["pixel_values"]
-            inputs_dict_to_return["pixel_values2"] = inputs_dict["pixel_values"]
+            inputs_dict_to_return["image1_values"] = inputs_dict["pixel_values"]
+            inputs_dict_to_return["image2_values"] = inputs_dict["pixel_values"]
             inputs_dict_to_return["padding_mask"] = inputs_dict["padding_mask"]
             inputs_dict_to_return["input_ids"] = inputs_dict["input_ids"]
             return inputs_dict_to_return
