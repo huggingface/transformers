@@ -286,6 +286,7 @@ class LlavaLlamaConfig(PretrainedConfig):
     ...     LlavaConfig,
     ...     LlamaConfig,
     ...     LlavaLlamaConfig,
+    ...     LlavaLlamaForCausalLM
     ... )
 
     >>> # Initializing a LlavaLlamaConfig with shauray/Llava-Llama-2-7B-hf style configuration

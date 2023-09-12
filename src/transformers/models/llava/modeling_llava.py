@@ -981,6 +981,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         ```python
         >>> from transformers import LlavaProcessor, LlavaLlamaForCausalLM
 
+        >>> PATH_TO_CONVERTED_WEIGHTS = "shauray/Llava-Llama-2-7B-hf"
         >>> model = LlavaLlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> processor = LlavaProcessor.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
