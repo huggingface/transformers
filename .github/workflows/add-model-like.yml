@@ -78,8 +78,4 @@ jobs:
         with:
           name: run_all_tests_new_models_test_reports
           path: reports/tests_new_models
-     
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    
