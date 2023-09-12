@@ -32,16 +32,6 @@ Tips:
 - Weights for the Llava models can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-7B-hf/)
 - The architecture is very similar to the first Llama, with the addition of Grouped Query Attention (GQA) following this [paper](https://arxiv.org/pdf/2305.13245.pdf)
 
-
-Example:
-
-```python
->>> from transformers import LlavaLlamaForCausalLM, LlavaProcessor
-
->>> processor = LlavaProcessor.from_pretrained("shauray/Llava-Llama-2-7B-hf")
->>> model = LlavaLlamaForCausalLM.from_pretrained("shauray/Llava-Llama-2-7B-hf")
-```
-
 Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 13B model, it's thus 26GB of RAM needed.
 
