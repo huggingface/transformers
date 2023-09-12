@@ -89,20 +89,7 @@ class LlamaConfig(PretrainedConfig):
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
 
-        Example:
-
-    ```python
-    >>> from transformers import LlamaModel, LlamaConfig
-
-    >>> # Initializing a LLaMA llama-7b style configuration
-    >>> configuration = LlamaConfig()
-
-    >>> # Initializing a model from the llama-7b style configuration
-    >>> model = LlamaModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    """
     model_type = "llama"
     keys_to_ignore_at_inference = ["past_key_values"]
 
