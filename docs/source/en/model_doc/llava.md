@@ -32,11 +32,14 @@ Tips:
 - Weights for the Llava models can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-7B-hf/)
 - The architecture is very similar to the first Llama, with the addition of Grouped Query Attention (GQA) following this [paper](https://arxiv.org/pdf/2305.13245.pdf)
 
-```python
-from transformers import LlavaLlamaForCausalLM, LlamaProcessor
 
-processor = LlamaProcessor.from_pretrained("shauray/Llava-Llama-2-7B-hf")
-model = LlavaLlamaForCausalLM.from_pretrained("shauray/Llava-Llama-2-7B-hf")
+Example:
+
+```python
+>>> from transformers import LlavaLlamaForCausalLM, LlamaProcessor
+
+>>> processor = LlamaProcessor.from_pretrained("shauray/Llava-Llama-2-7B-hf")
+>>> model = LlavaLlamaForCausalLM.from_pretrained("shauray/Llava-Llama-2-7B-hf")
 ```
 
 Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
@@ -46,6 +49,11 @@ come in several checkpoints they each contain a part of each weight of the model
 This model was contributed by [Shauray Singh](https://huggingface.co/shauray) The original code of the authors can be found [here](https://github.com/haotian-liu/LLaVA).
 
 
+## LlavaLlamaConfig
+
+[[autodoc]] LlavaLlamaConfig
+    - from_llava_llama_configs
+
 ## LlavaConfig
 
 [[autodoc]] LlavaConfig
@@ -54,14 +62,11 @@ This model was contributed by [Shauray Singh](https://huggingface.co/shauray) Th
 
 [[autodoc]] LlamaConfig
 
-## LlavaLlamaConfig
-
-[[autodoc]] LlavaLlamaConfig
-
 ## LlavaLlamaForCausalLM
 
 [[autodoc]] LlavaLlamaForCausalLM
     - forward
+    - generate
 
 ## LlavaProcessor
 

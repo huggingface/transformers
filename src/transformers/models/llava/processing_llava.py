@@ -30,8 +30,8 @@ from ..clip import CLIPVisionModel
 
 class LlavaProcessor(ProcessorMixin):
     r"""
-    Constructs an LLava processor which wraps a CLIP image processor, CLIP vision model  and a LLaMa/T5 tokenizer into a single
-    processor.
+    Constructs an LLava processor which wraps a CLIP image processor, CLIP vision model and a LLaMa/T5 tokenizer into a
+    single processor.
 
     [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`AutoTokenizer`]. See the
     docstring of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.

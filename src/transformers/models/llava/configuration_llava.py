@@ -341,9 +341,9 @@ class LlavaConfig(PretrainedConfig):
 
 class LlavaLlamaConfig(PretrainedConfig):
     r"""
-    [`LlavaLlamaConfig`] is the configuration class to store the configuration of a
-    [`LlavaLlamaForCausalLM`]. It is used to instantiate a LlavaLlama model according to the specified
-    arguments, defining the llama model and a llava model configs. Instantiating a configuration with
+    [`LlavaLlamaConfig`] is the configuration class to store the configuration of a [`LlavaLlamaForCausalLM`]. It is
+    used to instantiate a LlavaLlama model according to the specified arguments, defining the llama model and a llava
+    model configs. Instantiating a configuration with
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -380,7 +380,10 @@ class LlavaLlamaConfig(PretrainedConfig):
     >>> llava_config = LlavaConfig()
     >>> llama_config = LlamaConfig()
 
-    >>> config = LlavaLlamaConfig.from_llava_llama_configs(llava_config, llama_config,)
+    >>> config = LlavaLlamaConfig.from_llava_llama_configs(
+    ...     llava_config,
+    ...     llama_config,
+    ... )
     ```"""
 
     model_type = "llavallama"

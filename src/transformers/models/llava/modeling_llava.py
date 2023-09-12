@@ -988,7 +988,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         >>> prompt = "How would you best describe the image given?"
 
-        >>> inputs = processor(text=prompt,images=image, return_tensors="pt")
+        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
