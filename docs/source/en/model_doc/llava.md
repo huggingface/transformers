@@ -38,7 +38,7 @@ Example:
 ```python
 >>> from transformers import LlavaLlamaForCausalLM, LlavaProcessor
 
->>> processor = LlamaProcessor.from_pretrained("shauray/Llava-Llama-2-7B-hf")
+>>> processor = LlavaProcessor.from_pretrained("shauray/Llava-Llama-2-7B-hf")
 >>> model = LlavaLlamaForCausalLM.from_pretrained("shauray/Llava-Llama-2-7B-hf")
 ```
 
