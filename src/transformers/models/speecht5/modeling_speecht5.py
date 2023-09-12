@@ -2620,11 +2620,7 @@ def _generate_speech(
             meet_thresholds = torch.sum(prob, dim=-1) >= threshold
             # If the generation loops is less than maximum length times, check the ones in the batch that have met
             # the prob threshold. Otherwise, assume all have met thresholds and fill other spectrograms for the batch.
-            meet_indexes = (
-                torch.where(meet_thresholds is True)[0]
-                if idx < maxlen
-                else torch.tensor(list(range(len(prob))))
-            )
+            meet_indexes = torch.where(meet_thresholds)[0] if idx < maxlen else torch.tensor(list(range(len(prob))))
             meet_indexes = meet_indexes.tolist()
             for meet_index in meet_indexes:
                 if meet_index in result_spectrogram:
