@@ -308,8 +308,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         elif "<unk>" in self.sym2idx:
             self.unk_idx = self.sym2idx["<unk>"]
         else:
-            logger.warn(
-                "Token not in vocabulary and no <unk> token in vocabulary for replacement. Will automatically be added"
+            raise ValueError(
+                "Token not in vocabulary and no <unk> token in vocabulary for replacement."
             )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
@@ -411,7 +411,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             self.sym2idx[current_sym] = idx
 
         # Delete token from added_tokens
-        old_index = self.added_tokens_encoder[token]
+        old_index = self._added_tokens_encoder.pop(token)
         self._added_tokens_decoder.pop(old_index)
 
     def moses_punct_norm(self, text):
@@ -467,8 +467,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             elif "<UNK>" in self.sym2idx:
                 return self.sym2idx["<UNK>"]
             else:
-                logger.warn(
-                    "Token not in vocabulary and no <unk> token in vocabulary for replacement. Will automatically be added"
+                raise ValueError(
+                    "Token not in vocabulary and no <unk> token in vocabulary for replacement."
                 )
 
     def convert_tokens_to_string(self, tokens):
@@ -488,7 +488,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return len(self.idx2sym)
 
     def get_vocab(self):
-        return dict(self.sym2idx, **self.added_tokens_encoder)
+        vocab = self.sym2idx.copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def _tokenize(self, line, add_eos=False, add_double_eos=False):
         line = line.strip()
