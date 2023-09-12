@@ -98,7 +98,7 @@ class IdeficsVisionEmbeddings(nn.Module):
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embedding.num_embeddings - 1
         if num_patches == num_positions and height == width:
-            return self.position_embedding
+            return self.position_embedding(self.position_ids)
         class_pos_embed = self.position_embedding(torch.tensor([0]))
         patch_pos_embed = self.position_embedding(torch.arange(1, self.position_embedding.num_embeddings))
         embed_dim = embeddings.shape[-1]
