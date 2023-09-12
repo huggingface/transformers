@@ -236,6 +236,7 @@ def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
     image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
     perceiver_embeddings = kwargs.get("perceiver_embeddings", None)
     image_attention_mask = kwargs.get("image_attention_mask", None)
+    interpolate_pos_encoding = kwargs.get("interpolate_pos_encoding", False)
 
     return {
         "input_ids": input_ids,
@@ -248,6 +249,7 @@ def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
         "image_encoder_embeddings": image_encoder_embeddings,
         "perceiver_embeddings": perceiver_embeddings,
         "image_attention_mask": image_attention_mask,
+        "interpolate_pos_encoding": interpolate_pos_encoding,
     }
 
 
