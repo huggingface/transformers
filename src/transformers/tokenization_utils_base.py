@@ -90,6 +90,14 @@ else:
         normalized: bool = True
         special: bool = False
 
+        def __init__(self, content: str, single_word=False, lstrip=False, rstrip=False, normalized=True, special=None):
+            self.content = content
+            self.single_word = single_word
+            self.lstrip = lstrip
+            self.rstrip = rstrip
+            self.normalized = normalized
+            self.special = (not normalized) if special is None and normalized is not None else (special or False)
+
         def __getstate__(self):
             return self.__dict__
 
@@ -846,7 +854,7 @@ class SpecialTokensMixin:
                     ), "One of the tokens is not a string or an AddedToken"
                     setattr(self, key, value)
                 elif isinstance(value, (str)):
-                    value = AddedToken(value, normalized=False)
+                    value = AddedToken(value, normalized=False, special=True)
                     setattr(self, key, value)
                 elif isinstance(value, AddedToken):
                     setattr(self, key, value)
@@ -1171,7 +1179,7 @@ class SpecialTokensMixin:
         # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
         for token in value:
             if isinstance(token, str) and token != "":
-                token = AddedToken(token, normalized=False, rstrip=True, lstrip=True)
+                token = AddedToken(token, normalized=False, rstrip=True, lstrip=True, special=True)
             elif not isinstance(token, AddedToken):
                 raise ValueError(f"Cannot add instance of type {type(value)} to additional_special_tokens!")
             self._additional_special_tokens.append(token)
@@ -1662,12 +1670,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         raise NotImplementedError()
 
     def __repr__(self) -> str:
+        added_tokens_decoder_rep = "\n\t".join([f"{k}: {v.__repr__()}," for k, v in self.added_tokens_decoder.items()])
         return (
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
             f" special_tokens={self.special_tokens_map}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces}), "
-            f" added_tokens_decoder={self.added_tokens_decoder}"
+            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}"
         )
 
     def __len__(self) -> int:

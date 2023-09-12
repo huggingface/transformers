@@ -461,10 +461,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if isinstance(token, str):
                 # for legacy we strip left and right by default TODO @ArthurZ lots of tests rely on this
                 token = AddedToken(token, normalized=not special_tokens, rstrip=True, lstrip=True)
-            if token in self._added_tokens_decoder:
-                continue
             if special_tokens:
                 token.special = True
+            if token in self._added_tokens_decoder:
+                continue
             if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
                 # Normalize if requested
                 token.content = token.content.lower()

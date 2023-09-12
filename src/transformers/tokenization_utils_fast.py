@@ -794,6 +794,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                         lstrip=special_token_full.lstrip,
                         rstrip=special_token_full.rstrip,
                         normalized=special_token_full.normalized,
+                        special=True,
                     )
                 else:
                     kwargs[token] = special_token

@@ -276,22 +276,22 @@ class WhisperTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         bos_token = (
-            AddedToken(bos_token, lstrip=False, rstrip=False, normalized=False)
+            AddedToken(bos_token, lstrip=False, rstrip=False, normalized=False, special=True)
             if isinstance(bos_token, str)
             else bos_token
         )
         eos_token = (
-            AddedToken(eos_token, lstrip=False, rstrip=False, normalized=False)
+            AddedToken(eos_token, lstrip=False, rstrip=False, normalized=False, special=True)
             if isinstance(eos_token, str)
             else eos_token
         )
         unk_token = (
-            AddedToken(unk_token, lstrip=False, rstrip=False, normalized=False)
+            AddedToken(unk_token, lstrip=False, rstrip=False, normalized=False, special=True)
             if isinstance(unk_token, str)
             else unk_token
         )
         pad_token = (
-            AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False)
+            AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False, special=True)
             if isinstance(pad_token, str)
             else pad_token
         )
@@ -340,7 +340,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
-
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe with GPT2 -> Whisper
     def bpe(self, token):
