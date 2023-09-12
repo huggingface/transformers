@@ -360,7 +360,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if "added_tokens_decoder" in kwargs:
             # overwriting the class's added_tokens_decoder. This is the source of truth!
             self._added_tokens_decoder.update(kwargs.get("added_tokens_decoder"))
-            self._added_tokens_encoder.update({k.content:v for v,k in kwargs.get("added_tokens_decoder").items()})
+            self._added_tokens_encoder.update({k.content: v for v, k in kwargs.get("added_tokens_decoder").items()})
 
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
