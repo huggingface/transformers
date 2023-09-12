@@ -230,8 +230,8 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         max_length=3,
                         max_target_length=10,
                         return_tensors="pt",
-                        src_lang="eng_Latn",
-                        tgt_lang="ron_Latn",
+                        src_lang="eng",
+                        tgt_lang="ron",
                     )
                 except NotImplementedError:
                     return
@@ -293,7 +293,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
-    checkpoint_name = "facebook/nllb-200-distilled-600M"
+    checkpoint_name = "ylacombe/hf-seamless-m4t-medium"
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
         """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
@@ -304,40 +304,37 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         ' pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor'
         " face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
     ]
-    expected_src_tokens = [
-        256047,
-        16297,
-        134408,
-        8165,
-        248066,
-        14734,
-        950,
-        1135,
-        105721,
-        3573,
-        83,
-        27352,
-        108,
-        49486,
-        2,
-    ]
+    
+    # fmt: off
+    expected_src_tokens = [256047, 16297, 134408, 8165, 248066, 14734, 950, 1135, 105721, 3573, 83, 27352, 108, 49486, 3]
+    # fmt: on
 
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: SeamlessM4TTokenizer = SeamlessM4TTokenizer.from_pretrained(
-            cls.checkpoint_name, src_lang="eng_Latn", tgt_lang="ron_Latn"
+            cls.checkpoint_name, src_lang="eng", tgt_lang="ron"
         )
-        cls.pad_token_id = 1
+        #cls.pad_token_id = 1
         return cls
 
     def test_language_codes(self):
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ace_Arab"], 256001)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ace_Latn"], 256002)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["fra_Latn"], 256057)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__ace_Latn__"], 256002)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__shn__"], 256152)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__fra__"], 256057)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__quy__"], 256144)
 
-    def test_enro_tokenizer_batch_encode_plus(self):
-        ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
-        self.assertListEqual(self.expected_src_tokens, ids)
+    def test_tokenizer_tgt_lang(self):
+        ids = self.tokenizer(self.src_text, src_lang="fra").input_ids[0]
+        self.assertListEqual(self.expected_src_tokens[1:], ids[1:len(self.expected_src_tokens)])
+        self.assertEqual(256057, ids[0])
+        
+        rest_ids = ids[len(self.expected_src_tokens):]
+        self.assertListEqual([0]*len(rest_ids), rest_ids)
+
+        ids = self.tokenizer(self.src_text, src_lang="__shn__").input_ids[0]
+        self.assertListEqual(self.expected_src_tokens[1:], ids[1:len(self.expected_src_tokens)])
+        self.assertEqual(256152, ids[0])
+        
 
     def test_enro_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(RO_CODE, self.tokenizer.all_special_ids)
@@ -355,12 +352,10 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         assert isinstance(src_text[0], str)
         desired_max_length = 10
         ids = self.tokenizer(src_text, max_length=desired_max_length, truncation=True).input_ids[0]
-        self.assertEqual(ids[-1], 2)
+        self.assertEqual(ids[-1], 3)
         self.assertEqual(ids[0], EN_CODE)
         self.assertEqual(len(ids), desired_max_length)
 
-    def test_mask_token(self):
-        self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "ar_AR"]), [256203, 3])
 
     def test_special_tokens_unaffacted_by_save_load(self):
         tmpdirname = tempfile.mkdtemp()
@@ -377,10 +372,11 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
             padding=True,
             truncation=True,
             max_length=len(self.expected_src_tokens),
+            pad_to_multiple_of=None,
             return_tensors="pt",
         )
         batch["decoder_input_ids"] = shift_tokens_right(
-            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.lang_code_to_id["ron_Latn"]
+            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.lang_code_to_id["__ron__"]
         )
 
         self.assertIsInstance(batch, BatchEncoding)
@@ -395,7 +391,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
 
     def test_seq2seq_max_length(self):
-        batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
+        batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt", pad_to_multiple_of=None)
         targets = self.tokenizer(
             text_target=self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt"
         )
@@ -412,34 +408,16 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
     @require_torch
     def test_tokenizer_translation(self):
         inputs = self.tokenizer._build_translation_inputs(
-            "A test", return_tensors="pt", src_lang="eng_Latn", tgt_lang="fra_Latn"
+            "A test", return_tensors="pt", src_lang="eng", tgt_lang="fra"
         )
 
         self.assertEqual(
             nested_simplify(inputs),
             {
                 # A, test, EOS, en_XX
-                "input_ids": [[256047, 70, 7356, 2]],
+                "input_ids": [[256047, 70, 7356, 3]],
                 "attention_mask": [[1, 1, 1, 1]],
                 # ar_AR
                 "forced_bos_token_id": 256057,
             },
-        )
-
-    @require_torch
-    def test_legacy_behaviour(self):
-        self.tokenizer.legacy_behaviour = True
-        inputs = self.tokenizer(
-            "UN Chief says there is no military solution in Syria", src_lang="eng_Latn", tgt_lang="fra_Latn"
-        )
-        self.assertEqual(
-            inputs.input_ids, [16297, 134408, 25653, 6370, 248, 254, 103929, 94995, 108, 49486, 2, 256047]
-        )
-
-        self.tokenizer.legacy_behaviour = False
-        inputs = self.tokenizer(
-            "UN Chief says there is no military solution in Syria", src_lang="eng_Latn", tgt_lang="fra_Latn"
-        )
-        self.assertEqual(
-            inputs.input_ids, [256047, 16297, 134408, 25653, 6370, 248, 254, 103929, 94995, 108, 49486, 2]
         )

@@ -334,7 +334,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
                 Remaining dictionary of keyword arguments that will be passed to [`PreTrainedTokenizer.__call__`].
         """
         if src_lang is not None:
-            self.src_leng = src_lang
+            self.src_lang = src_lang
         if tgt_lang is not None:
             self.tgt_lang = tgt_lang
 
@@ -452,7 +452,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._build_translation_inputs
     def _build_translation_inputs(
         self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
     ):
@@ -461,6 +460,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
         self.src_lang = src_lang
         inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
+        if "__" not in tgt_lang:
+            tgt_lang = f"__{tgt_lang}__"
         tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
