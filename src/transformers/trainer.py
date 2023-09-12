@@ -1233,10 +1233,11 @@ class Trainer:
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            trial.report(self.objective, step)
-            if trial.should_prune():
-                self.callback_handler.on_train_end(self.args, self.state, self.control)
-                raise optuna.TrialPruned()
+            if not trial.study._is_multi_objective():
+                trial.report(self.objective, step)
+                if trial.should_prune():
+                    self.callback_handler.on_train_end(self.args, self.state, self.control)
+                    raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
             from ray import tune
 
@@ -2563,11 +2564,11 @@ class Trainer:
         hp_space: Optional[Callable[["optuna.Trial"], Dict[str, float]]] = None,
         compute_objective: Optional[Callable[[Dict[str, float]], float]] = None,
         n_trials: int = 20,
-        direction: str = "minimize",
+        direction: Union[str, List[str]] = "minimize",
         backend: Optional[Union["str", HPSearchBackend]] = None,
         hp_name: Optional[Callable[["optuna.Trial"], str]] = None,
         **kwargs,
-    ) -> BestRun:
+    ) -> Union[BestRun, List[BestRun]]:
         """
         Launch an hyperparameter search using `optuna` or `Ray Tune` or `SigOpt`. The optimized quantity is determined
         by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
@@ -2592,9 +2593,12 @@ class Trainer:
                 method. Will default to [`~trainer_utils.default_compute_objective`].
             n_trials (`int`, *optional*, defaults to 100):
                 The number of trial runs to test.
-            direction (`str`, *optional*, defaults to `"minimize"`):
-                Whether to optimize greater or lower objects. Can be `"minimize"` or `"maximize"`, you should pick
-                `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or several metrics.
+            direction (`str` or `List[str]`, *optional*, defaults to `"minimize"`):
+                If it's single objective optimization, direction is `str`, can be `"minimize"` or `"maximize"`, you
+                should pick `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or
+                several metrics. If it's multi objectives optimization, direction is `List[str]`, can be List of
+                `"minimize"` and `"maximize"`, you should pick `"minimize"` when optimizing the validation loss,
+                `"maximize"` when optimizing one or several metrics.
             backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
                 The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
                 on which one is installed. If all are installed, will default to optuna.
@@ -2610,8 +2614,9 @@ class Trainer:
                 - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
 
         Returns:
-            [`trainer_utils.BestRun`]: All the information about the best run. Experiment summary can be found in
-            `run_summary` attribute for Ray backend.
+            [`trainer_utils.BestRun` or `List[trainer_utils.BestRun]`]: All the information about the best run or best
+            runs for multi-objective optimization. Experiment summary can be found in `run_summary` attribute for Ray
+            backend.
         """
         if backend is None:
             backend = default_hp_search_backend()
