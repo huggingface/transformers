@@ -1856,6 +1856,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
+        self.layer_norm = nn.LayerNorm(config.d_model)
         self.layers = nn.ModuleList([GroundingDINODecoderLayer(config) for _ in range(config.decoder_layers)])
         self.reference_points_head = GroundingDINOMLPPredictionHead(
             config.query_dim // 2 * config.d_model,
@@ -2038,7 +2039,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                     new_reference_points = new_reference_points.sigmoid()
                 reference_points = new_reference_points.detach()
 
-            intermediate += (hidden_states,)
+            intermediate += (self.layer_norm(hidden_states),)
             intermediate_reference_points += (reference_points,)
 
             if output_attentions:
@@ -2146,6 +2147,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
             self.enc_output_norm = nn.LayerNorm(config.d_model)
+            self.encoder_output_bbox_embed = None
+            self.encoder_output_class_embed = None
         else:
             self.reference_points = nn.Embedding(config.num_queries, 4)
 
@@ -2400,13 +2403,13 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             # hack implementation for two-stage Deformable DETR
             # apply a detection head to each pixel (A.4 in paper)
             # linear projection for bounding box binary classification (i.e. foreground and background)
-            enc_outputs_class = self.decoder.class_embed[-1](
+            enc_outputs_class = self.encoder_output_class_embed(
                 object_query_embedding, 
                 encoder_outputs[1], 
                 text_token_mask
             )
             # 3-layer FFN to predict bounding boxes coordinates (bbox regression branch)
-            delta_bbox = self.decoder.bbox_embed[-1](object_query_embedding)
+            delta_bbox = self.encoder_output_bbox_embed(object_query_embedding)
             enc_outputs_coord_logits = delta_bbox + output_proposals
 
             # only keep top scoring `config.two_stage_num_proposals` proposals
@@ -2487,32 +2490,35 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         self.model = GroundingDINOModel(config)
 
         # Detection heads on top
-        self.class_embed = GroundingDINOContrastiveEmbedding(config)
-        self.bbox_embed = GroundingDINOMLPPredictionHead(
+        _class_embed = GroundingDINOContrastiveEmbedding(config)
+        _bbox_embed = GroundingDINOMLPPredictionHead(
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
 
-        nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
+        nn.init.constant_(_bbox_embed.layers[-1].weight.data, 0)
+        nn.init.constant_(_bbox_embed.layers[-1].bias.data, 0)
 
-        # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-        num_pred = (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
-        if config.with_box_refine:
-            self.class_embed = _get_clones(self.class_embed, num_pred)
-            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-            nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
-            # hack implementation for iterative bounding box refinement
-            self.model.decoder.bbox_embed = self.bbox_embed
+
+        if config.decoder_bbox_embed_share:
+            self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         else:
-            nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)
-            self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
-            self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
-            self.model.decoder.bbox_embed = None
+            self.bbox_embed = _get_clones(_bbox_embed, config.decoder_layers)
+        self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
+        # hack implementation for two-stage 
+        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = self.class_embed
+
         if config.two_stage:
-            # hack implementation for two-stage
-            self.model.decoder.class_embed = self.class_embed
-            for box_embed in self.bbox_embed:
-                nn.init.constant_(box_embed.layers[-1].bias.data[2:], 0.0)
+            if config.two_stage_bbox_embed_share:
+                self.model.encoder_output_bbox_embed = _bbox_embed
+            else:
+                self.model.encoder_output_bbox_embed = copy.deepcopy(_bbox_embed)
+            
+            #TODO don't believe this is necessary since class_embed has no parameters
+            if config.two_stage_class_embed_share:
+                self.model.encoder_output_class_embed = _class_embed
+            else:
+                self.model.encoder_output_class_embed = copy.deepcopy(_class_embed)
 
         # Initialize weights and apply final processing
         self.post_init()
