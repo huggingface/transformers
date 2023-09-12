@@ -33,7 +33,6 @@ UNICODE_VOCAB_SIZE = 1114112
 # Below: Constants defining canonical codepoints for special, pseudo-characters.
 # Copied from https://github.com/google-research/language/blob/master/language/canine/special_codepoints.py
 PAD = 0
-
 CLS = 0xE000
 SEP = 0xE001
 BOS = 0xE002
@@ -124,11 +123,13 @@ class CanineTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return self._unicode_vocab_size + self._num_special_tokens
+        return self._unicode_vocab_size
 
     def get_vocab(self):
-        vocab = {str(i): i for i in range(self.vocab_size)}
-        vocab.update({v: k for k, v in self._special_codepoint_strings.items()})
+        vocab = {chr(i): i for i in range(self.vocab_size)}
+        # for str_tok, index in self._special_codepoints.items():
+        #     del[vocab[chr(index)]]
+        #     vocab[str_tok] = index
         vocab.update(self.added_tokens_encoder)
         return vocab
 
