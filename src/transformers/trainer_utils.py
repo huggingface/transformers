@@ -46,9 +46,6 @@ from .utils import (
 if is_torch_available():
     import torch
 
-if is_tf_available():
-    import tensorflow as tf
-
 
 def seed_worker(_):
     """
@@ -80,6 +77,8 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         torch.backends.cudnn.benchmark = False
 
     if is_tf_available():
+        import tensorflow as tf
+
         tf.config.experimental.enable_op_determinism()
 
 
@@ -101,6 +100,8 @@ def set_seed(seed: int):
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
     if is_tf_available():
+        import tensorflow as tf
+
         tf.random.set_seed(seed)
 
 
