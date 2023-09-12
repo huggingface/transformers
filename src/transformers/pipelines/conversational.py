@@ -87,27 +87,30 @@ class Conversation:
 
     def add_user_input(self, text: str, overwrite: bool = False):
         """
-        Args:
-        Add a user input to the conversation for the next round. This is a legacy method that assumes that inputs
-        must alternate user/assistant/user/assistant, and so will not add multiple user messages in succession.
-            text (`str`): The user input for the next conversation round. overwrite (`bool`, *optional*, defaults to
-            `False`):
-                Whether existing and unprocessed user input should be overwritten when this function is called.
+        Add a user input to the conversation for the next round. This is a legacy method that assumes that inputs must
+        alternate user/assistant/user/assistant, and so will not add multiple user messages in succession. We recommend
+        just using `add_message` with role "user" instead.
         """
         if len(self) > 0 and self[-1]["role"] == "user":
             if overwrite:
                 logger.warning(
-                    f'User input added while unprocessed input was existing: "{self.new_user_input}" was overwritten '
+                    f'User input added while unprocessed input was existing: "{self[-1]["content"]}" was overwritten '
                     f'with: "{text}".'
                 )
-                self.new_user_input = text
+                self[-1]["content"] = text
             else:
                 logger.warning(
-                    f'User input added while unprocessed input was existing: "{self.new_user_input}" new input '
+                    f'User input added while unprocessed input was existing: "{self[-1]["content"]}" new input '
                     f'ignored: "{text}". Set `overwrite` to True to overwrite unprocessed user input'
                 )
         else:
             self.messages.append({"role": "user", "content": text})
+
+    def append_response(self, response: str):
+        """
+        This is a legacy method. We recommend just using `add_message` with an appropriate role instead.
+        """
+        self.messages.append({"role": "assistant", "content": response})
 
     def mark_processed(self):
         """
