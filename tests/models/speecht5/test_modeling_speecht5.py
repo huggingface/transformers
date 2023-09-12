@@ -1006,6 +1006,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_model(self):
         return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
+
     @cached_property
     def default_processor(self):
         return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
@@ -1037,13 +1038,15 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         input_text = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
             "nor is mister quilter's manner less interesting than his matter",
-            "he tells us that at this festive season of the year with christmas and rosebeaf looming before us"
+            "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
         ]
-        inputs = processor(text=input_text, padding='max_length', max_length=128, return_tensors="pt").to(torch_device)
+        inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
         speaker_embeddings = torch.zeros((1, 512), device=torch_device)
-        spectrograms, spectrogram_lengths = model.generate_speech(input_ids=inputs["input_ids"],
-                                                                  speaker_embeddings=speaker_embeddings,
-                                                                  attention_mask=inputs['attention_mask'])
+        spectrograms, spectrogram_lengths = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+            attention_mask=inputs["attention_mask"],
+        )
         self.assertEqual(spectrograms.shape, (662, model.config.num_mel_bins))
         self.assertEqual(len(spectrogram_lengths), 3)
         self.assertEqual(spectrogram_lengths[0] + spectrogram_lengths[1] + spectrogram_lengths[2], 662)
