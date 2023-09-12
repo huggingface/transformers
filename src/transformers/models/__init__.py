@@ -154,6 +154,7 @@ from . import (
     pegasus,
     pegasus_x,
     perceiver,
+    persimmon,
     phobert,
     pix2struct,
     plbart,
