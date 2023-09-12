@@ -142,6 +142,14 @@ class GroundingDINOConfig(PretrainedConfig):
             The dropout ratio for the fusion module.
         embedding_init_target (`bool`, *optional*, defaults to `True`):
             Whether to initialize the target with Embedding weights.
+        query_dim (`int`, *optional*, defaults to 4):
+            The dimension of the query vector.
+        decoder_bbox_embed_share (`bool`, *optional*, defaults to `True`):
+            Whether to share the bbox embedding between the decoder and the two-stage bbox generator.
+        two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`):
+            Whether to share the bbox embedding between the two-stage bbox generator and the region proposal generation.
+        two_stage_class_embed_share (`bool`, *optional*, defaults to `False`):
+            Whether to share the class embedding between the two-stage bbox generator and the region proposal generation.
 
     Examples:
 
@@ -215,6 +223,10 @@ class GroundingDINOConfig(PretrainedConfig):
         fusion_droppath = 0.1,
         fusion_dropout = 0.0,
         embedding_init_target = True,
+        query_dim = 4,
+        decoder_bbox_embed_share = True,
+        two_stage_bbox_embed_share = False,
+        two_stage_class_embed_share = False,
         **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
@@ -282,7 +294,14 @@ class GroundingDINOConfig(PretrainedConfig):
         # Fusion
         self.fusion_droppath = fusion_droppath
         self.fusion_dropout = fusion_dropout
+        # Others
         self.embedding_init_target = embedding_init_target
+        self.query_dim = query_dim
+        self.decoder_bbox_embed_share = decoder_bbox_embed_share
+        self.two_stage_bbox_embed_share = two_stage_bbox_embed_share
+        if two_stage_bbox_embed_share and not decoder_bbox_embed_share:
+            raise ValueError("If two_stage_bbox_embed_share is True, decoder_bbox_embed_share must be True.")
+        self.two_stage_class_embed_share = two_stage_class_embed_share
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
