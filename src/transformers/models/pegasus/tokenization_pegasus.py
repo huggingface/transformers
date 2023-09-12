@@ -138,6 +138,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
+            additional_special_tokens_extended = []
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
@@ -148,18 +149,18 @@ class PegasusTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(vocab_file)
 
         self._added_tokens_decoder = {
-            0: AddedToken(str(pad_token), lstrip=True, rsrip=True),
-            1: AddedToken(str(eos_token), lstrip=True, rsrip=True),
-            2: AddedToken(str(mask_token), lstrip=True, rsrip=True)
-            if mask_token_sent is None
-            else AddedToken(mask_token_sent, lstrip=True, rsrip=True),
+            0: AddedToken(str(pad_token), lstrip=True, rstrip=True),
+            1: AddedToken(str(eos_token), lstrip=True, rstrip=True),
         }
 
         if self.mask_token_sent is not None:
+            self._added_tokens_decoder[2] = AddedToken(mask_token_sent)
             self._added_tokens_decoder[3] = AddedToken(str(mask_token))
 
-        for i in range(2, self.offset):
-            self._added_tokens_decoder[len(self._added_tokens_decoder)] = AddedToken(f"<unk_{i}>")
+        for i in range(len(additional_special_tokens_extended)+1, self.offset-1):
+            self._added_tokens_decoder[len(self._added_tokens_decoder)] = AddedToken(str(additional_special_tokens[i]))
+
+        # update kwargs to this?
 
         super().__init__(
             eos_token=eos_token,
@@ -175,10 +176,10 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return len(self.sp_model)
+        return len(self.sp_model) + self.offset
 
     def get_vocab(self) -> Dict[str, int]:
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.offset, self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
