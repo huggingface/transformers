@@ -146,17 +146,16 @@ class IdeficsModelTester:
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
 
-    def prepare_config_and_inputs(self, num_images=1, interpolate_pos_encoding=False):
+    def prepare_config_and_inputs(self, num_images=1, interpolate_pos_encoding=False, image_expansion=0):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        expand_image_size = 2 if interpolate_pos_encoding else 0
         pixel_values = floats_tensor(
             [
                 self.batch_size,
                 num_images,
                 self.num_channels,
-                self.image_size + expand_image_size,
-                self.image_size + expand_image_size,
+                self.image_size + image_expansion,
+                self.image_size + image_expansion,
             ]
         )
         input_mask = None
@@ -295,19 +294,31 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.config_tester.run_common_tests()
 
     def test_model_single_image(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_images=1, interpolate_pos_encoding=False)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=1, interpolate_pos_encoding=False, image_expansion=0
+        )
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_multiple_images(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_images=2, interpolate_pos_encoding=False)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=2, interpolate_pos_encoding=False, image_expansion=0
+        )
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_with_image_pos_embeddings_interpolation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_images=1, interpolate_pos_encoding=True)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=1, interpolate_pos_encoding=True, image_expansion=2
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=1, interpolate_pos_encoding=True, image_expansion=0
+        )
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_generate_with_image_pos_embeddings_interpolation(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_images=1, interpolate_pos_encoding=True)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=1, interpolate_pos_encoding=True, image_expansion=2
+        )
         self.model_tester.create_and_check_model_gen(*config_and_inputs)
 
     def test_training(self):
