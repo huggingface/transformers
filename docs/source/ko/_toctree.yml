@@ -149,8 +149,8 @@
       title: TensorFlow 모델을 위한 XLA 통합
   title: (번역중) 성능 및 확장성
 - sections:
-    - local: in_translation
-      title: (번역중) How to contribute to transformers?
+    - local: contributing
+      title: 🤗 Transformers에 기여하는 방법
     - local: add_new_model
       title: 🤗 Transformers에 새로운 모델을 추가하는 방법 
     - local: add_tensorflow_model
