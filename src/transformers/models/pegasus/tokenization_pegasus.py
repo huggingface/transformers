@@ -166,7 +166,12 @@ class PegasusTokenizer(PreTrainedTokenizer):
         if self.offset > 0:
             # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
             # mask_token_sent is already added to list -> so start at 1
-            self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1 + additional_tokens, len(additional_special_tokens))})
+            self.encoder.update(
+                {
+                    i + 3: additional_special_tokens[i]
+                    for i in range(1 + additional_tokens, len(additional_special_tokens))
+                }
+            )
 
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
