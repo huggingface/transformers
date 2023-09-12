@@ -97,8 +97,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
               BPE-dropout.
     """
     vocab_files_names = VOCAB_FILES_NAMES
-
-    vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
@@ -123,7 +121,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
                     f"additional_special_tokens should be of type {type(list)}, but is"
                     f" {type(additional_special_tokens)}"
                 )
-
+            additional_tokens = len(additional_special_tokens)
             additional_special_tokens_extended = (
                 ([mask_token_sent] + additional_special_tokens)
                 if mask_token_sent not in additional_special_tokens and mask_token_sent is not None
@@ -141,6 +139,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
+            additional_tokens = 0
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
@@ -167,7 +166,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         if self.offset > 0:
             # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
             # mask_token_sent is already added to list -> so start at 1
-            self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset - 1)})
+            self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1 + additional_tokens, len(additional_special_tokens))})
 
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
