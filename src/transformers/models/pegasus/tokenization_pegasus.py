@@ -159,7 +159,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
             self.encoder.update(
                 {
                     2: self.mask_token_sent,
-                    3: mask_token,
+                    3: str(mask_token),
                 }
             )
 
@@ -189,7 +189,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
     def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
-        vocab.update({str(k): k for v, k in self.decoder.items()})
+        vocab.update({str(k): v for k, v in self.decoder.items()})
         return vocab
 
     def __getstate__(self):
