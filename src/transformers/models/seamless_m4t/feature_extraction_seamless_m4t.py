@@ -125,7 +125,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
-        do_normalize: Optional[bool] = True,
+        do_normalize_per_mel_bins: Optional[bool] = True,
         tgt_lang: Optional[str] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -182,9 +182,8 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
-            do_normalize (`bool`, *optional*, defaults to `True`):
-                Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
-                improve the performance of the model.
+            do_normalize_per_mel_bins (`bool`, *optional*, defaults to `True`):
+                Whether or not to zero-mean unit-variance normalize the input per mel-channel.
             tgt_lang (`str`, *optional*):
                 The language to use as target language for translation. If not specified, the last `tgt_lang` specified
                 (either during initialization or when calling the feature extractor) will be used.
@@ -229,9 +228,8 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         # extract fbank features
         features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
 
-        # TODO: verify usage
-        if do_normalize:
-            features = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in features]
+        if do_normalize_per_mel_bins:
+            features = [(x - x.mean(0).unsqueeze(0)) / np.sqrt(x.var(0).unsqueeze(0) + 1e-7) for x in features]
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
 

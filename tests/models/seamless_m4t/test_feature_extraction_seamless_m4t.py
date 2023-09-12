@@ -63,12 +63,13 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
         min_seq_length=400,
         max_seq_length=2000,
         feature_size=10,
-        hop_length=160,
-        chunk_length=8,
         padding_value=0.0,
         sampling_rate=4_000,
-        return_attention_mask=False,
+        return_attention_mask=True,
         do_normalize=True,
+        stride = 2,
+        src_lang = "fra",
+        tgt_lang = "min",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -80,16 +81,20 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
         self.return_attention_mask = return_attention_mask
         self.do_normalize = do_normalize
         self.feature_size = feature_size
-        self.chunk_length = chunk_length
-        self.hop_length = hop_length
+        self.stride = stride
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
+        self.num_mel_bins = feature_size
 
     def prepare_feat_extract_dict(self):
         return {
             "feature_size": self.feature_size,
-            "hop_length": self.hop_length,
-            "chunk_length": self.chunk_length,
+            "num_mel_bins": self.num_mel_bins,
             "padding_value": self.padding_value,
             "sampling_rate": self.sampling_rate,
+            "stride": self.stride,
+            "src_lang": self.src_lang,
+            "tgt_lang": self.tgt_lang,
             "return_attention_mask": self.return_attention_mask,
             "do_normalize": self.do_normalize,
         }
@@ -129,9 +134,9 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
-        mel_1 = feat_extract_first.mel_filters
-        mel_2 = feat_extract_second.mel_filters
-        self.assertTrue(np.allclose(mel_1, mel_2))
+
+        self.assertTrue(feat_extract_first.src_lang == feat_extract_second.src_lang)
+        self.assertTrue(feat_extract_first.tgt_lang == feat_extract_second.tgt_lang)
         self.assertEqual(dict_first, dict_second)
 
     def test_feat_extract_to_json_file(self):
@@ -144,9 +149,8 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
-        mel_1 = feat_extract_first.mel_filters
-        mel_2 = feat_extract_second.mel_filters
-        self.assertTrue(np.allclose(mel_1, mel_2))
+        self.assertTrue(feat_extract_first.src_lang == feat_extract_second.src_lang)
+        self.assertTrue(feat_extract_first.tgt_lang == feat_extract_second.tgt_lang)
         self.assertEqual(dict_first, dict_second)
 
     def test_call(self):
@@ -157,10 +161,10 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test feature size
-        input_features = feature_extractor(np_speech_inputs, padding="max_length", return_tensors="np").input_features
+        input_features = feature_extractor(np_speech_inputs, padding=True, return_tensors="np").input_features
         self.assertTrue(input_features.ndim == 3)
-        self.assertTrue(input_features.shape[-1] == feature_extractor.nb_max_frames)
-        self.assertTrue(input_features.shape[-2] == feature_extractor.feature_size)
+        self.assertTrue(input_features.shape[0] == 3)
+        self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size * feature_extractor.stride)
 
         # Test not batched input
         encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_features
@@ -181,18 +185,6 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
-        # Test truncation required
-        speech_inputs = [floats_list((1, x))[0] for x in range(200, (feature_extractor.n_samples + 500), 200)]
-        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
-
-        speech_inputs_truncated = [x[: feature_extractor.n_samples] for x in speech_inputs]
-        np_speech_inputs_truncated = [np.asarray(speech_input) for speech_input in speech_inputs_truncated]
-
-        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs_truncated, return_tensors="np").input_features
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
-            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-
     def test_double_precision_pad(self):
         import torch
 
@@ -206,36 +198,39 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
-    def _load_datasamples(self, num_samples):
+    def _load_datasample(self, id):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
-        return [x["array"] for x in speech_samples]
-
+        speech_sample = ds.sort("id")[id]["audio"]["array"]
+        
+        return torch.from_numpy(speech_sample).unsqueeze(0)
+    
     def test_integration(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
             [
-                0.1193, -0.0946, -0.1098, -0.0196, 0.0225, -0.0690, -0.1736, 0.0951,
-                0.0971, -0.0817, -0.0702, 0.0162, 0.0260, 0.0017, -0.0192, -0.1678,
-                0.0709, -0.1867, -0.0655, -0.0274, -0.0234, -0.1884, -0.0516, -0.0554,
-                -0.0274, -0.1425, -0.1423, 0.0837, 0.0377, -0.0854
+            -1.5621, -1.4236, -1.3335, -1.3991, -1.2881, -1.1133, -0.9710, -0.8895,
+            -0.8280, -0.7376, -0.7194, -0.6896, -0.6849, -0.6788, -0.6545, -0.6610,
+            -0.6566, -0.5738, -0.5252, -0.5533, -0.5887, -0.6116, -0.5971, -0.4956,
+            -0.2881, -0.1512,  0.0299,  0.1762,  0.2728,  0.2236
             ]
         )
         # fmt: on
 
-        input_speech = self._load_datasamples(1)
+        input_speech = self._load_datasample(10)
         feature_extractor = SeamlessM4TFeatureExtractor()
         input_features = feature_extractor(input_speech, return_tensors="pt").input_features
-        self.assertEqual(input_features.shape, (1, 80, 3000))
-        self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        
+        feature_extractor(input_speech, return_tensors="pt").input_features[0, 5, :30]
+        self.assertEqual(input_features.shape, (1, 279, 160))
+        self.assertTrue(torch.allclose(input_features[0, 5, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+
 
     def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        audio = self._load_datasamples(1)[0]
+        audio = self._load_datasample(1)
         audio = ((audio - audio.min()) / (audio.max() - audio.min())) * 65535  # Rescale to [0, 65535] to show issue
         audio = feat_extract.zero_mean_unit_var_norm([audio], attention_mask=None)[0]
 
-        self.assertTrue(np.all(np.mean(audio) < 1e-3))
-        self.assertTrue(np.all(np.abs(np.var(audio) - 1) < 1e-3))
+        self.assertTrue((audio.mean() < 1e-3).all())
+        self.assertTrue( ((audio.var()-1).abs() < 1e-3).all())
