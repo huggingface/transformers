@@ -90,13 +90,13 @@ else:
         normalized: bool = True
         special: bool = False
 
-        def __init__(self, content: str, single_word=False, lstrip=False, rstrip=False, normalized=True, special=None):
+        def __init__(self, content: str, single_word=False, lstrip=False, rstrip=False, special=False, normalized=None):
             self.content = content
             self.single_word = single_word
             self.lstrip = lstrip
             self.rstrip = rstrip
-            self.normalized = normalized
-            self.special = (not normalized) if special is None and normalized is not None else (special or False)
+            self.special = special
+            self.normalized =  (not normalized) if special is None and normalized is not None else (special or False)
 
         def __getstate__(self):
             return self.__dict__
