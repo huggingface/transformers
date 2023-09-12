@@ -1710,7 +1710,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         compiled_template = self._compile_jinja_template(chat_template)
 
         rendered = compiled_template.render(
-            messages=conversation, raise_exception=raise_exception, **self.special_tokens_map
+            messages=conversation, **self.special_tokens_map
         )
 
         if padding is True:
