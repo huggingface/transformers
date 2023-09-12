@@ -1,2 +1,0 @@
-WARNING  codecarbon.emissions_tracker:emissions_tracker.py:85 CODECARBON : No CPU tracking mode found. Falling back on CPU constant mode.
-WARNING  codecarbon.emissions_tracker:emissions_tracker.py:93 CODECARBON : Failed to match CPU TDP constant. Falling back on a global constant.

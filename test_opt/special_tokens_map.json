@@ -1,6 +1,0 @@
-{
-  "bos_token": "</s>",
-  "eos_token": "</s>",
-  "pad_token": "<pad>",
-  "unk_token": "</s>"
-}

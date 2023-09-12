@@ -152,7 +152,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
             1: AddedToken(str(eos_token), lstrip=True, rsrip=True),
             2: AddedToken(str(mask_token), lstrip=True, rsrip=True)
             if mask_token_sent is None
-            else AddedToken(mask_token_sent),
+            else AddedToken(mask_token_sent, lstrip=True, rsrip=True),
         }
 
         if self.mask_token_sent is not None:

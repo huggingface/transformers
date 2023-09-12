@@ -167,19 +167,3 @@ tags
 
 # ruff
 .ruff_cache
-test_training_results/checkpoint-10/adapter_config.json
-test_training_results/checkpoint-10/adapter_model.bin
-test_training_results/checkpoint-10/optimizer.pt
-test_training_results/checkpoint-10/README.md
-test_training_results/checkpoint-10/rng_state.pth
-test_training_results/checkpoint-10/scheduler.pt
-test_training_results/checkpoint-10/special_tokens_map.json
-test_training_results/checkpoint-10/tokenizer_config.json
-test_training_results/checkpoint-10/tokenizer.json
-test_training_results/checkpoint-10/trainer_state.json
-test_training_results/checkpoint-10/training_args.bin
-latest_llama.patch
-.gitignore
-.gitignore
-merged_changes.patch
-trl_mpt.py
