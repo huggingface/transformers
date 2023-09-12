@@ -332,14 +332,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.task = task
         self.predict_timestamps = predict_timestamps
 
+    @property
+    def vocab_size(self) -> int:
+        return len(self.encoder)
+
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    @property
-    def vocab_size(self) -> int:
-        return len(self.encoder)
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe with GPT2 -> Whisper
     def bpe(self, token):
