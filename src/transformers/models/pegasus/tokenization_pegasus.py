@@ -157,8 +157,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
             self._added_tokens_decoder[2] = AddedToken(mask_token_sent)
             self._added_tokens_decoder[3] = AddedToken(str(mask_token))
 
-        for i in range(1, self.offset-1):
-            self._added_tokens_decoder[len(self._added_tokens_decoder)] = AddedToken(f"<unk_{i}>" )
+        for i in range(1, self.offset - 1):
+            self._added_tokens_decoder[len(self._added_tokens_decoder)] = AddedToken(f"<unk_{i}>")
 
         # update kwargs to this?
 
@@ -209,7 +209,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
-        if index<self.offset:
+        if index < self.offset:
             print("Index erroring", index, self.sp_model.IdToPiece(index))
 
             return self.sp_model.IdToPiece(index)
