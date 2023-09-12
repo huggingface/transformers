@@ -965,7 +965,10 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         for key in output_1:
             if isinstance(output_1[key], torch.Tensor):
-                self.assertListAlmostEqual(output_1[key].squeeze().tolist(), output_2[key].squeeze().tolist())
+                if len(output_1[key].shape) == 0:
+                    self.assertEqual(output_1[key].item(), output_2[key].item())
+                else:
+                    self.assertListAlmostEqual(output_1[key].squeeze().tolist(), output_2[key].squeeze().tolist())
 
     @slow
     def test_whole_model(self):
@@ -1002,7 +1005,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50, 60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50: 60])
 
         self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
         self.assertTrue(expected_wav_std == output.waveforms.std().item())
@@ -1039,7 +1042,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50, 60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50 : 60])
 
         self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
         self.assertTrue(expected_wav_std == output.waveforms.std().item())
@@ -1079,7 +1082,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50, 60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50: 60])
 
         self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
         self.assertTrue(expected_wav_std == output.waveforms.std().item())

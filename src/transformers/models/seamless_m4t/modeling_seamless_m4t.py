@@ -3496,11 +3496,9 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
 
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
-        t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
-
-        # TODO: adapt if return_generate dict
-
-        unit_ids = t2u_generation_output
+        unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
+        output_unit_ids = unit_ids.detach().clone()
+        unit_ids = unit_ids
 
         # get rid of t2u_decoder_input_ids
         unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1] :]
@@ -3524,7 +3522,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(
                 sequences=sequences,
-                unit_sequences=t2u_generation_output,
+                unit_sequences=output_unit_ids,
                 waveforms=waveforms,
                 waveform_lengths=waveform_lengths,
             )
@@ -3760,11 +3758,9 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
 
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
-        t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
-
-        # TODO: adapt if return_generate dict
-
-        unit_ids = t2u_generation_output
+        unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
+        output_unit_ids = unit_ids.detach().clone()
+        unit_ids = unit_ids
 
         # get rid of t2u_decoder_input_ids
         unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1] :]
@@ -3788,7 +3784,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(
                 sequences=sequences,
-                unit_sequences=t2u_generation_output,
+                unit_sequences=output_unit_ids,
                 waveforms=waveforms,
                 waveform_lengths=waveform_lengths,
             )
@@ -4203,11 +4199,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
-        t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
-
-        # TODO: adapt if return_generate dict
-        # TODO: t2u_generation_output is dynamically changed, is it ok to copy?
-        unit_ids = t2u_generation_output
+        unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
+        output_unit_ids = unit_ids.detach().clone()
+        unit_ids = unit_ids
 
         # get rid of t2u_decoder_input_ids
         unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1] :]
@@ -4231,7 +4225,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(
                 sequences=sequences,
-                unit_sequences=t2u_generation_output,
+                unit_sequences=output_unit_ids,
                 waveforms=waveforms,
                 waveform_lengths=waveform_lengths,
             )
