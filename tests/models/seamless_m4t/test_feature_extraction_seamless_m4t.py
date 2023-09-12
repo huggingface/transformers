@@ -67,9 +67,9 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
         sampling_rate=4_000,
         return_attention_mask=True,
         do_normalize=True,
-        stride = 2,
-        src_lang = "fra",
-        tgt_lang = "min",
+        stride=2,
+        src_lang="fra",
+        tgt_lang="min",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -202,9 +202,9 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_sample = ds.sort("id")[id]["audio"]["array"]
-        
+
         return torch.from_numpy(speech_sample).unsqueeze(0)
-    
+
     def test_integration(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
@@ -220,11 +220,10 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         input_speech = self._load_datasample(10)
         feature_extractor = SeamlessM4TFeatureExtractor()
         input_features = feature_extractor(input_speech, return_tensors="pt").input_features
-        
+
         feature_extractor(input_speech, return_tensors="pt").input_features[0, 5, :30]
         self.assertEqual(input_features.shape, (1, 279, 160))
         self.assertTrue(torch.allclose(input_features[0, 5, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
-
 
     def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
@@ -233,4 +232,4 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         audio = feat_extract.zero_mean_unit_var_norm([audio], attention_mask=None)[0]
 
         self.assertTrue((audio.mean() < 1e-3).all())
-        self.assertTrue( ((audio.var()-1).abs() < 1e-3).all())
+        self.assertTrue(((audio.var() - 1).abs() < 1e-3).all())

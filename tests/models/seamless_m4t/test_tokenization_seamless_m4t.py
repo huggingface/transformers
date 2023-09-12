@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
 import tempfile
 import unittest
 
@@ -20,9 +19,9 @@ from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
     BatchEncoding,
+    PreTrainedTokenizerFast,
     SeamlessM4TTokenizer,
     SeamlessM4TTokenizerFast,
-    PreTrainedTokenizerFast,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -141,7 +140,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
             ],
         )
-        
+
     def test_maximum_encoding_length_single_input(self):
         tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
@@ -210,7 +209,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Overflowing tokens
                 stride = 2
-                
+
                 # modify padding because by activated default in seamlessM4T
                 information = tokenizer(
                     seq_0,
@@ -243,7 +242,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                     self.assertEqual(len(overflowing_tokens), 2 + stride)
                     self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
-        
+
     @unittest.skip("By defaults, uses pad_to_multiple_of which breaks the test")
     def test_maximum_encoding_length_pair_input(self):
         pass
@@ -283,7 +282,6 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         pad_to_multiple_of=8,
                     )
 
-
     @require_torch
     def test_prepare_seq2seq_batch(self):
         if not self.test_seq2seq:
@@ -320,7 +318,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     return
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 self.assertEqual(batch.labels.shape[1], 10)
-                
+
                 # TODO: not working for tgt_text
                 # max_target_length will default to max_length if not specified
                 # batch = tokenizer.prepare_seq2seq_batch(
@@ -329,7 +327,11 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # self.assertEqual(batch.labels.shape[1], 3)
 
                 batch_encoder_only = tokenizer.prepare_seq2seq_batch(
-                    src_texts=src_text, max_length=3, max_target_length=10, return_tensors="pt", pad_to_multiple_of=None
+                    src_texts=src_text,
+                    max_length=3,
+                    max_target_length=10,
+                    return_tensors="pt",
+                    pad_to_multiple_of=None,
                 )
                 self.assertEqual(batch_encoder_only.input_ids.shape[1], 3)
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
@@ -338,7 +340,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Unfortunately way too slow to build a BPE with SentencePiece.")
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
-    
+
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -371,11 +373,13 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertEqual(cr_output, r_output)
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
-                
-    @unittest.skip("encode_plus and batch_encode_plus are deprecated and __call__ do some processing, so we expect different results.")    
+
+    @unittest.skip(
+        "encode_plus and batch_encode_plus are deprecated and __call__ do some processing, so we expect different results."
+    )
     def test_call(self):
         pass
-                    
+
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
         if not self.test_rust_tokenizer:
@@ -430,7 +434,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         ' pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor'
         " face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
     ]
-    
+
     # fmt: off
     expected_src_tokens = [256047, 16297, 134408, 8165, 248066, 14734, 950, 1135, 105721, 3573, 83, 27352, 108, 49486, 3]
     # fmt: on
@@ -440,7 +444,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         cls.tokenizer: SeamlessM4TTokenizer = SeamlessM4TTokenizer.from_pretrained(
             cls.checkpoint_name, src_lang="eng", tgt_lang="ron"
         )
-        #cls.pad_token_id = 1
+        # cls.pad_token_id = 1
         return cls
 
     def test_language_codes(self):
@@ -451,16 +455,15 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
 
     def test_tokenizer_tgt_lang(self):
         ids = self.tokenizer(self.src_text, src_lang="fra").input_ids[0]
-        self.assertListEqual(self.expected_src_tokens[1:], ids[1:len(self.expected_src_tokens)])
+        self.assertListEqual(self.expected_src_tokens[1:], ids[1 : len(self.expected_src_tokens)])
         self.assertEqual(256057, ids[0])
-        
-        rest_ids = ids[len(self.expected_src_tokens):]
-        self.assertListEqual([0]*len(rest_ids), rest_ids)
+
+        rest_ids = ids[len(self.expected_src_tokens) :]
+        self.assertListEqual([0] * len(rest_ids), rest_ids)
 
         ids = self.tokenizer(self.src_text, src_lang="__shn__").input_ids[0]
-        self.assertListEqual(self.expected_src_tokens[1:], ids[1:len(self.expected_src_tokens)])
+        self.assertListEqual(self.expected_src_tokens[1:], ids[1 : len(self.expected_src_tokens)])
         self.assertEqual(256152, ids[0])
-        
 
     def test_enro_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(RO_CODE, self.tokenizer.all_special_ids)
@@ -481,7 +484,6 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         self.assertEqual(ids[-1], 3)
         self.assertEqual(ids[0], EN_CODE)
         self.assertEqual(len(ids), desired_max_length)
-
 
     def test_special_tokens_unaffacted_by_save_load(self):
         tmpdirname = tempfile.mkdtemp()
@@ -517,7 +519,9 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
 
     def test_seq2seq_max_length(self):
-        batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt", pad_to_multiple_of=None)
+        batch = self.tokenizer(
+            self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt", pad_to_multiple_of=None
+        )
         targets = self.tokenizer(
             text_target=self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt"
         )

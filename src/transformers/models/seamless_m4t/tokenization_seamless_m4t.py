@@ -291,16 +291,15 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return len(self.sp_model) + len(self.additional_special_tokens) + self.fairseq_offset
-    
-    def add_special_tokens(
-            self, special_tokens_dict, replace_additional_special_tokens=True
-        ) -> int:
+
+    def add_special_tokens(self, special_tokens_dict, replace_additional_special_tokens=True) -> int:
         if replace_additional_special_tokens:
             logger.warning_once(
-                    "`replace_additional_special_tokens=True` will break the language token ids once saved and reloaded. Be careful with this operation."
-                )
+                "`replace_additional_special_tokens=True` will break the language token ids once saved and reloaded. Be careful with this operation."
+            )
         return super().add_special_tokens(
-            special_tokens_dict=special_tokens_dict, replace_additional_special_tokens=replace_additional_special_tokens
+            special_tokens_dict=special_tokens_dict,
+            replace_additional_special_tokens=replace_additional_special_tokens,
         )
 
     def __call__(
@@ -364,11 +363,15 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         if tgt_lang is not None:
             self.tgt_lang = tgt_lang
 
-        output = super().__call__(text=text, 
-        text_pair = text_pair,
-        text_target = text_target,
-        text_pair_target = text_pair_target,
-        padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
+        output = super().__call__(
+            text=text,
+            text_pair=text_pair,
+            text_target=text_target,
+            text_pair_target=text_pair_target,
+            padding=padding,
+            pad_to_multiple_of=pad_to_multiple_of,
+            **kwargs,
+        )
 
         return BatchEncoding(output, tensor_type=kwargs.get("return_tensors"))
 
@@ -574,11 +577,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         """
         self.cur_lang_code = self.lang_code_to_id.get(src_lang, self.unk_token_id)
         self.init_kwargs["src_lang"] = src_lang
-        
+
         if self.cur_lang_code == self.unk_token_id:
             logger.warning_once(
-                    f"`src_lang={src_lang}` has not be found in the `lang_code_to_id` dictionary which has those keys: {', '.join(self.lang_code_to_id.keys())}. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
-                )
+                f"`src_lang={src_lang}` has not be found in the `lang_code_to_id` dictionary which has those keys: {', '.join(self.lang_code_to_id.keys())}. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+            )
 
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
@@ -593,8 +596,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         if self.cur_lang_code == self.unk_token_id:
             logger.warning_once(
-                    f"`tgt_lang={lang}` has not be found in the `lang_code_to_id` dictionary which has those keys: {', '.join(self.lang_code_to_id.keys())}. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
-                )
+                f"`tgt_lang={lang}` has not be found in the `lang_code_to_id` dictionary which has those keys: {', '.join(self.lang_code_to_id.keys())}. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+            )
 
         self.prefix_tokens = [self.eos_token_id, self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]

@@ -296,9 +296,9 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
 
         if self.cur_lang_code == self.unk_token_id:
             logger.warning_once(
-                    f"`tgt_lang={src_lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
-                )
-            
+                f"`tgt_lang={src_lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+            )
+
         self.init_kwargs["src_lang"] = src_lang
 
         self.prefix_tokens = [self.cur_lang_code]
@@ -321,11 +321,10 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
 
         if self.cur_lang_code == self.unk_token_id:
             logger.warning_once(
-                    f"`tgt_lang={lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
-                )
-            
+                f"`tgt_lang={lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+            )
+
         self.init_kwargs["tgt_lang"] = lang
-        
 
         self.prefix_tokens = [self.eos_token_id, self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
@@ -420,10 +419,14 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         if tgt_lang is not None:
             self.tgt_lang = tgt_lang
 
-        output = super().__call__(text=text, 
-                            text_pair = text_pair,
-                            text_target = text_target,
-                            text_pair_target = text_pair_target,
-                                  padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
+        output = super().__call__(
+            text=text,
+            text_pair=text_pair,
+            text_target=text_target,
+            text_pair_target=text_pair_target,
+            padding=padding,
+            pad_to_multiple_of=pad_to_multiple_of,
+            **kwargs,
+        )
 
         return output
