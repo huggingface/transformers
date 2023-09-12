@@ -50,6 +50,57 @@ BEIT3_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+# input_ids = None,
+# pixel_values = None,
+# text_padding_position = None,
+# attention_mask = None,
+# vision_masked_position = None,
+# incremental_state = None,
+# positions = None,
+# return_dict = None,
+# output_hidden_states = True,
+
+
+
+BEIT3_MODEL = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`BeitImageProcessor.__call__`] for details.
+        text_padding_position (`torch.LongTensor` of shape `({0})`):
+            Padding mask for input tokens , of same shape as `input_ids`
+            
+            - 1 indicates the token is **not masked**,
+            - 0 indicates the token is **masked**.
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        vision_masked_position (`torch.LongTensor` of shape `({1})`):
+            Padding mask for input tokens , of same shape as `pixel_values`
+            
+            - 1 indicates the token is **not masked**,
+            - 0 indicates the token is **masked**.
+        incremental_state (`Dict`):
+            A Dictionary containing the incremental states layerwise/
+        positions (`int`):
+            Position of where text representations end and image representation start.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.                                                                        
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+"""
 
 
 BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
@@ -185,11 +236,15 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 class Beit3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.embed_dim * 4)
-        self.dense1 = nn.Linear(config.embed_dim * 4, config.embed_dim * 2)
-        self.norm2 = nn.LayerNorm(config.embed_dim * 2)
+        in_features = config.embed_dim * 4
+        hidden_features = config.embed_dim * 2
+
+        self.norm1 = nn.LayerNorm(in_features, eps=config.layer_norm_eps)
+
+        self.dense1 = nn.Linear(in_features, hidden_features)
+        self.norm2 = nn.LayerNorm(hidden_features, eps=config.layer_norm_eps)
         self.act = nn.GELU()
-        self.dense2 = nn.Linear(config.embed_dim * 2, config.num_labels)
+        self.dense2 = nn.Linear(hidden_features, config.num_labels)
 
     def forward(self, hidden_states):
         hidden_states = self.norm1(hidden_states)
@@ -200,12 +255,11 @@ class Beit3MLP(nn.Module):
 
 
 class Beit3MultiwayFeedForwardNetwork(nn.Module):
-    def __init__(self, module):
+    def __init__(self, config):
         super().__init__()
         self.dim = 1
-        self.first = module
-        self.second = copy.deepcopy(module)
-        self.second.reset_parameters()
+        self.first = Beit3FeedForwardNetwork(config)
+        self.second = Beit3FeedForwardNetwork(config)
 
     def forward(self, hidden_states, split_position=-1):
         if split_position == -1:
@@ -330,11 +384,11 @@ class Beit3VisionEmbedding(nn.Module):
 
 
 class Beit3PositionalEmbedding(nn.Embedding):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        positions: torch.Tensor = None,
-    ):
+
+    def __init__(self, num_embeddings: int, embedding_dim: int):
+        super().__init__(num_embeddings, embedding_dim)
+
+    def forward(self,hidden_states: torch.Tensor,positions: torch.Tensor = None,):
         if positions is None:
             positions = torch.arange(2, hidden_states.size(1) + 2, device=hidden_states.device).long().unsqueeze(0)
         return F.embedding(
@@ -349,10 +403,7 @@ class Beit3PositionalEmbedding(nn.Embedding):
 
 
 class Beit3MultiheadAttention(nn.Module):
-    def __init__(
-        self,
-        config,
-    ):
+    def __init__(self,config,):
         super().__init__()
         self.embed_dim = config.embed_dim
         self.num_heads = config.num_attention_heads
@@ -373,7 +424,7 @@ class Beit3MultiheadAttention(nn.Module):
         value: torch.Tensor,
         incremental_state: Dict = None,
         key_padding_mask: torch.Tensor = None,
-        attn_mask: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
         relative_pos: torch.Tensor = None,
     ):
         batch_size, target_length, embed_dim = query.size()
@@ -403,10 +454,10 @@ class Beit3MultiheadAttention(nn.Module):
 
         attn_weights = torch.bmm(query, key.transpose(1, 2))
 
-        if attn_mask is not None:
+        if attention_mask is not None:
             attn_weights = torch.nan_to_num(attn_weights)
-            attn_mask = attn_mask.unsqueeze(0)
-            attn_weights += attn_mask
+            attention_mask = attention_mask.unsqueeze(0)
+            attn_weights += attention_mask
 
         if key_padding_mask is not None:
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len)
@@ -545,9 +596,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         self.normalize_before = config.normalize_before
         self.ffn_dim = config.hidden_size
 
-        self.ffn = Beit3MultiwayFeedForwardNetwork(
-            Beit3FeedForwardNetwork(config),
-        )
+        self.ffn = Beit3MultiwayFeedForwardNetwork(config)
         self.final_layer_norm = Beit3LayerNorm(config)
         self.alpha = 1.0
 
@@ -558,13 +607,13 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         self,
         hidden_states,
         encoder_padding_mask,
-        attn_mask=None,
+        attention_mask=None,
         relative_pos=None,
         multiway_split_position=None,
         incremental_state=None,
     ):
-        if attn_mask is not None:
-            attn_mask = attn_mask.masked_fill(attn_mask.to(torch.bool), -1e8)
+        if attention_mask is not None:
+            attention_mask = attention_mask.masked_fill(attention_mask.to(torch.bool), -1e8)
 
         residual = hidden_states
         split_position = multiway_split_position if multiway_split_position is not None else -1
@@ -574,7 +623,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
             key=hidden_states,
             value=hidden_states,
             key_padding_mask=encoder_padding_mask,
-            attn_mask=attn_mask,
+            attention_mask=attention_mask,
             relative_pos=relative_pos,
             incremental_state=incremental_state,
         )
@@ -644,7 +693,7 @@ class Beit3Encoder(nn.Module):
         self,
         src_tokens,
         encoder_padding_mask=None,
-        attn_mask=None,
+        attention_mask=None,
         return_all_hiddens=True,
         token_embeddings=None,
         multiway_split_position=None,
@@ -679,7 +728,7 @@ class Beit3Encoder(nn.Module):
             x = layer(
                 x,
                 encoder_padding_mask=encoder_padding_mask if incremental_state is None else None,
-                attn_mask=attn_mask,
+                attention_mask=attention_mask,
                 relative_pos=relative_pos_bias,
                 multiway_split_position=multiway_split_position,
                 incremental_state=incremental_state[idx] if incremental_state is not None else None,
@@ -696,7 +745,6 @@ class Beit3Encoder(nn.Module):
         return Beit3ModelOutput(
             encoder_out=x,
             encoder_embedding=encoder_embedding,
-            # encoder_padding_mask=encoder_padding_mask,
             hidden_states=hidden_states,
         )
 
@@ -735,12 +783,13 @@ class Beit3Model(Beit3PreTrainedModel):
     def get_num_layers(self):
         return self.encoder.num_layers
 
+    @add_start_docstrings_to_model_forward(BEIT3_MODEL)
     def forward(
         self,
         input_ids=None,
         pixel_values=None,
         text_padding_position=None,
-        attn_mask=None,
+        attention_mask=None,
         vision_masked_position=None,
         incremental_state=None,
         positions=None,
@@ -775,7 +824,7 @@ class Beit3Model(Beit3PreTrainedModel):
         encoder_out = self.encoder(
             src_tokens=None,
             encoder_padding_mask=encoder_padding_mask,
-            attn_mask=attn_mask,
+            attention_mask=attention_mask,
             token_embeddings=x,
             multiway_split_position=multiway_split_position,
             incremental_state=incremental_state,
@@ -869,7 +918,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         super(Beit3ForImageClassification, self).__init__(config)
         embed_dim = config.embed_dim
         self.beit3 = Beit3Model(config)
-        self.fc_norm = nn.LayerNorm(embed_dim)
+        self.fc_norm = nn.LayerNorm(embed_dim,eps=config.layer_norm_eps)
         self.classifier = nn.Linear(embed_dim, config.num_labels) if config.num_labels > 0 else nn.Identity()
         self.num_labels = config.num_labels
         self.post_init()
@@ -989,7 +1038,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             input_ids=input_ids,
             pixel_values=pixel_values,
             text_padding_position=padding_mask,
-            attn_mask=uni_mask,
+            attention_mask=uni_mask,
             incremental_state=incremental_state,
             positions=positions,
         )
@@ -1029,7 +1078,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
 class Beit3Pooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.norm = nn.LayerNorm(config.embed_dim)
+        self.norm = nn.LayerNorm(config.embed_dim,eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.embed_dim, config.embed_dim)
         self.activation = nn.Tanh()
 
@@ -1059,7 +1108,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         self.pooler.apply(self._init_weights)
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim * 2),
-            nn.LayerNorm(embed_dim * 2),
+            nn.LayerNorm(embed_dim * 2,eps=config.layer_norm_eps),
             nn.GELU(),
             nn.Linear(embed_dim * 2, config.num_labels),
         )

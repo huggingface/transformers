@@ -131,6 +131,7 @@ class Beit3Config(PretrainedConfig):
         initializer_range=0.02,
         label_smoothing=0.1,
         logit_scale_init_value=2.65926,
+        layer_norm_eps=1e-05,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -159,6 +160,7 @@ class Beit3Config(PretrainedConfig):
         self.num_labels = num_labels
         self.label_smoothing = label_smoothing
         self.logit_scale_init_value = logit_scale_init_value
+        self.layer_norm_eps = layer_norm_eps
         if self.subln:
             self.normalize_before = True
             self.deepnorm = False
