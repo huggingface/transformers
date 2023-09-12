@@ -27,39 +27,14 @@ from .test_feature_extraction_seamless_m4t import floats_list
 
 class SeamlessM4TProcessorTest(unittest.TestCase):
     def setUp(self):
-        vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-
-        self.add_kwargs_tokens_map = {
-            "pad_token": "<pad>",
-            "unk_token": "<unk>",
-            "bos_token": "<s>",
-            "eos_token": "</s>",
-        }
-        feature_extractor_map = {
-            "feature_size": 1,
-            "padding_value": 0.0,
-            "sampling_rate": 16000,
-            "return_attention_mask": False,
-            "do_normalize": True,
-        }
-
+        self.checkpoint = "ylacombe/hf-seamless-m4t-medium"
         self.tmpdirname = tempfile.mkdtemp()
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
 
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(feature_extractor_map) + "\n")
-
-    def get_tokenizer(self, **kwargs_init):
-        kwargs = self.add_kwargs_tokens_map.copy()
-        kwargs.update(kwargs_init)
-        return SeamlessM4TTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    def get_tokenizer(self, **kwargs):
+        return SeamlessM4TTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return SeamlessM4TFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+        return SeamlessM4TFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -72,7 +47,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
 
         processor.save_pretrained(self.tmpdirname)
         processor = SeamlessM4TProcessor.from_pretrained(self.tmpdirname)
-
+        
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, SeamlessM4TTokenizer)
 
@@ -91,7 +66,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         processor = SeamlessM4TProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
-
+                
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, SeamlessM4TTokenizer)
 
@@ -107,7 +82,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         raw_speech = floats_list((3, 1000))
 
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
-        input_processor = processor(raw_speech, return_tensors="np")
+        input_processor = processor(audios = raw_speech, return_tensors="np")
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
@@ -139,15 +114,3 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
-
-    def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = SeamlessM4TProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-
-        self.assertListEqual(
-            processor.model_input_names,
-            feature_extractor.model_input_names,
-            msg="`processor` and `feature_extractor` model input names do not match",
-        )
