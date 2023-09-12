@@ -15,7 +15,7 @@
 """ LLaVA model configuration"""
 
 import os
-from typing import Optional, Union
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -204,8 +204,6 @@ class LlavaConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to the Mpt-7b architecture
-    [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -270,57 +268,18 @@ class LlavaConfig(PretrainedConfig):
     def __init__(
         self,
         d_model: int = 4096,
-        emb_pdrop: int = 0,
-        embedding_fraction: float = 1.0,
-        expansion_ratio: int = 4,
-        freeze_mm_mlp_adapter: bool = False,
-        init_device: str = "cpu",
-        learned_pos_emb: bool = True,
-        logit_scale: Optional[Union[float, str]] = None,
-        max_seq_len: int = 2048,
         mm_hidden_size: int = 1024,
-        mm_use_im_start_end: bool = True,
-        mm_vision_select_layer: int = -2,
-        mm_vision_tower: str = "openai/clip-vit-large-patch14",
-        model_type: str = "llava_mpt",
         n_heads: int = 32,
         n_layers: int = 32,
-        no_bias: bool = True,
-        norm_type: str = "low_precision_layernorm",
-        resid_pdrop: int = 0,
-        sep_image_conv_front: bool = False,
-        torch_dtype: str = "float16",
-        tune_mm_mlp_adapter: bool = False,
         use_cache: bool = True,
-        use_mm_proj: bool = True,
-        verbose: int = 0,
         vocab_size: int = 50282,
         **kwargs,
     ):
-        self.freeze_mm_mlp_adapter = freeze_mm_mlp_adapter
         self.mm_hidden_size = mm_hidden_size
-        self.mm_use_im_start_end = mm_use_im_start_end
-        self.mm_vision_select_layer = mm_vision_select_layer
-        self.sep_image_conv_front = sep_image_conv_front
-        self.tune_mm_mlp_adapter = tune_mm_mlp_adapter
-        self.use_mm_proj = use_mm_proj
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
-        self.expansion_ratio = expansion_ratio
-        self.max_seq_len = max_seq_len
         self.vocab_size = vocab_size
-        self.resid_pdrop = resid_pdrop
-        self.emb_pdrop = emb_pdrop
-        self.learned_pos_emb = learned_pos_emb
-        self.init_device = init_device
-        self.logit_scale = logit_scale
-        self.no_bias = no_bias
-        self.verbose = verbose
-        self.embedding_fraction = embedding_fraction
-        self.norm_type = norm_type
-        # self.layer_norm_epsilon = layer_norm_epsilon
-        self.use_cache = use_cache
         super().__init__(**kwargs)
 
     @classmethod
@@ -346,10 +305,10 @@ class LlavaLlamaConfig(PretrainedConfig):
     r"""
     [`LlavaLlamaConfig`] is the configuration class to store the configuration of a [`LlavaLlamaForCausalLM`]. It is
     used to instantiate a LlavaLlama model according to the specified arguments, defining the llama model and a llava
-    model configs. Instantiating a configuration with
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    model configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture. objects
+    inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
+    [`PretrainedConfig`] for more information.
 
     Args:
         llava_config (`dict`, *optional*):
