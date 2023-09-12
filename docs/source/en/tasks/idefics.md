@@ -28,11 +28,11 @@ solve image-text tasks with a large multimodal model called IDEFICS.
 a state-of-the-art visual language model initially developed by DeepMind. The model accepts arbitrary sequences of image 
 and text inputs and generates coherent text as output. It can answer questions about images, describe visual content, 
 create stories grounded in multiple images, and so on. IDEFICS comes in two variants - 80 billion parameters and 9 billion 
-parameters, both of which are available on the 🤗 Hub. For each of the variants you can also find fine-tuned instructed 
+parameters, both of which are available on the 🤗 Hub. For each variant, you can also find fine-tuned instructed 
 versions of the model adapted for conversational use cases.
 
-This model is exceptionally versatile and can be used for a wide range of image and multimodal tasks. Note, however, that 
-being a large model, it requires significant computational resources and infrastructure. It is up to you to decide whether 
+This model is exceptionally versatile and can be used for a wide range of image and multimodal tasks. However, 
+being a large model means it requires significant computational resources and infrastructure. It is up to you to decide whether 
 this approach suits your use case better than fine-tuning specialized models for each individual task. 
 
 In this guide, you'll learn how to: 
@@ -85,7 +85,7 @@ preparing text and image inputs for the model.
 >>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
 ```
 
-## Loading the quantized version of the model
+### Quantized model
 
 If high-memory GPU availability is an issue, you can load the quantized version of the model. To load the model and the 
 processor in 4bit precision, pass a `BitsAndBytesConfig` to the `from_pretrained` method and the model will be compressed 
@@ -124,11 +124,11 @@ To illustrate the task, get an image to be captioned, e.g.:
 
 Photo by [Hendo Wang](https://unsplash.com/@hendoo). 
 
-IDEFICS accepts text and image prompts. However, to caption an image, you do not have to provide any text prompt to the 
-model, only the preprocessed input image. Without any text prompt, the model will start generating text from the 
+IDEFICS accepts text and image prompts. However, to caption an image, you do not have to provide a text prompt to the 
+model, only the preprocessed input image. Without a text prompt, the model will start generating text from the 
 BOS (beginning-of-sequence) token thus creating a caption.
 
-As image input to the model, you can use either an image object (PIL.Image) or a url from which the image can be retrieved.
+As image input to the model, you can use either an image object (`PIL.Image`) or a url from which the image can be retrieved.
 
 ```py
 >>> prompt = [
@@ -211,7 +211,7 @@ feel free to experiment with a larger number of examples (e.g., 3-shot, 5-shot, 
 
 ## Visual question answering
 
-Visual Question Answering (VQA) is the task of answering open-ended questions based on an image. Similarly to image 
+Visual Question Answering (VQA) is the task of answering open-ended questions based on an image. Similar to image 
 captioning it can be used in accessibility applications, but also in education (reasoning about visual materials), customer 
 service (questions about products based on images), and image retrieval.
 
@@ -273,7 +273,7 @@ Category: Vegetables
 
 ## Image-guided text generation
 
-For more creating applications, you can use image-guided text generation to generate text based on an image. This can be 
+For more creative applications, you can use image-guided text generation to generate text based on an image. This can be 
 useful to create descriptions of products, ads, descriptions of a scene, etc. 
 
 Let's prompt IDEFICS to write a story based on a simple image of a red door: 
@@ -319,13 +319,13 @@ Looks like IDEFICS noticed the pumpkin on the doorstep and went with a spooky Ha
 <Tip>
 
 For longer outputs like this, you will greatly benefit from tweaking the text generation strategy. This can help 
-you significantly improve the quality of the generated output. Check out the [Text generation strategies doc](../generation_strategies.md) 
+you significantly improve the quality of the generated output. Check out [Text generation strategies](../generation_strategies.md) 
 to learn more. 
 </Tip>
 
 ## Running inference in batch mode
 
-All of the earlier section illustrated using IDEFICS for a single example. In a very similar fashion, you can run inference 
+All of the earlier sections illustrated IDEFICS for a single example. In a very similar fashion, you can run inference 
 for a batch of examples by passing a list of prompts:
 
 ```py
