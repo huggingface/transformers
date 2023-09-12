@@ -151,8 +151,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
         # add special tokens to encoder dict
         self.encoder: Dict[int, str] = {
-            0: pad_token,
-            1: eos_token,
+            0: str(pad_token),
+            1: str(eos_token),
         }
 
         if self.mask_token_sent is not None:
@@ -189,6 +189,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
     def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
+        vocab.update({str(k): k for v, k in self.decoder.items()})
         return vocab
 
     def __getstate__(self):
@@ -214,8 +215,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
         """Converts a token (str) to an id using the vocab."""
         if token in self.decoder:
             return self.decoder[token]
-        elif token in self.added_tokens_decoder:
-            return self.added_tokens_decoder[token]
+        elif token in self.added_tokens_encoder:
+            return self.added_tokens_encoder[token]
         sp_id = self.sp_model.piece_to_id(token)
         return sp_id + self.offset
 
@@ -223,8 +224,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) to a token (str) using the vocab."""
         if index in self.encoder:
             return self.encoder[index]
-        elif index in self.added_tokens_encoder:
-            return self.added_tokens_encoder[index]
+        elif index in self.added_tokens_decoder:
+            return self.added_tokens_decoder[index]
         else:
             token = self.sp_model.IdToPiece(index - self.offset)
         return token
