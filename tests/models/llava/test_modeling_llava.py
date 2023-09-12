@@ -19,10 +19,13 @@ import inspect
 import unittest
 from typing import Optional, Union
 
-from transformers import LlamaConfig, LlavaConfig, is_torch_available
-from transformers.models.llava.configuration_llava import LlavaLlamaConfig
+import requests
+from PIL import Image
+
+from transformers import LlamaConfig, LlavaConfig, LlavaLlamaConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
     _config_zero_init,
@@ -39,6 +42,7 @@ if is_torch_available():
     from transformers import (
         LlamaModel,
         LlavaLlamaForCausalLM,
+        LlavaProcessor,
     )
 
 
@@ -244,6 +248,7 @@ class LlavaLlamaModelTester:
 
         self.num_hidden_layers = num_hidden_layers
         self.parent = parent
+        self.batch_size = 13
         self.llama_model_tester = LlamaModelTester(parent, **llama_kwargs)
         self.llava_model_tester = LlavaModelTester(parent, **llava_kwargs)
 
@@ -372,6 +377,7 @@ class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = LlavaLlamaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=LlavaLlamaConfig)
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -430,33 +436,48 @@ class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
 
 @require_torch
-class LlamaIntegrationTest(unittest.TestCase):
-    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
+class LlavaLlamaIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlavaLlamaForCausalLM.from_pretrained("shauray/Llava-Llama-2-7b-hf", device_map="auto")
-        out = model(torch.tensor([input_ids]))
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-6.6550, -4.1227, -4.9859, -3.2406, 0.8262, -3.0033, 1.2964, -3.3699]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        # fmt: off
-        EXPECTED_SLICE = torch.tensor([-12.8281, -7.4453, -0.4639, -8.0625, -7.2500, -8.0000, -6.4883, -7.7695, -7.8438, -7.0312, -6.2188, -7.1328, -1.8496, 1.9961, -8.6250, -6.7227, -12.8281, -6.9492, -7.0742, -7.7852, -7.5820, -7.9062, -6.9375, -7.9805, -8.3438, -8.1562, -8.0469, -7.6250, -7.7422, -7.3398,])
-        # fmt: on
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
+        url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
+        image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        prompt = "What is unusual about this image?"
 
-    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
-    @slow
-    def test_model_13b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlavaLlamaForCausalLM.from_pretrained("shauray/Llava-Llama-2-13b-hf", device_map="auto")
-        out = model(torch.tensor(input_ids))
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.0622, -1.2794, -1.1638, -0.9788, -1.4603, -1.0238, -1.7893, -1.4411]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
+        model = LlavaLlamaForCausalLM.from_pretrained(
+            "shauray/Llava-Llama-2-7B-hf",
+            torch_dtype=torch.float16,
+            device_map=torch_device,
+        ).to(torch_device)
+
+        processor = LlavaProcessor.from_pretrained(
+            "shauray/Llava-Llama-2-7B-hf", torch_dtype=torch.float16, device=torch_device
+        )
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
+
+        # verify logits
+        with torch.no_grad():
+            logits = model(**inputs).logits
+
+        expected_slice = torch.tensor(
+            [
+                [-1.5898e-03, -2.4231e-01, 4.6484e-01],
+                [-7.8398e00, -4.0273e00, -2.0098e00],
+                [-4.6172e00, -2.3887e00, 4.2432e-01],
+            ],
+            device=torch_device,
+        )
+        self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
+
+        # verify generation
+        outputs = model.generate(**inputs, max_length=128, temperature=0.1)
+        generated_text = processor.decode(outputs[0, inputs["input_ids"].shape[1] :]).strip()
         # fmt: off
-        EXPECTED_SLICE = torch.tensor([-8.1406, -8.0547, 2.7461, -1.2344, -0.1448, -1.8262, -1.0020, -1.8154, -1.6895, -1.8516, -2.3574, -0.9277, 3.7598, 6.5742, -1.2998, -0.1177, -8.1406, -2.9688, -2.9199, -3.1699, -3.5254, -2.3555, -2.7988, -3.4141, -2.8262, -4.5195, -3.3379, -3.3164, -2.7832, -3.0273])
+        expected_outputs = [1, 200, 29871, 13, 5618, 338, 22910, 1048, 445, 1967, 29973, 13, 797, 278, 1967, 29892, 263, 767, 338, 13407, 373, 278, 1250, 310, 263, 13328, 1559, 29892, 13977, 292, 22095, 29889, 910, 338, 385, 22910, 11126, 408, 372, 338, 451, 3619, 363, 2305, 304, 13977, 22095, 1550, 13407, 373, 263, 1559, 29892, 7148, 297, 263, 19587, 4272, 11952, 29889, 450, 767, 338, 884, 591, 4362, 263, 13328, 528, 2728, 29892, 607, 12778, 304, 278, 22910, 5469, 310, 278, 9088, 29889, 13, 13, 13, 5618, 338, 278, 767, 2599, 29973, 13, 1576, 767, 338, 13977, 292, 22095, 1550, 13407, 373, 278, 1250, 310, 263, 13328, 1559, 29889, 940, 338, 773, 385, 13977, 292, 7613, 304, 13977, 22095, 29892, 607, 338, 451, 263, 15662, 6354, 297, 263, 19587, 4272]
         # fmt: on
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
+        self.assertEqual(outputs[0].tolist(), expected_outputs)
+        self.assertEqual(
+            generated_text,
+            """In the image, a man is standing on the back of a yellow car, ironing clothes. This is an unusual sight as it is not common for people to iron clothes while standing on a car, especially in a busy city street. The man is also wearing a yellow shirt, which adds to the unusual nature of the scene.
+            What is the man doing
+            The man is ironing clothes while standing on the back of a yellow car. He is using an ironing board to iron clothes, which is not a typical activity in a busy city""",
+        )
