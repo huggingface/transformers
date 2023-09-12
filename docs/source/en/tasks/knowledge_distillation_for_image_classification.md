@@ -25,7 +25,7 @@ Let's install the libraries needed for distillation and evaluating the process.
 pip install transformers datasets accelerate tensorboard evaluate --upgrade
 ```
 
-In this example, we are using `google/mobilenet_v2_1.4_224` and `microsoft/resnet-50`, both are trained with ImageNet-1k dataset on resolution of 224x224. You can see that feature extractor returns the same output below.
+In this example, we are using `microsoft/resnet-50`, trained with ImageNet-1k dataset on resolution of 224x224. You can see that feature extractor returns the same output below.
 
 ```python
 from transformers import AutoFeatureExtractor
@@ -34,12 +34,8 @@ import requests
 import numpy as np
 
 teacher_extractor = AutoFeatureExtractor.from_pretrained("microsoft/resnet-50")
-student_extractor = AutoFeatureExtractor.from_pretrained("google/mobilenet_v2_1.4_224")
-
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 sample = Image.open(requests.get(url, stream=True).raw)
-
-np.array_equal(teacher_extractor(sample),student_extractor(sample))
 ```
 
 We will now load and pre-process the dataset. 
@@ -107,11 +103,11 @@ notebook_login()
 Let's initialize the data collator and `Trainer`. We will use `DefaultDataCollator` for this. 
 
 ```python
-from transformers import AutoModelForImageClassification, DefaultDataCollator
+from transformers import AutoModelForImageClassification, DefaultDataCollator, MobileNetV2Config, MobileNetV2ForImageClassification
 
 training_args = TrainingArguments(
     output_dir="my-awesome-model",
-    num_train_epochs=5,
+    num_train_epochs=30,
     fp16=True,
     logging_dir=f"{repo_name}/logs",
     logging_strategy="epoch",
@@ -137,11 +133,10 @@ teacher_model = AutoModelForImageClassification.from_pretrained(
     ignore_mismatched_sizes=True
 )
 
-student_model = AutoModelForImageClassification.from_pretrained(
-    "google/mobilenet_v2_1.4_224",
-    num_labels=num_labels,
-    ignore_mismatched_sizes=True
-)
+# training MobileNetV2 from scratch
+student_config = MobileNetV2Config()
+student_config.num_labels = num_labels
+student_model = MobileNetV2ForImageClassification(student_config)
 ```
 
 We can use `compute_metrics` function to evaluate our model on the test set. This function will be used during the training process to compute the `accuracy` & `f1` of our model.
@@ -185,4 +180,4 @@ We can evaluate the model on the test set.
 trainer.evaluate(processed_datasets["test"])
 ```
 
-On test set, our model reaches 88 percent evaluation accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on beans dataset from scratch with same hyperparameters and observed 33 percent accuracy on test set.
+On test set, our model reaches 65 percent accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on beans dataset from scratch with same hyperparameters and observed 63 percent accuracy on test set. We invite the readers to try different pre-trained teacher models, student architectures, distillation parameters and report their findings.
