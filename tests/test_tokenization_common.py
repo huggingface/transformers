@@ -3809,7 +3809,7 @@ class TokenizerTesterMixin:
                 self.assertTrue(
                     find,
                     f"'{new_special_token_str}' (the string) doesn't appear in the all_special_tokens_extended = "
-                    f"'{{k for k in new_tokenizer.all_special_tokens_extended if str(k)==new_special_token_str}}' as an AddedToken with the same parameters as "
+                    f"{[k for k in new_tokenizer.all_special_tokens_extended if str(k)==new_special_token_str]} as an AddedToken with the same parameters as "
                     f"'{special_token.__repr__()}' (the original added token, with the wrong string)",
                 )
             elif special_token not in special_tokens_map:

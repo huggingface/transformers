@@ -18,7 +18,7 @@ import os
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
-from tokenizers import pre_tokenizers, processors
+from tokenizers import AddedToken, pre_tokenizers, processors
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -145,12 +145,34 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
+        pad_token=None,
         add_prefix_space=False,
         language=None,
         task=None,
         predict_timestamps=False,
         **kwargs,
     ):
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
+
         super().__init__(
             vocab_file,
             merges_file,
@@ -158,6 +180,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            pad_token=pad_token,
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
