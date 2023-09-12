@@ -2718,9 +2718,9 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         Computes the output length after the duration layer.
         """
         unit_lengths = (input_ids != self.pad_token_id).sum(1)
-        
+
         # take care of edge cases where no padding or too many padding
-        unit_lengths = torch.clamp(unit_lengths, 0, dur_out.shape[1] -1)
+        unit_lengths = torch.clamp(unit_lengths, 0, dur_out.shape[1] - 1)
 
         cumulative_dur_out = torch.cumsum(dur_out, dim=1)
         unit_lengths = cumulative_dur_out.gather(dim=1, index=unit_lengths.unsqueeze(1)).squeeze()
@@ -3444,7 +3444,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         attention_mask = kwargs_speech.get("attention_mask", kwargs_text.get("attention_mask", None))
 
         encoder_hidden_states = text_generation_output.encoder_hidden_states[-1]
-        
+
         # take care of num_return_sequences
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
@@ -3466,7 +3466,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
             cross_attn_head_mask=kwargs_text.get("cross_attn_head_mask"),
         ).last_hidden_state
 
-
         pad_token_id = self.generation_config.pad_token_id
 
         # Compute new attention mask
@@ -3485,11 +3484,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
                     "to generate speech, or set TODO"  # TODO
                 )
             # + 5 for EOS/PAD/BOS/UNK token + mask token
-            t2u_tgt_lang_id = (
-                t2u_tgt_lang_id
-                + self.config.t2u_num_langs
-                + self.config.t2u_offset_tgt_lang
-            )
+            t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
             t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
                 self.device
             )
@@ -3505,7 +3500,9 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         # replace eos per pad
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
         # offset pad
-        unit_ids[unit_ids == self.config.t2u_pad_token_id] = self.config.t2u_pad_token_id + self.config.control_symbol_vocoder_offset
+        unit_ids[unit_ids == self.config.t2u_pad_token_id] = (
+            self.config.t2u_pad_token_id + self.config.control_symbol_vocoder_offset
+        )
         # offset of control symbols
         unit_ids = unit_ids - self.config.control_symbol_vocoder_offset
 
@@ -3703,7 +3700,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
             attention_mask = _compute_new_attention_mask(
                 hidden_states=encoder_hidden_states, seq_lens=sub_sampled_lengths
             )
-            
+
         # take care of num_return_sequences
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
@@ -3724,7 +3721,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
             head_mask=kwargs_text.get("decoder_head_mask"),
             cross_attn_head_mask=kwargs_text.get("cross_attn_head_mask"),
         ).last_hidden_state
-
 
         pad_token_id = self.generation_config.pad_token_id
 
@@ -3747,11 +3743,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
                     "to generate speech, or set TODO"
                 )
             # + 5 for EOS/PAD/BOS/UNK token + mask token
-            t2u_tgt_lang_id = (
-                t2u_tgt_lang_id
-                + self.config.t2u_num_langs
-                + self.config.t2u_offset_tgt_lang
-            )
+            t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
             t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
                 self.device
             )
@@ -3767,10 +3759,12 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         # replace eos per pad
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
         # offset pad
-        unit_ids[unit_ids == self.config.t2u_pad_token_id] = self.config.t2u_pad_token_id + self.config.control_symbol_vocoder_offset
+        unit_ids[unit_ids == self.config.t2u_pad_token_id] = (
+            self.config.t2u_pad_token_id + self.config.control_symbol_vocoder_offset
+        )
         # offset of control symbols
         unit_ids = unit_ids - self.config.control_symbol_vocoder_offset
-        
+
         # TODO: warnings for vocoder tgt lang id
 
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
@@ -4158,7 +4152,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
             )
             sequences = sequences[idx_most_probable_sequences_per_batch]
-            
+
         # get decoder last hidden state - must do a pass through the text decoder
         t2u_input_embeds = self.text_decoder(
             input_ids=sequences,
@@ -4188,11 +4182,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                     generate speech, or set TODO"""  # TODO
                 )
             # + 5 for EOS/PAD/BOS/UNK token + mask token
-            t2u_tgt_lang_id = (
-                t2u_tgt_lang_id
-                + self.config.t2u_num_langs
-                + self.config.t2u_offset_tgt_lang
-            )
+            t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
             t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
                 self.device
             )
@@ -4208,7 +4198,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # replace eos per pad
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
         # offset pad
-        unit_ids[unit_ids == self.config.t2u_pad_token_id] = self.config.t2u_pad_token_id + self.config.control_symbol_vocoder_offset
+        unit_ids[unit_ids == self.config.t2u_pad_token_id] = (
+            self.config.t2u_pad_token_id + self.config.control_symbol_vocoder_offset
+        )
         # offset of control symbols
         unit_ids = unit_ids - self.config.control_symbol_vocoder_offset
 

@@ -17,8 +17,8 @@
 
 import copy
 import inspect
-import unittest
 import tempfile
+import unittest
 
 from transformers import SeamlessM4TConfig, SeamlessM4TProcessor, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -204,7 +204,7 @@ class SeamlessM4TModelTester:
             t2u_num_langs=self.t2u_num_langs,
             t2u_max_new_tokens=self.t2u_max_new_tokens,
             t2u_offset_tgt_lang=self.t2u_offset_tgt_lang,
-            control_symbol_vocoder_offset=self.control_symbol_vocoder_offset
+            control_symbol_vocoder_offset=self.control_symbol_vocoder_offset,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -771,7 +771,7 @@ class SeamlessM4TMGenerationTest(unittest.TestCase):
         }
 
         return config, input_dict
-    
+
     def prepare_speech_and_text_input(self):
         config, inputs, decoder_input_ids, input_mask, lm_labels = self.speech_model_tester.prepare_config_and_inputs()
 
@@ -780,7 +780,7 @@ class SeamlessM4TMGenerationTest(unittest.TestCase):
             "attention_mask": input_mask,
             "tgt_lang": "fra",
         }
-        
+
         config, inputs, decoder_input_ids, input_mask, lm_labels = self.text_model_tester.prepare_config_and_inputs()
 
         input_text = {
@@ -790,16 +790,14 @@ class SeamlessM4TMGenerationTest(unittest.TestCase):
         }
         return config, input_speech, input_text
 
-
-
     def factory_generation_speech_test(self, model, inputs):
         with torch.inference_mode():
             output = model.generate(**inputs)
         return output
-    
+
     def test_speech_generation(self):
         config, input_speech, input_text = self.prepare_speech_and_text_input()
-        
+
         model = SeamlessM4TModel(config=config)
         self.update_generation(model)
         model.save_pretrained(self.tmpdirname)
@@ -808,38 +806,36 @@ class SeamlessM4TMGenerationTest(unittest.TestCase):
 
         output_original_text = self.factory_generation_speech_test(model, input_text)
         output_original_speech = self.factory_generation_speech_test(model, input_speech)
-        
+
         model = SeamlessM4TForTextToSpeech.from_pretrained(self.tmpdirname)
         self.update_generation(model)
         model.to(torch_device)
         model.eval()
 
         output_text = self.factory_generation_speech_test(model, input_text)
-        
-        
+
         model = SeamlessM4TForSpeechToSpeech.from_pretrained(self.tmpdirname)
         self.update_generation(model)
         model.to(torch_device)
         model.eval()
 
         output_speech = self.factory_generation_speech_test(model, input_speech)
-        
+
         # test same text output from input text
         self.assertListEqual(output_original_text[0].ravel().tolist(), output_text[0].ravel().tolist())
         self.assertListEqual(output_original_text[1].ravel().tolist(), output_text[1].ravel().tolist())
 
         # test same speech output from input text
         self.assertListEqual(output_original_speech[0].ravel().tolist(), output_speech[0].ravel().tolist())
-        self.assertListEqual(output_original_speech[1].ravel().tolist(), output_speech[1].ravel().tolist())   
-        
+        self.assertListEqual(output_original_speech[1].ravel().tolist(), output_speech[1].ravel().tolist())
 
     def test_text_generation(self):
         config, input_speech, input_text = self.prepare_speech_and_text_input()
-        
+
         # to return speech
         input_speech["generate_speech"] = False
         input_text["generate_speech"] = False
-        
+
         model = SeamlessM4TModel(config=config)
         self.update_generation(model)
         model.save_pretrained(self.tmpdirname)
@@ -848,42 +844,38 @@ class SeamlessM4TMGenerationTest(unittest.TestCase):
 
         output_original_text = self.factory_generation_speech_test(model, input_text)
         output_original_speech = self.factory_generation_speech_test(model, input_speech)
-        
-        
+
         # other models don't need it
         input_speech.pop("generate_speech")
         input_text.pop("generate_speech")
-        
-        
+
         model = SeamlessM4TForTextToText.from_pretrained(self.tmpdirname)
         self.update_generation(model)
         model.to(torch_device)
         model.eval()
 
         output_text = self.factory_generation_speech_test(model, input_text)
-        
-        
+
         model = SeamlessM4TForSpeechToText.from_pretrained(self.tmpdirname)
         self.update_generation(model)
         model.to(torch_device)
         model.eval()
 
         output_speech = self.factory_generation_speech_test(model, input_speech)
-        
+
         # test same text output from input text
         self.assertListEqual(output_original_text[0].ravel().tolist(), output_text.ravel().tolist())
 
         # test same speech output from input text
         self.assertListEqual(output_original_speech[0].ravel().tolist(), output_speech.ravel().tolist())
-        
-        
+
     def test_generation(self):
         config, input_speech, input_text = self.prepare_speech_and_text_input()
-        
+
         input_speech["num_beams"] = 3
         input_speech["do_sample"] = True
         input_speech["num_return_sequences"] = 3
-        
+
         input_text["num_beams"] = 3
         input_text["do_sample"] = True
         input_text["num_return_sequences"] = 3
@@ -893,25 +885,23 @@ class SeamlessM4TMGenerationTest(unittest.TestCase):
             self.update_generation(model)
             model.to(torch_device)
             model.eval()
-            
+
             output = model.generate(**input_speech)
             output = output[0] if isinstance(output, tuple) else output
-            
-            self.assertEqual(output.shape[0], 3*input_speech["input_features"].shape[0])
-            
-                    
-        for model_class in [ SeamlessM4TForTextToSpeech, SeamlessM4TForTextToText, SeamlessM4TModel]:
+
+            self.assertEqual(output.shape[0], 3 * input_speech["input_features"].shape[0])
+
+        for model_class in [SeamlessM4TForTextToSpeech, SeamlessM4TForTextToText, SeamlessM4TModel]:
             model = model_class(config=config)
             self.update_generation(model)
             model.to(torch_device)
             model.eval()
-            
+
             output = model.generate(**input_text)
-            
+
             output = output[0] if isinstance(output, tuple) else output
-            
-            self.assertEqual(output.shape[0], 3*input_text["input_ids"].shape[0])        
-                
+
+            self.assertEqual(output.shape[0], 3 * input_text["input_ids"].shape[0])
 
 
 @require_torch
@@ -1005,7 +995,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50: 60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50:60])
 
         self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
         self.assertTrue(expected_wav_std == output.waveforms.std().item())
@@ -1042,7 +1032,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50 : 60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50:60])
 
         self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
         self.assertTrue(expected_wav_std == output.waveforms.std().item())
@@ -1082,7 +1072,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50: 60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50:60])
 
         self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
         self.assertTrue(expected_wav_std == output.waveforms.std().item())

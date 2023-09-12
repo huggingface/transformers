@@ -12,15 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import shutil
 import tempfile
 import unittest
 
 from transformers.models.seamless_m4t import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor, SeamlessM4TTokenizer
-from transformers.models.seamless_m4t.tokenization_seamless_m4t import VOCAB_FILES_NAMES
-from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 from .test_feature_extraction_seamless_m4t import floats_list
 
@@ -47,7 +43,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
 
         processor.save_pretrained(self.tmpdirname)
         processor = SeamlessM4TProcessor.from_pretrained(self.tmpdirname)
-        
+
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, SeamlessM4TTokenizer)
 
@@ -66,7 +62,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         processor = SeamlessM4TProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
-                
+
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, SeamlessM4TTokenizer)
 
@@ -82,7 +78,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         raw_speech = floats_list((3, 1000))
 
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
-        input_processor = processor(audios = raw_speech, return_tensors="np")
+        input_processor = processor(audios=raw_speech, return_tensors="np")
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

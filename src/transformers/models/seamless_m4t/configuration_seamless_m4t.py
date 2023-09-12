@@ -310,7 +310,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         vocoder_num_spkrs=200,
         variance_predictor_kernel_size=3,
         var_pred_dropout=0.5,
-        control_symbol_vocoder_offset = 4,
+        control_symbol_vocoder_offset=4,
         **kwargs,
     ):
         # overall_config
@@ -398,7 +398,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         # for proper config init
         self.num_attention_heads = decoder_attention_heads
         self.num_hidden_layers = decoder_layers
-        
 
         super().__init__(
             pad_token_id=pad_token_id,
