@@ -1,0 +1,11 @@
+{
+  "additional_special_tokens": [
+    "▁<PRE>",
+    "▁<MID>",
+    "▁<SUF>",
+    "▁<EOT>"
+  ],
+  "bos_token": "<s>",
+  "eos_token": "</s>",
+  "unk_token": "<unk>"
+}
