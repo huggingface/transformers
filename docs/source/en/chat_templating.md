@@ -22,6 +22,10 @@ An increasingly common use case for LLMs is **chat**. In a chat context, rather 
 of text (as is the case with a standard language model), the model instead continues a conversation that consists
 of one or more **messages**, each of which includes a **role** as well as message text.
 
+Most commonly, these roles are "user" for messages sent by the user, and "assistant" for messages sent by the model.
+Some models also support a "system" role. System messages are usually sent at the beginning of the conversation
+and include directives about how the model should behave in the subsequent chat.
+
 All language models, including models fine-tuned for chat, operate on linear sequences of tokens and do not intrinsically
 have special handling for roles. This means that role information is usually injected by adding control tokens
 between messages, to indicate both the message boundary and the relevant roles.
@@ -36,7 +40,7 @@ and `content` keys, and represents a single chat message. Chat templates are str
 specifies how to format a conversation for a given model into a single tokenizable sequence. By storing this information
 with the tokenizer, we can ensure that models get input data in the format they expect.
 
-Let's make this concrete with a quick example using the `BlenderBot` model. Blenderbot has an extremely simple default 
+Let's make this concrete with a quick example using the `BlenderBot` model. BlenderBot has an extremely simple default 
 template, which mostly just adds whitespace between rounds of dialogue:
 
 ```python
@@ -68,6 +72,7 @@ that string will also be tokenized for us. To see a more complex template in act
 ...   {"role": "user", "content": "I'd like to show off how chat templating works!"},
 ... ]
 
+>> tokenizer.use_default_system_prompt = False
 >> tokenizer.apply_chat_template(chat, tokenize=False)
 "<s>[INST] Hello, how are you? [/INST] I'm doing great. How can I help you today? </s><s>[INST] I'd like to show off how chat templating works! [/INST]"
 ```
@@ -116,7 +121,7 @@ for idx, message in enumerate(messages):
     if message['role'] == 'user':
         print(' ')
     print(message['content'])
-    if not idx == len(messages) - 1:  # This checks for the last message in the conversation
+    if not idx == len(messages) - 1:  # Check for the last message in the conversation
         print('  ')
 print(eos_token)
 ```
@@ -128,15 +133,16 @@ Effectively, the template does three things:
 
 This is a pretty simple template - it doesn't add any control tokens, and it doesn't support "system" messages, which 
 are a common way to give the model directives about how it should behave in the subsequent conversation.
-But Jinja gives you a lot of flexibility to do those things! Here's the LLaMA default template, again with 
-newlines and indentations added for readability:
+But Jinja gives you a lot of flexibility to do those things! Let's see a Jinja template that can format inputs
+similarly to the way LLaMA formats them (note that the real LLaMA template includes handling for default system
+messages and slightly different system message handling in general - don't use this one in your actual code!)
 
 ```
 {% for message in messages %}
     {% if message['role'] == 'user' %}
-        {{ bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}
+        {{ bos_token + '[INST] ' + message['content'] + ' [/INST]' }}
     {% elif message['role'] == 'system' %}
-        {{ '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}
+        {{ '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}
     {% elif message['role'] == 'assistant' %}
         {{ ' '  + message['content'] + ' ' + eos_token }}
     {% endif %}
@@ -185,13 +191,13 @@ once you set the correct chat template, your model will automatically become com
 Before the introduction of chat templates, chat handling was hardcoded at the model class level. For backwards 
 compatibility, we have retained this class-specific handling as default templates, also set at the class level. If a
 model does not have a chat template set, but there is a default template for its model class, the `ConversationPipeline`
-class and methods like `apply_chat_template` will use the class template instead. The attribute
-`tokenizer.default_chat_template` contains the default template for your model.
+class and methods like `apply_chat_template` will use the class template instead. You can find out what the default
+template for your tokenizer is by checking the `tokenizer.default_chat_template` attribute.
 
 This is something we do purely for backward compatibility reasons, to avoid breaking any existing workflows. Even when
-the class template is appropriate for your model, we strongly recommend setting the `chat_template` 
-attribute explicitly to make it clear to users that your model has been correctly configured for chat, and
-to future-proof in case the default templates are ever altered or deprecated.
+the class template is appropriate for your model, we strongly recommend overriding the default template by
+setting the `chat_template` attribute explicitly to make it clear to users that your model has been correctly configured
+for chat, and to future-proof in case the default templates are ever altered or deprecated.
 
 ## What template should I use?
 
@@ -212,7 +218,13 @@ input formats. Our default template for models that don't have a class-specific 
 {% endfor %}
 ```
 
-This wraps each message in `<|im_start|>` and `<|im_end|>` tokens, and simply writes the role as a string, which
+If you like this one, here it is in one-liner form, ready to copy into your code:
+
+```
+tokenizer.chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}"
+```
+
+This template wraps each message in `<|im_start|>` and `<|im_end|>` tokens, and simply writes the role as a string, which
 allows for flexibility in the roles you train with. The output looks like this:
 
 ```
