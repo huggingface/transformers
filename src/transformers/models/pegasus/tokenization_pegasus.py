@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -121,7 +121,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
                     f"additional_special_tokens should be of type {type(list)}, but is"
                     f" {type(additional_special_tokens)}"
                 )
-            additional_tokens = len(additional_special_tokens)
             additional_special_tokens_extended = (
                 ([mask_token_sent] + additional_special_tokens)
                 if mask_token_sent not in additional_special_tokens and mask_token_sent is not None
@@ -139,7 +138,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
-            additional_tokens = 0
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
@@ -149,31 +147,19 @@ class PegasusTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
-        # add special tokens to encoder dict
-        self.encoder: Dict[int, str] = {
-            0: str(pad_token),
-            1: str(eos_token),
+        self._added_tokens_decoder = {
+            0: AddedToken(str(pad_token), lstrip=True, rsrip=True),
+            1: AddedToken(str(eos_token), lstrip=True, rsrip=True),
+            2: AddedToken(str(mask_token), lstrip=True, rsrip=True)
+            if mask_token_sent is None
+            else AddedToken(mask_token_sent),
         }
 
         if self.mask_token_sent is not None:
-            self.encoder.update(
-                {
-                    2: self.mask_token_sent,
-                    3: str(mask_token),
-                }
-            )
+            self._added_tokens_decoder[3] = AddedToken(str(mask_token))
 
-        if self.offset > 0:
-            # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
-            # mask_token_sent is already added to list -> so start at 1
-            self.encoder.update(
-                {
-                    i + 3: additional_special_tokens[i]
-                    for i in range(1 + additional_tokens, len(additional_special_tokens))
-                }
-            )
-
-        self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
+        for i in range(2, self.offset):
+            self._added_tokens_decoder[len(self._added_tokens_decoder)] = AddedToken(f"<unk_{i}>")
 
         super().__init__(
             eos_token=eos_token,
@@ -189,11 +175,10 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return len(self.sp_model) + self.offset
+        return len(self.sp_model)
 
     def get_vocab(self) -> Dict[str, int]:
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(dict(self.decoder.items()))
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
@@ -218,21 +203,12 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) to an id using the vocab."""
-        if token in self.decoder:
-            return self.decoder[token]
-        elif token in self.added_tokens_encoder:
-            return self.added_tokens_encoder[token]
         sp_id = self.sp_model.piece_to_id(token)
         return sp_id + self.offset
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
-        if index in self.encoder:
-            return self.encoder[index]
-        elif index in self.added_tokens_decoder:
-            return self.added_tokens_decoder[index]
-        else:
-            token = self.sp_model.IdToPiece(index - self.offset)
+        token = self.sp_model.IdToPiece(index - self.offset)
         return token
 
     def convert_tokens_to_string(self, tokens):
