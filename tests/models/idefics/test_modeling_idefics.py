@@ -213,6 +213,27 @@ class IdeficsModelTester:
             result.last_hidden_state.shape, (self.batch_size, input_ids.shape[1], self.hidden_size)
         )
 
+    def create_and_check_model_gen(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        pixel_values,
+        image_attention_mask,
+        interpolate_pos_encoding,
+    ):
+        model = IdeficsForVisionText2Text(config)
+        model.to(torch_device)
+        model.eval()
+        model.generate(
+            input_ids,
+            attention_mask=input_mask,
+            pixel_values=pixel_values,
+            image_attention_mask=image_attention_mask,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            max_length=self.seq_length + 2,
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -284,6 +305,10 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_with_image_pos_embeddings_interpolation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(num_images=1, interpolate_pos_encoding=True)
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_generate_with_image_pos_embeddings_interpolation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_images=1, interpolate_pos_encoding=True)
+        self.model_tester.create_and_check_model_gen(*config_and_inputs)
 
     def test_training(self):
         if not self.model_tester.is_training:
