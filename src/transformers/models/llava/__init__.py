@@ -40,6 +40,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_llava import LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig, LlavaLlamaConfig
+    from .processing_llava import LlavaProcessor
 
     try:
         if not is_torch_available():
