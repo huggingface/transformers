@@ -339,6 +339,8 @@
         title: (번역중) LED
       - local: model_doc/llama
         title: LLaMA
+      - local: model_doc/llama2
+        title: LLaMA2
       - local: in_translation
         title: (번역중) Longformer
       - local: in_translation
