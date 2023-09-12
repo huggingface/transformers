@@ -15,12 +15,10 @@
 """ PyTorch BEiT3 model."""
 
 
-import copy
 import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -61,7 +59,6 @@ BEIT3_START_DOCSTRING = r"""
 # output_hidden_states = True,
 
 
-
 BEIT3_MODEL = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
@@ -76,7 +73,7 @@ BEIT3_MODEL = r"""
             [`BeitImageProcessor.__call__`] for details.
         text_padding_position (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
-            
+
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
@@ -88,7 +85,7 @@ BEIT3_MODEL = r"""
             [What are attention masks?](../glossary#attention-mask)
         vision_masked_position (`torch.LongTensor` of shape `({1})`):
             Padding mask for input tokens , of same shape as `pixel_values`
-            
+
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
         incremental_state (`Dict`):
@@ -96,7 +93,7 @@ BEIT3_MODEL = r"""
         positions (`int`):
             Position of where text representations end and image representation start.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.                                                                        
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -320,11 +317,14 @@ class Beit3LayerNorm(nn.Module):
 
 
 class Beit3Embedder(nn.Module):
-    def __init__(self, modules, dim=1):
+    def __init__(self, config):
         super().__init__()
-        self.dim = dim
-        self.first = modules[0]
-        self.second = modules[1]
+        img_size = (config.img_size, config.img_size)
+        patch_size = (config.patch_size, config.patch_size)
+        self.num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0]) + 1
+
+        self.first = Beit3PositionalEmbedding(self.num_patches + 2, config.embed_dim)
+        self.second = Beit3PositionalEmbedding(config.max_source_positions, config.embed_dim)
         self.split_position = -1
 
     def forward(self, hidden_states, positions, multiway_split_position=None):
@@ -336,11 +336,11 @@ class Beit3Embedder(nn.Module):
             return self.second(hidden_states, positions=positions)
         text_hidden, image_hidden = torch.split(
             hidden_states,
-            [self.split_position, hidden_states.size(self.dim) - self.split_position],
-            dim=self.dim,
+            [self.split_position, hidden_states.size(1) - self.split_position],
+            dim=1,
         )
         y1, y2 = self.first(text_hidden, positions=positions), self.second(image_hidden, positions=positions)
-        return torch.cat([y1, y2], dim=self.dim)
+        return torch.cat([y1, y2], dim=1)
 
 
 class Beit3VisionEmbedding(nn.Module):
@@ -384,11 +384,14 @@ class Beit3VisionEmbedding(nn.Module):
 
 
 class Beit3PositionalEmbedding(nn.Embedding):
-
     def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__(num_embeddings, embedding_dim)
 
-    def forward(self,hidden_states: torch.Tensor,positions: torch.Tensor = None,):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        positions: torch.Tensor = None,
+    ):
         if positions is None:
             positions = torch.arange(2, hidden_states.size(1) + 2, device=hidden_states.device).long().unsqueeze(0)
         return F.embedding(
@@ -403,7 +406,10 @@ class Beit3PositionalEmbedding(nn.Embedding):
 
 
 class Beit3MultiheadAttention(nn.Module):
-    def __init__(self,config,):
+    def __init__(
+        self,
+        config,
+    ):
         super().__init__()
         self.embed_dim = config.embed_dim
         self.num_heads = config.num_attention_heads
@@ -642,11 +648,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
 
 
 class Beit3Encoder(nn.Module):
-    def __init__(
-        self,
-        config,
-        embed_positions=None,
-    ):
+    def __init__(self, config, embed_positions=None):
         super().__init__()
 
         self.config = config
@@ -760,13 +762,7 @@ class Beit3Model(Beit3PreTrainedModel):
         super().__init__(config)
         self.text_embedding = nn.Embedding(config.vocab_size, config.embed_dim)
         self.vision_embedding = Beit3VisionEmbedding(config)
-        embed_positions = Beit3Embedder(
-            modules=[
-                Beit3PositionalEmbedding(self.vision_embedding.num_position_embeddings() + 2, config.embed_dim),
-                Beit3PositionalEmbedding(config.max_source_positions, config.embed_dim),
-            ],
-            dim=1,
-        )
+        embed_positions = Beit3Embedder(config)
         self.encoder = Beit3Encoder(
             config,
             embed_positions=embed_positions,
@@ -918,7 +914,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         super(Beit3ForImageClassification, self).__init__(config)
         embed_dim = config.embed_dim
         self.beit3 = Beit3Model(config)
-        self.fc_norm = nn.LayerNorm(embed_dim,eps=config.layer_norm_eps)
+        self.fc_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.classifier = nn.Linear(embed_dim, config.num_labels) if config.num_labels > 0 else nn.Identity()
         self.num_labels = config.num_labels
         self.post_init()
@@ -1078,7 +1074,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
 class Beit3Pooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.norm = nn.LayerNorm(config.embed_dim,eps=config.layer_norm_eps)
+        self.norm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.embed_dim, config.embed_dim)
         self.activation = nn.Tanh()
 
@@ -1108,7 +1104,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         self.pooler.apply(self._init_weights)
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim * 2),
-            nn.LayerNorm(embed_dim * 2,eps=config.layer_norm_eps),
+            nn.LayerNorm(embed_dim * 2, eps=config.layer_norm_eps),
             nn.GELU(),
             nn.Linear(embed_dim * 2, config.num_labels),
         )
