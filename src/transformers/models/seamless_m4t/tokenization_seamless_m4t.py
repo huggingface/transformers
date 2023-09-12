@@ -32,8 +32,8 @@ logger = logging.get_logger(__name__)
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/nllb-200-distilled-600M": (
-            "https://huggingface.co/facebook/nllb-200-distilled-600M/blob/main/sentencepiece.bpe.model"
+        "ylacombe/hf-seamless-m4t-medium": (
+            "https://huggingface.co/ylacombe/hf-seamless-m4t-medium/blob/main/sentencepiece.bpe.model"
         ),
     }
 }
@@ -118,9 +118,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (`str`, *optional*, defaults to `"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
         tokenizer_file (`str`, *optional*):
             The path to a tokenizer file to use instead of the vocab file.
         src_lang (`str`, *optional*, defaults to `"eng"`):
@@ -151,7 +148,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        mask_token="<mask>",
         tokenizer_file=None,
         src_lang="eng",
         tgt_lang="fra",
@@ -193,8 +189,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         self.sp_model_size = len(self.sp_model)
 
+        self.init_kwargs["language_code"] = language_code
         language_code = language_code if language_code is not None else LARGE_SEAMLESS_M4T_LANGUAGE_CODES
-
         language_code = [f"__{code}__" for code in language_code if "__" not in code]
 
         # update languages codes
@@ -220,9 +216,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
                 [t for t in additional_special_tokens if t not in self._additional_special_tokens]
             )
 
-        self._src_lang = f"__{src_lang}__"
+        self._src_lang = f"__{src_lang}__" if "__" not in src_lang else src_lang
+        self._tgt_lang = f"__{tgt_lang}__" if "__" not in tgt_lang else tgt_lang
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
-        self._tgt_lang = f"__{tgt_lang}__"
         self.set_src_lang_special_tokens(self._src_lang)
         self.set_tgt_lang_special_tokens(self._tgt_lang)
 
@@ -295,10 +291,26 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return len(self.sp_model) + len(self.additional_special_tokens) + self.fairseq_offset
+    
+    def add_special_tokens(
+            self, special_tokens_dict, replace_additional_special_tokens=True
+        ) -> int:
+        if replace_additional_special_tokens:
+            logger.warning_once(
+                    "`replace_additional_special_tokens=True` will break the language token ids once saved and reloaded. Be careful with this operation."
+                )
+        return super().add_special_tokens(
+            special_tokens_dict=special_tokens_dict, replace_additional_special_tokens=replace_additional_special_tokens
+        )
 
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair_target: Optional[
+            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+        ] = None,
         padding: Union[bool, str, PaddingStrategy] = True,
         pad_to_multiple_of: Optional[int] = 2,
         src_lang: Optional[str] = None,
@@ -307,8 +319,22 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     ):
         """
         Args:
-            text (Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]], *optional*):
-                The sequence or batch of sequences to be encoded. Each sequence must be a string.
+            text (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_pair (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_pair_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -338,7 +364,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         if tgt_lang is not None:
             self.tgt_lang = tgt_lang
 
-        output = super().__call__(text=text, padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
+        output = super().__call__(text=text, 
+        text_pair = text_pair,
+        text_target = text_target,
+        text_pair_target = text_pair_target,
+        padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
 
         return BatchEncoding(output, tensor_type=kwargs.get("return_tensors"))
 
@@ -542,7 +572,13 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         """Reset the special tokens to the source lang setting.
         Prefix=[src_lang_code], suffix = [eos]
         """
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        self.cur_lang_code = self.lang_code_to_id.get(src_lang, self.unk_token_id)
+        self.init_kwargs["src_lang"] = src_lang
+        
+        if self.cur_lang_code == self.unk_token_id:
+            logger.warning_once(
+                    f"`src_lang={src_lang}` has not be found in the `lang_code_to_id` dictionary which has those keys: {', '.join(self.lang_code_to_id.keys())}. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+                )
 
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
@@ -552,7 +588,13 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         """Reset the special tokens to the target lang setting.
         Prefix=[eos, tgt_lang_code] and suffix=[eos].
         """
-        self.cur_lang_code = self.lang_code_to_id[lang]
+        self.cur_lang_code = self.lang_code_to_id.get(lang, self.unk_token_id)
+        self.init_kwargs["tgt_lang"] = lang
+
+        if self.cur_lang_code == self.unk_token_id:
+            logger.warning_once(
+                    f"`tgt_lang={lang}` has not be found in the `lang_code_to_id` dictionary which has those keys: {', '.join(self.lang_code_to_id.keys())}. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+                )
 
         self.prefix_tokens = [self.eos_token_id, self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]

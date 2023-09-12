@@ -112,9 +112,6 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (`str`, *optional*, defaults to `"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
         tokenizer_file (`str`, *optional*):
             The path to a tokenizer file to use instead of the vocab file.
         src_lang (`str`, *optional*, defaults to `"eng"`):
@@ -145,7 +142,6 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        mask_token="<mask>",
         src_lang="eng",
         tgt_lang="fra",
         additional_special_tokens=None,
@@ -161,17 +157,21 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             cls_token=cls_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            mask_token=mask_token,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
-        self._src_lang = f"__{src_lang}__"
-        self._tgt_lang = f"__{tgt_lang}__"
+        self.vocab_file = vocab_file
+        self._src_lang = f"__{src_lang}__" if "__" not in src_lang else src_lang
+        self._tgt_lang = f"__{tgt_lang}__" if "__" not in tgt_lang else tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
         self.set_tgt_lang_special_tokens(self._tgt_lang)
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     @property
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
@@ -294,6 +294,13 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         """
         self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
 
+        if self.cur_lang_code == self.unk_token_id:
+            logger.warning_once(
+                    f"`tgt_lang={src_lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+                )
+            
+        self.init_kwargs["src_lang"] = src_lang
+
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
 
@@ -311,6 +318,14 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         Prefix=[eos, tgt_lang_code] and suffix=[eos].
         """
         self.cur_lang_code = self.convert_tokens_to_ids(lang)
+
+        if self.cur_lang_code == self.unk_token_id:
+            logger.warning_once(
+                    f"`tgt_lang={lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
+                )
+            
+        self.init_kwargs["tgt_lang"] = lang
+        
 
         self.prefix_tokens = [self.eos_token_id, self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
@@ -347,6 +362,11 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair_target: Optional[
+            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+        ] = None,
         padding: Union[bool, str, PaddingStrategy] = True,
         pad_to_multiple_of: Optional[int] = 2,
         src_lang: Optional[str] = None,
@@ -355,8 +375,22 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     ):
         """
         Args:
-            text (Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]], *optional*):
-                The sequence or batch of sequences to be encoded. Each sequence must be a string.
+            text (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_pair (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_pair_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -386,6 +420,10 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         if tgt_lang is not None:
             self.tgt_lang = tgt_lang
 
-        output = super().__call__(text=text, padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
+        output = super().__call__(text=text, 
+                            text_pair = text_pair,
+                            text_target = text_target,
+                            text_pair_target = text_pair_target,
+                                  padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
 
-        return BatchEncoding(output, tensor_type=kwargs.get("return_tensors"))
+        return output
