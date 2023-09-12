@@ -16,8 +16,8 @@
 
 import math
 import random
-from typing import Optional, Tuple
 from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
