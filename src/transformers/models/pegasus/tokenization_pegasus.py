@@ -37,7 +37,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 logger = logging.get_logger(__name__)
 
-
+# TODO ArthurZ refactor this to only use the added_tokens_encoder
 class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a PEGASUS tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -188,8 +188,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update({k: v for k, v in self.decoder.items()})
         vocab.update(self.added_tokens_encoder)
-        vocab.update({str(k): v for k, v in self.decoder.items()})
         return vocab
 
     def __getstate__(self):
