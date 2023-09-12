@@ -168,7 +168,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         **kwargs,
     ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one or several sequence(s).
+        Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch for
+        the STFT computation if available, otherwise a slower NumPy based one.
 
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
