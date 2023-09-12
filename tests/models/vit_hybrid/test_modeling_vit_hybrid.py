@@ -281,7 +281,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
 
-        inputs = image_processor(images=image, return_tensors="pt")
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
         outputs = model(**inputs)
         logits = outputs.logits
         # model predicts one of the 1000 ImageNet classes

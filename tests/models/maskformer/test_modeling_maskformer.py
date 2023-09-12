@@ -539,7 +539,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         image_processor = self.default_image_processor
 
         inputs = image_processor(
-            [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
+            [np.zeros((3, 400, 333)), np.zeros((3, 400, 333))],
             segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
             return_tensors="pt",
         )

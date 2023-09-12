@@ -34,6 +34,7 @@ python utils/check_doc_toc.py --fix_and_overwrite
 
 import argparse
 from collections import defaultdict
+from typing import List
 
 import yaml
 
@@ -41,7 +42,7 @@ import yaml
 PATH_TO_TOC = "docs/source/en/_toctree.yml"
 
 
-def clean_model_doc_toc(model_doc):
+def clean_model_doc_toc(model_doc: List[dict]) -> List[dict]:
     """
     Cleans a section of the table of content of the model documentation (one specific modality) by removing duplicates
     and sorting models alphabetically.
@@ -77,7 +78,7 @@ def clean_model_doc_toc(model_doc):
     return sorted(new_doc, key=lambda s: s["title"].lower())
 
 
-def check_model_doc(overwrite=False):
+def check_model_doc(overwrite: bool = False):
     """
     Check that the content of the table of content in `_toctree.yml` is clean (no duplicates and sorted for the model
     API doc) and potentially auto-cleans it.

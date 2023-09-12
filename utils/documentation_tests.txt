@@ -449,6 +449,8 @@ src/transformers/models/vit_hybrid/image_processing_vit_hybrid.py
 src/transformers/models/vit_mae/configuration_vit_mae.py
 src/transformers/models/vit_mae/modeling_vit_mae.py
 src/transformers/models/vit_msn/modeling_vit_msn.py
+src/transformers/models/vits/modeling_vits.py
+src/transformers/models/vits/tokenization_vits.py
 src/transformers/models/wav2vec2/configuration_wav2vec2.py
 src/transformers/models/wav2vec2/feature_extraction_wav2vec2.py
 src/transformers/models/wav2vec2/modeling_wav2vec2.py

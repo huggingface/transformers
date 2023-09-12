@@ -553,19 +553,19 @@ class TFRagModel(TFRagPreTrainedModel):
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
         decoder_input_ids: np.ndarray | tf.Tensor | None = None,
         decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Tuple[Tuple[Union[np.ndarray, tf.Tensor]]] | None = None,
         doc_scores: np.ndarray | tf.Tensor | None = None,
         context_input_ids: np.ndarray | tf.Tensor | None = None,
         context_attention_mask: np.ndarray | tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_retrieved: Optional[bool] = None,
-        n_docs: Optional[int] = None,
-        return_dict: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_retrieved: bool | None = None,
+        n_docs: int | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
         **kwargs,
-    ):
+    ) -> TFRetrievAugLMOutput:
         r"""
         Returns:
 
@@ -849,22 +849,22 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         decoder_input_ids: np.ndarray | tf.Tensor | None = None,
         decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Tuple[Tuple[Union[np.ndarray, tf.Tensor]]] | None = None,
         doc_scores: np.ndarray | tf.Tensor | None = None,
         context_input_ids: np.ndarray | tf.Tensor | None = None,
         context_attention_mask: np.ndarray | tf.Tensor | None = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_retrieved: Optional[bool] = None,
-        n_docs: Optional[int] = None,
-        do_marginalize: Optional[bool] = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        output_retrieved: bool | None = None,
+        n_docs: int | None = None,
+        do_marginalize: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        reduce_loss: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        reduce_loss: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
         **kwargs,  # needs kwargs for generation
-    ):
+    ) -> TFRetrievAugLMMarginOutput:
         r"""
         do_marginalize (`bool`, *optional*):
             If `True`, the logits are marginalized over all documents by making use of

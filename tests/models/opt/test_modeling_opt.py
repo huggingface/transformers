@@ -522,13 +522,13 @@ class OPTGenerationTest(unittest.TestCase):
         model_name = "facebook/opt-1.3b"
         tokenizer = GPT2Tokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
 
-        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).cuda()
+        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).to(torch_device)
         model = model.eval()
 
         batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
 
-        input_ids = batch["input_ids"].cuda()
-        attention_mask = batch["attention_mask"].cuda()
+        input_ids = batch["input_ids"].to(torch_device)
+        attention_mask = batch["attention_mask"].to(torch_device)
 
         with torch.no_grad():
             outputs = model(input_ids, attention_mask=attention_mask)

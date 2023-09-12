@@ -112,7 +112,7 @@ pytest tests/test_optimization.py --collect-only -q
 개별 테스트 모듈 실행하기:
 
 ```bash
-pytest tests/test_logging.py
+pytest tests/utils/test_logging.py
 ```
 
 ### 특정 테스트 실행[[run-specific-tests]]
@@ -432,14 +432,14 @@ pytest --instafail
 GPU가 활성화된 환경에서, CPU 전용 모드로 테스트하려면 `CUDA_VISIBLE_DEVICES=""`를 추가합니다:
 
 ```bash
-CUDA_VISIBLE_DEVICES="" pytest tests/test_logging.py
+CUDA_VISIBLE_DEVICES="" pytest tests/utils/test_logging.py
 ```
 
 또는 다중 GPU가 있는 경우 `pytest`에서 사용할 GPU를 지정할 수도 있습니다. 
 예를 들어, GPU `0` 및 `1`이 있는 경우 다음을 실행할 수 있습니다:
 
 ```bash
-CUDA_VISIBLE_DEVICES="1" pytest tests/test_logging.py
+CUDA_VISIBLE_DEVICES="1" pytest tests/utils/test_logging.py
 ```
 
 이렇게 하면 다른 GPU에서 다른 작업을 실행하려는 경우 유용합니다.
@@ -538,7 +538,7 @@ CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/test_trainer_distributed.py
 출력 캡처를 비활성화하고 `stdout` 및 `stderr`를 정상적으로 받으려면 `-s` 또는 `--capture=no`를 사용하세요:
 
 ```bash
-pytest -s tests/test_logging.py
+pytest -s tests/utils/test_logging.py
 ```
 
 테스트 결과를 JUnit 형식의 출력으로 보내려면 다음을 사용하세요:
@@ -552,7 +552,7 @@ py.test tests --junitxml=result.xml
 색상이 없게 하려면 다음과 같이 설정하세요(예를 들어 흰색 배경에 노란색 글씨는 가독성이 좋지 않습니다):
 
 ```bash
-pytest --color=no tests/test_logging.py
+pytest --color=no tests/utils/test_logging.py
 ```
 
 ### online pastebin service에 테스트 보고서 전송[[sending test report to online pastebin service]]
@@ -560,7 +560,7 @@ pytest --color=no tests/test_logging.py
 각 테스트 실패에 대한 URL을 만듭니다:
 
 ```bash
-pytest --pastebin=failed tests/test_logging.py
+pytest --pastebin=failed tests/utils/test_logging.py
 ```
 
 이렇게 하면 각 실패에 대한 URL을 제공하는 remote Paste service에 테스트 실행 정보를 제출합니다. 
@@ -569,7 +569,7 @@ pytest --pastebin=failed tests/test_logging.py
 전체 테스트 세션 로그에 대한 URL을 생성합니다:
 
 ```bash
-pytest --pastebin=all tests/test_logging.py
+pytest --pastebin=all tests/utils/test_logging.py
 ```
 
 ## 테스트 작성[[writing-tests]]
@@ -1199,7 +1199,7 @@ tf.random.set_seed(seed)
 경고가 있는 곳에서 디버거를 시작하려면 다음을 수행하세요.
 
 ```bash
-pytest tests/test_logging.py -W error::UserWarning --pdb
+pytest tests/utils/test_logging.py -W error::UserWarning --pdb
 ```
 
 ## Github Actions 워크플로우 작업 처리[[working-with-github-actions-workflows]]

@@ -50,6 +50,7 @@ from .utils import (
     is_torch_npu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_torch_xpu_available,
     logging,
     requires_backends,
 )
@@ -154,6 +155,7 @@ class OptimizerNames(ExplicitEnum):
     PAGED_LION_8BIT = "paged_lion_8bit"
 
 
+# TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
 @dataclass
 class TrainingArguments:
     """
@@ -193,9 +195,9 @@ class TrainingArguments:
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU core/CPU for training.
+            The batch size per GPU/XPU/TPU/MPS/NPU core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU core/CPU for evaluation.
+            The batch size per GPU/XPU/TPU/MPS/NPU core/CPU for evaluation.
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -436,13 +438,13 @@ class TrainingArguments:
             deepspeed json config file (e.g., `ds_config.json`) or an already loaded json file as `dict`.
 
             A List of config and its options:
-                - fsdp_min_num_params (`int`, *optional*, defaults to `0`):
+                - min_num_params (`int`, *optional*, defaults to `0`):
                     FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
                     passed).
-                - fsdp_transformer_layer_cls_to_wrap (`List[str]`, *optional*):
+                - transformer_layer_cls_to_wrap (`List[str]`, *optional*):
                     List of transformer layer class names (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`,
                     `T5Block` .... (useful only when `fsdp` flag is passed).
-                - fsdp_backward_prefetch (`str`, *optional*)
+                - backward_prefetch (`str`, *optional*)
                     FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when
                     `fsdp` field is passed).
 
@@ -454,7 +456,7 @@ class TrainingArguments:
                     - `"backward_post"` : This prefetches the next set of parameters after the current set of
                       parameter’s
                         gradient computation.
-                - fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
+                - forward_prefetch (`bool`, *optional*, defaults to `False`)
                     FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
                      If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
                      forward pass.
@@ -462,6 +464,14 @@ class TrainingArguments:
                     FSDP's limit_all_gathers (useful only when `fsdp` field is passed).
                      If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight
                      all-gathers.
+                - use_orig_params (`bool`, *optional*, defaults to `False`)
+                    If `"True"`, allows non-uniform `requires_grad` during init, which means support for interspersed
+                    frozen and trainable paramteres. Useful in cases such as parameter-efficient fine-tuning. Please
+                    refer this
+                    [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019
+                - sync_module_states (`bool`, *optional*, defaults to `True`)
+                    If `"True"`, each individually wrapped FSDP unit will broadcast module parameters from rank 0 to
+                    ensure they are the same across all ranks after initialization
                 - xla (`bool`, *optional*, defaults to `False`):
                     Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. This is an experimental feature
                     and its API may evolve in the future.
@@ -474,6 +484,10 @@ class TrainingArguments:
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
+                - activation_checkpointing (`bool`, *optional*, defaults to `False`):
+                    If True, activation checkpointing is a technique to reduce memory usage by clearing activations of
+                    certain layers and recomputing them during a backward pass. Effectively, this trades extra
+                    computation time for reduced memory usage.
 
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
@@ -619,6 +633,12 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
+        include_tokens_per_second (`bool`, *optional*):
+            Whether or not to compute the number of tokens per second per device for training speed metrics.
+
+            This will iterate over the entire training dataloader once beforehand,
+
+            and will slow down the entire process.
     """
 
     framework = "pt"
@@ -648,10 +668,10 @@ class TrainingArguments:
     )
 
     per_device_train_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for training."}
     )
     per_device_eval_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for evaluation."}
     )
 
     per_gpu_train_batch_size: Optional[int] = field(
@@ -804,7 +824,9 @@ class TrainingArguments:
     )
     use_cpu: bool = field(
         default=False,
-        metadata={"help": " Whether or not to use cpu. If set to False, we will use cuda or mps device if available."},
+        metadata={
+            "help": " Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu device if available."
+        },
     )
     use_mps_device: bool = field(
         default=False,
@@ -1216,6 +1238,11 @@ class TrainingArguments:
         },
     )
 
+    include_tokens_per_second: Optional[bool] = field(
+        default=False,
+        metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
+    )
+
     def __post_init__(self):
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
@@ -1342,11 +1369,20 @@ class TrainingArguments:
                 if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
-                elif not self.use_cpu and torch.cuda.is_available() and not is_torch_bf16_gpu_available():
-                    # gpu
-                    raise ValueError(
-                        "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
-                    )
+                elif not self.use_cpu:
+                    if torch.cuda.is_available() and not is_torch_bf16_gpu_available():
+                        # gpu
+                        raise ValueError(
+                            "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+                        )
+                    elif not is_torch_xpu_available():
+                        # xpu
+                        from .pytorch_utils import is_torch_greater_or_equal_than_1_12
+
+                        if not is_torch_greater_or_equal_than_1_12:
+                            raise ValueError(
+                                "Your setup doesn't support bf16/xpu. You need torch>=1.12, using Intel XPU/GPU with IPEX installed"
+                            )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -1401,6 +1437,7 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) != "GPU")
             and (get_xla_device_type(self.device) != "TPU")
             and (self.device.type != "cpu")
@@ -1408,7 +1445,7 @@ class TrainingArguments:
         ):
             raise ValueError(
                 "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
-                " (`--bf16_full_eval`) can only be used on CUDA or CPU/TPU/NeuronCore devices."
+                " (`--bf16_full_eval`) can only be used on CUDA, XPU (with IPEX) or CPU/TPU/NeuronCore devices."
             )
 
         if self.torchdynamo is not None:
@@ -1456,6 +1493,15 @@ class TrainingArguments:
                     torch.backends.cuda.matmul.allow_tf32 = False
                     torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
+
+        # if training args is specified, it will override the one specified in the accelerate config
+        if self.half_precision_backend != "apex" and len(self.sharded_ddp) == 0:
+            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+            if self.fp16:
+                mixed_precision_dtype = "fp16"
+            elif self.bf16:
+                mixed_precision_dtype = "bf16"
+            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
         if self.report_to is None:
             logger.info(
@@ -1518,44 +1564,44 @@ class TrainingArguments:
             self.fsdp_config = {}
 
         if isinstance(self.fsdp_config, str):
+            if len(self.fsdp) == 0:
+                warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
             with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
+                for k in list(self.fsdp_config.keys()):
+                    if k.startswith("fsdp_"):
+                        v = self.fsdp_config.pop(k)
+                        self.fsdp_config[k[5:]] = v
 
         if self.fsdp_min_num_params > 0:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
 
-        self.fsdp_config["fsdp_min_num_params"] = max(
-            self.fsdp_config.get("fsdp_min_num_params", 0), self.fsdp_min_num_params
-        )
+        self.fsdp_config["min_num_params"] = max(self.fsdp_config.get("min_num_params", 0), self.fsdp_min_num_params)
 
-        # if fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is specified as a string, convert it to a list with a single object
-        if isinstance(self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None), str):
-            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = [
-                self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]
-            ]
+        # if fsdp_config["transformer_layer_cls_to_wrap"] is specified as a string, convert it to a list with a single object
+        if isinstance(self.fsdp_config.get("transformer_layer_cls_to_wrap", None), str):
+            self.fsdp_config["transformer_layer_cls_to_wrap"] = [self.fsdp_config["transformer_layer_cls_to_wrap"]]
 
         if self.fsdp_transformer_layer_cls_to_wrap is not None:
             warnings.warn(
                 "using `--fsdp_transformer_layer_cls_to_wrap` is deprecated. Use fsdp_config instead ", FutureWarning
             )
-            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = self.fsdp_config.get(
-                "fsdp_transformer_layer_cls_to_wrap", []
+            self.fsdp_config["transformer_layer_cls_to_wrap"] = self.fsdp_config.get(
+                "transformer_layer_cls_to_wrap", []
             ) + [self.fsdp_transformer_layer_cls_to_wrap]
 
-        if len(self.fsdp) == 0 and self.fsdp_config["fsdp_min_num_params"] > 0:
-            warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
+        if len(self.fsdp) == 0 and self.fsdp_config["min_num_params"] > 0:
+            warnings.warn("`min_num_params` is useful only when `--fsdp` is specified.")
 
-        if len(self.fsdp) == 0 and self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
-            warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
+        if len(self.fsdp) == 0 and self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None:
+            warnings.warn("`transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
 
         if (
             len(self.fsdp) > 0
-            and self.fsdp_config["fsdp_min_num_params"] > 0
-            and self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None
+            and self.fsdp_config["min_num_params"] > 0
+            and self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None
         ):
-            raise ValueError(
-                "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
-            )
+            raise ValueError("`min_num_params` and `transformer_layer_cls_to_wrap` are mutually exclusive.")
         self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
         self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
         if self.fsdp_config["xla"]:
@@ -1581,23 +1627,29 @@ class TrainingArguments:
                 FSDP_SHARDING_STRATEGY,
             )
 
+            prefix = "FSDP_"
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
                     # set environment variable for FSDP sharding strategy
-                    os.environ["FSDP_SHARDING_STRATEGY"] = str(FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1)
+                    os.environ[f"{prefix}SHARDING_STRATEGY"] = str(
+                        FSDP_SHARDING_STRATEGY.index(fsdp_option.upper()) + 1
+                    )
                 elif fsdp_option == FSDPOption.OFFLOAD:
-                    os.environ["FSDP_OFFLOAD_PARAMS"] = "true"
+                    os.environ[f"{prefix}OFFLOAD_PARAMS"] = "true"
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
-                    os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
-                    if self.fsdp_config["fsdp_min_num_params"] > 0:
-                        os.environ["FSDP_MIN_NUM_PARAMS"] = str(self.fsdp_config["fsdp_min_num_params"])
-                        os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[1]
-                    elif self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
-                        os.environ["FSDP_TRANSFORMER_CLS_TO_WRAP"] = ",".join(
-                            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]
+                    os.environ[f"{prefix}AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
+                    if self.fsdp_config["min_num_params"] > 0:
+                        os.environ[f"{prefix}MIN_NUM_PARAMS"] = str(self.fsdp_config["min_num_params"])
+                        os.environ[f"{prefix}AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[1]
+                    elif self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None:
+                        os.environ[f"{prefix}TRANSFORMER_CLS_TO_WRAP"] = ",".join(
+                            self.fsdp_config["transformer_layer_cls_to_wrap"]
                         )
             prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
-            os.environ["FSDP_BACKWARD_PREFETCH"] = prefetch_policy.upper()
+            os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
+            os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefect", "false")
+            os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
+            os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "false")
 
         if self.tpu_metrics_debug:
             warnings.warn(
@@ -1622,7 +1674,7 @@ class TrainingArguments:
             # - must be run before the model is created.
             if not is_accelerate_available():
                 raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
-            from transformers.deepspeed import HfTrainerDeepSpeedConfig
+            from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
@@ -1639,6 +1691,8 @@ class TrainingArguments:
             from accelerate.utils import DeepSpeedPlugin
 
             self.deepspeed_plugin = DeepSpeedPlugin()
+            mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
+            self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
 
         if self.push_to_hub_token is not None:
@@ -1675,15 +1729,6 @@ class TrainingArguments:
                 f"{self.hub_model_id}).",
                 FutureWarning,
             )
-
-        # if training args is specified, it will override the one specified in the accelerate config
-        if self.half_precision_backend != "apex" and len(self.sharded_ddp) == 0:
-            mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
-            if self.fp16:
-                mixed_precision_dtype = "fp16"
-            elif self.bf16:
-                mixed_precision_dtype = "bf16"
-            os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
 
     def __str__(self):
         self_as_dict = asdict(self)
@@ -1756,6 +1801,10 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
             torch.cuda.set_device(device)
+        elif is_torch_xpu_available() and "ACCELERATE_USE_XPU" not in os.environ:
+            os.environ["ACCELERATE_USE_XPU"] = "true"
+            device = torch.device("xpu:0")
+            self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
             self.distributed_state = PartialState(_use_sagemaker_dp=True)
             self._n_gpu = 1
@@ -1784,6 +1833,12 @@ class TrainingArguments:
         elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
             # Already set _n_gpu
             pass
+        elif self.distributed_state.distributed_type == DistributedType.MULTI_XPU:
+            if "ACCELERATE_USE_XPU" not in os.environ:
+                os.environ["ACCELERATE_USE_XPU"] = "true"
+            self._n_gpu = torch.xpu.device_count()
+            device = torch.device("xpu:0")
+            torch.xpu.set_device(device)
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 warnings.warn(
@@ -1801,6 +1856,10 @@ class TrainingArguments:
             elif self.use_cpu:
                 device = torch.device("cpu")
                 self._n_gpu = 0
+            elif is_torch_xpu_available():
+                device = torch.device("xpu:0")
+                torch.xpu.set_device(device)
+                self._n_gpu = 1
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
                 torch.npu.set_device(device)

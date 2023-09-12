@@ -30,11 +30,13 @@ rendered properly in your Markdown viewer.
 
 <frameworkcontent>
 <pt>
+
 ```bash
 pip install torch
 ```
 </pt>
 <tf>
+
 ```bash
 pip install tensorflow
 ```
@@ -203,6 +205,7 @@ label: NEGATIVE, with score: 0.5309
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> pt_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -214,6 +217,7 @@ label: NEGATIVE, with score: 0.5309
 ```
 </pt>
 <tf>
+
 ```py
 >>> tf_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -347,6 +351,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import AutoModel
 
@@ -355,6 +360,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import TFAutoModel
 
@@ -401,7 +407,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 ## Trainer - PyTorch优化训练循环
 
-所有的模型都是标准的[`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module), 所以你可以在任何典型的训练模型中使用它们. 当你编写自己的训练循环时W, 🤗 Transformers为PyTorch提供了一个[`Trainer`]类, 它包含了基础的训练循环并且为诸如分布式训练, 混合精度等特性增加了额外的功能.
+所有的模型都是标准的[`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module), 所以你可以在任何典型的训练模型中使用它们. 当你编写自己的训练循环时, 🤗 Transformers为PyTorch提供了一个[`Trainer`]类, 它包含了基础的训练循环并且为诸如分布式训练, 混合精度等特性增加了额外的功能.
 
 取决于你的任务, 你通常可以传递以下的参数给[`Trainer`]:
 
