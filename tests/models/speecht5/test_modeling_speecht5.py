@@ -1004,11 +1004,14 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
+    def default_model(self):
+        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
+    @cached_property
     def default_processor(self):
         return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
 
     def test_generation(self):
-        model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
+        model = self.default_model
         model.to(torch_device)
         processor = self.default_processor
 
@@ -1023,6 +1026,27 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         # test model.generate, same method than generate_speech but with additional kwargs to absorb kwargs such as attention_mask
         generated_speech_with_generate = model.generate(input_ids, attention_mask=None)
         self.assertEqual(generated_speech_with_generate.shape, (1820, model.config.num_mel_bins))
+
+    def test_batch_generation(self):
+        model = self.default_model
+        model.to(torch_device)
+        processor = self.default_processor
+
+        set_seed(555)  # make deterministic
+
+        input_text = [
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+            "nor is mister quilter's manner less interesting than his matter",
+            "he tells us that at this festive season of the year with christmas and rosebeaf looming before us"
+        ]
+        inputs = processor(text=input_text, padding='max_length', max_length=128, return_tensors="pt").to(torch_device)
+        speaker_embeddings = torch.zeros((1, 512), device=torch_device)
+        spectrograms, spectrogram_lengths = model.generate_speech(input_ids=inputs["input_ids"],
+                                                                  speaker_embeddings=speaker_embeddings,
+                                                                  attention_mask=inputs['attention_mask'])
+        self.assertEqual(spectrograms.shape, (662, model.config.num_mel_bins))
+        self.assertEqual(len(spectrogram_lengths), 3)
+        self.assertEqual(spectrogram_lengths[0] + spectrogram_lengths[1] + spectrogram_lengths[2], 662)
 
 
 @require_torch

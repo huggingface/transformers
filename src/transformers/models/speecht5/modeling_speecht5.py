@@ -2614,30 +2614,53 @@ def _generate_speech(
             continue
         else:
             spectrograms = torch.stack(spectrogram)
+            spectrograms = spectrograms.transpose(0, 1).flatten(1, 2)
+            spectrograms = model.speech_decoder_postnet.postnet(spectrograms)
 
-            # Finished when stop token or maximum length is reached or every text in the batches reaches the prob threshold
-            for i, p in enumerate(prob):
-                if i in result_spectrogram:  # already has result
+            meet_thresholds = torch.sum(prob, dim=-1) >= threshold
+            # If the generation loops is less than maximum length times, check the ones in the batch that have met
+            # the prob threshold. Otherwise, assume all have met thresholds and fill other spectrograms for the batch.
+            meet_indexes = (
+                torch.where(meet_thresholds == True)[0]
+                if idx < maxlen
+                else torch.tensor([i for i in range(len(prob))])
+            )
+            meet_indexes = meet_indexes.tolist()
+            for meet_index in meet_indexes:
+                if meet_index in result_spectrogram:
                     continue
-                cur_spectrogram = spectrograms[:, i, :, :]
-                cur_spectrogram = model.speech_decoder_postnet.postnet(cur_spectrogram)
-                if idx >= maxlen or int(sum(p >= threshold)) > 0:
-                    result_spectrogram[i] = cur_spectrogram.view((-1, cur_spectrogram.size(-1)))
+                result_spectrogram[meet_index] = spectrograms[meet_index]
+
             if len(result_spectrogram) >= bsz:
                 break
 
     spectrograms = [result_spectrogram[i] for i in range(len(result_spectrogram))]
-
-    outputs = []
-    if vocoder is not None:
-        for spectrogram in spectrograms:
-            outputs.append(vocoder(spectrogram))
+    if bsz == 1:
+        spectrogram = spectrograms[0]
+        if vocoder is not None:
+            outputs = vocoder(spectrogram)
+        else:
+            outputs = spectrogram
+        if output_cross_attentions:
+            cross_attentions = torch.cat(cross_attentions, dim=2)
+            outputs = (outputs, cross_attentions)
     else:
-        outputs = spectrograms
-
-    if output_cross_attentions:
-        cross_attentions = torch.cat(cross_attentions, dim=2)
-        outputs = (outputs, cross_attentions)
+        # batched return values should also include the spectrogram/waveform lengths
+        if vocoder is None:
+            spectrogram_lengths = []
+            for i in range(bsz):
+                spectrogram_lengths.append(spectrograms[i].size(0))
+            spectrograms = torch.cat(spectrograms, dim=0)
+            outputs = (spectrograms, spectrogram_lengths)
+        else:
+            waveform_lengths = []
+            waveforms = []
+            for i in range(bsz):
+                waveform = vocoder(spectrograms[i])
+                waveforms.append(waveform)
+                waveform_lengths.append(waveform.size(0))
+            waveforms = torch.cat(waveforms, dim=0)
+            outputs = (waveforms, waveform_lengths)
 
     return outputs
 
@@ -2892,8 +2915,10 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Attention mask from the tokenizer, required for batched inference to
-                signal to the model where to ignore padded tokens from the input_ids.
+                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
+                1]`:
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
             threshold (`float`, *optional*, defaults to 0.5):
                 The generated sequence ends when the predicted stop token probability exceeds this value.
             minlenratio (`float`, *optional*, defaults to 0.0):
@@ -3106,8 +3131,10 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Attention mask from the tokenizer, required for batched inference to
-                signal to the model where to ignore padded tokens from the input_ids.
+                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
+                1]`:
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
             threshold (`float`, *optional*, defaults to 0.5):
                 The generated sequence ends when the predicted stop token probability exceeds this value.
             minlenratio (`float`, *optional*, defaults to 0.0):
