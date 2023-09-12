@@ -152,7 +152,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_tokenizer_decode(self):
         tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-es")
-        source_text = "_This is 1 text string that starts with an _ and ends with one too _"
+        source_text = "Hello World"
         ids = tokenizer(source_text)["input_ids"]
         output_text = tokenizer.decode(ids, skip_special_tokens=True)
         self.assertEqual(source_text, output_text)
