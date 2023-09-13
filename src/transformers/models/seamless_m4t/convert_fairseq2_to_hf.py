@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 ylacombe The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -100,7 +100,8 @@ wav2vec_convert_list = [
     ("conv.depthwise_conv", "conv_module.depthwise_conv"),
     ("conv.batch_norm", "conv_module.batch_norm"),
     ("conv_layer_norm", "conv_module.layer_norm"),
-    ("speech_encoder.proj", "proj"),
+    ("speech_encoder.proj1", "intermediate_ffn.intermediate_dense"),
+    ("speech_encoder.proj2", "intermediate_ffn.output_dense"),
     ("speech_encoder.layer_norm", "inner_layer_norm"),
     # "layer_norm", "encoder.layers.*.final_layer_norm",
     # "inner.layer_norm", "encoder.layer_norm",

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -484,11 +484,14 @@ class SeamlessM4TConformerFeatureProjection(nn.Module):
 
 # Almost the same as Wav2Vec2ConformerFeedForward with Wav2Vec2->SeamlessM4T
 class SeamlessM4TConformerFeedForward(nn.Module):
-    def __init__(self, config, use_relu=False):
+    def __init__(self, config, intermediate_hidden_size, use_relu=False, use_dropout=True):
         super().__init__()
-        self.intermediate_dropout = nn.Dropout(config.speech_encoder_dropout)
+        self.use_dropout = use_dropout
+        
+        if use_dropout:
+            self.intermediate_dropout = nn.Dropout(config.speech_encoder_dropout)
 
-        self.intermediate_dense = nn.Linear(config.hidden_size, config.speech_encoder_intermediate_size)
+        self.intermediate_dense = nn.Linear(config.hidden_size, intermediate_hidden_size)
 
         if use_relu:
             self.intermediate_act_fn = nn.ReLU()
@@ -497,16 +500,20 @@ class SeamlessM4TConformerFeedForward(nn.Module):
         else:
             self.intermediate_act_fn = config.speech_encoder_hidden_act
 
-        self.output_dense = nn.Linear(config.speech_encoder_intermediate_size, config.hidden_size)
-        self.output_dropout = nn.Dropout(config.speech_encoder_dropout)
+        self.output_dense = nn.Linear(intermediate_hidden_size, config.hidden_size)
+        
+        if use_dropout:
+            self.output_dropout = nn.Dropout(config.speech_encoder_dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
-        hidden_states = self.intermediate_dropout(hidden_states)
+        if self.use_dropout:
+            hidden_states = self.intermediate_dropout(hidden_states)
 
         hidden_states = self.output_dense(hidden_states)
-        hidden_states = self.output_dropout(hidden_states)
+        if self.use_dropout:
+            hidden_states = self.output_dropout(hidden_states)
         return hidden_states
 
 
@@ -742,7 +749,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
 
         # Feed-forward 1
         self.ffn1_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn1 = SeamlessM4TConformerFeedForward(config)
+        self.ffn1 = SeamlessM4TConformerFeedForward(config, intermediate_hidden_size = config.speech_encoder_intermediate_size)
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
@@ -754,7 +761,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
 
         # Feed-forward 2
         self.ffn2_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn2 = SeamlessM4TConformerFeedForward(config)
+        self.ffn2 = SeamlessM4TConformerFeedForward(config, intermediate_hidden_size = config.speech_encoder_intermediate_size)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
     def forward(
@@ -944,7 +951,7 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
 
         # Feed-forward
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn = SeamlessM4TConformerFeedForward(config, use_relu=True)
+        self.ffn = SeamlessM4TConformerFeedForward(config, intermediate_hidden_size = config.speech_encoder_intermediate_size, use_relu=True)
         self.ffn_dropout = torch.nn.Dropout(dropout)
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
@@ -1622,13 +1629,8 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
         super().__init__(config)
 
         self.feature_projection = SeamlessM4TConformerFeatureProjection(config)
-
         self.encoder = SeamlessM4TConformerEncoder(config)
-
-        self.proj1 = nn.Linear(config.hidden_size, config.hidden_size * 4, bias=True)
-        self.activation = nn.ReLU()
-        self.proj2 = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=True)
-
+        self.intermediate_ffn = SeamlessM4TConformerFeedForward(config, intermediate_hidden_size = config.hidden_size * 4, use_relu=True, use_dropout=False)
         self.adapter = SeamlessM4TConformerAdapter(config) if config.add_adapter else None
         self.inner_layer_norm = nn.LayerNorm(config.hidden_size)
 
@@ -1669,11 +1671,8 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
-
-        expanded_hidden_states = self.proj1(hidden_states)
-        expanded_hidden_states = self.activation(expanded_hidden_states)
-        expanded_hidden_states = self.proj2(expanded_hidden_states)
-
+        
+        expanded_hidden_states = self.intermediate_ffn(hidden_states)
         hidden_states = hidden_states + 0.5 * expanded_hidden_states
 
         if self.adapter is not None:
@@ -1684,7 +1683,6 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
         if not return_dict:
             return (hidden_states,) + encoder_outputs[1:]
 
-        # TODO: probably edges cases when adapter
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=encoder_outputs.hidden_states,
