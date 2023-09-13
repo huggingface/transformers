@@ -95,7 +95,7 @@ class Beit3Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BeitConfig, BeitModel
+    >>> from transformers import BeitConfig, Beit3Model
 
     >>> # Initializing a BEiT3 beit3-base-patch16-224-pt22k style configuration
     >>> configuration = Beit3Config()
