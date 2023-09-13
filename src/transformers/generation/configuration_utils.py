@@ -34,6 +34,7 @@ from ..utils import (
 
 
 logger = logging.get_logger(__name__)
+METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 
 
 class GenerationConfig(PushToHubMixin):
@@ -315,20 +316,19 @@ class GenerationConfig(PushToHubMixin):
         # Validate the values of the attributes
         self.validate(is_init=True)
 
+    def __hash__(self):
+        return hash(self.to_json_string(ignore_metadata=True))
+
     def __eq__(self, other):
         if not isinstance(other, GenerationConfig):
             return False
 
-        self_dict = self.__dict__.copy()
-        other_dict = other.__dict__.copy()
-        # ignore metadata
-        for metadata_field in ("_from_model_config", "_commit_hash", "transformers_version"):
-            self_dict.pop(metadata_field, None)
-            other_dict.pop(metadata_field, None)
-        return self_dict == other_dict
+        self_without_metadata = self.to_json_string(use_diff=False, ignore_metadata=True)
+        other_without_metadata = other.to_json_string(use_diff=False, ignore_metadata=True)
+        return self_without_metadata == other_without_metadata
 
     def __repr__(self):
-        return f"{self.__class__.__name__} {self.to_json_string()}"
+        return f"{self.__class__.__name__} {self.to_json_string(ignore_metadata=True)}"
 
     def validate(self, is_init=False):
         """
@@ -729,7 +729,9 @@ class GenerationConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
-        return cls.from_dict(config_dict, **kwargs)
+        config = cls.from_dict(config_dict, **kwargs)
+        config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
+        return config
 
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
@@ -814,8 +816,12 @@ class GenerationConfig(PushToHubMixin):
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
+
+        # Fields to ignore at serialization time
         if "_commit_hash" in output:
             del output["_commit_hash"]
+        if "_original_object_hash" in output:
+            del output["_original_object_hash"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
@@ -823,7 +829,7 @@ class GenerationConfig(PushToHubMixin):
         self.dict_torch_dtype_to_str(output)
         return output
 
-    def to_json_string(self, use_diff: bool = True) -> str:
+    def to_json_string(self, use_diff: bool = True, ignore_metadata: bool = False) -> str:
         """
         Serializes this instance to a JSON string.
 
@@ -831,6 +837,8 @@ class GenerationConfig(PushToHubMixin):
             use_diff (`bool`, *optional*, defaults to `True`):
                 If set to `True`, only the difference between the config instance and the default `GenerationConfig()`
                 is serialized to JSON string.
+            ignore_metadata (`bool`, *optional*, defaults to `False`):
+                Whether to ignore the metadata fields present in the instance
 
         Returns:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
@@ -839,6 +847,11 @@ class GenerationConfig(PushToHubMixin):
             config_dict = self.to_diff_dict()
         else:
             config_dict = self.to_dict()
+
+        if ignore_metadata:
+            for metadata_field in METADATA_FIELDS:
+                config_dict.pop(metadata_field, None)
+
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
@@ -882,6 +895,7 @@ class GenerationConfig(PushToHubMixin):
                     if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
                         setattr(config, attr, decoder_config[attr])
 
+        config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
         return config
 
     def update(self, **kwargs):

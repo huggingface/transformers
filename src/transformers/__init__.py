@@ -469,6 +469,7 @@ _import_structure = {
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
+    "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -748,6 +749,7 @@ _import_structure = {
         "is_torch_npu_available",
         "is_torch_tpu_available",
         "is_torchvision_available",
+        "is_torch_xpu_available",
         "is_vision_available",
         "logging",
     ],
@@ -2431,6 +2433,9 @@ else:
             "PerceiverPreTrainedModel",
         ]
     )
+    _import_structure["models.persimmon"].extend(
+        ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
+    )
     _import_structure["models.pix2struct"].extend(
         [
             "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3359,6 +3364,7 @@ else:
         [
             "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFDebertaV2ForMaskedLM",
+            "TFDebertaV2ForMultipleChoice",
             "TFDebertaV2ForQuestionAnswering",
             "TFDebertaV2ForSequenceClassification",
             "TFDebertaV2ForTokenClassification",
@@ -4549,6 +4555,7 @@ if TYPE_CHECKING:
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
+    from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4814,6 +4821,7 @@ if TYPE_CHECKING:
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
+        is_torch_xpu_available,
         is_torchvision_available,
         is_vision_available,
         logging,
@@ -6208,6 +6216,12 @@ if TYPE_CHECKING:
             PerceiverModel,
             PerceiverPreTrainedModel,
         )
+        from .models.persimmon import (
+            PersimmonForCausalLM,
+            PersimmonForSequenceClassification,
+            PersimmonModel,
+            PersimmonPreTrainedModel,
+        )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pix2StructForConditionalGeneration,
@@ -6967,6 +6981,7 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import (
             TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaV2ForMaskedLM,
+            TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForQuestionAnswering,
             TFDebertaV2ForSequenceClassification,
             TFDebertaV2ForTokenClassification,
