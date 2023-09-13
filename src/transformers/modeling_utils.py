@@ -989,12 +989,33 @@ class ModuleUtilsMixin:
             embedding_param_names = [
                 f"{name}.weight" for name, module_type in self.named_modules() if isinstance(module_type, nn.Embedding)
             ]
-            non_embedding_parameters = [
+            total_parameters = [
                 parameter for name, parameter in self.named_parameters() if name not in embedding_param_names
             ]
-            return sum(p.numel() for p in non_embedding_parameters if p.requires_grad or not only_trainable)
         else:
-            return sum(p.numel() for p in self.parameters() if p.requires_grad or not only_trainable)
+            total_parameters = list(self.parameters())
+
+        total_numel = []
+        is_loaded_in_4bit = getattr(self, "is_loaded_in_4bit", False)
+        if is_loaded_in_4bit:
+            if is_bitsandbytes_available():
+                import bitsandbytes as bnb
+            else:
+                raise ValueError(
+                    "bitsandbytes is not installed but it seems that the model has been loaded in 4bit precision, something went wrong"
+                    " make sure to install bitsandbytes with `pip install bitsandbytes`."
+                )
+
+        for param in total_parameters:
+            if param.requires_grad or not only_trainable:
+                # For 4bit models, we need to multiply the number of parameters by 2 as half of the parameters are
+                # used for the 4bit quantization (uint8 tensors are stored)
+                if is_loaded_in_4bit and isinstance(param, bnb.nn.Params4bit):
+                    total_numel.append(param.numel() * 2)
+                else:
+                    total_numel.append(param.numel())
+
+        return sum(total_numel)
 
     def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]) -> int:
         """
