@@ -59,6 +59,7 @@ class EncodecOutput(ModelOutput):
 
     audio_codes: torch.FloatTensor = None
     audio_values: torch.FloatTensor = None
+    commitment_loss: torch.FloatTensor = None
 
 
 @dataclass
@@ -73,6 +74,7 @@ class EncodecEncoderOutput(ModelOutput):
 
     audio_codes: torch.FloatTensor = None
     audio_scales: torch.FloatTensor = None
+    commitment_loss: torch.FloatTensor = None
 
 
 @dataclass
@@ -372,20 +374,6 @@ class EncodecEuclideanCodebook(nn.Module):
         quantize = nn.functional.embedding(embed_ind, self.embed)
         return quantize
 
-    def forward(self, hidden_states):
-        shape = hidden_states.shape
-
-        hidden_states = hidden_states.reshape((-1, shape[-1]))
-
-        embed_ind = self.quantize(hidden_states)
-        embed_ind = embed_ind.view(*shape[:-1])
-
-        quantize = nn.functional.embedding(embed_ind, self.embed)
-
-        # TODO: Implement code expiration and exponential moving average updates for training.
-
-        return embed_ind, quantize
-
 
 class EncodecVectorQuantization(nn.Module):
     """
@@ -406,26 +394,6 @@ class EncodecVectorQuantization(nn.Module):
         quantize = quantize.permute(0, 2, 1)
         return quantize
 
-    def forward(self, hidden_states):
-        device = hidden_states.device
-
-        hidden_states = hidden_states.permute(0, 2, 1)
-
-        embed_ind, quantize = self.codebook(hidden_states)
-
-        loss = torch.tensor([0.0], device=device, requires_grad=self.training)
-
-        if self.training:
-            # Pass the gradients straight through the quantization, by directly linking the gradients of the input
-            # embed_ind with the output quantize in the computation graph.
-            quantize = hidden_states + (quantize - hidden_states).detach()
-
-            commitment_loss = nn.functional.mse_loss(quantize.detach(), hidden_states)
-            loss = loss + commitment_loss
-
-        quantize = quantize.permute(0, 2, 1)
-        return loss, embed_ind, quantize
-
 
 class EncodecResidualVectorQuantizer(nn.Module):
     """Residual Vector Quantizer."""
@@ -445,7 +413,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
             num_quantizers = int(max(1, math.floor(bandwidth * 1000 / bw_per_q)))
         return num_quantizers
 
-    def encode(self, embeddings: torch.Tensor, bandwidth: Optional[float] = None) -> torch.Tensor:
+    def encode(self, embeddings: torch.Tensor, bandwidth: Optional[float] = None) -> Tuple[torch.Tensor, List]:
         """
         Encode a given input tensor with the specified frame rate at the given bandwidth. The RVQ encode method sets
         the appropriate number of quantizers to use and returns indices for each quantizer.
@@ -453,13 +421,23 @@ class EncodecResidualVectorQuantizer(nn.Module):
         num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
         residual = embeddings
         all_indices = []
+        quantization_steps = []
         for layer in self.layers[:num_quantizers]:
             indices = layer.encode(residual)
             quantized = layer.decode(indices)
+
+            if self.training:
+                # Pass the gradients straight through the quantization, by directly linking the gradients of the input
+                # embed_ind with the output quantize in the computation graph.
+                quantized = residual + (quantized - residual).detach()
+                quantization_steps.append((residual.clone(), quantized.detach().clone()))
+
+            # Note: There may be a bug here with the quantized results, but we do not fix it as it is present in the
+            # original FB code as well. For more context, see https://github.com/facebookresearch/encodec/issues/25.
             residual = residual - quantized
             all_indices.append(indices)
         out_indices = torch.stack(all_indices)
-        return out_indices
+        return out_indices, quantization_steps
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to the quantized representation."""
@@ -469,27 +447,6 @@ class EncodecResidualVectorQuantizer(nn.Module):
             quantized = layer.decode(indices)
             quantized_out = quantized_out + quantized
         return quantized_out
-
-    def forward(self, embeddings: torch.Tensor, bandwidth: Optional[float] = None):
-        residual = embeddings
-        num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
-
-        quantized_out = torch.tensor(0.0, device=embeddings.device)
-        all_losses = []
-        all_indices = []
-
-        for layer in self.layers[:num_quantizers]:
-            loss, embed_ind, quantized = layer(residual)
-            # Note: The source from FB research did not detach the quantized here. There may have been a bug in the
-            # commitment loss computation, which could mean that training results would be different between that
-            # implementation and this one.
-            residual = residual - quantized
-            quantized_out = quantized_out + quantized
-            all_indices.append(embed_ind)
-            all_losses.append(loss)
-
-        out_losses, out_indices = map(torch.stack, (all_losses, all_indices))
-        return out_losses, out_indices, quantized_out
 
 
 class EncodecPreTrainedModel(PreTrainedModel):
@@ -612,7 +569,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
     def _encode_frame(
         self, input_values: torch.Tensor, bandwidth: float, padding_mask: int
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], List]:
         """
         Encodes the given input using the underlying VQVAE. If `config.normalize` is set to `True` the input is first
         normalized. The padding mask is required to compute the correct scale.
@@ -632,9 +589,9 @@ class EncodecModel(EncodecPreTrainedModel):
             input_values = input_values / scale
 
         embeddings = self.encoder(input_values)
-        codes = self.quantizer.encode(embeddings, bandwidth)
+        codes, quantization_steps = self.quantizer.encode(embeddings, bandwidth)
         codes = codes.transpose(0, 1)
-        return codes, scale
+        return codes, scale, quantization_steps
 
     def encode(
         self,
@@ -688,6 +645,7 @@ class EncodecModel(EncodecPreTrainedModel):
 
         encoded_frames = []
         scales = []
+        quantization_steps_frames = []
 
         step = chunk_length - stride
         if (input_length % stride) - step != 0:
@@ -698,16 +656,24 @@ class EncodecModel(EncodecPreTrainedModel):
         for offset in range(0, input_length - step, stride):
             mask = padding_mask[..., offset : offset + chunk_length].bool()
             frame = input_values[:, :, offset : offset + chunk_length]
-            encoded_frame, scale = self._encode_frame(frame, bandwidth, mask)
+            encoded_frame, scale, quantization_steps = self._encode_frame(frame, bandwidth, mask)
             encoded_frames.append(encoded_frame)
+            quantization_steps_frames.append(quantization_steps)
             scales.append(scale)
 
         encoded_frames = torch.stack(encoded_frames)
 
+        commitment_loss = torch.tensor([0.0], device=input_values.device, requires_grad=self.training)
+        if self.training:
+            for quantization_steps in quantization_steps_frames:
+                for residual, quantize in quantization_steps:
+                    loss = nn.functional.mse_loss(quantize, residual)
+                    commitment_loss = commitment_loss + loss
+
         if not return_dict:
             return (encoded_frames, scales)
 
-        return EncodecEncoderOutput(encoded_frames, scales)
+        return EncodecEncoderOutput(encoded_frames, scales, commitment_loss)
 
     @staticmethod
     def _linear_overlap_add(frames: List[torch.Tensor], stride: int):
@@ -856,11 +822,12 @@ class EncodecModel(EncodecPreTrainedModel):
         if audio_scales is not None and audio_codes is None:
             raise ValueError("You specified `audio_scales` but did not specify the `audio_codes`")
 
+        commitment_loss = None
         if audio_scales is None and audio_codes is None:
-            audio_codes, audio_scales = self.encode(input_values, padding_mask, bandwidth, False)
+            audio_codes, audio_scales, commitment_loss = self.encode(input_values, padding_mask, bandwidth, False)
 
         audio_values = self.decode(audio_codes, audio_scales, padding_mask, return_dict=return_dict)[0]
         if not return_dict:
             return (audio_codes, audio_values)
 
-        return EncodecOutput(audio_codes=audio_codes, audio_values=audio_values)
+        return EncodecOutput(audio_codes=audio_codes, audio_values=audio_values, commitment_loss=commitment_loss)
