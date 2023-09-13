@@ -34,6 +34,8 @@ We natively support Flash Attention 2 for some models, currently supported archi
 - Llama
 - Falcon
 
+You can request to add Flash Attention 2 support for more models by opening an issue on GitHub!
+
 And they can be used for inference and training, including training with padding tokens - which is currently not supported for `BetterTransformer` API below.
 
 <Tip>
