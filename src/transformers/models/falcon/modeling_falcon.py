@@ -562,7 +562,7 @@ class FalconFlashAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        self.maybe_rotary = self._init_rope() if config.rotary else lambda q, k, t: (q, k)
+        self.maybe_rotary = self._init_rope() if config.rotary else lambda q, k, t, p: (q, k)
 
         # Layer-wise attention scaling
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
@@ -672,6 +672,7 @@ class FalconFlashAttention(nn.Module):
         hidden_states: torch.Tensor,
         alibi: Optional[torch.Tensor],
         attention_mask: torch.Tensor,
+        position_ids: Optional[torch.LongTensor] = None,
         layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
@@ -694,7 +695,7 @@ class FalconFlashAttention(nn.Module):
         value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_kv_heads, query_length, self.head_dim)
 
         past_kv_length = 0 if layer_past is None else layer_past[0].shape[1]
-        query_layer, key_layer = self.maybe_rotary(query_layer, key_layer, past_kv_length)
+        query_layer, key_layer = self.maybe_rotary(query_layer, key_layer, past_kv_length, position_ids)
 
         if layer_past is not None and use_cache:
             past_key, past_value = layer_past
