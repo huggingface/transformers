@@ -1396,7 +1396,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         all_inputs = []
         all_masks = []
 
-        print(pixel_values.shape) #1,5,3,244,244
+        # print(pixel_values.shape) #1,5,3,244,244
         for i in range(pixel_values.shape[0]):
             
             
@@ -1412,30 +1412,30 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
             image_embeds = vision_outputs[0]
 
-            print(image_embeds.shape) #5,257,1408
+            # print(image_embeds.shape) #5,257,1408
 
             image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
-            print("image_attention_mask",image_attention_mask.shape) #5,257
+            # print("image_attention_mask",image_attention_mask.shape) #5,257
 
             # difference with BLIP-2 here: we also feed the instruction prompt to the Q-Former
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
-            print("query_tokens",query_tokens.shape) #5,32,728
+            # print("query_tokens",query_tokens.shape) #5,32,728
 
-            print("qformer_input_ids", qformer_input_ids.shape)#1,376
+            # print("qformer_input_ids", qformer_input_ids.shape)#1,376
 
             qformer_input_ids0 = qformer_input_ids[i].expand(image_embeds.shape[0], -1)
 
-            print("qformer_input_ids0",qformer_input_ids0.shape)
+            # print("qformer_input_ids0",qformer_input_ids0.shape)
     
             query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
-            print("query_attention_mask",query_attention_mask.shape) 
+            # print("query_attention_mask",query_attention_mask.shape) 
 
             qformer_attention_mask0 = torch.ones_like(qformer_input_ids0)
 
-            print("qformer_attention_mask0",qformer_attention_mask0.shape) 
+            # print("qformer_attention_mask0",qformer_attention_mask0.shape) 
            
             qformer_attention_mask0 = torch.cat([query_attention_mask, qformer_attention_mask0], dim=1)
 
@@ -1450,20 +1450,20 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
                 return_dict=return_dict,
             )
 
-            print("query_outputs[0]",query_outputs[0].shape)
+            # print("query_outputs[0]",query_outputs[0].shape)
 
             query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
-            print("query_output",query_output.shape)
+            # print("query_output",query_output.shape)
             
             language_model_inputs = self.language_projection(query_output)
 
-            print("language_model_inputs",language_model_inputs.shape)
+            # print("language_model_inputs",language_model_inputs.shape)
 
             language_model_attention_mask = torch.ones(
                 language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
             )
-            print("language_model_attention_mask",language_model_attention_mask.shape)
+            # print("language_model_attention_mask",language_model_attention_mask.shape)
             
             language_model_inputs = language_model_inputs.reshape(1,-1,language_model_inputs.shape[2])
             language_model_attention_mask = language_model_attention_mask.reshape(1,-1)
@@ -1473,11 +1473,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         
         language_model_inputs = torch.cat(all_inputs, dim=0)
 
-        print("Xlanguage_model_inputs",language_model_inputs.shape)
+        # print("Xlanguage_model_inputs",language_model_inputs.shape)
 
         language_model_attention_mask = torch.cat(all_masks, dim=0)
 
-        print("Xlanguage_model_attention_mask",language_model_attention_mask.shape)
+        # print("Xlanguage_model_attention_mask",language_model_attention_mask.shape)
 
         inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
@@ -1571,31 +1571,35 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        image_embedsX = self.vision_model(pixel_values, return_dict=True).last_hidden_state
+        # image_embedsX = self.vision_model(pixel_values, return_dict=True).last_hidden_state
 
         all_inputs = []
         all_masks = []
 
-        for i in range(len(image_embedsX)):
-            image_embeds = image_embedsX[i].unsqueeze(0)
-                
+        for i in range(pixel_values.shape[0]):
+            pixel_values0 = pixel_values[i]
+
+            image_embeds = self.vision_model(pixel_values0, return_dict=True).last_hidden_state
+
             image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
             query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
-            if qformer_attention_mask is None:
-                qformer_attention_mask = torch.ones_like(qformer_input_ids)
-            qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+           
+            qformer_input_ids0 = qformer_input_ids[i].expand(image_embeds.shape[0], -1)
+            qformer_attention_mask0 = torch.ones_like(qformer_input_ids0)
+            qformer_attention_mask0 = torch.cat([query_attention_mask, qformer_attention_mask0], dim=1)
+            
+            
             query_outputs = self.qformer(
-                input_ids=qformer_input_ids,
-                attention_mask=qformer_attention_mask,
+                input_ids=qformer_input_ids0,
+                attention_mask=qformer_attention_mask0,
                 query_embeds=query_tokens,
                 encoder_hidden_states=image_embeds,
                 encoder_attention_mask=image_attention_mask,
                 return_dict=True,
             )
 
-            qformer_attention_mask = None
             query_output = query_outputs.last_hidden_state[:, : query_tokens.size(1), :]
 
             language_model_inputs = self.language_projection(query_output)
@@ -1603,11 +1607,14 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
                 language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
             )
 
+            language_model_inputs = language_model_inputs.reshape(1,-1,language_model_inputs.shape[2])
+            language_attention_mask = language_attention_mask.reshape(1,-1)
+
             all_inputs.append(language_model_inputs)
             all_masks.append(language_attention_mask)
 
-        language_model_inputs = torch.cat(all_inputs, dim=1)
-        language_attention_mask = torch.cat(all_masks, dim=1)
+        language_model_inputs = torch.cat(all_inputs, dim=0)
+        language_attention_mask = torch.cat(all_masks, dim=0)
 
         if input_ids is None:
             input_ids = (
