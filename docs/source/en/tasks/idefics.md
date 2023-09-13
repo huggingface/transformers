@@ -27,8 +27,8 @@ solve image-text tasks with a large multimodal model called IDEFICS.
 [IDEFICS](../model_doc/idefics) is an open-access vision and language model based on [Flamingo](https://huggingface.co/papers/2204.14198), 
 a state-of-the-art visual language model initially developed by DeepMind. The model accepts arbitrary sequences of image 
 and text inputs and generates coherent text as output. It can answer questions about images, describe visual content, 
-create stories grounded in multiple images, and so on. IDEFICS comes in two variants - 80 billion parameters and 9 billion 
-parameters, both of which are available on the 🤗 Hub. For each variant, you can also find fine-tuned instructed 
+create stories grounded in multiple images, and so on. IDEFICS comes in two variants - [80 billion parameters](https://huggingface.co/HuggingFaceM4/idefics-80b) 
+and [9 billion parameters](https://huggingface.co/HuggingFaceM4/idefics-9b), both of which are available on the 🤗 Hub. For each variant, you can also find fine-tuned instructed 
 versions of the model adapted for conversational use cases.
 
 This model is exceptionally versatile and can be used for a wide range of image and multimodal tasks. However, 
@@ -50,13 +50,7 @@ In this guide, you'll learn how to:
 Before you begin, make sure you have all the necessary libraries installed. 
 
 ```bash
-pip install -q bitsandbytes sentencepiece accelerate
-```
-
-Install 🤗Transformers from source as IDEFICS has only recently been added:
-
-```bash
-pip install git+https://github.com/huggingface/transformers.git
+pip install -q bitsandbytes sentencepiece accelerate transformers
 ```
 
 <Tip>
@@ -72,7 +66,7 @@ Let's start by loading the model's 9 billion parameters checkpoint:
 ```
 
 Just like for other Transformers models, you need to load a processor and the model itself from the checkpoint. 
-The IDEFICS processor wraps a LLama tokenizer and IDEFICS image processor into a single processor to take care of 
+The IDEFICS processor wraps a [`LlamaTokenizer`] and IDEFICS image processor into a single processor to take care of 
 preparing text and image inputs for the model.
 
 ```py
@@ -84,6 +78,9 @@ preparing text and image inputs for the model.
 
 >>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
 ```
+
+Setting `device_map` to `"auto"` will automatically determine how to load and store the model weights in the most optimized 
+manner given existing devices.
 
 ### Quantized model
 
