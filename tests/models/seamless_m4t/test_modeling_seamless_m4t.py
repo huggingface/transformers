@@ -275,6 +275,9 @@ class SeamlessM4TModelTester:
         model = SeamlessM4TModel(config=config)
         model.to(torch_device)
         model.eval()
+        
+        # make sure no pad token in decoder_input_ids
+        decoder_input_ids = torch.clamp(decoder_input_ids, config.pad_token_id+1)
 
         # first forward pass
         outputs = model(
@@ -313,8 +316,6 @@ class SeamlessM4TModelTester:
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        # TODO: invest why error
-        print((output_from_past_slice - output_from_no_past_slice).abs().max())
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
@@ -480,6 +481,11 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
+        pass
+    
+
+    @unittest.skip(reason="SeamlessM4T has no base model")
+    def test_save_load_fast_init_from_base(self):
         pass
 
     def test_attention_outputs(self):
