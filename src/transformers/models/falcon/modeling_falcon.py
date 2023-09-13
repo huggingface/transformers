@@ -1227,7 +1227,7 @@ class FalconModel(FalconPreTrainedModel):
                     causal_mask,
                     position_ids,
                     head_mask[i],
-                    padding_mask
+                    padding_mask,
                 )
             else:
                 outputs = block(
