@@ -356,7 +356,7 @@ class Beit3VisionEmbedding(nn.Module):
         self.patch_size = patch_size
         self.num_patches = num_patches
 
-        self.proj = nn.Conv2d(config.in_chans, config.embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.proj = nn.Conv2d(config.num_channels, config.embed_dim, kernel_size=patch_size, stride=patch_size)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
 
@@ -420,7 +420,7 @@ class Beit3MultiheadAttention(nn.Module):
         self.value_proj = Beit3Linear(config)
         self.query_proj = Beit3Linear(config)
         self.out_proj = Beit3Linear(config)
-        self.inner_attn_ln = Beit3LayerNorm(config) if config.subln else None
+        self.inner_attn_ln = Beit3LayerNorm(config) if config.sub_layernorm else None
         self.dropout_module = torch.nn.Dropout(config.attention_dropout)
 
     def forward(
@@ -575,7 +575,7 @@ class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
         self.dropout = torch.nn.Dropout(config.dropout)
         self.fc1 = nn.Linear(self.embed_dim, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, self.embed_dim)
-        self.ffn_layernorm = LayerNorm(config.hidden_size, eps=config.layernorm_eps) if config.subln else None
+        self.ffn_layernorm = LayerNorm(config.hidden_size, eps=config.layernorm_eps) if config.sub_layernorm else None
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         x_shape = hidden_states.shape
@@ -665,7 +665,7 @@ class Beit3Encoder(nn.Module):
             self.fc_norm = None
         self.relative_position = None
 
-        if config.subln:
+        if config.sub_layernorm:
             init_scale = math.sqrt(math.log(config.layers * 2))
             for name, p in self.named_parameters():
                 if "fc1" in name or "fc2" in name or "out_proj" in name or "v_proj" in name:
