@@ -849,7 +849,7 @@ class SpecialTokensMixin:
                     ), "One of the tokens is not a string or an AddedToken"
                     setattr(self, key, value)
                 elif isinstance(value, (str)):
-                    value = AddedToken(value, rstrip=True, lstrip=True, normalized=False, special=True)
+                    value = AddedToken(value, normalized=False, special=True)
                     setattr(self, key, value)
                 elif isinstance(value, AddedToken):
                     setattr(self, key, value)
