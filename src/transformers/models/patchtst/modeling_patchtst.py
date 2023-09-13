@@ -682,6 +682,7 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
                 self.w_p.append(nn.Linear(config.patch_length, config.d_model))
         else:
             self.w_p = nn.Linear(config.patch_length, config.d_model)
+
         # Positional encoding
         if config.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
@@ -694,7 +695,7 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
             )
 
         # Positional dropout
-        self.dropout = nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
+        self.positional_dropout = nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
 
         # Encoder
         self.encoder = ChannelAttentionTSTEncoder(config)
@@ -731,13 +732,13 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
             past_values = self.w_p(past_values)  # x: [bs x nvars  x num_patches x d_model]
 
         if self.use_cls_token:
-            past_values = self.dropout(past_values + self.w_pos[1:, :])  # x: [bs x nvars x num_patches x d_model]
+            past_values = self.positional_dropout(past_values + self.w_pos[1:, :])  # x: [bs x nvars x num_patches x d_model]
             # append cls token
             cls_token = self.cls_token + self.w_pos[:1, :]  # cls_token: [1 x 1 x 1 x d_model]
             cls_tokens = cls_token.expand(past_values.shape[0], -1, -1)  # get the same copy for all the batch samples
             past_values = torch.cat((cls_tokens, past_values), dim=1)  # x: [bs x nvars x (num_patches+1) x d_model]
         else:
-            past_values = self.dropout(past_values + self.w_pos)  # x: [bs x nvars x num_patches x d_model]
+            past_values = self.positional_dropout(past_values + self.w_pos)  # x: [bs x nvars x num_patches x d_model]
 
         # Encoder
         past_values, hidden_states = self.encoder(
@@ -1228,13 +1229,13 @@ class ForecastHead(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
-        self.individual = config.individual
+        self.shared_projection = config.shared_projection
         self.num_input_channels = config.num_input_channels
         self.use_cls_token = config.use_cls_token
         self.pooling = config.pooling
         head_dim = config.d_model if self.pooling else config.d_model * config.num_patches
 
-        if self.individual:
+        if not self.shared_projection:
             self.linears = nn.ModuleList()
             self.dropouts = nn.ModuleList()
             self.flattens = nn.ModuleList()
@@ -1264,7 +1265,7 @@ class ForecastHead(nn.Module):
             else:
                 y = x  # y: [bs x nvars x num_patches x d_model]
 
-        if self.individual:
+        if not self.shared_projection:
             x_out = []
             for i in range(self.num_input_channels):
                 z = self.flattens[i](y[:, i, :])  # y: [bs x (d_model * num_patches)] or [bs x d_model)]
