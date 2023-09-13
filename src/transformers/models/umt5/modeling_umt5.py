@@ -19,7 +19,7 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-from torch import nn
+from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.utils.checkpoint import checkpoint
 
@@ -149,40 +149,18 @@ class UMT5LayerFF(nn.Module):
         return hidden_states
 
 
-class UMT5Attention(nn.Module):
-    """
-    T5's attention using relative_attention_bias.
-    """
-
-    def __init__(self, config, has_relative_attention_bias=False):
+class UMTRelativePositionalBias(nn.Module):
+    
+    def __init__(self, relative_attention_num_buckets: int, n_heads: int, relative_attention_max_distance: int = None, is_decoder = True) -> None:
         super().__init__()
-        self.is_decoder = config.is_decoder
-        self.has_relative_attention_bias = has_relative_attention_bias
-        self.relative_attention_num_buckets = config.relative_attention_num_buckets
-        self.relative_attention_max_distance = config.relative_attention_max_distance
-        self.d_model = config.d_model
-        self.key_value_proj_dim = config.d_kv
-        self.n_heads = config.num_heads
-        self.dropout = config.dropout_rate
-        self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.weight = nn.Parameter(torch.ones(relative_attention_num_buckets, n_heads))
+        self.relative_attention_max_distance = relative_attention_max_distance
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.n_heads = n_heads
+        self.is_decoder = is_decoder
+        self._set_cached_bias(relative_attention_max_distance, relative_attention_max_distance)
 
-        # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
-
-        if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-        self.pruned_heads = set()
-
-    def _shape(self, projection: torch.Tensor) -> torch.Tensor:
-        new_projection_shape = projection.size()[:-1] + (self.n_heads, self.key_value_proj_dim)
-        # move heads to 2nd position (B, T, H * D) -> (B, T, H, D) -> (B, H, T, D)
-        new_projection = projection.view(new_projection_shape).permute(0, 2, 1, 3)
-        return new_projection
-
-    def _relative_position_bucket(self, relative_position):
+    def _relative_position_bucket(self, relative_position, device=None):
         """
         Adapted from Mesh Tensorflow:
         https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
@@ -226,20 +204,56 @@ class UMT5Attention(nn.Module):
             relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
         )
 
-        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large).to(self.weight.device)
         return relative_buckets
 
-    def compute_bias(self, query_length, key_length, device=None):
+    def _set_cached_bias(self, query_length, key_length):
         """Compute binned relative position bias"""
-        if device is None:
-            device = self.relative_attention_bias.weight.device
-        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
-        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
+        context_position = torch.arange(query_length, dtype=torch.long, device = self.weight.device)[:, None]
+        memory_position = torch.arange(key_length, dtype=torch.long, device = self.weight.device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(relative_position)
-        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
-        return values
+        values = self.weight.data[relative_position_bucket].to(self.weight.device) # shape (query_length, key_length, num_heads)
+        # shape (1, num_heads, query_length, key_length)
+        self.register_buffer("cached_bias", values.permute([2, 0, 1]).unsqueeze(0), persistent=False)
+
+
+    def forward(self, query_length, key_length, dtype=None):
+        return self.cached_bias[:,:, :query_length, :key_length].to(dtype=dtype)
+    
+    
+class UMT5Attention(nn.Module):
+    """
+    T5's attention using relative_attention_bias.
+    """
+
+    def __init__(self, config, has_relative_attention_bias=False):
+        super().__init__()
+        self.is_decoder = config.is_decoder
+        self.has_relative_attention_bias = has_relative_attention_bias
+        self.relative_attention_num_buckets = config.relative_attention_num_buckets
+        self.relative_attention_max_distance = config.relative_attention_max_distance
+        self.d_model = config.d_model
+        self.key_value_proj_dim = config.d_kv
+        self.n_heads = config.num_heads
+        self.dropout = config.dropout_rate
+        self.inner_dim = self.n_heads * self.key_value_proj_dim
+
+        # Mesh TensorFlow initialization to avoid scaling before softmax
+        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+
+        if self.has_relative_attention_bias:
+            self.relative_attention_bias = UMTRelativePositionalBias(self.relative_attention_num_buckets, self.n_heads, self.relative_attention_max_distance)
+        self.pruned_heads = set()
+
+    def _shape(self, projection: torch.Tensor) -> torch.Tensor:
+        new_projection_shape = projection.size()[:-1] + (self.n_heads, self.key_value_proj_dim)
+        # move heads to 2nd position (B, T, H * D) -> (B, T, H, D) -> (B, H, T, D)
+        new_projection = projection.view(new_projection_shape).permute(0, 2, 1, 3)
+        return new_projection
 
     def forward(
         self,
@@ -276,7 +290,7 @@ class UMT5Attention(nn.Module):
             query_length = seq_length
             if past_key_value is not None:
                 query_length += past_key_value[0].shape[2]
-            position_bias = self.compute_bias(query_length, key_states.size(2), device=attention_scores.device)
+            position_bias = self.relative_attention_bias(query_length, key_states.size(2), dtype=attention_scores.dtype)
         else:
             position_bias = torch.zeros(
                 (1, self.n_heads, seq_length, key_states.size(2)),
