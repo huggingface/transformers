@@ -204,6 +204,8 @@ class MusicgenConfig(PretrainedConfig):
         self.decoder = MusicgenDecoderConfig(**decoder_config)
         self.is_encoder_decoder = True
 
+        self.sampling_rate = self.audio_encoder.sampling_rate
+
     @classmethod
     def from_sub_models_config(
         cls,

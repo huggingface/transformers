@@ -39,37 +39,59 @@ class TextToAudioPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
     # for now only test text_to_waveform and not text_to_spectrogram
 
+    @require_torch
+    def test_tiny_musicgen_pt(self):
+        music_generator = pipeline(
+            task="text-to-audio",
+            model="hf-internal-testing/tiny-random-MusicgenForConditionalGeneration",
+            framework="pt",
+        )
+        sampling_rate = music_generator.model.audio_encoder.config.sampling_rate
+
+        forward_params = {"max_new_tokens": 10}
+        # test single sample
+        outputs = music_generator("this", forward_params=forward_params)
+        self.assertEqual(
+            {"audio": ANY(np.ndarray), "sampling_rate": sampling_rate},
+            outputs,
+        )
+
+        # test batching
+        outputs = music_generator(["this", "this a"], forward_params=forward_params, batch_size=2)
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+
     @slow
     @require_torch
-    def test_small_model_pt(self):
-        speech_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+    def test_small_musicgen_pt(self):
+        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
 
         forward_params = {
             "do_sample": False,
             "max_new_tokens": 250,
         }
 
-        outputs = speech_generator("This is a test", forward_params=forward_params)
-        # musicgen sampling_rate is not straightforward to get
-        self.assertIsNone(outputs["sampling_rate"])
-
-        audio = outputs["audio"]
-        self.assertEqual(ANY(np.ndarray), audio)
+        outputs = music_generator("This is a test", forward_params=forward_params)
+        self.assertEqual(
+            {"audio": ANY(np.ndarray), "sampling_rate": 32000},
+            outputs,
+        )
 
         # test two examples side-by-side
-        outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params)
+        outputs = music_generator(["This is a test", "This is a second test"], forward_params=forward_params)
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
         # test batching
-        outputs = speech_generator(
+        outputs = music_generator(
             ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
         )
-        self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
     @slow
     @require_torch
-    def test_large_model_pt(self):
+    def test_small_bark_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
 
         forward_params = {
