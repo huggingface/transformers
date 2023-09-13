@@ -113,11 +113,26 @@ class FalconRotaryEmbedding(nn.Module):
     def forward(self, query, key, past_key_values_length, position_ids):
         _, seq_len, _ = query.shape
         cos, sin = self.cos_sin(seq_len, past_key_values_length, position_ids, query.device, query.dtype)
-        # query and key's shapes are [bs * num_heads, seq_len, dim], might need manual expansion
-        expanded_cos = torch.repeat_interleave(cos, int(query.shape[0] / cos.shape[0]), dim=0)
-        expanded_sin = torch.repeat_interleave(sin, int(query.shape[0] / sin.shape[0]), dim=0)
-        # return (query * cos) + (rotate_half(query) * sin), (key * cos) + (rotate_half(key) * sin)
-        return (query * expanded_cos) + (rotate_half(query) * expanded_sin), (key * cos) + (rotate_half(key) * sin)
+        # Query and key's shapes are [bs * num_heads, seq_len, dim], might need manual expansion. Ifs and elses used to
+        # avoid unnecessary repeat_interleave operations.
+        query_expansion_factor = int(query.shape[0] / cos.shape[0])
+        if query_expansion_factor > 1:
+            query_cos = torch.repeat_interleave(cos, query_expansion_factor, dim=0)
+            query_sin = torch.repeat_interleave(sin, query_expansion_factor, dim=0)
+        else:
+            query_cos, query_sin = cos, sin
+
+        key_expansion_factor = int(key.shape[0] / cos.shape[0])
+        if key_expansion_factor > 1:
+            if key_expansion_factor != query_expansion_factor:
+                key_cos = torch.repeat_interleave(cos, key_expansion_factor, dim=0)
+                key_sin = torch.repeat_interleave(sin, key_expansion_factor, dim=0)
+            else:
+                key_cos, key_sin = query_cos, query_sin
+        else:
+            key_cos, key_sin = cos, sin
+
+        return (query * query_cos) + (rotate_half(query) * query_sin), (key * key_cos) + (rotate_half(key) * key_sin)
 
 
 class FalconLinearScalingRotaryEmbedding(FalconRotaryEmbedding):
@@ -276,7 +291,7 @@ class FalconAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        self.maybe_rotary = self._init_rope() if config.rotary else lambda q, k, t: (q, k)
+        self.maybe_rotary = self._init_rope() if config.rotary else lambda q, k, t, p: (q, k)
 
         # Layer-wise attention scaling
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
