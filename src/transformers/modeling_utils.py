@@ -997,12 +997,20 @@ class ModuleUtilsMixin:
 
         total_numel = []
         is_loaded_in_4bit = getattr(self, "is_loaded_in_4bit", False)
+        if is_loaded_in_4bit:
+            if is_bitsandbytes_available():
+                import bitsandbytes as bnb
+            else:
+                raise ValueError(
+                    "bitsandbytes is not installed but it seems that the model has been loaded in 4bit precision, something went wrong"
+                    " make sure to install bitsandbytes with `pip install bitsandbytes`."
+                )
 
         for param in total_parameters:
             if param.requires_grad or not only_trainable:
                 # For 4bit models, we need to multiply the number of parameters by 2 as half of the parameters are
                 # used for the 4bit quantization (uint8 tensors are stored)
-                if is_loaded_in_4bit and param.__class__.__name__ == "Params4bit":
+                if is_loaded_in_4bit and isinstance(param, bnb.nn.Params4bit):
                     total_numel.append(param.numel() * 2)
                 else:
                     total_numel.append(param.numel())
