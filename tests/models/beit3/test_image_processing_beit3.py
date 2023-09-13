@@ -26,7 +26,6 @@ if is_torch_available():
     pass
 
 if is_vision_available():
-
     from transformers import Beit3ImageProcessor
 
 
