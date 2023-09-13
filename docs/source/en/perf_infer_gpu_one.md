@@ -81,6 +81,7 @@ Below is the expected speedup you can get for a simple forward pass on `meta-lla
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-7b-inference-large-seqlen.png">
 </div>
 
+TODO: @younesbelkada add more figures and cases where FA fails.
 
 Note that Flash Attention makes the attention computation more memory efficient, meaning you can train with much larger sequenc lengths without facing CUDA OOM issues. 
 
