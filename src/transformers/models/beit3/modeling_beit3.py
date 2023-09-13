@@ -752,9 +752,9 @@ class Beit3Encoder(nn.Module):
 
 
 @add_start_docstrings(
-    """Beit3 is a multimodal foundation model, It achieves big convergence from bachbone architecture, pretraining task
-    and model scaling. The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers
-    architecture which uses a shared self-attention module.""",
+    """Beit3 is a multimodal foundation model, It which treats image as a foreign langauge and embeds images. Beit3 uses
+     Multiway transformers (from VLMo). The key idea in BEiT-3 is to model images as another language. Beit3 uses
+     multiway Transformers architecture which uses a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3Model(Beit3PreTrainedModel):
@@ -836,10 +836,9 @@ class Beit3Model(Beit3PreTrainedModel):
 
 
 @add_start_docstrings(
-    """Beit3ForVisualReasoning has a MLP head on top of Beit3Model. Beit3 is a multimodal foundation model, It achieves
-    big convergence from bachbone architecture, pretraining task and model scaling. The key idea in BEiT-3 is to model
-    images as another language. Beit3 uses multiway Transformers architecture which uses a shared self-attention
-    module.""",
+    """Beit3ForVisualReasoning has a MLP head on top of Beit3Model. Beit3 is a multimodal foundation model. The key idea
+     in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers architecture which uses a
+     shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3ForVisualReasoning(Beit3PreTrainedModel):
@@ -902,9 +901,8 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
 
 @add_start_docstrings(
     """Beit3ForImageClassification has a Linear head on top of Beit3Model for classification. Beit3 is a multimodal
-    foundation model, It achieves big convergence from bachbone architecture, pretraining task and model scaling. The
-    key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers architecture which uses
-    a shared self-attention module.""",
+    foundation model, The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers
+    architecture which uses a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3ForImageClassification(Beit3PreTrainedModel):
@@ -968,9 +966,8 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 
 @add_start_docstrings(
     """Beit3ForCaptioning has a Linear head on top of Beit3Model for Image captioning . Beit3 is a multimodal
-    foundation model, It achieves big convergence from bachbone architecture, pretraining task and model scaling. The
-    key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers architecture which uses
-    a shared self-attention module.""",
+    foundation model, The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers
+    architecture which uses a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3ForCaptioning(Beit3PreTrainedModel):
@@ -1088,10 +1085,8 @@ class Beit3Pooler(nn.Module):
 
 @add_start_docstrings(
     """Beit3ForVisualQuestionAnswering has a Linear head on top of Beit3Model for visual question answering . Beit3 is a
-multimodal
-    foundation model, It achieves big convergence from bachbone architecture, pretraining task and model scaling. The
-    key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers architecture which uses
-    a shared self-attention module.""",
+    multimodal foundation model.The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway
+    Transformers architecture which uses a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
