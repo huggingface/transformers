@@ -17,6 +17,126 @@ rendered properly in your Markdown viewer.
 
 In addition to this guide, relevant information can be found as well in [the guide for training on a single GPU](perf_train_gpu_one) and [the guide for inference on CPUs](perf_infer_cpu).
 
+## Flash Attention 2
+
+<Tip>
+
+Note that this feature is experimental and might considerably change in future versions. For instance, the Flash Attention 2 API might migrate to `BetterTransformer` API in the near future.
+
+</Tip>
+
+Flash Attention 2 can considerably speedup the training and inference speed of transformer based models. Flash Attention 2 has been introduced in the [official Flash Attention repository](https://github.com/Dao-AILab/flash-attention) from Tri Dao et al. The scientific paper of Flash attention can be found [here](https://arxiv.org/abs/2205.14135).
+
+Make sure to follow the installation guide on the repository mentioned above to properly install Flash Attention 2. Once that package is installed, you can benefit from this feature.
+
+We natively support Flash Attention 2 for some models, currently supported architectures are:
+
+- Llama
+- Falcon
+
+And they can be used for inference and training, including training with padding tokens - which is currently not supported for `BetterTransformer` API below.
+
+<Tip>
+
+Flash Attention 2 can only be used for models using fp16 or bf16 dtype, and can be run only on NVIDIA-GPU devices. Make sure to cast your model to the appropriate dtype and load them on a supported device before using that feature.
+  
+</Tip>
+
+### Quick usage
+
+To enable Flash Attention 2 in your model, simply add `use_flash_attn_2` in `from_pretrained` arguments
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+
+model_id = "tiiuae/falcon-7b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, 
+    torch_dtype=torch.bfloat16, 
+    use_flash_attn_2=True,
+)
+```
+
+And use it for generation or fine-tuning.
+
+### Expected speedups
+
+You can benefit from considerable speedup for fine-tuning and inference, especially for long sequence length. 
+However, note that due to the fact that Flash Attention does not support computing attention scores with padd tokens under the hood, we need to manually pad / unpad the attention scores for batched inference when the sequence contains padd tokens. This leads to an important slowdown for batched `generate` with padd tokens. To overcome this, one should use Flash Attention without padd tokens in the sequence for training (e.g. by packing a dataset, i.e. concatenating sequences until reaching the maximum sequence length)
+
+TODO: @younesbelkada add figures here
+
+### Advanced usage
+
+You can combine this feature with many exisiting feature for model optimization. Check out few examples below:
+
+### Combining Flash Attention 2 and 8-bit models
+
+You can combine this feature together with 8-bit quantization:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+
+model_id = "tiiuae/falcon-7b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, 
+    load_in_8bit=True,
+    use_flash_attn_2=True,
+)
+```
+
+### Combining Flash Attention 2 and 4-bit models
+
+You can combine this feature together with 4-bit quantization:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+
+model_id = "tiiuae/falcon-7b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, 
+    load_in_4bit=True,
+    use_flash_attn_2=True,
+)
+```
+
+### Combining Flash Attention 2 and PEFT
+
+You can combine this feature together with PEFT for training adapters using Flash Attention 2 under the hood:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+from peft import LoraConfig
+
+model_id = "tiiuae/falcon-7b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, 
+    load_in_4bit=True,
+    use_flash_attn_2=True,
+)
+
+lora_config = LoraConfig(
+    r=8,
+    task_type="CAUSAL_LM"
+)
+
+model.add_adapter(lora_config)
+
+... # train your model
+```
+
 ## BetterTransformer
 
 [BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview) converts 🤗 Transformers models to use the PyTorch-native fastpath execution, which calls optimized kernels like Flash Attention under the hood.  
