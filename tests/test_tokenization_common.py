@@ -3806,22 +3806,22 @@ class TokenizerTesterMixin:
                     ):
                         find = True
                         break
+                special_token.content = new_special_token_str
                 self.assertTrue(
                     find,
-                    f"'{new_special_token_str}' (the string) doesn't appear in the all_special_tokens_extended = "
-                    f"{[k for k in new_tokenizer.all_special_tokens_extended if str(k)==new_special_token_str]} as an AddedToken with the same parameters as "
-                    f"'{special_token.__repr__()}' (the original added token, with the wrong string)",
+                    f"'{special_token.__repr__()}' should appear as an `AddedToken` in the all_special_tokens_extended = "
+                    f"{[k for k in new_tokenizer.all_special_tokens_extended if str(k)==new_special_token_str]} but it is missing"
+                    ", this means that the new tokenizers did not keep the `rstrip`, `lstrip`, `normalized` etc attributes.",
                 )
             elif special_token not in special_tokens_map:
                 # The special token must appear identically in the list of the new tokenizer.
                 self.assertTrue(
                     special_token in new_tokenizer.all_special_tokens_extended,
-                    f"'{special_token}' should be in {new_tokenizer.all_special_tokens_extended}",
+                    f"'{special_token.__repr__()}' should be in {new_tokenizer.all_special_tokens_extended}",
                 )
 
             else:
                 # The special token must appear in the list of the new tokenizer as an object of type string.
-                # TODO @ArthurZucker no longer true
                 self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
 
         # Test we can use the new tokenizer with something not seen during training

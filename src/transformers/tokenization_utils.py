@@ -379,7 +379,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     @added_tokens_decoder.setter
     def added_tokens_decoder(self, value: Dict[int, Union[AddedToken, str]]) -> Dict[int, AddedToken]:
-        # Always raise an error if string because users should define the behaviour
+        # Always raise an error if string because users should define the behavior
         for index, token in value.items():
             if not isinstance(token, (str, AddedToken)) or not isinstance(index, int):
                 raise ValueError(
@@ -459,7 +459,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if str(token) == "":
                 continue
             if isinstance(token, str):
-                # for legacy we strip left and right by default TODO @ArthurZ lots of tests rely on this
+                # for legacy AddedTokens strip left and right by default
+                # TODO this will be remove to have the same default behavior as rust
                 token = AddedToken(token, normalized=not special_tokens, rstrip=True, lstrip=True)
             if special_tokens:
                 token.special = True
@@ -475,10 +476,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             else:
                 token_index = current_vocab[token.content]
 
-            # if we are adding this as an additional special token (no need to store the added tokens object)
             if token.special and str(token) not in self.all_special_tokens:
                 self._additional_special_tokens.append(token)
-
             # the setter automatically updates the reverse map
             self._added_tokens_decoder[token_index] = token
             self._added_tokens_encoder[token.content] = token_index

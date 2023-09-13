@@ -145,7 +145,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
-        pad_token=None,
         add_prefix_space=False,
         language=None,
         task=None,
@@ -167,11 +166,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             if isinstance(unk_token, str)
             else unk_token
         )
-        pad_token = (
-            AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False, special=True)
-            if isinstance(pad_token, str)
-            else pad_token
-        )
 
         super().__init__(
             vocab_file,
@@ -180,7 +174,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
-            pad_token=pad_token,
             add_prefix_space=add_prefix_space,
             **kwargs,
         )

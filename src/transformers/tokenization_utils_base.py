@@ -26,7 +26,7 @@ import warnings
 from collections import UserDict
 from collections.abc import Mapping, Sized
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -82,13 +82,6 @@ else:
         AddedToken represents a token to be added to a Tokenizer An AddedToken can have special options defining the
         way it should behave.
         """
-
-        content: str = field(default_factory=str)
-        single_word: bool = False
-        lstrip: bool = False
-        rstrip: bool = False
-        normalized: bool = True
-        special: bool = False
 
         def __init__(
             self, content: str, single_word=False, lstrip=False, rstrip=False, special=False, normalized=None
@@ -856,7 +849,7 @@ class SpecialTokensMixin:
                     ), "One of the tokens is not a string or an AddedToken"
                     setattr(self, key, value)
                 elif isinstance(value, (str)):
-                    value = AddedToken(value, normalized=False, special=True)
+                    value = AddedToken(value, rstrip=True, lstrip=True, normalized=False, special=True)
                     setattr(self, key, value)
                 elif isinstance(value, AddedToken):
                     setattr(self, key, value)
@@ -1344,11 +1337,16 @@ class SpecialTokensMixin:
         Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
         special tokens are tokenized.
         """
-        all_toks = []
-        set_attr = self.special_tokens_map_extended
-        for attr_value in set_attr.values():
-            all_toks = all_toks + (list(attr_value) if isinstance(attr_value, (list, tuple)) else [attr_value])
-        return all_toks
+        all_tokens = []
+        seen = set()
+        for value in self.special_tokens_map_extended.values():
+            if isinstance(value, (list, tuple)):
+                tokens_to_add = [token for token in value if str(token) not in seen]
+            else:
+                tokens_to_add = [value] if str(value) not in seen else []
+            seen.update(map(str, tokens_to_add))
+            all_tokens.extend(tokens_to_add)
+        return all_tokens
 
     @property
     def all_special_tokens(self) -> List[str]:
