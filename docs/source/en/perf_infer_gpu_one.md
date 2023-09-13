@@ -69,7 +69,20 @@ And use it for generation or fine-tuning.
 You can benefit from considerable speedup for fine-tuning and inference, especially for long sequence length. 
 However, note that due to the fact that Flash Attention does not support computing attention scores with padd tokens under the hood, we need to manually pad / unpad the attention scores for batched inference when the sequence contains padd tokens. This leads to an important slowdown for batched `generate` with padd tokens. To overcome this, one should use Flash Attention without padd tokens in the sequence for training (e.g. by packing a dataset, i.e. concatenating sequences until reaching the maximum sequence length)
 
-TODO: @younesbelkada add figures here
+Below is the expected speedup you can get for a simple forward pass on `tiiuae/falcon-7b` with a sequence length of 4096 and various batch sizes, without padd tokens:
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/falcon-7b-inference-large-seqlen.png">
+</div>
+
+Below is the expected speedup you can get for a simple forward pass on `meta-llama/Llama-7b-hf` with a sequence length of 4096 and various batch sizes, without padd tokens:
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-7b-inference-large-seqlen.png">
+</div>
+
+
+Note that Flash Attention makes the attention computation more memory efficient, meaning you can train with much larger sequenc lengths without facing CUDA OOM issues. 
 
 ### Advanced usage
 
