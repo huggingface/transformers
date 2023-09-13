@@ -437,11 +437,8 @@ class FalconAttention(nn.Module):
         else:
             present = None
 
-        attention_mask_float = (
-            (attention_mask * 1.0)
-            .masked_fill(attention_mask, torch.finfo(query_layer.dtype).min)
-            .to(query_layer.dtype)
-        )
+        float_min = torch.finfo(query_layer.dtype).min
+        attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, float_min).to(query_layer.dtype)
 
         query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
         key_layer_ = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
@@ -1032,13 +1029,13 @@ class FalconForCausalLM(FalconPreTrainedModel):
         input_ids: torch.LongTensor,
         past_key_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         # Note: versions of Falcon with alibi do not use position_ids. It is used with RoPE.
-        position_ids = kwargs.get("position_ids", None)
         if not self.transformer.use_alibi and attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
