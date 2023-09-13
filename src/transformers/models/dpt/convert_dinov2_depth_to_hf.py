@@ -17,11 +17,14 @@ https://github.com/facebookresearch/dinov2/tree/main"""
 
 
 import argparse
+import itertools
+import math
 from pathlib import Path
 
 import requests
 import torch
 from PIL import Image
+from torchvision import transforms
 
 from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
 from transformers.utils import logging
@@ -182,6 +185,46 @@ name_to_url = {
 }
 
 
+def get_original_pixel_values(image):
+    class CenterPadding(object):
+        def __init__(self, multiple):
+            super().__init__()
+            self.multiple = multiple
+
+        def _get_pad(self, size):
+            new_size = math.ceil(size / self.multiple) * self.multiple
+            pad_size = new_size - size
+            pad_size_left = pad_size // 2
+            pad_size_right = pad_size - pad_size_left
+            return pad_size_left, pad_size_right
+
+        def __call__(self, img):
+            pads = list(itertools.chain.from_iterable(self._get_pad(m) for m in img.shape[-2:][::-1]))
+            output = torch.nn.functional.pad(img, pads)
+            return output
+
+        def __repr__(self):
+            return self.__class__.__name__ + "()"
+
+    def make_depth_transform() -> transforms.Compose:
+        return transforms.Compose(
+            [
+                transforms.ToTensor(),
+                lambda x: 255.0 * x[:3],  # Discard alpha component and scale by 255
+                transforms.Normalize(
+                    mean=(123.675, 116.28, 103.53),
+                    std=(58.395, 57.12, 57.375),
+                ),
+                CenterPadding(multiple=14),
+            ]
+        )
+
+    transform = make_depth_transform()
+    original_pixel_values = transform(image).unsqueeze(0)
+
+    return original_pixel_values
+
+
 @torch.no_grad()
 def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
@@ -228,9 +271,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     ]
     model.eval()
 
-    # Check outputs on an image
-    # TODO image processor
-
+    # Verify image processor
     processor = DPTImageProcessor(
         do_resize=False,
         do_rescale=False,
@@ -243,13 +284,11 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     image = prepare_img()
     pixel_values = processor(image, return_tensors="pt").pixel_values.float()
+    original_pixel_values = get_original_pixel_values(image)
 
-    from huggingface_hub import hf_hub_download
+    assert torch.allclose(pixel_values, original_pixel_values)
 
-    filepath = hf_hub_download(repo_id="nielsr/dinov2-test-batch", filename="pixel_values.pt", repo_type="dataset")
-    pixel_values = torch.load(filepath)
-
-    # forward pass
+    # Verify forward pass
     with torch.no_grad():
         outputs = model(pixel_values)
 
@@ -273,12 +312,12 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model and processor to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing model and processor to hub...")
         model.push_to_hub(repo_id=f"nielsr/{model_name}")
-        # processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

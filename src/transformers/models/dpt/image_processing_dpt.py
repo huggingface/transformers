@@ -20,7 +20,7 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import resize, to_channel_dimension_format
+from ...image_transforms import pad, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -122,6 +122,10 @@ class DPTImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_pad (`bool`, *optional*, defaults to `False`):
+            Whether to apply center padding.
+        pad_multiple_of (`int`, *optional*):
+            If `do_pad` is `True`, pads the image dimensions to be a multiple of this value.
     """
 
     model_input_names = ["pixel_values"]
@@ -138,6 +142,8 @@ class DPTImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_pad: bool = False,
+        pad_multiple_of: int = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -153,6 +159,8 @@ class DPTImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.do_pad = do_pad
+        self.pad_multiple_of = pad_multiple_of
 
     def resize(
         self,
@@ -208,6 +216,51 @@ class DPTImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    def pad_image(
+        self,
+        image: np.array,
+        multiple: int,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        """
+        Center pad an image to be a multiple of `multiple`.
+
+        Args:
+            image (`np.ndarray`):
+                Image to pad.
+            multiple (`int`, *optional*, defaults to 32):
+                The width and height of the image will be padded to a multiple of this number.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+        """
+
+        def _get_pad(size, multiple):
+            new_size = math.ceil(size / multiple) * multiple
+            pad_size = new_size - size
+            pad_size_left = pad_size // 2
+            pad_size_right = pad_size - pad_size_left
+            return pad_size_left, pad_size_right
+
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+
+        height, width = image.shape[:2] if input_data_format == ChannelDimension.LAST else image.shape[1:]
+
+        pad_size_left, pad_size_right = _get_pad(height, multiple)
+        pad_size_top, pad_size_bottom = _get_pad(width, multiple)
+
+        return pad(image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format)
+
     def preprocess(
         self,
         images: ImageInput,
@@ -221,6 +274,8 @@ class DPTImageProcessor(BaseImageProcessor):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        do_pad: bool = None,
+        pad_multiple_of: int = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -286,6 +341,8 @@ class DPTImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+        do_pad = do_pad if do_pad is not None else self.do_pad
+        pad_multiple_of = pad_multiple_of if pad_multiple_of is not None else self.pad_multiple_of
 
         images = make_list_of_images(images)
 
@@ -331,7 +388,15 @@ class DPTImageProcessor(BaseImageProcessor):
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image.astype(np.float32), mean=image_mean, std=image_std, input_data_format=input_data_format
+                )
+                for image in images
+            ]
+
+        if do_pad:
+            images = [
+                self.pad_image(image=image, multiple=pad_multiple_of, input_data_format=input_data_format)
                 for image in images
             ]
 
