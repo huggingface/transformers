@@ -1255,11 +1255,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         specific section of the documentation to learn more about it:
         https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
 
-        The method checks if the current setup is compatible with Flash Attention as it requires the model
-        to be in half precision and not ran on CPU.
+        The method checks if the current setup is compatible with Flash Attention as it requires the model to be in
+        half precision and not ran on CPU.
 
-        If all checks pass, the method will create an attribute in the config `_flash_attn_2_enabled` so that
-        the model can initialize the correct attention module
+        If all checks pass, the method will create an attribute in the config `_flash_attn_2_enabled` so that the model
+        can initialize the correct attention module
         """
         if not cls._supports_flash_attn_2:
             raise ValueError(
