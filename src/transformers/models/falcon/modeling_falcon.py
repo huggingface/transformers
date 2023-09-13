@@ -99,13 +99,15 @@ class FalconRotaryEmbedding(nn.Module):
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
 
-    def cos_sin(self, seq_len: int, past_key_values_length: int, position_ids: torch.Tensor, device="cpu", dtype=torch.bfloat16) -> torch.Tensor:
+    def cos_sin(
+        self, seq_len: int, past_key_values_length: int, position_ids: torch.Tensor, device="cpu", dtype=torch.bfloat16
+    ) -> torch.Tensor:
         total_length = seq_len + past_key_values_length
         if total_length > self.seq_len_cached:
             self._set_cos_sin_cache(total_length, device, dtype)
         # Gather cos, sin at the designated position ids
-        cos = self.cos_cached.squeeze(0)[position_ids] # [bs, seq_len, dim]
-        sin = self.sin_cached.squeeze(0)[position_ids] # [bs, seq_len, dim]
+        cos = self.cos_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
+        sin = self.sin_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
         return cos, sin
 
     def forward(self, query, key, past_key_values_length, position_ids):
@@ -420,7 +422,11 @@ class FalconAttention(nn.Module):
         else:
             present = None
 
-        attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, float("-1e9")).to(query_layer.dtype)
+        attention_mask_float = (
+            (attention_mask * 1.0)
+            .masked_fill(attention_mask, torch.finfo(query_layer.dtype).min)
+            .to(query_layer.dtype)
+        )
 
         query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
         key_layer_ = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
