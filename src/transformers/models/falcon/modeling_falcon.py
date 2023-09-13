@@ -67,6 +67,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+# TODO (joao): Is this the same implementation as in Llama? If so, let's make them the same and add the copy facilities
 class FalconRotaryEmbedding(nn.Module):
     """Implementation of RotaryEmbedding from GPT-NeoX.
     This implementation is designed to operate on queries and keys that are compatible with `[batch_size,
