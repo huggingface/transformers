@@ -794,9 +794,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
 
         # 3. Convolutional Layer
         residual = hidden_states
-        hidden_states = self.conv_module(
-            hidden_states, attention_mask=conv_attention_mask
-        )
+        hidden_states = self.conv_module(hidden_states, attention_mask=conv_attention_mask)
         hidden_states = residual + hidden_states
 
         # 4. Feed-Forward 2 Layer
