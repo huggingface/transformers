@@ -1465,12 +1465,20 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             )
             print("language_model_attention_mask",language_model_attention_mask.shape)
             
+            language_model_inputs = language_model_inputs.reshape(1,-1,language_model_inputs.shape[2])
+            language_model_attention_mask = language_model_attention_mask.reshape(1,-1)
+
             all_inputs.append(language_model_inputs)
             all_masks.append(language_model_attention_mask)
         
         language_model_inputs = torch.cat(all_inputs, dim=0)
+
+        print("language_model_inputs",language_model_inputs.shape)
+
         language_model_attention_mask = torch.cat(all_masks, dim=0)
 
+        print("language_model_attention_mask",language_model_attention_mask.shape)
+        
         inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
         
