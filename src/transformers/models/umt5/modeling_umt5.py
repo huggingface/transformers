@@ -220,9 +220,7 @@ class UMTRelativePositionalBias(nn.Module):
 
 
     def forward(self, query_length, kv_length, dtype=None):
-        if query_length == kv_length:
-            return self.cached_bias[:,:,:kv_length, :kv_length].transpose(2,3)
-        return self.cached_bias[:,:,:kv_length,kv_length-query_length-1:kv_length].transpose(2,3)
+        return self.cached_bias[:,:,kv_length-query_length:kv_length, :kv_length] #.transpose(2,3)
     
     
 class UMT5Attention(nn.Module):
@@ -269,11 +267,6 @@ class UMT5Attention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         batch_size, seq_length = hidden_states.shape[:2]
 
-        kv_seq_len = seq_length
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
-        key_length = kv_seq_len if encoder_hidden_states is None else encoder_hidden_states.shape[1]
-        
         # use encoder_hidden_states if cross attention
         current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
         # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
@@ -290,6 +283,7 @@ class UMT5Attention(nn.Module):
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
+        key_length = key_states.shape[-2]        
         query_states = self._shape(self.q(hidden_states))
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
@@ -299,14 +293,11 @@ class UMT5Attention(nn.Module):
             position_bias = self.relative_attention_bias(seq_length, key_length, dtype=attention_scores.dtype)
         else:
             position_bias = torch.zeros(
-                (1, self.n_heads, seq_length, kv_seq_len),
+                (1, self.n_heads, seq_length, key_length),
                 device=attention_scores.device,
                 dtype=attention_scores.dtype,
                 requires_grad=self.training,
             )
-
-        if past_key_value is not None:
-            position_bias = position_bias[:, :,  -hidden_states.size(1):, :]
 
         if attention_mask is not None:
             position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
