@@ -15,6 +15,7 @@
 """Tokenization classes for Whisper."""
 import json
 import os
+from functools import lru_cache
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
@@ -561,12 +562,24 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return offsets
 
+    @lru_cache
+    def timestamp_ids(self, time_precision=0.02):
+        """
+        Compute the timestamp token ids for a given precision and save to least-recently used (LRU) cache.
+
+        Args:
+            time_precision (`float`, `optional`, defaults to 0.02):
+                The time ratio to convert from token to time.
+        """
+        return self.convert_tokens_to_ids([("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)])
+
     def _preprocess_token_ids(
         self, token_ids, skip_special_tokens: bool = False, decode_with_timestamps: bool = False, time_precision=0.02
     ):
         """
-        Args:
         Pre-process the token ids for decoding by removing the prompt tokens ids and timestamp token ids.
+
+        Args:
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Typically, obtained using the `__call__` method of the tokenizer.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
@@ -585,7 +598,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         if not decode_with_timestamps:
             # filter timestamp tokens if they are contained in the vocab
-            timestamp_ids = self.convert_tokens_to_ids([("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)])
+            timestamp_ids = self.timestamp_ids(time_precision=time_precision)
             token_ids = [token for token in token_ids if token not in timestamp_ids]
 
         return token_ids
