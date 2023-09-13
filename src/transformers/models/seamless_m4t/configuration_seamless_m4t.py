@@ -378,7 +378,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_decoder_attention_heads = t2u_decoder_attention_heads
         self.t2u_max_position_embeddings = t2u_max_position_embeddings
 
-
         # hifi-gan vocoder config
         # original parameters specific to Hifi-Gan
         self.sampling_rate = sampling_rate

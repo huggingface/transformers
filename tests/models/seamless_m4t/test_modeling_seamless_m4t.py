@@ -275,9 +275,9 @@ class SeamlessM4TModelTester:
         model = SeamlessM4TModel(config=config)
         model.to(torch_device)
         model.eval()
-        
+
         # make sure no pad token in decoder_input_ids
-        decoder_input_ids = torch.clamp(decoder_input_ids, config.pad_token_id+1)
+        decoder_input_ids = torch.clamp(decoder_input_ids, config.pad_token_id + 1)
 
         # first forward pass
         outputs = model(
@@ -482,7 +482,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
         pass
-    
 
     @unittest.skip(reason="SeamlessM4T has no base model")
     def test_save_load_fast_init_from_base(self):
@@ -994,9 +993,6 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        expected_wav_mean = 0.00021144005586393178
-        expected_wav_std = 0.12780693173408508
-
         with torch.inference_mode():
             set_seed(0)
             output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
@@ -1007,8 +1003,8 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50:60])
 
-        #self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
-        #self.assertTrue(expected_wav_std == output.waveforms.std().item())
+        # self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
+        # self.assertTrue(expected_wav_std == output.waveforms.std().item())
 
         ########################
 
@@ -1033,9 +1029,6 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
             ]
         # fmt: on
 
-        expected_wav_mean = -0.0006770279142074287
-        expected_wav_std = 0.22130604088306427
-
         with torch.inference_mode():
             set_seed(0)
             output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
@@ -1045,8 +1038,8 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50:60])
 
-        #self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
-        #self.assertTrue(expected_wav_std == output.waveforms.std().item())
+        # self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
+        # self.assertTrue(expected_wav_std == output.waveforms.std().item())
 
         ########################
 
@@ -1072,9 +1065,6 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
             ]
         # fmt: on
 
-        expected_wav_mean = 0.00013920154015067965
-        expected_wav_std = 0.09129837900400162
-
         with torch.inference_mode():
             set_seed(0)
             output = model.generate(
@@ -1086,8 +1076,8 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50:60])
 
-        #self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
-        #self.assertTrue(expected_wav_std == output.waveforms.std().item())
+        # self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
+        # self.assertTrue(expected_wav_std == output.waveforms.std().item())
 
         ########################
 

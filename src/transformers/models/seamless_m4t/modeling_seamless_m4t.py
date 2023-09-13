@@ -1928,7 +1928,9 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.t2u_pad_token_id if is_t2u_decoder else config.pad_token_id
         self.vocab_size = config.unit_vocab_size if is_t2u_decoder else config.vocab_size
-        self.max_target_positions = config.t2u_max_position_embeddings if is_t2u_decoder else config.max_position_embeddings
+        self.max_target_positions = (
+            config.t2u_max_position_embeddings if is_t2u_decoder else config.max_position_embeddings
+        )
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
         decoder_layers = config.t2u_decoder_layers if is_t2u_decoder else config.decoder_layers
         decoder_attention_heads = (
@@ -3292,8 +3294,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
 class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
-    
-    
+
     _tied_weights_keys = [
         "lm_head.weight",
         "text_encoder.embed_tokens.weight",
@@ -3302,19 +3303,19 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
 
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
-        
+
         self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
 
         self.text_encoder = SeamlessM4TEncoder(config, self.shared)
         self.text_decoder = SeamlessM4TDecoder(config, self.shared)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        
+
         # Initialize weights and apply final processing
         self.post_init()
-        
+
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
-        
+
     def get_encoder(self):
         return self.text_encoder
 
@@ -3665,7 +3666,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
 class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
-    
+
     _tied_weights_keys = [
         "lm_head.weight",
         "text_decoder.embed_tokens.weight",
@@ -4007,7 +4008,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
-    
+
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
