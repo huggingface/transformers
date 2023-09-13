@@ -1425,7 +1425,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
             print(qformer_input_ids.shape)
 
-            qformer_input_ids0 = qformer_input_ids[i].expand(image_embeds.shape[0], -1, -1)
+            qformer_input_ids0 = qformer_input_ids[i].unsqueeze(0).expand(image_embeds.shape[0], -1, -1)
 
             print(qformer_input_ids0.shape)
     
