@@ -2765,6 +2765,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
+    @slow
     def test_flash_attn_2_inference(self):
         import torch
 
@@ -2816,18 +2817,24 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=True
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=False, low_cpu_mem_usage=True
                 ).to(torch_device)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=False).to(
-                    torch_device
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+
+                out = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
                 )
 
-                dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[0, 1, 1]]).to(torch_device)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=True, low_cpu_mem_usage=True
+                ).to(torch_device)
 
-                out = model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1)
-                out_fa = model_fa.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1)
+                out_fa = model.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                )
 
                 self.assertTrue(torch.equal(out, out_fa))
 

@@ -522,10 +522,10 @@ class LlamaFlashAttention(nn.Module):
         # contains at least one padding token
         if padding_mask is not None:
             indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+
             key_states = index_first_axis(rearrange(key_states, "b s ... -> (b s) ..."), indices_k)
             value_states = index_first_axis(rearrange(value_states, "b s ... -> (b s) ..."), indices_k)
 
-            # In an ideal world, at least for the path q_len == kv_seq_len and q_len == 1, we should collect the
             if q_len == kv_seq_len:
                 query_states = index_first_axis(rearrange(query_states, "b s ... -> (b s) ..."), indices_k)
                 cu_seqlens_q = cu_seqlens_k
@@ -560,7 +560,7 @@ class LlamaFlashAttention(nn.Module):
         else:
             attn_output = flash_attn_func(query_states, key_states, value_states, dropout_rate, causal=True)
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:

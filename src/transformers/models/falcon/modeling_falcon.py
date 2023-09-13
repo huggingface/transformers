@@ -556,7 +556,6 @@ class FalconFlashAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.num_kv_heads = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
 
-
     # Copied from transformers.models.falcon.modeling_falcon.FalconAttention._init_rope
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -697,12 +696,11 @@ class FalconFlashAttention(nn.Module):
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 
         # contains at least one padding token
+
         if padding_mask is not None:
             indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
             key_layer = index_first_axis(rearrange(key_layer, "b s ... -> (b s) ..."), indices_k)
             value_layer = index_first_axis(rearrange(value_layer, "b s ... -> (b s) ..."), indices_k)
-
-            # In an ideal world, at least for the path q_len == kv_seq_len and q_len == 1, we should collect the
             if query_length == kv_seq_length:
                 query_layer = index_first_axis(rearrange(query_layer, "b s ... -> (b s) ..."), indices_k)
                 cu_seqlens_q = cu_seqlens_k
