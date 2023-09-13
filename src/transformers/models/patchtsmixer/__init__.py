@@ -37,7 +37,7 @@ else:
         "PatchTSMixerForMaskPretraining",
         "PatchTSMixerForForecasting",
         "PatchTSMixerForClassification",
-        "PatchTSMixerForRegression"
+        "PatchTSMixerForRegression",
     ]
 
 
@@ -55,12 +55,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_patchtsmixer import (
             PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PatchTSMixerPreTrainedModel,
-            PatchTSMixerModel,
-            PatchTSMixerForMaskPretraining,
-            PatchTSMixerForForecasting,
             PatchTSMixerForClassification,
+            PatchTSMixerForForecasting,
+            PatchTSMixerForMaskPretraining,
             PatchTSMixerForRegression,
+            PatchTSMixerModel,
+            PatchTSMixerPreTrainedModel,
         )
 
 else:

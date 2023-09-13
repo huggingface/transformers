@@ -165,10 +165,6 @@ _import_structure = {
         "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "AutoformerConfig",
     ],
-    "models.patchtsmixer": [
-        "PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "PatchTSMixerConfig",
-    ],
     "models.bark": [
         "BarkCoarseConfig",
         "BarkConfig",
@@ -469,6 +465,10 @@ _import_structure = {
         "OwlViTProcessor",
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
+    ],
+    "models.patchtsmixer": [
+        "PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PatchTSMixerConfig",
     ],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
@@ -1136,6 +1136,8 @@ else:
             "MODEL_FOR_TEXT_ENCODING_MAPPING",
             "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
             "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
+            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
             "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
@@ -1145,8 +1147,6 @@ else:
             "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
-            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
-            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "AutoBackbone",
             "AutoModel",
             "AutoModelForAudioClassification",
@@ -1191,17 +1191,6 @@ else:
             "AutoformerForPrediction",
             "AutoformerModel",
             "AutoformerPreTrainedModel",
-        ]
-    )
-    _import_structure["models.patchtsmixer"].extend(
-        [
-            "PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PatchTSMixerPreTrainedModel",
-            "PatchTSMixerModel",
-            "PatchTSMixerForMaskPretraining",
-            "PatchTSMixerForForecasting",
-            "PatchTSMixerForClassification",
-            "PatchTSMixerForRegression"
         ]
     )
     _import_structure["models.bark"].extend(
@@ -2420,6 +2409,17 @@ else:
             "OwlViTPreTrainedModel",
             "OwlViTTextModel",
             "OwlViTVisionModel",
+        ]
+    )
+    _import_structure["models.patchtsmixer"].extend(
+        [
+            "PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PatchTSMixerForClassification",
+            "PatchTSMixerForForecasting",
+            "PatchTSMixerForMaskPretraining",
+            "PatchTSMixerForRegression",
+            "PatchTSMixerModel",
+            "PatchTSMixerPreTrainedModel",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -4284,10 +4284,6 @@ if TYPE_CHECKING:
         AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AutoformerConfig,
     )
-    from .models.patchtsmixer import (
-        PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        PatchTSMixerConfig,
-    )
     from .models.bark import (
         BarkCoarseConfig,
         BarkConfig,
@@ -4566,6 +4562,10 @@ if TYPE_CHECKING:
         OwlViTProcessor,
         OwlViTTextConfig,
         OwlViTVisionConfig,
+    )
+    from .models.patchtsmixer import (
+        PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PatchTSMixerConfig,
     )
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
@@ -5163,6 +5163,8 @@ if TYPE_CHECKING:
             MODEL_FOR_TEXT_ENCODING_MAPPING,
             MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING,
             MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
+            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
@@ -5172,8 +5174,6 @@ if TYPE_CHECKING:
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
-            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
-            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             AutoBackbone,
             AutoModel,
             AutoModelForAudioClassification,
@@ -5216,15 +5216,6 @@ if TYPE_CHECKING:
             AutoformerForPrediction,
             AutoformerModel,
             AutoformerPreTrainedModel,
-        )
-        from .models.patchtsmixer import (
-            PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PatchTSMixerPreTrainedModel,
-            PatchTSMixerModel,
-            PatchTSMixerForMaskPretraining,
-            PatchTSMixerForForecasting,
-            PatchTSMixerForClassification,
-            PatchTSMixerForRegression
         )
         from .models.bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6214,6 +6205,15 @@ if TYPE_CHECKING:
             OwlViTPreTrainedModel,
             OwlViTTextModel,
             OwlViTVisionModel,
+        )
+        from .models.patchtsmixer import (
+            PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PatchTSMixerForClassification,
+            PatchTSMixerForForecasting,
+            PatchTSMixerForMaskPretraining,
+            PatchTSMixerForRegression,
+            PatchTSMixerModel,
+            PatchTSMixerPreTrainedModel,
         )
         from .models.pegasus import (
             PegasusForCausalLM,

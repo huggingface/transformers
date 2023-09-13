@@ -233,6 +233,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "OwlViTTextModel",
     "OwlViTVisionModel",
     "OwlViTForObjectDetection",
+    "PatchTSMixerForForecasting",
+    "PatchTSMixerForMaskPretraining",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",

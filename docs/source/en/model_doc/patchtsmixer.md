@@ -43,3 +43,26 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] PatchTSMixerModel
     - forward
 
+
+## PatchTSMixerForForecasting
+
+[[autodoc]] PatchTSMixerForForecasting
+    - forward
+
+
+## PatchTSMixerForClassification
+
+[[autodoc]] PatchTSMixerForClassification
+    - forward
+
+
+## PatchTSMixerForMaskPretraining
+
+[[autodoc]] PatchTSMixerForMaskPretraining
+    - forward
+
+
+## PatchTSMixerForRegression
+
+[[autodoc]] PatchTSMixerForRegression
+    - forward

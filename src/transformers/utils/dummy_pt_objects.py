@@ -624,6 +624,12 @@ MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING = None
 MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING = None
 
 
+MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING = None
+
+
+MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING = None
+
+
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
@@ -5809,6 +5815,51 @@ class OwlViTTextModel(metaclass=DummyObject):
 
 
 class OwlViTVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PatchTSMixerForClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSMixerForForecasting(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSMixerForMaskPretraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSMixerForRegression(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSMixerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PatchTSMixerPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

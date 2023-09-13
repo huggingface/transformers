@@ -1,8 +1,9 @@
-import torch
 from torch import nn
+
 
 class GatedAttention(nn.Module):
     """GatedAttention
+
     Args:
         in_size (int): input size
         out_size (int): output size
@@ -18,4 +19,3 @@ class GatedAttention(nn.Module):
         attn_weight = self.attn_softmax(self.attn_layer(x))
         x = x * attn_weight
         return x
-
