@@ -796,7 +796,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.conv_module(
             hidden_states, attention_mask=conv_attention_mask
-        )  # TODO: make sure attention mask is passed and apply
+        )
         hidden_states = residual + hidden_states
 
         # 4. Feed-Forward 2 Layer
@@ -1014,7 +1014,6 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         hidden_states = self.ffn(hidden_states)
         hidden_states = self.ffn_dropout(hidden_states) + residual
 
-        # TODO: return attention_weights ? (must pass output_attention first)
         return hidden_states
 
 
