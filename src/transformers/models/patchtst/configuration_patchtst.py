@@ -39,63 +39,89 @@ class PatchTSTConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        prediction_length (`int`):
-            The prediction length for the decoder. In other words, the prediction horizon of the model. This value is
-            typically dictated by the dataset and we recommend to set it appropriately.
-        context_length (`int`, *optional*, defaults to `prediction_length`):
-            The context length for the encoder. If `None`, the context length will be the same as the
-            `prediction_length`.
         num_input_channels (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
-        num_time_features (`int`, *optional*, defaults to 0):
-            The number of time features in the input time series.
-        num_dynamic_real_features (`int`, *optional*, defaults to 0):
-            The number of dynamic real valued features.
-        num_static_categorical_features (`int`, *optional*, defaults to 0):
-            The number of static categorical features.
-        num_static_real_features (`int`, *optional*, defaults to 0):
-            The number of static real valued features.
-        embedding_dimension (`list[int]`, *optional*):
-            The dimension of the embedding for each of the static categorical features. Should be a list of integers,
-            having the same length as `num_static_categorical_features`. Cannot be `None` if
-            `num_static_categorical_features` is > 0.
-        d_model (`int`, *optional*, defaults to 64):
-            Dimensionality of the transformer layers.
+        context_length (`int`, defaults to 32):
+            The context length for the encoder. 
+        
+        patch_length (`int`, *optional*, defaults to 1):
+            Define the patch length of the patchification process. Default to 1
+        stride (`int`, *optional*, defaults to 1):
+            define the stride of the patchification process. Default to 1
+        
         encoder_layers (`int`, *optional*, defaults to 2):
             Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 2):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 2):
+        d_model (`int`, *optional*, defaults to 64):
+            Dimensionality of the transformer layers.    
+        encoder_attention_heads (`int`, *optional*, defaults to 4):
             Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 2):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 32):
+        shared_embedding (`bool`, *optional*, defaults to True):
+            Sharing the input embedding across all channels.
+        channel_attention (`bool`, *optional*, defaults to False):
+            Activate channel attention block in the Transformer to allow channels to attend each other.
+        encoder_ffn_dim (`int`, *optional*, defaults to 256):
             Dimension of the "intermediate" (often named feed-forward) layer in encoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 32):
-            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and decoder. If string, `"gelu"` and
-            `"relu"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the encoder, and decoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the attention and fully connected layers for each encoder layer.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the attention and fully connected layers for each decoder layer.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
+        norm (`str` , *optional*, defaults to `"BatchNorm"`):
+            Normalization at each Transformer layer. Can be `"BatchNorm"` or `"LayerNorm"`.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the encoder, and decoder.
+        positional_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability in the positional embedding layer.            
+        dropout_path (`float`, *optional*, defaults to 0.0):
+            The dropout path in the residual block. 
+        ff_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability used between the two layers of the feed-forward networks.
-        num_parallel_samples (`int`, *optional*, defaults to 100):
-            The number of samples to generate in parallel for each time step of inference.
+        bias (`bool`, *optional*, defaults to True):
+            Consider bias in the feed-forward networks.
+        activation_function (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (string) in the encoder.`"gelu"` and `"relu"` are supported.
+        positional_encoding (`str`, *optional*, defaults to `"sincos"`):
+            Positional encodings. `"zeros"`, `"normal"`, `"uniform"' and `"sincos"` are supported.    
+        learn_pe (`bool`, *optional*, defaults to False):
+            Whether the positional encoding is updated during training.                   
+        use_cls_token (`bool`, *optional*, defaults to False):
+            Whether cls token is used.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
-        distil (`bool`, *optional*, defaults to `True`):
-            Whether to use distilling in encoder.
-
+        shared_projection (`bool`, *optional*, defaults to True):
+            Sharing the projection layer across different channels in the forecast head. 
+        seed_number (`int`, *optional*, defaults to None):
+            Use seed number for random masking.
+        revin (`bool`, *optional*, defaults to True):
+            Apply reverse instance normalization on each input batch.
+        
+        mask_input (`bool`, *optional*, defaults to False):
+            Apply masking during the pretraining.
+        mask_type (`str`, *optional*, defaults to `"random"`):
+            Masking type. Only `"random"` is currently supported.
+        mask_ratio (`float`, *optional*, defaults to 0.5):
+            Masking ratio is applied to mask the input data during pretraining.           
+        channel_consistent_masking (`bool`, *optional*, defaults to False):
+            If channel consistent masking is True, all the channels will have the same masking.
+        unmasked_channel_indices (`list`, *optional*, defaults to None):
+            Channels are not masked during pretraining.
+        mask_value (`int`, *optional*, defaults to 0):
+            Mask value to set.
+        
+        pooling (`str`, *optional*, defaults to `"mean"`):
+            Pooling in the latent representation. `"mean"`, `"max"` and None are supported.
+        num_classes (`int`, *optional*, defaults to 1):
+            Number of classes is defined for classification task.
+        head_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for head.                                            
+        prediction_length (`int`):
+            The prediction length for the encoder. In other words, the prediction horizon of the model. 
+        prediction_length (`int`):
+            The prediction length for the encoder. In other words, the prediction horizon of the model. 
+        num_output_channels (`int`, *optional*, defaults to 1):
+            Number of output channels.
+        prediction_range (`list`, *optional*, defaults to None):
+            The range of prediction values can be set to enforce the model to produce values within a range. 
+            
+                
     Example:
 
     ```python
@@ -122,12 +148,12 @@ class PatchTSTConfig(PretrainedConfig):
         num_input_channels: int = 1,
         context_length: int = 32,
         # PatchTST arguments
-        patch_length: int = 8,
-        stride: int = 8,
+        patch_length: int = 1,
+        stride: int = 1,
         # Transformer architecture configuration
         encoder_layers: int = 3,
-        d_model: int = 128,
-        encoder_attention_heads: int = 16,
+        d_model: int = 64,
+        encoder_attention_heads: int = 4,
         shared_embedding: bool = True,
         channel_attention: bool = False,
         encoder_ffn_dim: int = 256,
@@ -144,13 +170,13 @@ class PatchTSTConfig(PretrainedConfig):
         learn_pe: bool = False,
         use_cls_token: bool = False,
         init_std: float = 0.02,
-        individual: bool = False,
+        shared_projection: bool = True,
         seed_number: int = None,
         revin: Optional[bool] = True,
         # mask pretraining
         mask_input: Optional[bool] = None,
         mask_type: str = "random",
-        mask_ratio=0.5,
+        mask_ratio: float = 0.5,
         mask_patches: List[int] = [2, 3],
         mask_patch_ratios: List[int] = [1, 1],
         channel_consistent_masking: bool = False,
@@ -161,8 +187,8 @@ class PatchTSTConfig(PretrainedConfig):
         num_classes: int = 1,
         head_dropout: float = 0.0,
         prediction_length: int = 24,
-        prediction_range: List = [0, 1],
         num_output_channels: int = 1,
+        prediction_range: List = None,
         **kwargs,
     ):
         # time series specific configuration
@@ -208,9 +234,11 @@ class PatchTSTConfig(PretrainedConfig):
         self.mask_value = mask_value
 
         # general head params
-        self.individual = individual
         self.pooling = pooling
         self.head_dropout = head_dropout
+
+        # Forecast head
+        self.shared_projection = shared_projection
 
         # Classification
         self.num_classes = num_classes
