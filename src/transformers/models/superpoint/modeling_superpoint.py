@@ -298,3 +298,41 @@ class SuperPointModel(SuperPointPreTrainedModel):
             last_hidden_state=last_hidden_state,
             hidden_states=encoder_outputs.hidden_states,
         )
+
+
+class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
+    def __init__(self, config: SuperPointConfig):
+        super().__init__(config)
+
+        self.config = config
+
+        self.superpoint = SuperPointModel(config)
+
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ImagePointDescriptionOutput]:
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        outputs = self.superpoint(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+
+        if not return_dict:
+            return (outputs.keypoints, outputs.scores, outputs.descriptors) + outputs.hidden_states
+
+        return ImagePointDescriptionOutput(
+            keypoints=outputs.keypoints,
+            scores=outputs.scores,
+            descriptors=outputs.descriptors,
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+        )
