@@ -1437,7 +1437,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
             print("qformer_attention_mask0",qformer_attention_mask0.shape) 
            
-            qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+            qformer_attention_mask0 = torch.cat([query_attention_mask, qformer_attention_mask0], dim=1)
 
             query_outputs = self.qformer(
                 input_ids=qformer_input_ids0,
