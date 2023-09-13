@@ -430,7 +430,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
                 # Pass the gradients straight through the quantization, by directly linking the gradients of the input
                 # embed_ind with the output quantize in the computation graph.
                 quantized = residual + (quantized - residual).detach()
-                quantization_steps.append((residual.clone(), quantized.detach().clone()))
+                quantization_steps.append((residual, quantized.detach()))
 
             # Note: There may be a bug here with the quantized results, but we do not fix it as it is present in the
             # original FB code as well. For more context, see https://github.com/facebookresearch/encodec/issues/25.
@@ -667,7 +667,7 @@ class EncodecModel(EncodecPreTrainedModel):
         if self.training:
             for quantization_steps in quantization_steps_frames:
                 for residual, quantize in quantization_steps:
-                    loss = nn.functional.mse_loss(quantize, residual)
+                    loss = nn.functional.mse_loss(quantize.permute(0, 2, 1), residual.permute(0, 2, 1))
                     commitment_loss = commitment_loss + loss
 
         if not return_dict:
