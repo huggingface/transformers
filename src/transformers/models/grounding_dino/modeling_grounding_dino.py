@@ -975,16 +975,14 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
             )
         # Implementation of Feedforward model
         self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
-        self.dropout = nn.Dropout(config.text_enhancer_dropout)
         self.fc2 = nn.Linear(config.encoder_ffn_dim // 2, config.d_model)
 
         self.layer_norm_before = nn.LayerNorm(config.d_model)
         self.layer_norm_after = nn.LayerNorm(config.d_model)
-        self.dropout1 = nn.Dropout(config.text_enhancer_dropout)
-        self.dropout2 = nn.Dropout(config.text_enhancer_dropout)
 
         self.activation = ACT2FN[config.activation_function]
         self.num_heads = config.encoder_attention_heads // 2
+        self.dropout = config.text_enhancer_dropout
 
     def with_pos_embed(self, hidden_state: Tensor, position_embeddings: Optional[Tensor]):
         return hidden_state if position_embeddings is None else hidden_state + position_embeddings
@@ -995,7 +993,7 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         attention_masks: Optional[Tensor] = None,
         position_embeddings: Optional[Tensor] = None,
     ):    # repeat attn mask
-        if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[1]:
+        if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[0]:
             # bs, num_q, num_k
             attention_masks = attention_masks.repeat(self.num_heads, 1, 1)
 
@@ -1007,13 +1005,18 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
             attn_mask=attention_masks,
             average_attn_weights=False
         )
+        attention_output = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + attention_output
+        residual = hidden_states
 
-        hidden_states = hidden_states + self.dropout1(attention_output)
         hidden_states = self.layer_norm_before(hidden_states)
         hidden_states = self.activation(self.fc1(hidden_states))
-        attention_output = self.fc2(self.dropout(hidden_states))
-        hidden_states = hidden_states + self.dropout2(attention_output)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = hidden_states + residual
         hidden_states = self.layer_norm_after(hidden_states)
+
         return hidden_states, attention_weights
     
 class GroundingDINOBiMultiHeadAttention(nn.Module):
@@ -1423,12 +1426,10 @@ class GroundingDINOEncoderLayer(nn.Module):
         )
 
         (text_features, text_enhanced_attn) = self.text_enhancer_layer(
-            hidden_states=text_features.transpose(0, 1),
+            hidden_states=text_features,
             attention_masks=~text_self_attention_masks,  # note we use ~ for mask here
-            position_embeddings=(
-                text_position_embedding.transpose(0, 1) if text_position_embedding is not None else None
-            ),
-        ).transpose(0, 1)
+            position_embeddings=(text_position_embedding if text_position_embedding is not None else None)
+        )
 
         (vision_features, vision_deformable_attn) = self.deformable_layer(
             hidden_states=vision_features,
