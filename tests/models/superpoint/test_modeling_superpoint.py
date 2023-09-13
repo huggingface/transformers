@@ -15,7 +15,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 if is_torch_available():
     import torch
 
-    from transformers import SuperPointModel
+    from transformers import SuperPointModel, SuperPointModelForInterestPointDescription
 
 if is_vision_available():
     from PIL import Image
@@ -70,6 +70,17 @@ class SuperPointModelTester:
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.conv_layers_sizes[-2], self.image_width // 8, self.image_height // 8),
+        )
+
+    def create_and_check_for_interest_point_description(self, config, pixel_values):
+        model = SuperPointModelForInterestPointDescription(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
         )
 
     def prepare_config_and_inputs_for_common(self):
