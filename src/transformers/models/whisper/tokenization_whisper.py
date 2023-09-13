@@ -23,7 +23,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-from .english_normalizer import EnglishTextNormalizer
+from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 
 
 VOCAB_FILES_NAMES = {
@@ -493,6 +493,14 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
+    def _basic_normalize(self, text, remove_diacritics=False):
+        """
+        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        multilingual text.
+        """
+        normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
+        return normalizer(text)
+
     def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
@@ -607,6 +615,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         output_offsets: bool = False,
         time_precision=0.02,
         decode_with_timestamps: bool = False,
+        normalize: bool = False,
+        basic_normalize: bool = False,
+        remove_diacritics: bool = False,
         **kwargs,
     ) -> str:
         """
@@ -630,6 +641,17 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 timestamps.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
                 Whether or not to decode with timestamps included in the raw text.
+            normalize (`bool`, *optional*, defaults to `False`):
+                Whether or not to apply the English text normalizer to the decoded text. Only applicable when the
+                target text is in English. Otherwise, the basic text normalizer should be applied.
+            basic_normalize (`bool`, *optional*, defaults to `False`):
+                Whether or not to apply the Basic text normalizer to the decoded text. Applicable to multilingual
+                target text.
+            remove_diacritics (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove diacritics when applying the Basic text normalizer. Removing diacritics may
+                destroy information in the decoded text, hence it should be used with caution.
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
         Returns:
             `str`: The decoded sentence.
         """
@@ -644,6 +666,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
             filtered_ids,
             skip_special_tokens=skip_special_tokens,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            normalize=normalize,
+            basic_normalize=basic_normalize,
+            remove_diacritics=remove_diacritics,
             decode_with_timestamps=decode_with_timestamps,
             **kwargs,
         )
@@ -663,6 +688,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         normalize: bool = False,
+        basic_normalize: bool = False,
+        remove_diacritics: bool = False,
         decode_with_timestamps: bool = False,
         **kwargs,
     ) -> str:
@@ -691,6 +718,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         if normalize:
             clean_text = self._normalize(text)
+            return clean_text
+        elif basic_normalize:
+            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
