@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Apple, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,8 +29,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    ImageClassifierOutput,
-    MaskedImageModelingOutput,
+    ImageClassifierOutput
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -55,7 +54,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 48, 64, 64]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "apple/fastvit-t8" 
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby cat"
 
 #TODO: Add more new models there are atleast 5 more
 FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [ 
@@ -63,16 +62,16 @@ FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all FastViT models at https://huggingface.co/models?filter=fastvit
 ]
 
-
 class FastViTEmbeddings(nn.Module):
     """
     Construct the patch embeddings. Optionally, also the mask token.
     """
 
-    def __init__(self, config: FastViTConfig, use_mask_token: bool = False) -> None:
+    def __init__(self, config: FastViTConfig, inference_mode: bool = False) -> None:
         super().__init__()
+        self.inference_mode = inference_mode
 
-        self.patch_embeddings = FastViTPatchEmbeddings(config)
+        self.patch_embeddings = FastViTPatchEmbeddings(config, inference_mode=inference_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
@@ -91,7 +90,7 @@ class FastViTPatchEmbeddings(nn.Module):
     """
     Construction of the Stem Block, following paper structure here <https://arxiv.org/abs/2303.14189>.
     """
-    def __init__(self, config: FastViTConfig) -> None:
+    def __init__(self, config: FastViTConfig, inference_mode: bool = False) -> None:
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_sizes[0]
@@ -103,7 +102,7 @@ class FastViTPatchEmbeddings(nn.Module):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_patches = num_patches
-        self.inference_mode = config.inference_mode
+        self.inference_mode = inference_mode
         self.config = config
 
         self.projection = nn.Sequential(
@@ -217,6 +216,7 @@ class FastViTConvLayer(nn.Module):
             if out_channels == in_channels and stride == 1:
                 self.rbr_skip = nn.BatchNorm2d(num_features=in_channels)
 
+
             # Conv branches
             self.rbr_scale = None
             if kernel_size > 1 and self.use_scale_branch:
@@ -285,6 +285,116 @@ class FastViTConvLayer(nn.Module):
             out = self.activation(out)
 
         return out
+    
+    def reparameterize(self):
+        """Following works like `RepVGG: Making VGG-style ConvNets Great Again` -
+        https://arxiv.org/pdf/2101.03697.pdf. We re-parameterize multi-branched
+        architecture used at training time to obtain a plain CNN-like structure
+        for inference.
+        """
+        if self.inference_mode:
+            return
+        kernel, bias = self._get_kernel_bias()
+        self.reparam_conv = nn.Conv2d(
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            kernel_size=self.kernel_size,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.dilation,
+            groups=self.groups,
+            bias=True,
+        )
+        self.reparam_conv.weight.data = kernel
+        self.reparam_conv.bias.data = bias
+
+        # Delete un-used branches
+        for para in self.parameters():
+            para.detach_()
+        self.__delattr__("rbr_conv")
+        self.__delattr__("rbr_scale")
+        if hasattr(self, "rbr_skip"):
+            self.__delattr__("rbr_skip")
+
+        self.inference_mode = True
+
+    def _get_kernel_bias(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Method to obtain re-parameterized kernel and bias.
+        Reference: https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py#L83
+
+        Returns:
+            Tuple of (kernel, bias) after fusing branches.
+        """
+        # get weights and bias of scale branch
+        kernel_scale = 0
+        bias_scale = 0
+        if self.rbr_scale is not None:
+            kernel_scale, bias_scale = self._fuse_bn_tensor(self.rbr_scale)
+            # Pad scale branch kernel to match conv branch kernel size.
+            pad = self.kernel_size // 2
+            kernel_scale = torch.nn.functional.pad(kernel_scale, [pad, pad, pad, pad])
+
+        # get weights and bias of skip branch
+        kernel_identity = 0
+        bias_identity = 0
+        if self.rbr_skip is not None:
+            kernel_identity, bias_identity = self._fuse_bn_tensor(self.rbr_skip)
+
+        # get weights and bias of conv branches
+        kernel_conv = 0
+        bias_conv = 0
+        if self.rbr_conv is not None:
+            for ix in range(self.num_conv_branches):
+                _kernel, _bias = self._fuse_bn_tensor(self.rbr_conv)
+                kernel_conv += _kernel
+                bias_conv += _bias
+
+        kernel_final = kernel_conv + kernel_scale + kernel_identity
+        bias_final = bias_conv + bias_scale + bias_identity
+        return kernel_final, bias_final
+    
+    def _fuse_bn_tensor(
+        self, branch: Union[nn.Sequential, nn.BatchNorm2d]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Method to fuse batchnorm layer with preceeding conv layer.
+        Reference: https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py#L95
+
+        Args:
+            branch: Sequence of ops to be fused.
+
+        Returns:
+            Tuple of (kernel, bias) after fusing batchnorm.
+        """
+        if isinstance(branch, nn.Sequential):
+            kernel = branch.conv.weight
+            running_mean = branch.bn.running_mean
+            running_var = branch.bn.running_var
+            gamma = branch.bn.weight
+            beta = branch.bn.bias
+            eps = branch.bn.eps
+        else:
+            assert isinstance(branch, nn.BatchNorm2d)
+            if not hasattr(self, "id_tensor"):
+                input_dim = self.in_channels // self.groups
+                kernel_value = torch.zeros(
+                    (self.in_channels, input_dim, self.kernel_size, self.kernel_size),
+                    dtype=branch.weight.dtype,
+                    device=branch.weight.device,
+                )
+                for i in range(self.in_channels):
+                    kernel_value[
+                        i, i % input_dim, self.kernel_size // 2, self.kernel_size // 2
+                    ] = 1
+                self.id_tensor = kernel_value
+            kernel = self.id_tensor
+            running_mean = branch.running_mean
+            running_var = branch.running_var
+            gamma = branch.weight
+            beta = branch.bias
+            eps = branch.eps
+        std = (running_var + eps).sqrt()
+        t = (gamma / std).reshape(-1, 1, 1, 1)
+        return kernel * t, beta - running_mean * gamma / std
 
 
 class FastViTSEBlock(nn.Module):
@@ -346,7 +456,6 @@ class FastViTReparamLKConv(nn.Module):
         groups: int,
         small_kernel: int,
         inference_mode: bool = False,
-        activation: nn.Module = nn.GELU(),
     ) -> None:
         super().__init__()
 
@@ -354,7 +463,6 @@ class FastViTReparamLKConv(nn.Module):
         self.groups = groups
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.activation = activation
         self.kernel_size = kernel_size
         self.small_kernel = small_kernel
         self.padding = kernel_size // 2
@@ -414,67 +522,136 @@ class FastViTReparamLKConv(nn.Module):
             if hasattr(self, "small_conv"):
                 out += self.small_conv(x)
 
-        out = self.activation(out)
         return out
+
+    def get_kernel_bias(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Method to obtain re-parameterized kernel and bias.
+        Reference: https://github.com/DingXiaoH/RepLKNet-pytorch
+
+        Returns:
+            Tuple of (kernel, bias) after fusing branches.
+        """
+        eq_k, eq_b = self._fuse_bn(self.large_conv.conv, self.large_conv.bn)
+        if hasattr(self, "small_conv"):
+            small_k, small_b = self._fuse_bn(self.small_conv.conv, self.small_conv.bn)
+            eq_b += small_b
+            eq_k += nn.functional.pad(
+                small_k, [(self.kernel_size - self.small_kernel) // 2] * 4
+            )
+        return eq_k, eq_b
+
+    def reparameterize(self) -> None:
+        """
+        Following works like `RepVGG: Making VGG-style ConvNets Great Again` -
+        https://arxiv.org/pdf/2101.03697.pdf. We re-parameterize multi-branched
+        architecture used at training time to obtain a plain CNN-like structure
+        for inference.
+        """
+        eq_k, eq_b = self.get_kernel_bias()
+        self.lkb_reparam = nn.Conv2d(
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            kernel_size=self.kernel_size,
+            stride=self.stride,
+            padding=self.padding,
+            dilation=self.large_conv.conv.dilation,
+            groups=self.groups,
+            bias=True,
+        )
+
+        self.lkb_reparam.weight.data = eq_k
+        self.lkb_reparam.bias.data = eq_b
+        self.__delattr__("large_conv")
+        if hasattr(self, "small_conv"):
+            self.__delattr__("small_conv")
+
+    @staticmethod
+    def _fuse_bn(
+        conv: torch.Tensor, bn: nn.BatchNorm2d
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Method to fuse batchnorm layer with conv layer.
+
+        Args:
+            conv: Convolutional kernel weights.
+            bn: Batchnorm 2d layer.
+
+        Returns:
+            Tuple of (kernel, bias) after fusing batchnorm.
+        """
+        kernel = conv.weight
+        running_mean = bn.running_mean
+        running_var = bn.running_var
+        gamma = bn.weight
+        beta = bn.bias
+        eps = bn.eps
+        std = (running_var + eps).sqrt()
+        t = (gamma / std).reshape(-1, 1, 1, 1)
+        return kernel * t, beta - running_mean * gamma / std
 
 
 class FastViTSelfAttention(nn.Module):
     def __init__(self, config: FastViTConfig, stage: str) -> None:
         super().__init__()
         self.hidden_size = config.hidden_sizes[stage]
-        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_dim = config.attention_head_dim
+        self.num_heads = int(self.hidden_size / self.attention_head_dim)
+        self.scale = self.attention_head_dim ** -0.5
         
+        self.all_head_size = self.attention_head_dim * self.num_heads
 
-        if self.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if self.hidden_size % config.attention_head_dim != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size {self.hidden_size,} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
+                f"heads {config.attention_head_dim}."
             )
 
-        self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.qkv = nn.Linear(self.hidden_size, self.all_head_size * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout_proj = nn.Dropout(config.hidden_dropout_prob)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (self.attention_head_dim, self.num_heads)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, output_attentions: bool = False
+        self, hidden_states
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
+        B, C, H, W = hidden_states.shape
+        N = H * W
+        # Added this line, we expect always 4D Input convert
+        # from shape (batch_size, channels, orig_height, orig_width)
+        # to the shape (batch_size * patch_area, num_patches, channels)
+        hidden_states = torch.flatten(hidden_states, start_dim=2).transpose(-2, -1) #B N C
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(B, N, 3, self.num_heads, self.attention_head_dim)
+            .permute(2,0,3,1,4)
+        )
+        query_layer, key_layer, value_layer = qkv.unbind(0)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        attention_scores = (query_layer * self.scale) @ key_layer.transpose(-2, -1)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+        attention_probs = attention_scores.softmax(dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = (attention_probs @ value_layer).transpose(1,2).reshape(B, N, C)
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        attention_outputs = self.proj(context_layer)
+        attention_outputs = self.dropout_proj(attention_outputs)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        # Convert to 4D tensor
+        attention_outputs = attention_outputs.transpose(-2, -1).reshape(B, C, H, W)
 
-        return outputs
+        return attention_outputs
 
 
 class FastViTRepMixer(nn.Module):
@@ -483,12 +660,14 @@ class FastViTRepMixer(nn.Module):
     reparameterization to lower the memory access cost by removing skip-connections in the network.
     For more info: `MetaFormer Is Actually What You Need for Vision <https://arxiv.org/pdf/2111.11418.pdf>`_
     """
-    def __init__(self, config: FastViTConfig, stage: str) -> None:
+    def __init__(self, config: FastViTConfig, stage: str, inference_mode: bool = False) -> None:
         super().__init__()
         dimension = config.hidden_sizes[stage]
         kernel_size = 3
         layer_norm_eps = config.layer_norm_eps
-        self.inference_mode = config.inference_mode
+        self.inference_mode = inference_mode
+        self.dimension = dimension
+        self.kernel_size = kernel_size
 
         if self.inference_mode:
             self.reparam_conv = nn.Conv2d(
@@ -525,6 +704,7 @@ class FastViTRepMixer(nn.Module):
             self.layer_scale = nn.Parameter(
                 layer_norm_eps * torch.ones((dimension, 1, 1)), requires_grad=True
             )
+
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         if self.inference_mode:
             features_probs = self.reparam_conv(features)
@@ -534,6 +714,41 @@ class FastViTRepMixer(nn.Module):
             features_probs = features + self.layer_scale * (features_mixer - features_norm)
 
         return features_probs
+    
+    def reparameterize(self) -> None:
+        """Reparameterize mixer and norm into a single
+        convolutional layer for efficient inference.
+        """
+        if self.inference_mode:
+            return
+        
+        self.mixer.reparameterize()
+        self.norm.reparameterize()
+
+        w = self.mixer.id_tensor + self.layer_scale.unsqueeze(-1) * (
+            self.mixer.reparam_conv.weight - self.norm.reparam_conv.weight
+        )
+        b = torch.squeeze(self.layer_scale) * (
+            self.mixer.reparam_conv.bias - self.norm.reparam_conv.bias
+        )
+
+        self.reparam_conv = nn.Conv2d(
+            in_channels=self.dimension,
+            out_channels=self.dimension,
+            kernel_size=self.kernel_size,
+            stride=1,
+            padding=self.kernel_size // 2,
+            groups=self.dimension,
+            bias=True,
+        )
+        self.reparam_conv.weight.data = w
+        self.reparam_conv.bias.data = b
+
+        for para in self.parameters():
+            para.detach_()
+        self.__delattr__("mixer")
+        self.__delattr__("norm")
+        self.__delattr__("layer_scale")
 
 
 class FastViTConvFFN(nn.Module):
@@ -578,12 +793,11 @@ class FastViTConvFFN(nn.Module):
 
 
 class FastViTDownsample(nn.Module):
-    def __init__(self, config: FastViTConfig, stage: str) -> None:
+    def __init__(self, config: FastViTConfig, stage: str, inference_mode : bool = False) -> None:
         super().__init__()
         hidden_size = config.hidden_sizes[stage]
         hidden_size_next = config.hidden_sizes[stage+1]
-        inference_mode = config.inference_mode
-
+        
         self.reparam_large_conv = FastViTReparamLKConv(
             in_channels=hidden_size,
             out_channels=hidden_size_next,
@@ -613,96 +827,11 @@ class FastViTAttention(nn.Module):
     def __init__(self, config, stage: str) -> None:
         super().__init__()
         hidden_size = config.hidden_sizes[stage]
-        drop_path = config.hidden_dropout_prob
-        layer_scale_init_value = config.layer_norm_eps
         self.patch_size = config.patch_size
 
-        self.layer_norm = nn.BatchNorm2d(num_features=hidden_size)
-        self.token_mixer = FastViTSelfAttention(config, stage)
-
-        self.convffn = FastViTConvFFN(config, stage)
-
-        self.drop_path = nn.Dropout(drop_path) if drop_path > 0.0 else nn.Identity()
-
-        self.layer_scale_1 = nn.Parameter(
-            layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
-        )
-        self.layer_scale_2 = nn.Parameter(
-            layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
-        )
-
+        self.norm = nn.BatchNorm2d(num_features=hidden_size)
+        self.attention = FastViTSelfAttention(config, stage)
         self.pruned_heads = set()
-
-    def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
-        patch_height = int(self.patch_size / 2)
-        patch_width = int(self.patch_size / 2)
-
-        batch_size, channels, orig_height, orig_width = features.shape
-        new_height = int(math.ceil(orig_height / patch_height) * patch_height)
-        new_width = int(math.ceil(orig_width / patch_width) * patch_width)
-
-        interpolate = False
-        if new_width != orig_width or new_height != orig_height:
-            # Note: Padding can be done, but then it needs to be handled in attention function.
-            features = nn.functional.interpolate(
-                features, size=(new_height, new_width), mode="bilinear", align_corners=False
-            )
-            interpolate = True
-
-        num_patch_width = new_width // patch_width
-        num_patch_height = new_height // patch_height
-        num_patches = num_patch_height * num_patch_width
-
-        # convert from shape (batch_size, channels, orig_height, orig_width)
-        # to the shape (batch_size * patch_area, num_patches, channels)
-        patches = features.reshape(
-            batch_size * channels * num_patch_height, patch_height, num_patch_width, patch_width
-        )
-        patches = patches.transpose(1, 2)
-        patches = patches.reshape(batch_size, channels, num_patches, self.patch_size)
-        patches = patches.transpose(1, 3)
-        patches = patches.reshape(batch_size * self.patch_size, num_patches, -1)
-        info_dict = {
-            "orig_size": (orig_height, orig_width),
-            "batch_size": batch_size,
-            "channels": channels,
-            "interpolate": interpolate,
-            "num_patches": num_patches,
-            "num_patches_width": num_patch_width,
-            "num_patches_height": num_patch_height,
-        }
-        return patches, info_dict
-
-    def folding(self, patches: torch.Tensor, info_dict: Dict) -> torch.Tensor:
-        patch_height = int(self.patch_size / 2)
-        patch_width = int(self.patch_size / 2)
-
-        patch_area = int(patch_width * patch_height)
-
-        batch_size = info_dict["batch_size"]
-        channels = info_dict["channels"]
-        num_patches = info_dict["num_patches"]
-        num_patch_height = info_dict["num_patches_height"]
-        num_patch_width = info_dict["num_patches_width"]
-
-        # convert from shape (batch_size * patch_area, num_patches, channels)
-        # back to shape (batch_size, channels, orig_height, orig_width)
-        features = patches.contiguous().view(batch_size, patch_area, num_patches, -1)
-        features = features.transpose(1, 3)
-        features = features.reshape(
-            batch_size * channels * num_patch_height, num_patch_width, patch_height, patch_width
-        )
-        features = features.transpose(1, 2)
-        features = features.reshape(
-            batch_size, channels, num_patch_height * patch_height, num_patch_width * patch_width
-        )
-
-        if info_dict["interpolate"]:
-            features = nn.functional.interpolate(
-                features, size=info_dict["orig_size"], mode="bilinear", align_corners=False
-            )
-
-        return features
 
     def prune_heads(self, heads: Set[int]) -> None:
         if len(heads) == 0:
@@ -723,29 +852,12 @@ class FastViTAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residutal_features = hidden_states
+        # Apply Layernorm
+        hidden_states = self.norm(hidden_states)
 
-        before_layer_norm = self.layer_norm(hidden_states)
-
-        # convert feature maps back to patches
-        patches, info_dict = self.unfolding(before_layer_norm)
-
-        # Apply token mixer 
-        token_mixer = self.token_mixer(patches)
-
-        # convert patches back to feature maps
-        features = self.folding(token_mixer[0], info_dict)
-
-        features_probs = self.drop_path(self.layer_scale_1 * features)
-        embeddings = residutal_features + features_probs 
-
-        residutal_features = embeddings
-        features_conv = self.convffn(embeddings)
-        features_probs = self.drop_path(self.layer_scale_2 * features_conv)
-
-        embeddings = residutal_features + features_probs
-
-        return embeddings
+        # Apply attention
+        attention = self.attention(hidden_states)
+        return attention
 
 
 class FastViTMixer(nn.Module):
@@ -756,25 +868,10 @@ class FastViTMixer(nn.Module):
     """
     def __init__(self, config: FastViTConfig, stage: str) -> None:
         super().__init__()
-
-        hidden_size = config.hidden_sizes[stage]
-        drop_path = config.hidden_dropout_prob
-        layer_scale_init_value = config.layer_norm_eps
-
         self.token_mixer = FastViTRepMixer(config, stage)
-
-        self.convffn = FastViTConvFFN(config, stage)
-
-        self.drop_path = nn.Dropout(drop_path) if drop_path > 0.0 else nn.Identity()
-
-
-        self.layer_scale = nn.Parameter(
-            layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
-        )
 
     def forward(self, x : torch.tensor) -> torch.tensor:
         x = self.token_mixer(x)
-        x = x + self.drop_path(self.layer_scale * self.convffn(x))
         return x
 
 
@@ -812,8 +909,8 @@ class FastViTCPE(nn.Module):
         self.in_channels = in_channels
         self.groups = embed_dim
         self.inference_mode = inference_mode
-
-        self.pe = nn.Conv2d(
+        if inference_mode:
+            self.reparam_conv = nn.Conv2d(
                 in_channels=self.in_channels,
                 out_channels=self.embed_dim,
                 kernel_size=self.spatial_shape,
@@ -821,53 +918,126 @@ class FastViTCPE(nn.Module):
                 padding=int(self.spatial_shape[0] // 2),
                 groups=self.embed_dim,
                 bias=True,
-        )
+            )
+        else:
+            self.pos_enc = nn.Conv2d(
+                    in_channels=self.in_channels,
+                    out_channels=self.embed_dim,
+                    kernel_size=self.spatial_shape,
+                    stride=1,
+                    padding=int(self.spatial_shape[0] // 2),
+                    groups=self.embed_dim,
+                    bias=True,
+            )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.inference_mode:
-            CPE = self.pe(hidden_states)
+            CPE = self.reparam_conv(hidden_states)
         else:
-            CPE = self.pe(hidden_states) + hidden_states
+            CPE = self.pos_enc(hidden_states) + hidden_states
 
         return CPE
+
+    def reparameterize(self) -> None:
+        # Build equivalent Id tensor
+        input_dim = self.in_channels // self.groups
+        kernel_value = torch.zeros(
+            (
+                self.in_channels,
+                input_dim,
+                self.spatial_shape[0],
+                self.spatial_shape[1],
+            ),
+            dtype=self.pos_enc.weight.dtype,
+            device=self.pos_enc.weight.device,
+        )
+        for i in range(self.in_channels):
+            kernel_value[
+                i,
+                i % input_dim,
+                self.spatial_shape[0] // 2,
+                self.spatial_shape[1] // 2,
+            ] = 1
+        id_tensor = kernel_value
+
+        # Reparameterize Id tensor and conv
+        w_final = id_tensor + self.pos_enc.weight
+        b_final = self.pos_enc.bias
+
+        # Introduce reparam conv
+        self.reparam_conv = nn.Conv2d(
+            in_channels=self.in_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.spatial_shape,
+            stride=1,
+            padding=int(self.spatial_shape[0] // 2),
+            groups=self.embed_dim,
+            bias=True,
+        )
+        self.reparam_conv.weight.data = w_final
+        self.reparam_conv.bias.data = b_final
+
+        for para in self.parameters():
+            para.detach_()
+        self.__delattr__("pe")
 
 
 class FastViTIntermediate(nn.Module):
     def __init__(self, config: FastViTConfig, stage: str) -> None:
         super().__init__()
         token_mixer_type = config.token_mixers[stage]
+        drop_path = config.attention_probs_dropout_prob
+        layer_scale_init_value = config.layer_norm_eps
+        hidden_size = config.hidden_sizes[stage]
         self.depth = config.depths[stage]
+        self.token_mixer_type = token_mixer_type
+
+        self.drop_path = nn.Dropout(drop_path) if drop_path > 0.0 else nn.Identity()
         if token_mixer_type == "repmixer":
             self.token_mixer_block = FastViTMixer(config, stage)
+            self.layer_scale = nn.Parameter(
+                    layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
+                )
         elif token_mixer_type == "attention":
             self.token_mixer_block = FastViTAttention(config, stage)
+            self.layer_scale_1 = nn.Parameter(
+                layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
+            )
+            self.layer_scale_2 = nn.Parameter(
+                layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
+            )
         else:
             raise ValueError(
                 "Token mixer type: {} not supported".format(token_mixer_type)
             )
+        self.convffn = FastViTConvFFN(config, stage)
+
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.token_mixer_block(hidden_states)
-
-        return hidden_states
+        output_token_mixer = self.token_mixer_block(hidden_states)
+        if self.token_mixer_type == "repmixer":
+            output = output_token_mixer + self.drop_path(self.layer_scale * self.convffn(output_token_mixer))
+        else:            
+            output = hidden_states + self.drop_path(self.layer_scale_1 * output_token_mixer)
+            output = output + self.drop_path(self.layer_scale_2 * self.convffn(output))
+        return output
 
 
 class FastViTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: FastViTConfig, stage: int) -> None:
+    def __init__(self, config: FastViTConfig, stage: int, inference_mode: bool = False) -> None:
         super().__init__()
         self.stage = stage
         pos_embeds = config.pos_embeds
         depth = config.depths[stage]
-        inference_mode = config.inference_mode
 
         if pos_embeds is None:
             pos_embeds = [None] * len(config.depths)
 
-        self.position_embeddings = None
+        self.pos_emb = None
         if pos_embeds[stage] is not None:
-            self.position_embeddings = FastViTCPE(config.hidden_sizes[stage], 
+            self.pos_emb = FastViTCPE(config.hidden_sizes[stage], 
                                                 config.hidden_sizes[stage], 
                                                 spatial_shape=(7, 7), 
                                                 inference_mode = inference_mode)
@@ -885,11 +1055,12 @@ class FastViTLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        if self.position_embeddings:
-            hidden_states = self.position_embeddings(hidden_states)
+        if self.pos_emb:
+            hidden_states = self.pos_emb(hidden_states)
 
+        features = hidden_states
         for layer_module in self.stage_conv:
-            features = layer_module(hidden_states)
+            features = layer_module(features)
 
         if self.downsample:
             features = self.downsample(features)
@@ -1073,9 +1244,10 @@ class FastViTModel(FastViTPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection[0].rbr_scale[0].weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
+        if hasattr(self, "rbr_scale"):
+            expected_dtype = self.embeddings.patch_embeddings.projection[0].rbr_scale[0].weight.dtype
+            if pixel_values.dtype != expected_dtype:
+                pixel_values = pixel_values.to(expected_dtype)
 
         embedding_output = self.embeddings(
             pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
@@ -1087,6 +1259,7 @@ class FastViTModel(FastViTPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        
         sequence_output = encoder_outputs[0]
 
         if not return_dict:
@@ -1117,16 +1290,15 @@ class FastViTModel(FastViTPreTrainedModel):
     FASTVIT_START_DOCSTRING,
 )
 class FastViTForImageClassification(FastViTPreTrainedModel):
-    def __init__(self, config: FastViTConfig) -> None:
+    def __init__(self, config: FastViTConfig, inference_mode: bool = False) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.inference_mode = config.inference_mode
+        self.inference_mode = inference_mode
         self.fastvit = FastViTModel(config)
 
         # Classifier head
         hidden_size = config.hidden_sizes[-1]
-        self.gap = nn.AdaptiveAvgPool2d(output_size=1)
         self.final_conv = FastViTConvLayer(
                 in_channels=hidden_size,
                 out_channels=int(hidden_size * 2),
@@ -1138,6 +1310,7 @@ class FastViTForImageClassification(FastViTPreTrainedModel):
                 use_se=True,
                 num_conv_branches=1,
             )
+        self.gap = nn.AdaptiveAvgPool2d(output_size=1)
         self.classifier = nn.Linear(int(hidden_size * 2), config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
