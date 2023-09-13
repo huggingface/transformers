@@ -1396,7 +1396,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         all_inputs = []
         all_masks = []
 
-        print(pixel_values.shape)
+        print(pixel_values.shape) #1,5,3,244,244
         for i in range(pixel_values.shape[0]):
             
             
@@ -1412,22 +1412,22 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
             image_embeds = vision_outputs[0]
 
-            print(image_embeds.shape)
+            print(image_embeds.shape) #5,257,1408
 
             image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
-            print(image_attention_mask.shape)
+            print(image_attention_mask.shape) #5,257
 
             # difference with BLIP-2 here: we also feed the instruction prompt to the Q-Former
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
-            print(query_tokens.shape)
+            print(query_tokens.shape) #5,32,728
 
-            print(qformer_input_ids.shape)
+            print("qformer_input_ids", qformer_input_ids.shape)#1,376
 
             qformer_input_ids0 = qformer_input_ids[i].expand(image_embeds.shape[0], -1)
 
-            print(qformer_input_ids0.shape)
+            print("qformer_input_ids0",qformer_input_ids0.shape)
     
             query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
