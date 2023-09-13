@@ -120,7 +120,11 @@ _init_weights = True
 
 
 def is_fsdp_enabled():
-    return torch.distributed.is_initialized() and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+    return (
+        torch.distributed.is_available()
+        and torch.distributed.is_initialized()
+        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+    )
 
 
 def is_fsdp_enabled_and_dist_rank_0():
