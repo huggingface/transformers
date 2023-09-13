@@ -140,7 +140,7 @@ class Beit3Config(PretrainedConfig):
         # Vision
         self.img_size = img_size
         self.patch_size = patch_size
-        self.in_chans = num_channels
+        self.num_channels = num_channels
 
         self.num_labels = num_labels
         self.label_smoothing = label_smoothing
