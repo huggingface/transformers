@@ -272,22 +272,18 @@ class LlavaLlamaConfig(PretrainedConfig):
     [`PretrainedConfig`] for more information.
 
     Args:
-        llava_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`LlavaConfig`].
         llama_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`LlamaConfig`].
+        llava_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`LlavaConfig`].
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
     Example:
 
     ```python
-    >>> from transformers import (
-    ...     LlavaConfig,
-    ...     LlamaConfig,
-    ...     LlavaLlamaConfig,
-    ...     LlavaLlamaForCausalLM
-    ... )
+    >>> from transformers.models.llava.configuration_llava import LlamaConfig
+    >>> from transformers import LlavaConfig, LlavaLlamaConfig, LlavaLlamaForCausalLM
 
     >>> # Initializing a LlavaLlamaConfig with shauray/Llava-Llama-2-7B-hf style configuration
     >>> configuration = LlavaLlamaConfig()
@@ -298,11 +294,9 @@ class LlavaLlamaConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a InstructBlipConfig from a LlamaConfig, LlavaConfig and any PretrainedConfig
-
     >>> # Initializing Llava, Llama configurations
-    >>> llava_config = LlavaConfig()
     >>> llama_config = LlamaConfig()
+    >>> llava_config = LlavaConfig()
 
     >>> config = LlavaLlamaConfig.from_llava_llama_configs(
     ...     llava_config,
