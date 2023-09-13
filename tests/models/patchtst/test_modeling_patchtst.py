@@ -298,7 +298,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
 
 # Note: Publishing of this dataset is under internal review. The dataset is not yet downloadable.
-def prepare_batch(repo_id="ibm/etth-forecast-dev", file="train-batch.pt"):
+def prepare_batch(repo_id="ibm/etth1-forecast-test", file="train-batch.pt"):
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
     batch = torch.load(file, map_location=torch_device)
     return batch
@@ -310,7 +310,7 @@ def prepare_batch(repo_id="ibm/etth-forecast-dev", file="train-batch.pt"):
 class PatchTSTModelIntegrationTests(unittest.TestCase):
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_pretrain_head(self):
-        model = PatchTSTForMaskPretraining.from_pretrained("ibm/patchtst-etth-pretrain-dev").to(torch_device)
+        model = PatchTSTForMaskPretraining.from_pretrained("ibm/patchtst-etth1-pretrain").to(torch_device)
         batch = prepare_batch()
 
         torch.manual_seed(0)
@@ -329,7 +329,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
 
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_prediction_head(self):
-        model = PatchTSTForForecasting.from_pretrained("ibm/patchtst-etth-forecasting-dev").to(torch_device)
+        model = PatchTSTForForecasting.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
 
         batch = prepare_batch(file="test-batch.pt")
 
