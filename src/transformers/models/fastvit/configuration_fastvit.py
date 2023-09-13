@@ -96,7 +96,7 @@ class FastViTConfig(PretrainedConfig):
         num_channels=3,
         patch_size=4,
         depths=[2, 2, 4, 2],
-        num_attention_heads=32,
+        attention_head_dim=32,
         hidden_sizes=[48, 96, 192, 384],
         pos_embeds = None,
         token_mixers = ("repmixer", "repmixer", "repmixer", "repmixer"),
@@ -106,8 +106,7 @@ class FastViTConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        qkv_bias=True,
-        inference_mode=False,
+        qkv_bias=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -126,8 +125,7 @@ class FastViTConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.num_attention_heads = num_attention_heads
-        self.inference_mode = inference_mode
+        self.attention_head_dim = attention_head_dim
 
 class FastViTOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")

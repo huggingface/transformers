@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert FastViT from the timm library."""
 
-
 import argparse
 import json
 from pathlib import Path
@@ -32,99 +31,151 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+def get_fastvit_config(fastvit_name):
+    # define default FastViT configuration
+    config = FastViTConfig()
+    config.num_labels = 1000
+    repo_id = "huggingface/label-files"
+    filename = "imagenet-1k-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
+    config.image_size = 256
 
-# here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config, base_model=False):
-    rename_keys = []
-    for i in range(config.num_hidden_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"fastvit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"fastvit.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"fastvit.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"fastvit.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"fastvit.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"fastvit.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"fastvit.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"fastvit.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"fastvit.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"fastvit.encoder.layer.{i}.output.dense.bias"))
-
-    # projection layer + position embeddings
-    rename_keys.extend(
-        [
-            ("cls_token", "fastvit.embeddings.cls_token"),
-            ("patch_embed.proj.weight", "fastvit.embeddings.patch_embeddings.projection.weight"),
-            ("patch_embed.proj.bias", "fastvit.embeddings.patch_embeddings.projection.bias"),
-            ("pos_embed", "fastvit.embeddings.position_embeddings"),
-        ]
-    )
-
-    if base_model:
-        # layernorm + pooler
-        rename_keys.extend(
-            [
-                ("norm.weight", "layernorm.weight"),
-                ("norm.bias", "layernorm.bias"),
-                ("pre_logits.fc.weight", "pooler.dense.weight"),
-                ("pre_logits.fc.bias", "pooler.dense.bias"),
-            ]
-        )
-
-        # if just the base model, we should remove "fastvit" from all keys that start with "fastvit"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("fastvit") else pair for pair in rename_keys]
-    else:
-        # layernorm + classification head
-        rename_keys.extend(
-            [
-                ("norm.weight", "fastvit.layernorm.weight"),
-                ("norm.bias", "fastvit.layernorm.bias"),
-                ("head.weight", "classifier.weight"),
-                ("head.bias", "classifier.bias"),
-            ]
-        )
-
-    return rename_keys
+    # size of the architecture
+    if "t8" in fastvit_name:
+        pass
+    elif "t12" in fastvit_name:
+        config.depths=[2, 2, 6, 2]
+        config.hidden_sizes= [64, 128, 256, 512]
+    elif "s12" in fastvit_name:
+        config.depths=[2, 2, 6, 2]
+        config.hidden_sizes= [64, 128, 256, 512]
+        config.mlp_ratio = 4.0
+    elif "sa12" in fastvit_name:
+        config.depths=[2, 2, 6, 2]
+        config.hidden_sizes= [64, 128, 256, 512]
+        config.mlp_ratio = 4.0
+        config.pos_embeds = [None, None, None, "RepCPE"]
+        config.token_mixers = ("repmixer", "repmixer", "repmixer", "attention")
+    elif "sa24" in fastvit_name:
+        config.depths=[4, 4, 12, 4]
+        config.hidden_sizes= [64, 128, 256, 512]
+        config.mlp_ratio = 4.0
+        config.pos_embeds = [None, None, None, "RepCPE"]
+        config.token_mixers = ("repmixer", "repmixer", "repmixer", "attention")
+    elif "sa36" in fastvit_name:
+        config.depths=[6, 6, 18, 6]
+        config.hidden_sizes= [64, 128, 256, 512]
+        config.mlp_ratio = 4.0
+        config.pos_embeds = [None, None, None, "RepCPE"]
+        config.token_mixers = ("repmixer", "repmixer", "repmixer", "attention")
+    elif "ma36" in fastvit_name:
+        config.depths=[6, 6, 18, 6]
+        config.hidden_sizes= [76, 152, 304, 608]
+        config.mlp_ratio = 4.0
+        config.pos_embeds = [None, None, None, "RepCPE"]
+        config.token_mixers = ("repmixer", "repmixer", "repmixer", "attention")
+    
+    return config
 
 
-# we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config, base_model=False):
-    for i in range(config.num_hidden_layers):
-        if base_model:
-            prefix = ""
+def rename_key(name):
+    if "stem" in name:
+        name = name.replace("stem", "embeddings.patch_embeddings.projection")
+    if "conv_kxk" in name:
+        name = name.replace("conv_kxk", "rbr_conv")
+    if "conv_scale" in name:
+        name = name.replace("conv_scale", "rbr_scale")
+    if "identity" in name:
+        name = name.replace("identity", "rbr_skip")
+    if "0.conv" in name:
+        name = name.replace("0.conv", "conv")
+    if "0.bn" in name:
+        name = name.replace("0.bn", "bn")
+    if "stages" in name:
+        name = name.replace("stages", "encoder.layer")
+    if "blocks" in name:
+        name = name.replace("blocks", "stage_conv")
+    if "layer_scale.gamma" in name:
+        name = name.replace("layer_scale.gamma", "layer_scale")
+        name = name.replace("token_mixer", "token_mixer_block.token_mixer")
+    if "layer_scale_1.gamma" in name:
+        name = name.replace("layer_scale_1.gamma", "layer_scale_1")
+    if "layer_scale_2.gamma" in name:
+        name = name.replace("layer_scale_2.gamma", "layer_scale_2")
+    if "token_mixer.norm" in name:
+        name = name.replace("token_mixer.norm", "token_mixer_block.token_mixer.norm")
+    if "token_mixer.mixer" in name:
+        name = name.replace("token_mixer.mixer", "token_mixer_block.token_mixer.mixer")
+    if "mlp" in name:
+        name = name.replace("mlp", "convffn")
+    if ".conv.conv" in name:
+        name = name.replace("conv.conv", "conv")
+    if ".conv.bn" in name:
+        name = name.replace("conv.bn", "bn")
+    if "proj." in name:
+        if "token_mixer" not in name:
+            name_split = name.split(".")
+            pos = int(name_split[2])
+            name_split[2] = str(pos-1)
+            if int(name_split[5]) == 0:
+                name_split[4] = "reparam_large_conv"
+            else:
+                name_split[4] = "conv"
+            name_split.pop(5) #drop the 0 or 1....
+            name = ".".join(name_split)
         else:
-            prefix = "fastvit."
-        # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
-        in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+            name = name.replace("token_mixer.proj", "token_mixer_block.attention.proj")
+    if "se.fc1" in name:
+        name = name.replace("se.fc1", "se.reduce")
+    if "se.fc2" in name:
+        name = name.replace("se.fc2", "se.expand")
+    if "q_bias" in name:
+        name = name.replace("q_bias", "query.bias")
+    if "k_bias" in name:
+        name = name.replace("k_bias", "key.bias")
+    if "v_bias" in name:
+        name = name.replace("v_bias", "value.bias")
+    if "running_mean" in name or "running_var" in name or "num_batches_tracked" in name:
+        name_split = name.split(".")
+        if len(name_split) > 5:
+            if name_split[5].isdigit():
+                name_split.pop(5) #drop the 0 or 1....
+        name = ".".join(name_split)
+    if "norm" in name and "token_mixer" not in name:
+        name_split = name.split(".")
+        if name_split[4].isdigit():
+            name = name.replace("norm", "token_mixer_block.norm")
+    if "head.fc" in name or "final_conv" in name:
+        name = name.replace("head.fc", "classifier")
+    else:
+        name = "fastvit." + name
+    return name
 
 
-def remove_classification_head_(state_dict):
-    ignore_keys = ["head.weight", "head.bias"]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
+def convert_state_dict(orig_state_dict, model):
+    for key in orig_state_dict.copy().keys():
+        val = orig_state_dict.pop(key)
+        if "mask" in key:
+            continue
+        elif "qkv" in key:
+            key_split = key.split(".")
+            layer_num = int(key_split[1])
+            block_num = int(key_split[3])
+
+            if "weight" in key:
+                orig_state_dict[f"fastvit.encoder.layer.{layer_num}.stage_conv.{block_num}.token_mixer_block.attention.qkv.weight"] = val
+            else:
+                orig_state_dict[f"fastvit.encoder.layer.{layer_num}.stage_conv.{block_num}.token_mixer_block.attention.qkv.bias"] = val
+        else:
+            orig_state_dict[rename_key(key)] = val
+
+    return orig_state_dict
 
 
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
-
-
-# We will verify our results on an image of cute cats
+# We will verify our results on an image of cute cats  
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
@@ -133,98 +184,31 @@ def prepare_img():
 
 @torch.no_grad()
 def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path):
-    """
-    Copy/paste/tweak model's weights to our FastViT structure.
-    """
-
-    # define default FastViT configuration
-    config = FastViTConfig()
-    base_model = False
-    # dataset (ImageNet-21k only or also fine-tuned on ImageNet 2012), patch_size and image_size
-    if fastvit_name[-5:] == "in21k":
-        base_model = True
-        config.patch_size = int(fastvit_name[-12:-10])
-        config.image_size = int(fastvit_name[-9:-6])
-    else:
-        config.num_labels = 1000
-        repo_id = "huggingface/label-files"
-        filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
-        config.patch_size = int(fastvit_name[-6:-4])
-        config.image_size = int(fastvit_name[-3:])
-    # size of the architecture
-    if "deit" in fastvit_name:
-        if fastvit_name[9:].startswith("tiny"):
-            config.hidden_size = 192
-            config.intermediate_size = 768
-            config.num_hidden_layers = 12
-            config.num_attention_heads = 3
-        elif fastvit_name[9:].startswith("small"):
-            config.hidden_size = 384
-            config.intermediate_size = 1536
-            config.num_hidden_layers = 12
-            config.num_attention_heads = 6
-        else:
-            pass
-    else:
-        if fastvit_name[4:].startswith("small"):
-            config.hidden_size = 768
-            config.intermediate_size = 2304
-            config.num_hidden_layers = 8
-            config.num_attention_heads = 8
-        elif fastvit_name[4:].startswith("base"):
-            pass
-        elif fastvit_name[4:].startswith("large"):
-            config.hidden_size = 1024
-            config.intermediate_size = 4096
-            config.num_hidden_layers = 24
-            config.num_attention_heads = 16
-        elif fastvit_name[4:].startswith("huge"):
-            config.hidden_size = 1280
-            config.intermediate_size = 5120
-            config.num_hidden_layers = 32
-            config.num_attention_heads = 16
-
+    
     # load original model from timm
     timm_model = timm.create_model(fastvit_name, pretrained=True)
     timm_model.eval()
 
+    # load model from HF
+    config = get_fastvit_config(fastvit_name)
+    model = FastViTForImageClassification(config)
+    model.eval()
+
     # load state_dict of original model, remove and rename some keys
     state_dict = timm_model.state_dict()
-    if base_model:
-        remove_classification_head_(state_dict)
-    rename_keys = create_rename_keys(config, base_model)
-    for src, dest in rename_keys:
-        rename_key(state_dict, src, dest)
-    read_in_q_k_v(state_dict, config, base_model)
+    new_state_dict = convert_state_dict(state_dict, model)
 
-    # load HuggingFace model
-    if fastvit_name[-5:] == "in21k":
-        model = FastViTModel(config).eval()
-    else:
-        model = FastViTForImageClassification(config).eval()
-    model.load_state_dict(state_dict)
+    model.load_state_dict(new_state_dict)
 
-    # Check outputs on an image, prepared by ViTFeatureExtractor/DeiTFeatureExtractor
-    if "deit" in fastvit_name:
-        feature_extractor = DeiTFeatureExtractor(size=config.image_size)
-    else:
-        feature_extractor = ViTFeatureExtractor(size=config.image_size)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
-    outputs = model(pixel_values)
+    feature_extractor = ViTFeatureExtractor(size=config.image_size)
+    inputs = feature_extractor(images=prepare_img(), return_tensors="pt")
+    # print(inputs)
+    # pixel_values = encoding["pixel_values"]
+    outputs = model(**inputs).logits
+    timm_logits = timm_model(inputs["pixel_values"])
 
-    if base_model:
-        timm_pooled_output = timm_model.forward_features(pixel_values)
-        assert timm_pooled_output.shape == outputs.pooler_output.shape
-        assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-3)
-    else:
-        timm_logits = timm_model(pixel_values)
-        assert timm_logits.shape == outputs.logits.shape
-        assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
+    assert outputs.shape == timm_logits.shape, f"Shape is not equal: {outputs.shape} and {timm_logits.shape}"
+    assert torch.allclose(timm_logits, outputs, atol=1e-3), f"The predicted logits are not the same."
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {fastvit_name} to {pytorch_dump_folder_path}")
@@ -238,7 +222,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--fastvit_name",
-        default="fastvit_base_patch16_224",
+        default="timm/fastvit_ma36.apple_in1k",
         type=str,
         help="Name of the FastViT timm model you'd like to convert.",
     )
