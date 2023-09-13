@@ -1928,7 +1928,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.t2u_pad_token_id if is_t2u_decoder else config.pad_token_id
         self.vocab_size = config.unit_vocab_size if is_t2u_decoder else config.vocab_size
-        self.max_target_positions = config.max_position_embeddings
+        self.max_target_positions = config.t2u_max_position_embeddings if is_t2u_decoder else config.max_position_embeddings
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
         decoder_layers = config.t2u_decoder_layers if is_t2u_decoder else config.decoder_layers
         decoder_attention_heads = (
@@ -1943,11 +1943,10 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
 
-        # padding_idx is 0 to stay consistent with the origina implementation for both text decoder and t2u decoder
         self.embed_positions = SeamlessM4TSinusoidalPositionalEmbedding(
-            config.max_position_embeddings,
+            self.max_target_positions,
             config.hidden_size,
-            padding_idx=0,
+            padding_idx=self.padding_idx,
         )
 
         self.layers = nn.ModuleList(

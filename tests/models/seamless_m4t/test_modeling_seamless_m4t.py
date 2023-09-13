@@ -950,7 +950,9 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         model2 = class2.from_pretrained(self.repo_id).to(torch_device)
 
         with torch.inference_mode():
+            set_seed(0)
             output_1 = model1.generate(**inputs, **class1_kwargs)
+            set_seed(0)
             output_2 = model2.generate(**inputs, **class2_kwargs)
 
         for key in output_1:
@@ -990,6 +992,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         expected_wav_std = 0.12780693173408508
 
         with torch.inference_mode():
+            set_seed(0)
             output = model.generate(**self.input_text, num_beams=2, tgt_lang="eng", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
@@ -1027,6 +1030,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         expected_wav_std = 0.22130604088306427
 
         with torch.inference_mode():
+            set_seed(0)
             output = model.generate(**self.input_text, num_beams=2, tgt_lang="swh", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
@@ -1065,6 +1069,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         expected_wav_std = 0.09129837900400162
 
         with torch.inference_mode():
+            set_seed(0)
             output = model.generate(
                 **self.input_audio, num_beams=2, tgt_lang="rus", return_intermediate_token_ids=True
             )

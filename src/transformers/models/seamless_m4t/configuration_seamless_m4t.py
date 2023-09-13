@@ -166,6 +166,9 @@ class SeamlessM4TConfig(PretrainedConfig):
             Number of langs supported by the text-to-unit component.
         t2u_offset_tgt_lang (`int`, *optional*, defaults to 10005):
             Used to offset the target language id before passing it to the text decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
+            this to something large just in case (e.g., 512 or 1024 or 2048).
         pad_token_id (`int`, *optional*, defaults to 0):
             The id of the _padding_ text token. Only applied to the text-decoder model.
         bos_token_id (`int`, *optional*, defaults to 2):
@@ -290,6 +293,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_decoder_attention_heads=16,
         t2u_num_langs=38,
         t2u_offset_tgt_lang=10005,
+        t2u_max_position_embeddings=2048,
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
@@ -372,6 +376,8 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_decoder_layers = t2u_decoder_layers
         self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
         self.t2u_decoder_attention_heads = t2u_decoder_attention_heads
+        self.t2u_max_position_embeddings = t2u_max_position_embeddings
+
 
         # hifi-gan vocoder config
         # original parameters specific to Hifi-Gan
