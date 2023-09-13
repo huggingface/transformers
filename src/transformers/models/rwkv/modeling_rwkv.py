@@ -746,8 +746,8 @@ class RwkvModel(RwkvPreTrainedModel):
 
     def _bnb_4bit_dequantize_and_rescale(self, target_layer, block_id):
         r"""
-        Perform the dequantization and rescaling of the weights of a given layer. After that operation
-        the layer will be quantized again.
+        Perform the dequantization and rescaling of the weights of a given layer. After that operation the layer will
+        be quantized again.
         """
         if not is_bitsandbytes_available():
             raise ImportError("Please install bitsandbytes to use this method.")
