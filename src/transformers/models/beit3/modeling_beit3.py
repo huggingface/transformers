@@ -575,7 +575,7 @@ class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
         self.dropout = torch.nn.Dropout(config.dropout)
         self.fc1 = nn.Linear(self.embed_dim, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, self.embed_dim)
-        self.ffn_layernorm = LayerNorm(config.hidden_size, eps=config.layernorm_eps) if config.sub_layernorm else None
+        self.ffn_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.sub_layernorm else None
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         x_shape = hidden_states.shape

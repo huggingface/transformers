@@ -131,9 +131,8 @@ class Beit3Config(PretrainedConfig):
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.subln = sub_layernorm
+        self.sub_layernorm = sub_layernorm
         self.max_source_positions = max_source_positions
-        self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         # Text
         self.vocab_size = vocab_size
@@ -146,6 +145,6 @@ class Beit3Config(PretrainedConfig):
         self.label_smoothing = label_smoothing
         self.logit_scale_init_value = logit_scale_init_value
         self.layer_norm_eps = layer_norm_eps
-        if self.subln:
+        if self.sub_layernorm:
             self.normalize_before = True
             self.deepnorm = False
