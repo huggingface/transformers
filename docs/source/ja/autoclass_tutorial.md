@@ -1,5 +1,5 @@
 <!--
-著作権 2022 The HuggingFace Team。全著作権所有。
+著作権 2023 The HuggingFace Team。全著作権所有。
 
 Apache License、Version 2.0（以下「ライセンス」と呼びます）に基づくライセンスで、
 ライセンスに従わない限り、このファイルを使用できません。
