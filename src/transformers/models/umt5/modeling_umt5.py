@@ -215,11 +215,14 @@ class UMTRelativePositionalBias(nn.Module):
         relative_position_bucket = self._relative_position_bucket(relative_position)
         values = self.weight.data[relative_position_bucket].to(self.weight.device) # shape (query_length, key_length, num_heads)
         # shape (1, num_heads, query_length, key_length)
-        self.register_buffer("cached_bias", values.permute([2, 0, 1]).unsqueeze(0), persistent=False)
+        cached_bias = values.permute([2, 0, 1]).unsqueeze(0)
+        self.register_buffer("cached_bias", cached_bias, persistent=False)
 
 
-    def forward(self, query_length, key_length, dtype=None):
-        return self.cached_bias[:,:, :query_length, :key_length].to(dtype=dtype)
+    def forward(self, query_length, kv_length, dtype=None):
+        if query_length == kv_length:
+            return self.cached_bias[:,:,:kv_length, :kv_length].transpose(2,3)
+        return self.cached_bias[:,:,:kv_length,kv_length-query_length-1:kv_length].transpose(2,3)
     
     
 class UMT5Attention(nn.Module):
@@ -266,6 +269,11 @@ class UMT5Attention(nn.Module):
         is_cross_attention = encoder_hidden_states is not None
         batch_size, seq_length = hidden_states.shape[:2]
 
+        kv_seq_len = seq_length
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[0].shape[-2]
+        key_length = kv_seq_len if encoder_hidden_states is None else encoder_hidden_states.shape[1]
+        
         # use encoder_hidden_states if cross attention
         current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
         # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
@@ -285,21 +293,21 @@ class UMT5Attention(nn.Module):
         query_states = self._shape(self.q(hidden_states))
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
+
         # compute positional bias
         if self.has_relative_attention_bias:
-            query_length = seq_length
-            if past_key_value is not None:
-                query_length += past_key_value[0].shape[2]
-            position_bias = self.relative_attention_bias(query_length, key_states.size(2), dtype=attention_scores.dtype)
+            position_bias = self.relative_attention_bias(seq_length, key_length, dtype=attention_scores.dtype)
         else:
             position_bias = torch.zeros(
-                (1, self.n_heads, seq_length, key_states.size(2)),
+                (1, self.n_heads, seq_length, kv_seq_len),
                 device=attention_scores.device,
                 dtype=attention_scores.dtype,
                 requires_grad=self.training,
             )
+
         if past_key_value is not None:
-            position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+            position_bias = position_bias[:, :,  -hidden_states.size(1):, :]
+
         if attention_mask is not None:
             position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
 
