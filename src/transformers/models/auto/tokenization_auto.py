@@ -783,7 +783,7 @@ class AutoTokenizer:
                 The configuration corresponding to the model to register.
             slow_tokenizer_class ([`PretrainedTokenizer`], *optional*):
                 The slow tokenizer to register.
-            slow_tokenizer_class ([`PretrainedTokenizerFast`], *optional*):
+            fast_tokenizer_class ([`PretrainedTokenizerFast`], *optional*):
                 The fast tokenizer to register.
         """
         if slow_tokenizer_class is None and fast_tokenizer_class is None:
