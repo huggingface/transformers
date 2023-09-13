@@ -1248,13 +1248,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         cls, config, torch_dtype: Optional[torch.dtype] = None, device_map: Optional[Union[str, Dict[str, int]]] = None
     ) -> PretrainedConfig:
         """
-        Enable the Flash Attention 2.0 implementation for this model for more memory efficient inference and training.
         If you don't know about Flash Attention, check out the official repository of flash attention:
         https://github.com/Dao-AILab/flash-attention
 
         For using Flash Attention 1.0 you can do it directly via the `BetterTransformer` API, have a look at this
         specific section of the documentation to learn more about it:
         https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
+
+        The method checks if the current setup is compatible with Flash Attention as it requires the model
+        to be in half precision and not ran on CPU.
+
+        If all checks pass, the method will create an attribute in the config `_flash_attn_2_enabled` so that
+        the model can initialize the correct attention module
         """
         if not cls._supports_flash_attn_2:
             raise ValueError(
