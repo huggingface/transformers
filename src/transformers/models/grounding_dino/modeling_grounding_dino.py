@@ -970,7 +970,8 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         self.self_attn = nn.MultiheadAttention(
             embed_dim=config.d_model, 
             num_heads=config.encoder_attention_heads // 2, 
-            dropout=config.text_enhancer_dropout
+            dropout=config.text_enhancer_dropout,
+            batch_first=True,
             )
         # Implementation of Feedforward model
         self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
@@ -999,7 +1000,13 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
             attention_masks = attention_masks.repeat(self.num_heads, 1, 1)
 
         q = k = self.with_pos_embed(hidden_states, position_embeddings)
-        attention_output, attention_weights = self.self_attn(q, k, value=hidden_states, attn_mask=attention_masks)
+        attention_output, attention_weights = self.self_attn(
+            query=q, 
+            key=k, 
+            value=hidden_states, 
+            attn_mask=attention_masks,
+            average_attn_weights=False
+        )
 
         hidden_states = hidden_states + self.dropout1(attention_output)
         hidden_states = self.layer_norm_before(hidden_states)
@@ -1233,8 +1240,8 @@ class GroundingDINOFusionLayer(nn.Module):
         (delta_v, vision_attn), (delta_t, text_attn) = self.attn(
             vision_features, 
             text_features, 
-            attention_mask_vision=attention_mask_vision, 
-            attention_mask_text=attention_mask_text
+            vision_attention_mask=attention_mask_vision, 
+            text_attention_mask=attention_mask_text
         )
         vision_features = vision_features + self.drop_path(self.gamma_v * delta_v)
         text_features = text_features + self.drop_path(self.gamma_l * delta_t)
@@ -1448,6 +1455,7 @@ class GroundingDINODecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
+            batch_first=True
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1459,6 +1467,7 @@ class GroundingDINODecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
+            batch_first=True
         )
         self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim)
         # cross-attention
@@ -1518,7 +1527,8 @@ class GroundingDINODecoderLayer(nn.Module):
             query=self.with_pos_embed(hidden_states, position_embeddings),
             key=self.with_pos_embed(hidden_states, position_embeddings),
             value=hidden_states,
-            attn_mask=self_attn_mask
+            attn_mask=self_attn_mask,
+            average_attn_weights=False
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1533,6 +1543,7 @@ class GroundingDINODecoderLayer(nn.Module):
             key=text_encoder_hidden_states.transpose(0, 1),
             value=text_encoder_hidden_states.transpose(0, 1),
             attn_mask=text_encoder_attention_mask,
+            average_attn_weights=False
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -2423,13 +2434,13 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 vision_features=source_flatten,
-                vision_attention_mask=mask_flatten,
+                vision_attention_mask=~mask_flatten,
                 vision_position_embedding=lvl_pos_embed_flatten,
                 spatial_shapes=spatial_shapes,
                 level_start_index=level_start_index,
                 valid_ratios=valid_ratios,
                 text_features=text_features,
-                text_attention_mask=text_token_mask,
+                text_attention_mask=~text_token_mask,
                 text_position_embedding=None,
                 text_self_attention_masks=text_self_attention_masks,
                 text_position_ids=position_ids,
@@ -2599,16 +2610,19 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
     @replace_return_docstrings(output_type=GroundingDINOObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values,
-        pixel_mask=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        pixel_values: torch.FloatTensor,
+        input_ids: torch.LongTensor,
+        attention_mask: torch.BoolTensor,
+        token_type_ids: torch.LongTensor,
+        text_token_mask: torch.BoolTensor,
+        text_self_attention_masks: torch.BoolTensor,
+        position_ids: torch.LongTensor,
+        pixel_mask: Optional[torch.BoolTensor]=None,
+        encoder_outputs: Optional[Union[GroundingDINOEncoderOutput, Tuple]]=None,
+        labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]]=None,
+        output_attentions: Optional[bool]=None,
+        output_hidden_states: Optional[bool]=None,
+        return_dict: Optional[bool]=None,
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -2654,12 +2668,15 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
 
         # First, sent images through Grounding DINO base model to obtain encoder + decoder outputs
         outputs = self.model(
-            pixel_values,
-            pixel_mask=pixel_mask,
-            decoder_attention_mask=decoder_attention_mask,
+            pixel_values=pixel_values ,
+            input_ids=input_ids ,
+            attention_mask=attention_mask ,
+            token_type_ids=token_type_ids ,
+            text_token_mask=text_token_mask ,
+            text_self_attention_masks=text_self_attention_masks ,
+            position_ids=position_ids ,
+            pixel_mask=pixel_mask ,
             encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

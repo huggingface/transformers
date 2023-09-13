@@ -385,7 +385,7 @@ def text_processor(text: str, config):
         tokenized_for_encoder["attention_mask"] = text_self_attention_masks
         tokenized_for_encoder["position_ids"] = position_ids
 
-    return tokenized_for_encoder
+    return tokenized_for_encoder, tokenized.attention_mask.bool()
 
 @torch.no_grad()
 def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
@@ -418,25 +418,17 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
         ]
     )
     image_inputs = image_processor(image)
-    text_inputs = text_processor(text, config)
+    text_inputs, text_token_mask = text_processor(text, config)
 
-    pixel_mask = torch.ones(
-        ((1, image_inputs.shape[1], image_inputs.shape[2])), 
-        dtype=torch.long, 
-        device=image_inputs.device
+    outputs = model(
+        pixel_values=image_inputs.unsqueeze(0),
+        input_ids=text_inputs["input_ids"],
+        attention_mask=text_inputs["attention_mask"],
+        token_type_ids=text_inputs["token_type_ids"],
+        text_token_mask=text_token_mask,
+        text_self_attention_masks=text_inputs["attention_mask"],
+        position_ids=text_inputs["position_ids"],
     )
-    # output = model.model.backbone.conv_encoder.model(pixel_values=image_inputs.unsqueeze(0))
-    output = model.model.text_backbone(**text_inputs)
-    print(output.last_hidden_state[:, :, :5])
-
-    # for feature_map in output.last_hidden_state:
-    #     print(f"{feature_map.shape}")
-    #     print(f"\t {feature_map[:, :5, 0, 0].cpu().numpy()}")
-
-    # outputs = model(**inputs).logits
-
-    # print(outputs.keys())
-    # print("Looks ok!")
 
     # if pytorch_dump_folder_path is not None:
     #     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
