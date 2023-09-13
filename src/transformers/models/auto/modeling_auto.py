@@ -178,6 +178,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SpeechT5Model"),
         ("splinter", "SplinterModel"),
         ("squeezebert", "SqueezeBertModel"),
+        ("superpoint", "SuperPointModel"),
         ("swiftformer", "SwiftFormerModel"),
         ("swin", "SwinModel"),
         ("swin2sr", "Swin2SRModel"),
@@ -1471,8 +1472,9 @@ class AutoModelForInterestPointDescription(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING
 
 
-AutoModelForInterestPointDescription = auto_class_update(AutoModelForInterestPointDescription,
-                                                         head_doc="image interest point description")
+AutoModelForInterestPointDescription = auto_class_update(
+    AutoModelForInterestPointDescription, head_doc="image interest point description"
+)
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):

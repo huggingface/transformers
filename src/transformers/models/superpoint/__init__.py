@@ -40,6 +40,7 @@ else:
     _import_structure["modeling_superpoint"] = [
         "SuperPointModel",
         "SuperPointPreTrainedModel",
+        "SuperPointModelForInterestPointDescription",
     ]
 
 
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
         from .modeling_superpoint import (
             SuperPointModel,
             SuperPointPreTrainedModel,
+            SuperPointModelForInterestPointDescription,
         )
 
 else:

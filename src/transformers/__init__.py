@@ -1134,6 +1134,7 @@ else:
             "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
+            "MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoBackbone",
@@ -1171,6 +1172,7 @@ else:
             "AutoModelForVisualQuestionAnswering",
             "AutoModelForZeroShotImageClassification",
             "AutoModelForZeroShotObjectDetection",
+            "AutoModelForInterestPointDescription",
             "AutoModelWithLMHead",
         ]
     )
@@ -2701,10 +2703,7 @@ else:
         ]
     )
     _import_structure["models.superpoint"].extend(
-        [
-            "SuperPointModel",
-            "SuperPointPretrainedModel",
-        ]
+        ["SuperPointModel", "SuperPointPretrainedModel", "SuperPointModelForInterestPointDescription"]
     )
     _import_structure["models.swiftformer"].extend(
         [
@@ -4598,7 +4597,7 @@ if TYPE_CHECKING:
     )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
-    from .models.superpoint import SuperPointConfig, SuperPointModel
+    from .models.superpoint import SuperPointConfig
     from .models.swiftformer import SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SwiftFormerConfig
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
@@ -5129,6 +5128,7 @@ if TYPE_CHECKING:
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
+            MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoBackbone,
@@ -5166,6 +5166,7 @@ if TYPE_CHECKING:
             AutoModelForVisualQuestionAnswering,
             AutoModelForZeroShotImageClassification,
             AutoModelForZeroShotObjectDetection,
+            AutoModelForInterestPointDescription,
             AutoModelWithLMHead,
         )
         from .models.autoformer import (
@@ -6409,6 +6410,10 @@ if TYPE_CHECKING:
             SqueezeBertModel,
             SqueezeBertModule,
             SqueezeBertPreTrainedModel,
+        )
+        from .models.superpoint import (
+            SuperPointModel,
+            SuperPointModelForInterestPointDescription,
         )
         from .models.swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

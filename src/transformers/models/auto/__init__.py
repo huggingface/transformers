@@ -76,6 +76,7 @@ else:
         "MODEL_WITH_LM_HEAD_MAPPING",
         "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
         "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
+        "MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING",
         "AutoModel",
         "AutoBackbone",
         "AutoModelForAudioClassification",
@@ -254,6 +255,7 @@ if TYPE_CHECKING:
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
+            MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoBackbone,
@@ -291,6 +293,7 @@ if TYPE_CHECKING:
             AutoModelForVisualQuestionAnswering,
             AutoModelForZeroShotImageClassification,
             AutoModelForZeroShotObjectDetection,
+            AutoModelForInterestPointDescription,
             AutoModelWithLMHead,
         )
 
