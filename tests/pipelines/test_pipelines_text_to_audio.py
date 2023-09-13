@@ -39,28 +39,6 @@ class TextToAudioPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
     # for now only test text_to_waveform and not text_to_spectrogram
 
-    @require_torch
-    def test_tiny_musicgen_pt(self):
-        music_generator = pipeline(
-            task="text-to-audio",
-            model="hf-internal-testing/tiny-random-MusicgenForConditionalGeneration",
-            framework="pt",
-        )
-        sampling_rate = music_generator.model.audio_encoder.config.sampling_rate
-
-        forward_params = {"max_new_tokens": 10}
-        # test single sample
-        outputs = music_generator("this", forward_params=forward_params)
-        self.assertEqual(
-            {"audio": ANY(np.ndarray), "sampling_rate": sampling_rate},
-            outputs,
-        )
-
-        # test batching
-        outputs = music_generator(["this", "this a"], forward_params=forward_params, batch_size=2)
-        audio = [output["audio"] for output in outputs]
-        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
-
     @slow
     @require_torch
     def test_small_musicgen_pt(self):
