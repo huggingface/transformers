@@ -487,12 +487,12 @@ class SeamlessM4TConformerFeedForward(nn.Module):
     def __init__(self, config, use_relu=False, use_dropout=True):
         super().__init__()
         self.use_dropout = use_dropout
-        
+
         if use_dropout:
             self.intermediate_dropout = nn.Dropout(config.speech_encoder_dropout)
 
         self.intermediate_dense = nn.Linear(config.hidden_size, config.speech_encoder_intermediate_size)
-        
+
         if use_relu:
             self.intermediate_act_fn = nn.ReLU()
         elif isinstance(config.speech_encoder_hidden_act, str):
@@ -501,7 +501,7 @@ class SeamlessM4TConformerFeedForward(nn.Module):
             self.intermediate_act_fn = config.speech_encoder_hidden_act
 
         self.output_dense = nn.Linear(config.speech_encoder_intermediate_size, config.hidden_size)
-        
+
         if use_dropout:
             self.output_dropout = nn.Dropout(config.speech_encoder_dropout)
 
@@ -1671,7 +1671,7 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
-        
+
         expanded_hidden_states = self.intermediate_ffn(hidden_states)
         hidden_states = hidden_states + 0.5 * expanded_hidden_states
 
