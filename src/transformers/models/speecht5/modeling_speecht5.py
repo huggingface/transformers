@@ -2846,8 +2846,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
                 [What are input IDs?](../glossary#input-ids)
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Attention mask from the tokenizer, required for batched inference to
-                signal to the model where to ignore padded tokens from the input_ids.
+                Attention mask from the tokenizer, required for batched inference to signal to the model where to
+                ignore padded tokens from the input_ids.
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
             threshold (`float`, *optional*, defaults to 0.5):
@@ -2910,11 +2910,14 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 [What are input IDs?](../glossary#input-ids)
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
-            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-                1]`:
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
+                `[0, 1]`:
+
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
             threshold (`float`, *optional*, defaults to 0.5):
                 The generated sequence ends when the predicted stop token probability exceeds this value.
             minlenratio (`float`, *optional*, defaults to 0.0):
@@ -3126,11 +3129,14 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
                 of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
-            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-                1]`:
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
+                `[0, 1]`:
+
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
             threshold (`float`, *optional*, defaults to 0.5):
                 The generated sequence ends when the predicted stop token probability exceeds this value.
             minlenratio (`float`, *optional*, defaults to 0.0):
