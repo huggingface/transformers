@@ -116,15 +116,15 @@ class Beit3ModelTester:
             attention_dropout=self.attention_dropout,
             activation_dropout=self.activation_dropout,
             deepnorm=self.deepnorm,
-            subln=self.subln,
+            sub_layernorm=self.subln,
             bert_init=self.bert_init,
             multiway=self.multiway,
             max_source_positions=self.max_source_positions,
-            layernorm_eps=self.layernorm_eps,
+            layer_norm_eps=self.layernorm_eps,
             vocab_size=self.vocab_size,
             img_size=self.img_size,
             patch_size=self.patch_size,
-            in_chans=self.in_chans,
+            num_channels=self.in_chans,
             num_labels=self.num_labels,
         )
 

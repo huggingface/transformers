@@ -295,8 +295,8 @@ class Beit3Linear(nn.Module):
 class Beit3LayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layernorm_1 = nn.LayerNorm(config.embed_dim, eps=config.layernorm_eps)
-        self.layernorm_2 = nn.LayerNorm(config.embed_dim, eps=config.layernorm_eps)
+        self.layernorm_1 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
+        self.layernorm_2 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, split_position=-1):
         if split_position == -1:
@@ -1170,12 +1170,12 @@ class Beit3ImageTextMatchingModelOutput(ModelOutput):
     scores.
 
     Args:
-        similarity (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Languge modeling loss from the text decoder.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
+        text_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
+            The image hidden states.
+        image_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
+            The image hidden states.
     """
 
     loss: Optional[torch.Tensor] = None

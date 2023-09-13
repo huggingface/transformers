@@ -16,7 +16,9 @@ specific language governing permissions and limitations under the License.
 
 The BEiT-3 model was proposed in [Image as a Foreign Language: BEiT Pretraining for All Vision and Vision-Language
 Tasks](https://arxiv.org/abs/2208.10442) by Wenhui Wang, Hangbo Bao, Li Dong, Johan Bjorck, Zhiliang Peng, Qiang Liu,
-Kriti Aggarwal, Owais Khan Mohammed, Saksham Singhal, Subhojit Som, Furu Wei.
+Kriti Aggarwal, Owais Khan Mohammed, Saksham Singhal, Subhojit Som, Furu Wei. Beit3 is family of models are multimodal  
+which treats image as a foreign langauge and embeds images. Beit3 uses Multiway transformers (from VLMo) and does deep
+fusion of modality-specific encoding, then trained for various lanugauage , vision tasks. 
 
 The abstract from the paper is the following:
 
