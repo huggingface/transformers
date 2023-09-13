@@ -400,6 +400,7 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
             Whether to return the loss in the `forward` call.
 
         Returns: 
+
         """
         
         # context_values: tensor [bs x seq_len x in_channels]
@@ -506,6 +507,13 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True
     ) -> PatchTSMixerForForecastOutputWithNoAttention:
+
+        r"""
+
+        Returns: 
+        
+        """
+
         # context_values: tensor [bs x seq_len x in_channels]
         model_output = self.model(
             context_values,
@@ -621,6 +629,12 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             output_hidden_states: Optional[bool] = False,
             return_loss: bool = True
     ) -> PatchTSMixerForClassificationOutputWithNoAttention:
+        
+        r"""
+
+        Returns: 
+        
+        """
 
         model_output = self.model(
             context_values,
@@ -728,6 +742,12 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
     ) -> PatchTSMixerForRegressionOutputWithNoAttention:
+        
+        r"""
+
+        Returns: 
+        
+        """
         
         # context_values: tensor [bs x seq_len x in_channels]
         # target_values: tensor [bs x n_targets]
