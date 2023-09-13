@@ -1451,8 +1451,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             )
 
             print("query_outputs[0]",query_outputs[0].shape)
+
             query_output = query_outputs[0][:, : query_tokens.size(1), :]
-            
+
             print("query_output",query_output.shape)
             
             language_model_inputs = self.language_projection(query_output)
@@ -1462,7 +1463,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             language_model_attention_mask = torch.ones(
                 language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
             )
-
             print("language_model_attention_mask",language_model_attention_mask.shape)
             
             all_inputs.append(language_model_inputs)
