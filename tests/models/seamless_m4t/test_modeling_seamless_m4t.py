@@ -727,6 +727,10 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
     )
     def test_save_load_fast_init_to_base(self):
         pass
+    
+    @unittest.skip(reason="SeamlessM4T has no base model")
+    def test_save_load_fast_init_from_base(self):
+        pass
 
 
 @require_torch
