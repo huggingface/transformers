@@ -1567,7 +1567,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Stores a Jinja template that formats chat histories into tokenizable strings
         self.chat_template = kwargs.pop("chat_template", None)
-        self._jinja_env = None
 
         super().__init__(**kwargs)
 
@@ -1682,19 +1681,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
         """
-        try:
-            from jinja2.exceptions import TemplateError
-            from jinja2.sandbox import ImmutableSandboxedEnvironment
-        except ImportError:
-            raise ImportError("apply_chat_template requires jinja2 to be installed.")
-
-        if self._jinja_env is None:  # Lazily initialize Jinja environment only when needed
-
-            def raise_exception(message):
-                raise TemplateError(message)
-
-            self._jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
-            self._jinja_env.globals["raise_exception"] = raise_exception
 
         if hasattr(conversation, "messages"):
             # Indicates it's a Conversation object
@@ -1729,7 +1715,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @lru_cache
     def _compile_jinja_template(self, chat_template):
-        return self._jinja_env.from_string(chat_template)
+        try:
+            from jinja2.exceptions import TemplateError
+            from jinja2.sandbox import ImmutableSandboxedEnvironment
+        except ImportError:
+            raise ImportError("apply_chat_template requires jinja2 to be installed.")
+
+        def raise_exception(message):
+            raise TemplateError(message)
+
+        jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+        jinja_env.globals["raise_exception"] = raise_exception
+        return jinja_env.from_string(chat_template)
 
     @property
     def default_chat_template(self):
