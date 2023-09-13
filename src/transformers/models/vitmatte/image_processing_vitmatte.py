@@ -25,6 +25,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
@@ -92,7 +93,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
         size_divisibility: int = 32,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ):
+    ) -> np.ndarray:
         """
         Args:
             image (`np.ndarray`):
@@ -114,7 +115,7 @@ class VitMatteImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
-        height, width = image.shape[:2] if input_data_format == ChannelDimension.LAST else image.shape[1:]
+        height, width = get_image_size(image, input_data_format)
 
         if height % size_divisibility != 0 or width % size_divisibility != 0:
             pad_height = size_divisibility - height % size_divisibility

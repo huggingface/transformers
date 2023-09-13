@@ -222,9 +222,9 @@ class VitMatteDetailCaptureModule(nn.Module):
             detailed_feature_map_name = "detailed_feature_map_" + str(len(self.fusion_blocks) - i - 1)
             features = self.fusion_blocks[i](features, detail_features[detailed_feature_map_name])
 
-        phas = torch.sigmoid(self.matting_head(features))
+        alphas = torch.sigmoid(self.matting_head(features))
 
-        return phas
+        return alphas
 
 
 VITMATTE_START_DOCSTRING = r"""
