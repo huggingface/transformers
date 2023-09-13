@@ -151,14 +151,14 @@ class UMT5LayerFF(nn.Module):
 
 class UMTRelativePositionalBias(nn.Module):
     
-    def __init__(self, relative_attention_num_buckets: int, n_heads: int, relative_attention_max_distance: int = None, is_decoder = True) -> None:
+    def __init__(self, relative_attention_num_buckets: int, n_heads: int, relative_attention_max_distance:int, max_position_embeddings: int = 2048, is_decoder = True) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(relative_attention_num_buckets, n_heads))
         self.relative_attention_max_distance = relative_attention_max_distance
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.n_heads = n_heads
         self.is_decoder = is_decoder
-        self._set_cached_bias(relative_attention_max_distance, relative_attention_max_distance)
+        self._set_cached_bias(max_position_embeddings, max_position_embeddings)
 
     def _relative_position_bucket(self, relative_position, device=None):
         """
@@ -219,8 +219,8 @@ class UMTRelativePositionalBias(nn.Module):
         self.register_buffer("cached_bias", cached_bias, persistent=False)
 
 
-    def forward(self, query_length, kv_length, dtype=None):
-        return self.cached_bias[:,:,kv_length-query_length:kv_length, :kv_length] #.transpose(2,3)
+    def forward(self, query_length, key_length, dtype=None):
+        return self.cached_bias[:,:, :key_length, key_length-query_length:key_length]
     
     
 class UMT5Attention(nn.Module):
@@ -247,7 +247,7 @@ class UMT5Attention(nn.Module):
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
-            self.relative_attention_bias = UMTRelativePositionalBias(self.relative_attention_num_buckets, self.n_heads, self.relative_attention_max_distance)
+            self.relative_attention_bias = UMTRelativePositionalBias(self.relative_attention_num_buckets, self.n_heads, self.relative_attention_max_distance, config.max_position_embeddings)
         self.pruned_heads = set()
 
     def _shape(self, projection: torch.Tensor) -> torch.Tensor:
