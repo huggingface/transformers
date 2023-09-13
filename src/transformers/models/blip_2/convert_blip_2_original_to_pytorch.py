@@ -45,8 +45,6 @@ from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 def load_demo_image():
     url = "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png"
-    url = "https://user-images.githubusercontent.com/50018861/252267123-a49ec5be-d964-4760-9ef5-3f006a353720.png"
-    url = "https://user-images.githubusercontent.com/50018861/255126794-269d9dea-2620-454c-9643-63b1155a697e.png"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
     return image
@@ -230,7 +228,6 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     print("Generating a caption...")
     prompt = "Question: what object is in this image? Answer:"
-    # prompt = "Question: what is the structure and geometry of this chair?"
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(hf_model_device)
 
     set_seed(42)
