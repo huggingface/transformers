@@ -183,6 +183,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertEqual(v, self.fsdp_config[k])
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
             trainer.train()
+            print(trainer.model_wrapped)
 
     def test_can_resume_training_normal(self):
         pass
