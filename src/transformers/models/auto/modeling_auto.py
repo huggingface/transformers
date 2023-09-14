@@ -81,6 +81,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ernie", "ErnieModel"),
         ("ernie_m", "ErnieMModel"),
         ("esm", "EsmModel"),
+        ("fastvit", "FastViTModel"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
         ("fnet", "FNetModel"),
@@ -186,7 +187,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
-        ("fastvit", "FastViTModel"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
@@ -416,7 +416,6 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
-        ("fastvit", "FastViTForMaskedImageModeling"),
     ]
 )
 
@@ -447,6 +446,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
             ),
         ),
         ("efficientnet", "EfficientNetForImageClassification"),
+        ("fastvit", "FastViTForImageClassification"),
         ("focalnet", "FocalNetForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
         ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),
@@ -470,7 +470,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2ForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
-        ("fastvit", "FastViTForImageClassification"),
         ("vit_hybrid", "ViTHybridForImageClassification"),
         ("vit_msn", "ViTMSNForImageClassification"),
     ]

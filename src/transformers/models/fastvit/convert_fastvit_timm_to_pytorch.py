@@ -16,7 +16,6 @@
 
 import argparse
 import json
-from pathlib import Path
 
 import requests
 import timm
@@ -24,12 +23,13 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import FastViTConfig, ViTFeatureExtractor, FastViTForImageClassification, FastViTModel
+from transformers import FastViTConfig, FastViTForImageClassification, ViTFeatureExtractor
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
 
 def get_fastvit_config(fastvit_name):
     # define default FastViT configuration
@@ -47,37 +47,37 @@ def get_fastvit_config(fastvit_name):
     if "t8" in fastvit_name:
         pass
     elif "t12" in fastvit_name:
-        config.depths=[2, 2, 6, 2]
-        config.hidden_sizes= [64, 128, 256, 512]
+        config.depths = [2, 2, 6, 2]
+        config.hidden_sizes = [64, 128, 256, 512]
     elif "s12" in fastvit_name:
-        config.depths=[2, 2, 6, 2]
-        config.hidden_sizes= [64, 128, 256, 512]
+        config.depths = [2, 2, 6, 2]
+        config.hidden_sizes = [64, 128, 256, 512]
         config.mlp_ratio = 4.0
     elif "sa12" in fastvit_name:
-        config.depths=[2, 2, 6, 2]
-        config.hidden_sizes= [64, 128, 256, 512]
+        config.depths = [2, 2, 6, 2]
+        config.hidden_sizes = [64, 128, 256, 512]
         config.mlp_ratio = 4.0
         config.pos_embeds = [None, None, None, "RepCPE"]
         config.token_mixers = ("repmixer", "repmixer", "repmixer", "attention")
     elif "sa24" in fastvit_name:
-        config.depths=[4, 4, 12, 4]
-        config.hidden_sizes= [64, 128, 256, 512]
+        config.depths = [4, 4, 12, 4]
+        config.hidden_sizes = [64, 128, 256, 512]
         config.mlp_ratio = 4.0
         config.pos_embeds = [None, None, None, "RepCPE"]
         config.token_mixers = ("repmixer", "repmixer", "repmixer", "attention")
     elif "sa36" in fastvit_name:
-        config.depths=[6, 6, 18, 6]
-        config.hidden_sizes= [64, 128, 256, 512]
+        config.depths = [6, 6, 18, 6]
+        config.hidden_sizes = [64, 128, 256, 512]
         config.mlp_ratio = 4.0
         config.pos_embeds = [None, None, None, "RepCPE"]
         config.token_mixers = ("repmixer", "repmixer", "repmixer", "attention")
     elif "ma36" in fastvit_name:
-        config.depths=[6, 6, 18, 6]
-        config.hidden_sizes= [76, 152, 304, 608]
+        config.depths = [6, 6, 18, 6]
+        config.hidden_sizes = [76, 152, 304, 608]
         config.mlp_ratio = 4.0
         config.pos_embeds = [None, None, None, "RepCPE"]
         config.token_mixers = ("repmixer", "repmixer", "repmixer", "attention")
-    
+
     return config
 
 
@@ -119,12 +119,12 @@ def rename_key(name):
         if "token_mixer" not in name:
             name_split = name.split(".")
             pos = int(name_split[2])
-            name_split[2] = str(pos-1)
+            name_split[2] = str(pos - 1)
             if int(name_split[5]) == 0:
                 name_split[4] = "reparam_large_conv"
             else:
                 name_split[4] = "conv"
-            name_split.pop(5) #drop the 0 or 1....
+            name_split.pop(5)  # drop the 0 or 1....
             name = ".".join(name_split)
         else:
             name = name.replace("token_mixer.proj", "token_mixer_block.attention.proj")
@@ -142,7 +142,7 @@ def rename_key(name):
         name_split = name.split(".")
         if len(name_split) > 5:
             if name_split[5].isdigit():
-                name_split.pop(5) #drop the 0 or 1....
+                name_split.pop(5)  # drop the 0 or 1....
         name = ".".join(name_split)
     if "norm" in name and "token_mixer" not in name:
         name_split = name.split(".")
@@ -166,16 +166,20 @@ def convert_state_dict(orig_state_dict, model):
             block_num = int(key_split[3])
 
             if "weight" in key:
-                orig_state_dict[f"fastvit.encoder.layer.{layer_num}.stage_conv.{block_num}.token_mixer_block.attention.qkv.weight"] = val
+                orig_state_dict[
+                    f"fastvit.encoder.layer.{layer_num}.stage_conv.{block_num}.token_mixer_block.attention.qkv.weight"
+                ] = val
             else:
-                orig_state_dict[f"fastvit.encoder.layer.{layer_num}.stage_conv.{block_num}.token_mixer_block.attention.qkv.bias"] = val
+                orig_state_dict[
+                    f"fastvit.encoder.layer.{layer_num}.stage_conv.{block_num}.token_mixer_block.attention.qkv.bias"
+                ] = val
         else:
             orig_state_dict[rename_key(key)] = val
 
     return orig_state_dict
 
 
-# We will verify our results on an image of cute cats  
+# We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
@@ -184,7 +188,6 @@ def prepare_img():
 
 @torch.no_grad()
 def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path):
-    
     # load original model from timm
     timm_model = timm.create_model(fastvit_name, pretrained=True)
     timm_model.eval()
@@ -202,19 +205,18 @@ def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path):
 
     feature_extractor = ViTFeatureExtractor(size=config.image_size)
     inputs = feature_extractor(images=prepare_img(), return_tensors="pt")
-    # print(inputs)
-    # pixel_values = encoding["pixel_values"]
+
     outputs = model(**inputs).logits
     timm_logits = timm_model(inputs["pixel_values"])
 
     assert outputs.shape == timm_logits.shape, f"Shape is not equal: {outputs.shape} and {timm_logits.shape}"
-    assert torch.allclose(timm_logits, outputs, atol=1e-3), f"The predicted logits are not the same."
+    assert torch.allclose(timm_logits, outputs, atol=1e-3), "The predicted logits are not the same."
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {fastvit_name} to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    # print(f"Saving model {fastvit_name} to {pytorch_dump_folder_path}")
+    # model.save_pretrained(pytorch_dump_folder_path)
+    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -222,7 +224,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--fastvit_name",
-        default="timm/fastvit_ma36.apple_in1k",
+        default="timm/fastvit_t8.apple_in1k",
         type=str,
         help="Name of the FastViT timm model you'd like to convert.",
     )

@@ -32,12 +32,11 @@ FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class FastViTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FastViTModel`]. It is used to instantiate an FastViT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the FastViT
+    This is the configuration class to store the configuration of a [`FastViTModel`]. It is used to instantiate an
+    FastViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the FastViT
     [google/fastvit-base-patch16-224](https://huggingface.co/google/fastvit-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -98,9 +97,9 @@ class FastViTConfig(PretrainedConfig):
         depths=[2, 2, 4, 2],
         attention_head_dim=32,
         hidden_sizes=[48, 96, 192, 384],
-        pos_embeds = None,
-        token_mixers = ("repmixer", "repmixer", "repmixer", "repmixer"),
-        mlp_ratio = 3.0,
+        pos_embeds=None,
+        token_mixers=["repmixer", "repmixer", "repmixer", "repmixer"],
+        mlp_ratio=3.0,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -126,6 +125,7 @@ class FastViTConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.attention_head_dim = attention_head_dim
+
 
 class FastViTOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
