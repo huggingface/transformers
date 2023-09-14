@@ -784,7 +784,9 @@ class SeamlessM4TConverter(SpmConverter):
             ("</s>", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        vocab += [(tok, 0.0) for tok in self.original_tokenizer._additional_special_tokens if not isinstance(tok,AddedToken)]
+        vocab += [
+            (tok, 0.0) for tok in self.original_tokenizer._additional_special_tokens if not isinstance(tok, AddedToken)
+        ]
         return vocab
 
     def unk_id(self, proto):
