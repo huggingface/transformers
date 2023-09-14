@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.models.seamless_m4t import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor, SeamlessM4TTokenizer
+from transformers.models.seamless_m4t import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor, SeamlessM4TTokenizer, SeamlessM4TTokenizerFast
 
 from .test_feature_extraction_seamless_m4t import floats_list
 
@@ -45,8 +45,9 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         processor = SeamlessM4TProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, SeamlessM4TTokenizer)
-
+        tokenizer_instance = isinstance(processor.tokenizer,SeamlessM4TTokenizerFast) or isinstance(processor.tokenizer,SeamlessM4TTokenizer)
+        self.assertTrue(tokenizer_instance)
+        
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
 
@@ -64,7 +65,9 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, SeamlessM4TTokenizer)
+        
+        tokenizer_instance = isinstance(processor.tokenizer,SeamlessM4TTokenizerFast) or isinstance(processor.tokenizer,SeamlessM4TTokenizer)
+        self.assertTrue(tokenizer_instance)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
