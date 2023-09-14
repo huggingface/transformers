@@ -327,8 +327,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
 class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] enforcing an exponential penalty on tokens that are not in the original input. This technique
-    avoids hallucination by boosting the probabilities of tokens found within the original input.
+    [`LogitsProcessor`] that avoids hallucination by boosting the probabilities of tokens found within the original
+    input.
 
     This technique can also be used to reward and thus encourage hallucination (or creativity) in a similar manner. To
     penalize and reduce hallucination, use `penalty` values above 1.0, where a higher value penalizes more strongly. To
