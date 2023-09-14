@@ -269,10 +269,10 @@ jobs:
         check_runner_status,
         check_runners,
         setup_amdgpu,
-        run_tests_single_gpu,
-        run_tests_multi_gpu,
-        run_tests_torch_cuda_extensions_single_gpu,
-        run_tests_torch_cuda_extensions_multi_gpu
+        run_tests_single_amdgpu,
+        run_tests_multi_amdgpu,
+#        run_tests_torch_cuda_extensions_single_gpu,
+#        run_tests_torch_cuda_extensions_multi_gpu
     ]
     steps:
       - name: Preliminary job status
