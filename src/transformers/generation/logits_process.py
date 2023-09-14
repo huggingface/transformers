@@ -276,13 +276,12 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     selected. The formula can be seen in the original [paper](https://arxiv.org/pdf/1909.05858.pdf). According to the
     paper a penalty of around 1.2 yields a good balance between truthful generation and lack of repetition.
 
-    While the intended usage within the paper is to penalize and thus reduce repetition in the generated sequence, this
-    technique can also be used to reward and thus encourage repetition in a similar manner. To penalize and reduce 
-    repetition, use `repetition_penalty` values above 1.0, where a higher value penalizes more strongly. To reward and 
-    encourage repetion, use `repetition_penalty` values between 0.0 and 1.0, where a lower value rewards more strongly.
+    This technique can also be used to reward and thus encourage repetition in a similar manner. To penalize and reduce
+    repetition, use `penalty` values above 1.0, where a higher value penalizes more strongly. To reward and encourage
+    repetition, use `penalty` values between 0.0 and 1.0, where a lower value rewards more strongly.
 
     Args:
-        repetition_penalty (`float`):
+        penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated tokens.
             Between 0.0 and 1.0 rewards previously generated tokens. See [this 
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
@@ -331,13 +330,13 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
     [`LogitsProcessor`] enforcing an exponential penalty on tokens that are not in the original input. This technique
     avoids hallucination by boosting the probabilities of tokens found within the original input.
 
-    While the intended usage is to penalize and thus reduce hallucination, this technique can also be used to reward and
-    thus encourage creativity in a similar manner. To penalize and reduce repetition, use `hallucination_penalty` values
-    above 1.0, where a higher value penalizes more strongly. To reward and encourage creativity, use 
-    `hallucination_penalty` values between 0.0 and 1.0, where a lower value rewards more strongly.
+    This technique can also be used to reward and thus encourage hallucination (or creativity) in a similar manner. To
+    penalize and reduce hallucination, use `penalty` values above 1.0, where a higher value penalizes more strongly. To
+    reward and encourage hallucination, use `penalty` values between 0.0 and 1.0, where a lower value rewards more
+    strongly.
 
     Args:
-        hallucination_penalty (`float`):
+        penalty (`float`):
             The parameter for hallucination penalty. 1.0 means no penalty. Above 1.0 penalizes hallucination. Between
             0.0 and 1.0 rewards hallucination.
         encoder_input_ids (`torch.LongTensor`):
