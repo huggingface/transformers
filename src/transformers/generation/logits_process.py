@@ -1358,34 +1358,23 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
     >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-    >>> inputs = processor(ds[4]["audio"]["array"], return_tensors="pt")
+    >>> inputs = processor(ds[3]["audio"]["array"], return_tensors="pt")
     >>> input_features = inputs.input_features
 
-    >>> #Change EOS:
+    >>> #Displaying time time stamps
+    >>> generated_ids = model.generate(inputs=input_features, return_timestamps=True)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+    >>> print("Transcription:", transcription)
+    Transcription: <|startoftranscript|><|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all, and can<|6.44|><|6.44|> discover in it but little of rocky Ithaca.<|9.44|><|endoftext|>
+
+
+    >>> #No timestamps & change EOS:
     >>> #This allows the user to select a specific token to terminate the sequence on, in this case it's the word poem(21247)
-    >>> model.generation_config.eos_token_id = 21247
-    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
+    >>> model.generation_config.eos_token_id = 460
+    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=False)
     >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    >>> print(transcription)
-    Linnell's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem
-
-    >>> #Change Max_initial_timestamp
-    >>> #Changing the max initial timestamp only impacts the start of predictions for the first set of tokens
-    >>> #when this value is changed you're selecting the window of predictions for the first tokens.
-    >>> model.generation_config.max_initial_timestamp_index= 800
-    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
-    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    >>> print(transcription)
-    Linnell's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem
-
-    >>> #Change No_timestamps_token_id
-    >>> #This ID represents tokens that shouldn't have timestamps in the transcription output.
-    >>> #Such tokens might be unwanted artifacts, special characters, or noise.
-    >>> model.generation_config.no_timestamps_token_id =4
-    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
-    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    >>> print(transcription)
-    &L!s scriptures! are assorted! upguards! and atom! paintings!?! and Macy!s exquisite! itolls! are arsenal! as ding!o poem
+    >>> print("Transcription:", transcription)
+    Transcription:  He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can
     ```
     """
 
