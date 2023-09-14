@@ -149,16 +149,14 @@ class UMT5LayerFF(nn.Module):
         return hidden_states
 
 
-class UMTRelativePositionalBias(nn.Module):
-    
-    def __init__(self, relative_attention_num_buckets: int, n_heads: int, relative_attention_max_distance:int, max_position_embeddings: int = 2048, is_decoder = True) -> None:
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(relative_attention_num_buckets, n_heads))
-        self.relative_attention_max_distance = relative_attention_max_distance
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.n_heads = n_heads
-        self.is_decoder = is_decoder
-        self._set_cached_bias(max_position_embeddings, max_position_embeddings)
+class UMTRelativePositionalBias(nn.Embedding):
+    def __init__(self, config) -> None:
+        super().__init__(config.relative_attention_num_buckets, config.num_heads)
+        self.relative_attention_max_distance = config.relative_attention_max_distance
+        self.relative_attention_num_buckets = config.relative_attention_num_buckets
+        self.num_heads = config.num_heads
+        self.is_decoder = config.is_decoder
+        self._set_cached_bias(config.max_position_embeddings, config.max_position_embeddings)
 
     def _relative_position_bucket(self, relative_position, device=None):
         """
@@ -189,7 +187,7 @@ class UMTRelativePositionalBias(nn.Module):
             relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
             relative_position = torch.abs(relative_position)
         else:
-            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
+            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position, device=self.weight.device))
         # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
@@ -201,10 +199,10 @@ class UMTRelativePositionalBias(nn.Module):
         log_ratio = log_ratio * (num_buckets - max_exact)
         relative_position_if_large = max_exact + log_ratio.to(torch.long)
         relative_position_if_large = torch.min(
-            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1, device=self.weight.device)
         )
 
-        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large).to(self.weight.device)
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
     def _set_cached_bias(self, query_length, key_length):
@@ -213,14 +211,15 @@ class UMTRelativePositionalBias(nn.Module):
         memory_position = torch.arange(key_length, dtype=torch.long, device = self.weight.device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(relative_position)
-        values = self.weight.data[relative_position_bucket].to(self.weight.device) # shape (query_length, key_length, num_heads)
+        values = super().forward(relative_position_bucket).to(self.weight.device) # shape (query_length, key_length, num_heads)
         # shape (1, num_heads, query_length, key_length)
         cached_bias = values.permute([2, 0, 1]).unsqueeze(0)
         self.register_buffer("cached_bias", cached_bias, persistent=False)
 
 
     def forward(self, query_length, key_length, dtype=None):
-        return self.cached_bias[:,:, :key_length, key_length-query_length:key_length]
+        self._set_cached_bias(2048,2048)
+        return self.cached_bias[:,:, :query_length, :key_length].to(dtype)
     
     
 class UMT5Attention(nn.Module):
@@ -247,7 +246,7 @@ class UMT5Attention(nn.Module):
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
-            self.relative_attention_bias = UMTRelativePositionalBias(self.relative_attention_num_buckets, self.n_heads, self.relative_attention_max_distance, config.max_position_embeddings)
+            self.relative_attention_bias = UMTRelativePositionalBias(config)
         self.pruned_heads = set()
 
     def _shape(self, projection: torch.Tensor) -> torch.Tensor:
