@@ -118,6 +118,7 @@ class MaskFormerPixelLevelModuleOutput(ModelOutput):
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@dataclass
 class MaskFormerPixelDecoderOutput(ModelOutput):
     """
     MaskFormer's pixel decoder module output, practically a Feature Pyramid Network. It returns the last hidden state
