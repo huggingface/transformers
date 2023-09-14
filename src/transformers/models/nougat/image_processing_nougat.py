@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Nougat."""
 
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 from PIL import Image
@@ -32,7 +32,6 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    get_channel_dimension_axis,
     get_image_size,
     infer_channel_dimension_format,
     make_list_of_images,
@@ -76,10 +75,13 @@ class NougatImageProcessor(BaseImageProcessor):
             Whether to pad the image. If `random_padding` is set to `True` in `preprocess`, each image is padded with a
             random amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
             padded to the largest image size in the batch.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
-            method.
-        do_normalize:
+            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
+            `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
@@ -99,6 +101,8 @@ class NougatImageProcessor(BaseImageProcessor):
         do_thumbnail: bool = True,
         do_align_long_axis: bool = False,
         do_pad: bool = True,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -116,6 +120,8 @@ class NougatImageProcessor(BaseImageProcessor):
         self.do_thumbnail = do_thumbnail
         self.do_align_long_axis = do_align_long_axis
         self.do_pad = do_pad
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
@@ -336,70 +342,6 @@ class NougatImageProcessor(BaseImageProcessor):
         )
         return resized_image
 
-    def normalize(
-        self,
-        image: np.array,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        max_pixel_value: int = 255.0,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
-        """
-        Normalize the image with the provided mean and standard deviation. Replicates
-        `Albumentations.augmentations.Normalize`.
-
-        Normalization is applied by the formula: `img = (img - mean * max_pixel_value) / (std * max_pixel_value)`.
-
-        Args:
-            image (`np.ndarray`):
-                The image to normalize.
-            mean (`float` or `Iterable[float]`):
-                The mean to use for normalization.
-            std (`float` or `Iterable[float]`):
-                The standard deviation to use for normalization.
-            data_format (`ChannelDimension`, *optional*):
-                The channel dimension format of the output image. If unset, will use the inferred format from the
-                input.
-            input_data_format (`ChannelDimension`, *optional*):
-                The channel dimension format of the input image. If unset, will use the inferred format from the input.
-        """
-        if not isinstance(image, np.ndarray):
-            raise ValueError("image must be a numpy array")
-
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-        channel_axis = get_channel_dimension_axis(image, input_data_format=input_data_format)
-        num_channels = image.shape[channel_axis]
-
-        if isinstance(mean, Iterable):
-            if len(mean) != num_channels:
-                raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(mean)}")
-        else:
-            mean = [mean] * num_channels
-        mean = np.array(mean, dtype=np.float32)
-        mean *= max_pixel_value
-
-        if isinstance(std, Iterable):
-            if len(std) != num_channels:
-                raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(std)}")
-        else:
-            std = [std] * num_channels
-        std = np.array(std, dtype=np.float32)
-        std *= max_pixel_value
-
-        denominator = np.reciprocal(std, dtype=np.float32)
-
-        if input_data_format == ChannelDimension.LAST:
-            image = (image - mean) * denominator
-        else:
-            image = ((image.T - mean) * denominator).T
-
-        image = (
-            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
-        )
-        return image
-
     def preprocess(
         self,
         images: ImageInput,
@@ -411,6 +353,8 @@ class NougatImageProcessor(BaseImageProcessor):
         do_align_long_axis: bool = None,
         do_pad: bool = None,
         random_padding: bool = False,
+        do_rescale: bool = None,
+        rescale_factor: Union[int, float] = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -446,6 +390,10 @@ class NougatImageProcessor(BaseImageProcessor):
             random_padding (`bool`, *optional*, defaults to `self.random_padding`):
                 Whether to use random padding when padding the image. If `True`, each image in the batch with be padded
                 with a random amount of padding on each side up to the size of the largest image in the batch.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image by the specified scale `rescale_factor`.
+            rescale_factor (`int` or `float`, *optional*, defaults to `self.rescale_factor`):
+                Scale factor to use if rescaling the image.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
@@ -474,14 +422,12 @@ class NougatImageProcessor(BaseImageProcessor):
         do_crop_margin = do_crop_margin if do_crop_margin is not None else self.do_crop_margin
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        if isinstance(size, (tuple, list)):
-            # Previous feature extractor had size in (width, height) format
-            size = size[::-1]
-        size = get_size_dict(size)
         resample = resample if resample is not None else self.resample
         do_thumbnail = do_thumbnail if do_thumbnail is not None else self.do_thumbnail
         do_align_long_axis = do_align_long_axis if do_align_long_axis is not None else self.do_align_long_axis
         do_pad = do_pad if do_pad is not None else self.do_pad
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -499,6 +445,9 @@ class NougatImageProcessor(BaseImageProcessor):
 
         if do_pad and size is None:
             raise ValueError("Size must be specified if do_pad is True.")
+
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
@@ -530,6 +479,12 @@ class NougatImageProcessor(BaseImageProcessor):
                 self.pad_image(
                     image=image, size=size, random_padding=random_padding, input_data_format=input_data_format
                 )
+                for image in images
+            ]
+
+        if do_rescale:
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
 

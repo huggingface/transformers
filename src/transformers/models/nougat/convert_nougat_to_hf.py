@@ -171,7 +171,6 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     image_processor = NougatImageProcessor(
         do_align_long_axis=original_model.config.align_long_axis,
         size=size,
-        do_rescale=False,
     )
     processor = NougatProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
