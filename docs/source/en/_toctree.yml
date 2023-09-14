@@ -98,6 +98,8 @@
     title: Use model-specific APIs
   - local: custom_models
     title: Share a custom model
+  - local: chat_templating
+    title: Templates for chat models
   - local: sagemaker
     title: Run training on Amazon SageMaker
   - local: serialization

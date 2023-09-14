@@ -14,7 +14,7 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from tokenizers import normalizers, processors
 
@@ -22,9 +22,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 from ...utils.versions import require_version
 
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 require_version("tokenizers>=0.13.3")
 
@@ -344,6 +341,58 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
+    @property
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.default_chat_template
+    def default_chat_template(self):
+        """
+        LLaMA uses [INST] and [/INST] to indicate user messages, and <<SYS>> and <</SYS>> to indicate system messages.
+        Assistant messages do not have special tokens, because LLaMA chat models are generally trained with strict
+        user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
+        rather than needing special tokens. The system message is partly 'embedded' in the first user message, which
+        results in an unusual token ordering when it is present. This template should definitely be changed if you wish
+        to fine-tune a model with more flexible role ordering!
+
+        The output should look something like:
+
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST]
+        """
+
+        template = (
+            "{% if messages[0]['role'] == 'system' %}"
+            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
+            "{% set system_message = messages[0]['content'] %}"
+            "{% elif USE_DEFAULT_PROMPT == true and not '<<SYS>>' in messages[0]['content'] %}"
+            "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
+            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
+            "{% else %}"
+            "{% set loop_messages = messages %}"
+            "{% set system_message = false %}"
+            "{% endif %}"
+            "{% for message in loop_messages %}"  # Loop over all non-system messages
+            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
+            "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
+            "{% endif %}"
+            "{% if loop.index0 == 0 and system_message != false %}"  # Embed system message in first message
+            "{% set content = '<<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n' + message['content'] %}"
+            "{% else %}"
+            "{% set content = message['content'] %}"
+            "{% endif %}"
+            "{% if message['role'] == 'user' %}"  # After all of that, handle messages/roles in a fairly normal way
+            "{{ bos_token + '[INST] ' + content.strip() + ' [/INST]' }}"
+            "{% elif message['role'] == 'system' %}"
+            "{{ '<<SYS>>\\n' + content.strip() + '\\n<</SYS>>\\n\\n' }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{{ ' '  + content.strip() + ' ' + eos_token }}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+        template = template.replace("USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false")
+        default_message = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
+        template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
+
+        return template
+
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -371,69 +420,3 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return self.bos_token_id + token_ids_0 + self.eos_token_id
         return self.bos_token_id + token_ids_0 + token_ids_1 + self.eos_token_id
-
-    # Copied from transformers.models.code_llama.tokenization_code_llama.CodeLlamaTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        r"""Builds the input ids for a conversation.
-        This is the format used in the provided examples. System prompts should be manually added at the beginning of
-        the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
-        ```
-        <bos>[INST] B_SYS SytemPrompt E_SYS Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST]
-        ```
-
-        If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
-        ```python
-        >>> from transformers import Conversation
-
-        >>> Conversation(
-        ...     "<<SYS>>\n Complete the functions without any documentation\n<</SYS>>\n\n `def remove_non_ascii(s: str) -> str:`"
-        ... )  # doctest: +IGNORE_RESULT
-        ```
-        Args:
-            conversation (`Conversation`):
-                Conversation to build input ids for.
-        Returns:
-            `List[int]`:
-                Input ids for the conversation.
-        """
-        if self.use_default_system_prompt:
-            if len(conversation.past_user_inputs) > 0:
-                if (
-                    not conversation.past_user_inputs[0].startswith(B_SYS)
-                    or E_SYS not in conversation.past_user_inputs[0]
-                ):
-                    conversation.past_user_inputs[0] = (
-                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                    )
-            elif conversation.new_user_input:
-                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-            else:
-                raise ValueError("Last message must be from user")
-
-        dialogue = list(conversation.iter_texts())
-        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
-            [not is_user for is_user, msg in dialogue[1::2]]
-        ):
-            raise ValueError(
-                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
-            )
-
-        dialog_tokens: List[int] = []
-        dialog_tokens += sum(
-            [
-                [self.bos_token_id]
-                + self.encode(
-                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
-                )
-                + [self.eos_token_id]
-                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
-            ],
-            [],
-        )
-        dialog_tokens += [self.bos_token_id] + self.encode(
-            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
-        )
-        return dialog_tokens
