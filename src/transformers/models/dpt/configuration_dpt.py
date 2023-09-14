@@ -151,7 +151,7 @@ class DPTConfig(PretrainedConfig):
         fusion_hidden_size=256,
         head_in_index=-1,
         use_batch_norm_in_fusion_residual=False,
-        use_bias_in_fusion_residual=True,
+        use_bias_in_fusion_residual=None,
         add_projection=False,
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,

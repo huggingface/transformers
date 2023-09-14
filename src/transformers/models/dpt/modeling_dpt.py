@@ -726,6 +726,11 @@ class DPTPreActResidualLayer(nn.Module):
         super().__init__()
 
         self.use_batch_norm = config.use_batch_norm_in_fusion_residual
+        use_bias_in_fusion_residual = (
+            config.use_bias_in_fusion_residual
+            if config.use_bias_in_fusion_residual is not None
+            else not self.use_batch_norm
+        )
 
         self.activation1 = ACT2FN["relu"]
         self.convolution1 = nn.Conv2d(
@@ -734,7 +739,7 @@ class DPTPreActResidualLayer(nn.Module):
             kernel_size=3,
             stride=1,
             padding=1,
-            bias=config.use_bias_in_fusion_residual,
+            bias=use_bias_in_fusion_residual,
         )
 
         self.activation2 = ACT2FN["relu"]
@@ -744,7 +749,7 @@ class DPTPreActResidualLayer(nn.Module):
             kernel_size=3,
             stride=1,
             padding=1,
-            bias=config.use_bias_in_fusion_residual,
+            bias=use_bias_in_fusion_residual,
         )
 
         if self.use_batch_norm:
