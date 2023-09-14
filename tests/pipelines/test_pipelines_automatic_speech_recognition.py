@@ -299,6 +299,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
+    @slow
     @require_torch
     def test_return_timestamps_in_preprocess(self):
         pipe = pipeline(
