@@ -221,6 +221,7 @@ _import_structure = {
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
     ],
+    "models.bros": ["BROS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BrosConfig", "BrosProcessor"],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -1353,6 +1354,17 @@ else:
             "BridgeTowerForMaskedLM",
             "BridgeTowerModel",
             "BridgeTowerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bros"].extend(
+        [
+            "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BrosForTokenClassification",
+            "BrosModel",
+            "BrosPreTrainedModel",
+            "BrosProcessor",
+            "BrosSpadeEEForTokenClassification",
+            "BrosSpadeELForTokenClassification",
         ]
     )
     _import_structure["models.camembert"].extend(
@@ -4324,6 +4336,7 @@ if TYPE_CHECKING:
         BridgeTowerTextConfig,
         BridgeTowerVisionConfig,
     )
+    from .models.bros import BROS_PRETRAINED_CONFIG_ARCHIVE_MAP, BrosConfig, BrosProcessor
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
@@ -5337,6 +5350,15 @@ if TYPE_CHECKING:
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,
+        )
+        from .models.bros import (
+            BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BrosForTokenClassification,
+            BrosModel,
+            BrosPreTrainedModel,
+            BrosProcessor,
+            BrosSpadeEEForTokenClassification,
+            BrosSpadeELForTokenClassification,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
