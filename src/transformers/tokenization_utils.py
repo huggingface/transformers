@@ -452,7 +452,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if new_tokens is None:
             return added_tokens
         current_vocab = self.get_vocab().copy()
-        new_idx = len(set(current_vocab.keys()))  # only call this once, len gives the last index + 1
+        new_idx = len(current_vocab)  # only call this once, len gives the last index + 1
         for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")

@@ -127,9 +127,6 @@ class CanineTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         vocab = {chr(i): i for i in range(self.vocab_size)}
-        # for str_tok, index in self._special_codepoints.items():
-        #     del[vocab[chr(index)]]
-        #     vocab[str_tok] = index
         vocab.update(self.added_tokens_encoder)
         return vocab
 
