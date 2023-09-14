@@ -328,7 +328,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
 
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
-    def test_prediction_head(self):
+    def test_forecast_head(self):
         model = PatchTSTForForecasting.from_pretrained("ibm/patchtst-etth1-forecast").to(torch_device)
 
         batch = prepare_batch(file="test-batch.pt")

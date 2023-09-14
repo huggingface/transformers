@@ -22,7 +22,6 @@ from typing import Optional, Tuple
 import numpy as np
 import torch
 from torch import nn
-from torch.nn.modules.activation import MultiheadAttention
 
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -35,7 +34,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "PatchTSTConfig"
 
 PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtst-base",
+    "ibm/patchtst-etth1-pretrain",
     # See all PatchTST models at https://huggingface.co/models?filter=patchtst
 ]
 
@@ -654,10 +653,6 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, MultiheadAttention):
-            module.in_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
-            module.bias_k.data.normal_(mean=0.0, std=self.config.init_std)
-            module.bias_v.data.normal_(mean=0.0, std=self.config.init_std)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (ChannelAttentionPatchTSTEncoder)):
