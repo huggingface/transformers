@@ -81,6 +81,8 @@ else:
         """
         AddedToken represents a token to be added to a Tokenizer An AddedToken can have special options defining the
         way it should behave.
+        
+        The `normalized` will default to `not special` if it is not specified, similarly to the definition in `tokenizers`.
         """
 
         def __init__(
@@ -91,7 +93,7 @@ else:
             self.lstrip = lstrip
             self.rstrip = rstrip
             self.special = special
-            self.normalized = (not normalized) if special is None and normalized is not None else (special or False)
+            self.normalized = normalized if normalized is not None else not special
 
         def __getstate__(self):
             return self.__dict__
@@ -1170,7 +1172,8 @@ class SpecialTokensMixin:
         if value is None:
             self._additional_special_tokens = value
             return
-
+        if self._additional_special_tokens is None:
+            self._additional_special_tokens = []
         # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
         for token in value:
             if isinstance(token, str) and token != "":
@@ -2331,11 +2334,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             legacy_format=legacy_format,
             filename_prefix=filename_prefix,
         )
-        added_tokens_file = save_files[-1] + " and " if self.get_added_vocab() else None
-
-        logger.warning_once(
-            f"Saving {added_tokens_file}{special_tokens_map_file} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file"
-        )
+        added_files = special_tokens_map_file
+        if self.get_added_vocab(): 
+            added_files = save_files[-1] + " and " + added_files 
+        logger.warning_once( f"Saving {added_files} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file" )     
 
         if push_to_hub:
             self._upload_modified_files(

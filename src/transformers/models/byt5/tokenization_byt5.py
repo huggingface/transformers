@@ -83,7 +83,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
                 )
 
         pad_token = AddedToken(pad_token, lstrip=True, rstrip=True) if isinstance(pad_token, str) else pad_token
-        # hack, the tests need to strip left and right....
+        # we force left and right stripping for backward compatibility. The byt5tests depend on this.
         eos_token = AddedToken(eos_token, lstrip=True, rstrip=True) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=True, rstrip=True) if isinstance(unk_token, str) else unk_token
         # unk token needs to be in the vocab with correct index

@@ -21,7 +21,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import sentencepiece as sp
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...utils import logging
 
+logger = logging.get_logger(__name__)
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -384,6 +386,19 @@ class SPMTokenizer:
                 self.ids_to_tokens.append(token)
         return self.id(token)
 
+    def part_of_whole_word(self, token, is_bos=False):
+        logger.warning_once("The `DebertaTokenizer.part_of_whole_word` method is deprecated and will be removed in `transformers==4.35`")
+        if is_bos:
+            return True
+        if (
+            len(token) == 1
+            and (_is_whitespace(list(token)[0]) or _is_control(list(token)[0]) or _is_punctuation(list(token)[0]))
+        ) or token in self.special_tokens:
+            return False
+
+        word_start = b"\xe2\x96\x81".decode("utf-8")
+        return not token.startswith(word_start)
+
     def pad(self):
         return "[PAD]"
 
@@ -401,6 +416,10 @@ class SPMTokenizer:
 
     def sym(self, id):
         return self.ids_to_tokens[id]
+
+    def id(self, sym):
+        logger.warning_once("The `DebertaTokenizer.id` method is deprecated and will be removed in `transformers==4.35`")
+        return self.vocab[sym] if sym in self.vocab else 1
 
     def _encode_as_pieces(self, text):
         text = convert_to_unicode(text)
@@ -475,6 +494,30 @@ class SPMTokenizer:
         with open(full_path, "wb") as fs:
             fs.write(self.spm.serialized_model_proto())
         return (full_path,)
+
+
+def _is_whitespace(char):
+    """Checks whether `chars` is a whitespace character."""
+    # \t, \n, and \r are technically control characters but we treat them
+    # as whitespace since they are generally considered as such.
+    if char == " " or char == "\t" or char == "\n" or char == "\r":
+        return True
+    cat = unicodedata.category(char)
+    if cat == "Zs":
+        return True
+    return False
+
+
+def _is_control(char):
+    """Checks whether `chars` is a control character."""
+    # These are technically control characters but we count them as whitespace
+    # characters.
+    if char == "\t" or char == "\n" or char == "\r":
+        return False
+    cat = unicodedata.category(char)
+    if cat.startswith("C"):
+        return True
+    return False
 
 
 def _is_punctuation(char):

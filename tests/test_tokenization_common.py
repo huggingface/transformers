@@ -986,7 +986,6 @@ class TokenizerTesterMixin:
                     AddedToken("GHI IHG", normalized=True, lstrip=True, rstrip=True),
                 ]
                 tokenizer.add_tokens(new_toks)
-                # special tokens should not be normalized...
                 tokenizer.add_tokens([AddedToken("[SAMPLE]", normalized=True)], special_tokens=True)
                 input = "[ABC][DEF][ABC]GHI IHG[DEF]"
                 if self.space_between_special_tokens:
@@ -3619,8 +3618,6 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
-
-                # DO I UNDERSTAND THAT FAST ALLOWS ADDING TOKENS THROUGH additional_special_tokens?
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )

@@ -67,11 +67,6 @@ class EsmTokenizer(PreTrainedTokenizer):
         self.all_tokens = load_vocab_file(vocab_file)
         self._id_to_token = dict(enumerate(self.all_tokens))
         self._token_to_id = {tok: ind for ind, tok in enumerate(self.all_tokens)}
-        self.unk_token = unk_token
-        self.cls_token = cls_token
-        self.pad_token = pad_token
-        self.mask_token = mask_token
-        self.eos_token = eos_token
         super().__init__(
             unk_token=unk_token,
             cls_token=cls_token,
