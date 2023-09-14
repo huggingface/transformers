@@ -18,6 +18,9 @@
 - sections:
   - local: Preprocessing
     title: データ前処理
-    - sections:
+- sections:
   - local: Training
-    title: "訓練
+    title: 訓練
+- sections:
+  - local: Model Sharing
+    title: モデル共有
