@@ -669,7 +669,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             normalize=normalize,
             basic_normalize=basic_normalize,
             remove_diacritics=remove_diacritics,
-            decode_with_timestamps=decode_with_timestamps,
             **kwargs,
         )
         if decode_with_timestamps:
@@ -690,7 +689,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalize: bool = False,
         basic_normalize: bool = False,
         remove_diacritics: bool = False,
-        decode_with_timestamps: bool = False,
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)

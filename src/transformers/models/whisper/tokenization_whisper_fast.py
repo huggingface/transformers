@@ -371,7 +371,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             normalize=normalize,
             basic_normalize=basic_normalize,
             remove_diacritics=remove_diacritics,
-            decode_with_timestamps=decode_with_timestamps,
             **kwargs,
         )
         if decode_with_timestamps:
