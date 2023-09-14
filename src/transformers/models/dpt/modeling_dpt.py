@@ -1003,7 +1003,14 @@ class DPTNeck(nn.Module):
         # fusion
         self.fusion_stage = DPTFeatureFusionStage(config)
 
-    def forward(self, hidden_states: List[torch.Tensor], cls_tokens: List[torch.Tensor]) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor], cls_tokens: List[torch.Tensor] = None) -> List[torch.Tensor]:
+        """
+        Args:
+            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+                List of hidden states from the backbone.
+            cls_tokens (`List[torch.FloatTensor]`, each of shape `(batch_size, hidden_size)`, *optional*):
+                List of cls token features from the backbone. Only relevant for ViT-based models.
+        """
         if not isinstance(hidden_states, (tuple, list)):
             raise ValueError("hidden_states should be a tuple or list of tensors")
 

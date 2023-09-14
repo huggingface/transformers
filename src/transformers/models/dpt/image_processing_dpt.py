@@ -123,9 +123,11 @@ class DPTImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `False`):
-            Whether to apply center padding.
-        pad_multiple_of (`int`, *optional*):
-            If `do_pad` is `True`, pads the image dimensions to be a multiple of this value.
+            Whether to apply center padding. This was introduced in the DINOv2 paper, which uses the model in
+            combination with DPT.
+        size_divisibility (`int`, *optional*):
+            If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
+            DINOv2 paper, which uses the model in combination with DPT.
     """
 
     model_input_names = ["pixel_values"]
@@ -143,7 +145,7 @@ class DPTImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = False,
-        pad_multiple_of: int = None,
+        size_divisibility: int = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -160,7 +162,7 @@ class DPTImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
-        self.pad_multiple_of = pad_multiple_of
+        self.size_divisibility = size_divisibility
 
     def resize(
         self,
@@ -219,7 +221,7 @@ class DPTImageProcessor(BaseImageProcessor):
     def pad_image(
         self,
         image: np.array,
-        multiple: int,
+        size_divisibility: int,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -229,7 +231,7 @@ class DPTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            multiple (`int`, *optional*, defaults to 32):
+            size_divisibility (`int`, *optional*, defaults to 32):
                 The width and height of the image will be padded to a multiple of this number.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
@@ -244,8 +246,8 @@ class DPTImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
 
-        def _get_pad(size, multiple):
-            new_size = math.ceil(size / multiple) * multiple
+        def _get_pad(size, size_divisibility):
+            new_size = math.ceil(size / size_divisibility) * size_divisibility
             pad_size = new_size - size
             pad_size_left = pad_size // 2
             pad_size_right = pad_size - pad_size_left
@@ -256,8 +258,8 @@ class DPTImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(image, input_data_format)
 
-        pad_size_left, pad_size_right = _get_pad(height, multiple)
-        pad_size_top, pad_size_bottom = _get_pad(width, multiple)
+        pad_size_left, pad_size_right = _get_pad(height, size_divisibility)
+        pad_size_top, pad_size_bottom = _get_pad(width, size_divisibility)
 
         return pad(image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format)
 
@@ -275,7 +277,7 @@ class DPTImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: bool = None,
-        pad_multiple_of: int = None,
+        size_divisibility: int = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -342,7 +344,7 @@ class DPTImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
-        pad_multiple_of = pad_multiple_of if pad_multiple_of is not None else self.pad_multiple_of
+        size_divisibility = size_divisibility if size_divisibility is not None else self.size_divisibility
 
         images = make_list_of_images(images)
 
@@ -360,6 +362,9 @@ class DPTImageProcessor(BaseImageProcessor):
 
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
+
+        if do_pad and size_divisibility is None:
+            raise ValueError("Size divisibility must be specified if do_pad is True.")
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
@@ -396,7 +401,7 @@ class DPTImageProcessor(BaseImageProcessor):
 
         if do_pad:
             images = [
-                self.pad_image(image=image, multiple=pad_multiple_of, input_data_format=input_data_format)
+                self.pad_image(image=image, size_divisibility=size_divisibility, input_data_format=input_data_format)
                 for image in images
             ]
 

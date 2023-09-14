@@ -276,7 +276,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
         do_resize=False,
         do_rescale=False,
         do_pad=True,
-        pad_multiple_of=14,
+        size_divisibility=14,
         do_normalize=True,
         image_mean=(123.675, 116.28, 103.53),
         image_std=(58.395, 57.12, 57.375),
