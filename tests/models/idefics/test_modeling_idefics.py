@@ -305,7 +305,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         )
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_with_image_pos_embeddings_interpolation(self):
+    def test_model_with_image_pos_embeddings_interpolation_single_image(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(
             num_images=1, interpolate_pos_encoding=True, image_expansion=2
         )
@@ -315,9 +315,25 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         )
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_generate_with_image_pos_embeddings_interpolation(self):
+    def test_model_with_image_pos_embeddings_interpolation_multiple_images(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=2, interpolate_pos_encoding=True, image_expansion=2
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=2, interpolate_pos_encoding=True, image_expansion=0
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_generate_with_image_pos_embeddings_interpolation_single_image(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(
             num_images=1, interpolate_pos_encoding=True, image_expansion=2
+        )
+        self.model_tester.create_and_check_model_gen(*config_and_inputs)
+
+    def test_generate_with_image_pos_embeddings_interpolation_multiple_images(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=2, interpolate_pos_encoding=True, image_expansion=2
         )
         self.model_tester.create_and_check_model_gen(*config_and_inputs)
 
