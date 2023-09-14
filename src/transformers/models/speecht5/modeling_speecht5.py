@@ -2657,7 +2657,9 @@ def _generate_speech(
                 waveform_lengths.append(waveform.size(0))
             waveforms = torch.cat(waveforms, dim=0)
             outputs = (waveforms, waveform_lengths)
-
+        if output_cross_attentions:
+            cross_attentions = torch.cat(cross_attentions, dim=2)
+            outputs = (*outputs, cross_attentions)
     return outputs
 
 
@@ -2864,13 +2866,28 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         Returns:
             `tuple(torch.FloatTensor)` comprising various elements depending on the inputs:
-            - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
-              `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
-            - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
-              `(num_frames,)` -- The predicted speech waveform.
-            - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`) `torch.FloatTensor`
-              of shape `(config.decoder_layers, config.decoder_attention_heads, output_sequence_length,
-              input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
+            - when batch size is 1
+                - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
+                `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
+                - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
+                `(num_frames,)` -- The predicted speech waveform.
+                - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
+                `torch.FloatTensor` of shape `(config.decoder_layers, config.decoder_attention_heads,
+                output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
+            - when batch size is larger than 1
+                - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
+                `(sum of all lengths of spectrograms , config.num_mel_bins)` -- The predicted log-mel spectrograms of
+                the batch concatenated along the first dimension.
+                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
+                all the lengths for each spectrogram.
+                - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
+                `(sum of all lengths of num_frames,)` -- The predicted speech waveforms of the batch concatenated along
+                the first dimension.
+                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
+                the lengths for each waveform.
+                - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
+                `torch.FloatTensor` of shape `(batch_size * config.decoder_layers, config.decoder_attention_heads,
+                output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
         """
         return _generate_speech(
             self,
@@ -2932,13 +2949,28 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         Returns:
             `tuple(torch.FloatTensor)` comprising various elements depending on the inputs:
-            - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
-              `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
-            - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
-              `(num_frames,)` -- The predicted speech waveform.
-            - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`) `torch.FloatTensor`
-              of shape `(config.decoder_layers, config.decoder_attention_heads, output_sequence_length,
-              input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
+            - when batch size is 1
+                - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
+                `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
+                - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
+                `(num_frames,)` -- The predicted speech waveform.
+                - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
+                `torch.FloatTensor` of shape `(config.decoder_layers, config.decoder_attention_heads,
+                output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
+            - when batch size is larger than 1
+                - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
+                `(sum of all lengths of spectrograms , config.num_mel_bins)` -- The predicted log-mel spectrograms of
+                the batch concatenated along the first dimension.
+                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
+                all the lengths for each spectrogram.
+                - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
+                `(sum of all lengths of num_frames,)` -- The predicted speech waveforms of the batch concatenated along
+                the first dimension.
+                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
+                the lengths for each waveform.
+                - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
+                `torch.FloatTensor` of shape `(batch_size * config.decoder_layers, config.decoder_attention_heads,
+                output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
         """
         return _generate_speech(
             self,
@@ -3151,13 +3183,28 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
 
         Returns:
             `tuple(torch.FloatTensor)` comprising various elements depending on the inputs:
-            - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
-              `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
-            - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
-              `(num_frames,)` -- The predicted speech waveform.
-            - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`) `torch.FloatTensor`
-              of shape `(config.decoder_layers, config.decoder_attention_heads, output_sequence_length,
-              input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
+            - when batch size is 1
+                - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
+                `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
+                - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
+                `(num_frames,)` -- The predicted speech waveform.
+                - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
+                `torch.FloatTensor` of shape `(config.decoder_layers, config.decoder_attention_heads,
+                output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
+            - when batch size is larger than 1
+                - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
+                `(sum of all lengths of spectrograms , config.num_mel_bins)` -- The predicted log-mel spectrograms of
+                the batch concatenated along the first dimension.
+                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
+                all the lengths for each spectrogram.
+                - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
+                `(sum of all lengths of num_frames,)` -- The predicted speech waveforms of the batch concatenated along
+                the first dimension.
+                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
+                the lengths for each waveform.
+                - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
+                `torch.FloatTensor` of shape `(batch_size * config.decoder_layers, config.decoder_attention_heads,
+                output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
         """
         if speaker_embeddings is None:
             speaker_embeddings = torch.zeros((1, 512), device=input_values.device)

@@ -1051,6 +1051,17 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         self.assertEqual(len(spectrogram_lengths), 3)
         self.assertEqual(spectrogram_lengths[0] + spectrogram_lengths[1] + spectrogram_lengths[2], 662)
 
+        # Check results when batching are consistent with results without batching
+        set_seed(555)  # make deterministic
+
+        input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+        spectrogram_second = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+        )
+        self.assertTrue(torch.allclose(spectrogram_second, spectrograms[: spectrogram_lengths[0]], atol=1e-4))
+
 
 @require_torch
 class SpeechT5ForSpeechToSpeechTester:
