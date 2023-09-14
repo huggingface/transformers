@@ -88,9 +88,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             `UnivNetGan.config.model_in_channels`.
         pad_end_len (`int`, *optional*, defaults to 10):
             If padding the end of the spectrograms, the number of frames to append to the end of each spectrogram.
-        spectrogram_zero (`float`, *optional*, defaults to -11.5129):
-            If padding the end of the spectrogram, the padding value to use. This should be the lowest possible value
-            in the spectrogram.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -117,7 +114,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         normalize_max: float = 2.3143386840820312,
         model_in_channels: int = 64,
         pad_end_length: int = 10,
-        spectrogram_zero: float = -11.5129,
         **kwargs,
     ):
         super().__init__(
@@ -169,8 +165,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_max = normalize_max
         self.model_in_channels = model_in_channels
         self.pad_end_length = pad_end_length
-        # TODO: Calculate spectrogram_zero? Should be a function of self.mel_floor I think
-        self.spectrogram_zero = spectrogram_zero
+        # Minimum value in spectrogram after dynamic_range_compression
+        self.spectrogram_zero = np.log(self.compression_clip_val * self.compression_factor)
 
     # Based on tacotron2.audio_processing.dynamic_range_compression
     # https://github.com/NVIDIA/tacotron2/blob/master/audio_processing.py#L78
@@ -458,7 +454,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         output = super().to_dict()
 
         # Don't serialize these as they are derived from the other properties.
-        names = ["window", "mel_filters", "n_fft", "n_freqs", "num_max_samples"]
+        names = ["window", "mel_filters", "n_fft", "n_freqs", "num_max_samples", "spectrogram_zero"]
         for name in names:
             if name in output:
                 del output[name]

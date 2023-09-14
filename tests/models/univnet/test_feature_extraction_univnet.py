@@ -76,7 +76,6 @@ class UnivNetFeatureExtractionTester(unittest.TestCase):
         normalize_max=2.3143386840820312,
         model_in_channels=64,
         pad_end_length=10,
-        spectrogram_zero=-11.5129,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -104,7 +103,6 @@ class UnivNetFeatureExtractionTester(unittest.TestCase):
         self.normalize_max = normalize_max
         self.model_in_channels = model_in_channels
         self.pad_end_length = pad_end_length
-        self.spectrogram_zero = spectrogram_zero
 
     def prepare_feat_extract_dict(self):
         return {
@@ -128,7 +126,6 @@ class UnivNetFeatureExtractionTester(unittest.TestCase):
             "normalize_max": self.normalize_max,
             "model_in_channels": self.model_in_channels,
             "pad_end_length": self.pad_end_length,
-            "spectrogram_zero": self.spectrogram_zero,
         }
 
     def prepare_inputs_for_common(self, equal_length=False, numpify=False):
