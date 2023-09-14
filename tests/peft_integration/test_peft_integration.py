@@ -196,9 +196,19 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 self.assertTrue(self._check_lora_correctly_converted(model))
 
+                # When attaching adapters the input embeddings will stay frozen, this will
+                # lead to the output embedding having requires_grad=False.
+                dummy_input = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device)
+                frozen_output = model.get_input_embeddings()(dummy_input)
+                self.assertTrue(frozen_output.requires_grad is False)
+
                 model.gradient_checkpointing_enable()
 
-                dummy_input = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device)
+                # Since here we attached the hook, the input should have requires_grad to set
+                # properly
+                non_frozen_output = model.get_input_embeddings()(dummy_input)
+                self.assertTrue(non_frozen_output.requires_grad is True)
+
                 # To repro the Trainer issue
                 dummy_input.requires_grad = False
 

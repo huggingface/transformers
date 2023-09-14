@@ -1728,6 +1728,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if getattr(self, "_hf_peft_config_loaded", False):
             # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
             # we do it also on PEFT: https://github.com/huggingface/peft/blob/85013987aa82aa1af3da1236b6902556ce3e483e/src/peft/peft_model.py#L334
+            # When training with PEFT, only LoRA layers will have requires grad set to True, but the output of frozen layers need to propagate
+            # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
 
     def gradient_checkpointing_disable(self):
