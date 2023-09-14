@@ -15,3 +15,6 @@
 - sections:
   - local: autoclass_tutorial
     title: AutoClassを使用してポータブルなコードを書く
+- sections:
+  - local: Preprocessing
+    title: データ前処理
