@@ -1297,7 +1297,7 @@ class GenerationMixin:
                     UserWarning,
                 )
 
-    def _extend_attention_mask(self, model_kwargs: Dict[str, Any], to: int) -> Dict[str, Any]:
+    def _extend_attention_mask(self, model_kwargs: Dict[str, Any], new_mask_length: int) -> Dict[str, Any]:
         if self.config.is_encoder_decoder:
             key = "decoder_attention_mask"
         else:
@@ -1307,13 +1307,13 @@ class GenerationMixin:
             return model_kwargs
 
         mask = model_kwargs[key]
-        amount = to - mask.shape[1]
+        mask_extension_length = new_mask_length - mask.shape[1]
 
-        if amount < 0:
+        if mask_extension_length < 0:
             raise ValueError("Cannot extend attention mask to a length less than it already is")
 
         model_kwargs[key] = torch.cat(
-            [mask, mask.new_ones((mask.shape[0], amount))],
+            [mask, mask.new_ones((mask.shape[0], mask_extension_length))],
             dim=-1,
         )
 
