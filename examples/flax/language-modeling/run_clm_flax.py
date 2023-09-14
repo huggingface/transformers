@@ -574,7 +574,7 @@ def main():
         if block_size > config.max_position_embeddings:
             logger.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
+                f"Picking {min(1024, config.max_position_embeddings)} instead. You can change that default value by passing --block_size xxx."
             )
             block_size = min(1024, config.max_position_embeddings)
     else:
