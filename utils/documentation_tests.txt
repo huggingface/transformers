@@ -72,6 +72,7 @@ src/transformers/models/blip/image_processing_blip.py
 src/transformers/models/blip/modeling_blip.py
 src/transformers/models/blip/modeling_tf_blip.py
 src/transformers/models/blip/processing_blip.py
+src/transformers/models/blip_2/modeling_blip_2.py
 src/transformers/models/blip_2/processing_blip_2.py
 src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/bloom/tokenization_bloom_fast.py
