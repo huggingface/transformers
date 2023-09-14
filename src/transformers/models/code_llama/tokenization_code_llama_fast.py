@@ -185,8 +185,8 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         eos = self.eos_token
         eos_token_id = self.eos_token_id
 
-        single = f"{(bos+':0 ') * self.add_bos_token}$A:0{(' '+eos+':0') * self.add_eos_token}"
-        pair = f"{single}{(' '+bos+':1') * self.add_bos_token} $B:1{(' '+eos+':1') * self.add_eos_token}"
+        single = f"{(bos+':0 ') * self.add_bos_token}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' '+bos+':1') * self.add_bos_token} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
 
         special_tokens = []
         if self.add_bos_token:
@@ -256,6 +256,16 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self.update_post_processor()
 
     def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens=True):
+        """
+        Updates the normalizer to make sure the prompt format for `infilling` is respected. The infilling format is the
+        following: if suffix_first
+            " <PRE> <SUF>{suf} <MID> {pre}"
+        else:
+            " <PRE> {pre} <SUF>{suf} <MID>"
+
+        If `reset` is set to `True`, the `normalizer` and `post_processor` are reset to their "normal" behaviour, which
+        is to add a prefix space for the normalizer, and add a `bos_token` to the input text for the `post_processor`.
+        """
         if reset:
             self._tokenizer.normalizer = normalizers.Sequence(
                 [
@@ -264,6 +274,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
                 ]
             )
             self.update_post_processor()
+            return
 
         self._tokenizer.normalizer = normalizers.Replace(pattern=" ", content="▁")
         pair = [self.bos_token] if self.add_bos_token and add_special_tokens else []

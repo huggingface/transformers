@@ -149,3 +149,10 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         decoded = tokenizer.decode(target_ids, skip_special_tokens=True)
         self.assertEqual(decoded, target_text)
+
+    def test_tokenizer_decode(self):
+        tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-es")
+        source_text = "Hello World"
+        ids = tokenizer(source_text)["input_ids"]
+        output_text = tokenizer.decode(ids, skip_special_tokens=True)
+        self.assertEqual(source_text, output_text)
