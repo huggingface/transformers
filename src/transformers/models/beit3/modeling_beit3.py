@@ -109,10 +109,7 @@ BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        image1_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BeitImageProcessor.__call__`] for details.
-        image2_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, 2 ,num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
         padding_mask (`torch.LongTensor` of shape `({0})`):
@@ -852,8 +849,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
     def forward(
         self,
         input_ids,
-        image1_values,
-        image2_values,
+        pixel_values,
         padding_mask,
         output_hidden_states=None,
         return_dict=None,
@@ -861,7 +857,9 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
     ):
         batch_size = input_ids.size()[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        image1_values, image2_values = pixel_values.split(1,dim=1)
+        image1_values = image1_values.squeeze(1)
+        image2_values = image2_values.squeeze(1)
         vision_input = torch.cat((image1_values, image2_values), dim=0)
         language_input = torch.cat((input_ids, input_ids), dim=0)
         padding_mask = torch.cat((padding_mask, padding_mask), dim=0)
