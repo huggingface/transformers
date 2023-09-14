@@ -1715,6 +1715,7 @@ class Trainer:
                 )
 
         if self.is_fsdp_enabled:
+            print(f"{model=}")
             self.model = model
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
