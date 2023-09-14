@@ -72,11 +72,13 @@ src/transformers/models/blip/image_processing_blip.py
 src/transformers/models/blip/modeling_blip.py
 src/transformers/models/blip/modeling_tf_blip.py
 src/transformers/models/blip/processing_blip.py
+src/transformers/models/blip_2/modeling_blip_2.py
 src/transformers/models/blip_2/processing_blip_2.py
 src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/bloom/tokenization_bloom_fast.py
 src/transformers/models/bridgetower/image_processing_bridgetower.py
 src/transformers/models/bridgetower/processing_bridgetower.py
+src/transformers/models/bros/processing_bros.py
 src/transformers/models/byt5/tokenization_byt5.py
 src/transformers/models/camembert/configuration_camembert.py
 src/transformers/models/camembert/tokenization_camembert.py

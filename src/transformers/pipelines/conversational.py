@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
@@ -19,136 +19,152 @@ class Conversation:
     """
     Utility class containing a conversation and its history. This class is meant to be used as an input to the
     [`ConversationalPipeline`]. The conversation contains several utility functions to manage the addition of new user
-    inputs and generated model responses. A conversation needs to contain an unprocessed user input before being passed
-    to the [`ConversationalPipeline`]. This user input is either created when the class is instantiated, or by calling
-    `conversational_pipeline.append_response("input")` after a conversation turn.
+    inputs and generated model responses.
 
     Arguments:
-        text (`str`, *optional*):
-            The initial user input to start the conversation. If not provided, a user input needs to be provided
-            manually using the [`~Conversation.add_user_input`] method before the conversation can begin.
+        messages (Union[str, List[Dict[str, str]]], *optional*):
+            The initial messages to start the conversation, either a string, or a list of dicts containing "role" and
+            "content" keys. If a string is passed, it is interpreted as a single message with the "user" role.
         conversation_id (`uuid.UUID`, *optional*):
             Unique identifier for the conversation. If not provided, a random UUID4 id will be assigned to the
             conversation.
-        past_user_inputs (`List[str]`, *optional*):
-            Eventual past history of the conversation of the user. You don't need to pass it manually if you use the
-            pipeline interactively but if you want to recreate history you need to set both `past_user_inputs` and
-            `generated_responses` with equal length lists of strings
-        generated_responses (`List[str]`, *optional*):
-            Eventual past history of the conversation of the model. You don't need to pass it manually if you use the
-            pipeline interactively but if you want to recreate history you need to set both `past_user_inputs` and
-            `generated_responses` with equal length lists of strings
 
     Usage:
 
     ```python
     conversation = Conversation("Going to the movies tonight - any suggestions?")
-
-    # Steps usually performed by the model when generating a response:
-    # 1. Mark the user input as processed (moved to the history)
-    conversation.mark_processed()
-    # 2. Append a mode response
-    conversation.append_response("The Big lebowski.")
-
-    conversation.add_user_input("Is it good?")
+    conversation.add_message({"role": "assistant", "content": "The Big lebowski."})
+    conversation.add_message({"role": "user", "content": "Is it good?"})
     ```"""
 
     def __init__(
-        self, text: str = None, conversation_id: uuid.UUID = None, past_user_inputs=None, generated_responses=None
+        self, messages: Union[str, List[Dict[str, str]]] = None, conversation_id: uuid.UUID = None, **deprecated_kwargs
     ):
         if not conversation_id:
             conversation_id = uuid.uuid4()
-        if past_user_inputs is None:
-            past_user_inputs = []
-        if generated_responses is None:
-            generated_responses = []
 
-        self.uuid: uuid.UUID = conversation_id
-        self.past_user_inputs: List[str] = past_user_inputs
-        self.generated_responses: List[str] = generated_responses
-        self.new_user_input: Optional[str] = text
+        if messages is None:
+            text = deprecated_kwargs.pop("text", None)
+            if text is not None:
+                messages = [{"role": "user", "content": text}]
+            else:
+                messages = []
+        elif isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
+
+        # This block deals with the legacy args - new code should just totally
+        # avoid past_user_inputs and generated_responses
+        generated_responses = deprecated_kwargs.pop("generated_responses", None)
+        past_user_inputs = deprecated_kwargs.pop("past_user_inputs", None)
+        if generated_responses is not None and past_user_inputs is None:
+            raise ValueError("generated_responses cannot be passed without past_user_inputs!")
+        if past_user_inputs is not None:
+            legacy_messages = []
+            if generated_responses is None:
+                generated_responses = []
+            # We structure it this way instead of using zip() because the lengths may differ by 1
+            for i in range(max([len(past_user_inputs), len(generated_responses)])):
+                if i < len(past_user_inputs):
+                    legacy_messages.append({"role": "user", "content": past_user_inputs[i]})
+                if i < len(generated_responses):
+                    legacy_messages.append({"role": "assistant", "content": generated_responses[i]})
+            messages = legacy_messages + messages
+
+        self.uuid = conversation_id
+        self.messages = messages
 
     def __eq__(self, other):
         if not isinstance(other, Conversation):
             return False
-        if self.uuid == other.uuid:
-            return True
-        return (
-            self.new_user_input == other.new_user_input
-            and self.past_user_inputs == other.past_user_inputs
-            and self.generated_responses == other.generated_responses
-        )
+        return self.uuid == other.uuid or self.messages == other.messages
+
+    def add_message(self, message: Dict[str, str]):
+        if not set(message.keys()) == {"role", "content"}:
+            raise ValueError("Message should contain only 'role' and 'content' keys!")
+        if message["role"] not in ("user", "assistant", "system"):
+            raise ValueError("Only 'user', 'assistant' and 'system' roles are supported for now!")
+        self.messages.append(message)
 
     def add_user_input(self, text: str, overwrite: bool = False):
         """
-        Add a user input to the conversation for the next round. This populates the internal `new_user_input` field.
-
-        Args:
-            text (`str`): The user input for the next conversation round.
-            overwrite (`bool`, *optional*, defaults to `False`):
-                Whether or not existing and unprocessed user input should be overwritten when this function is called.
+        Add a user input to the conversation for the next round. This is a legacy method that assumes that inputs must
+        alternate user/assistant/user/assistant, and so will not add multiple user messages in succession. We recommend
+        just using `add_message` with role "user" instead.
         """
-        if self.new_user_input:
+        if len(self) > 0 and self[-1]["role"] == "user":
             if overwrite:
                 logger.warning(
-                    f'User input added while unprocessed input was existing: "{self.new_user_input}" was overwritten '
+                    f'User input added while unprocessed input was existing: "{self[-1]["content"]}" was overwritten '
                     f'with: "{text}".'
                 )
-                self.new_user_input = text
+                self[-1]["content"] = text
             else:
                 logger.warning(
-                    f'User input added while unprocessed input was existing: "{self.new_user_input}" new input '
+                    f'User input added while unprocessed input was existing: "{self[-1]["content"]}" new input '
                     f'ignored: "{text}". Set `overwrite` to True to overwrite unprocessed user input'
                 )
         else:
-            self.new_user_input = text
-
-    def mark_processed(self):
-        """
-        Mark the conversation as processed (moves the content of `new_user_input` to `past_user_inputs`) and empties
-        the `new_user_input` field.
-        """
-        if self.new_user_input:
-            self.past_user_inputs.append(self.new_user_input)
-        self.new_user_input = None
+            self.messages.append({"role": "user", "content": text})
 
     def append_response(self, response: str):
         """
-        Append a response to the list of generated responses.
-
-        Args:
-            response (`str`): The model generated response.
+        This is a legacy method. We recommend just using `add_message` with an appropriate role instead.
         """
-        self.generated_responses.append(response)
+        self.messages.append({"role": "assistant", "content": response})
 
-    def iter_texts(self):
+    def mark_processed(self):
         """
-        Iterates over all blobs of the conversation.
+        This is a legacy method that no longer has any effect, as the Conversation no longer distinguishes between
+        processed and unprocessed user input.
+        """
+        pass
 
-        Returns: Iterator of (is_user, text_chunk) in chronological order of the conversation. `is_user` is a `bool`,
-        `text_chunks` is a `str`.
-        """
-        for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
-            yield True, user_input
-            yield False, generated_response
-        if self.new_user_input:
-            yield True, self.new_user_input
+    def __iter__(self):
+        for message in self.messages:
+            yield message
+
+    def __getitem__(self, item):
+        return self.messages[item]
+
+    def __setitem__(self, key, value):
+        self.messages[key] = value
+
+    def __len__(self):
+        return len(self.messages)
 
     def __repr__(self):
         """
         Generates a string representation of the conversation.
 
-        Return:
+        Returns:
             `str`:
 
-            Example: Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114 user >> Going to the movies tonight - any
-            suggestions? bot >> The Big Lebowski
+        Example:
+            Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114 user: Going to the movies tonight - any suggestions?
+            bot: The Big Lebowski
         """
-        output = f"Conversation id: {self.uuid} \n"
-        for is_user, text in self.iter_texts():
-            name = "user" if is_user else "bot"
-            output += f"{name} >> {text} \n"
+        output = f"Conversation id: {self.uuid}\n"
+        for message in self.messages:
+            output += f"{message['role']}: {message['content']}\n"
         return output
+
+    def iter_texts(self):
+        # This is a legacy method for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead.
+        for message in self.messages:
+            yield message["role"] == "user", message["content"]
+
+    @property
+    def past_user_inputs(self):
+        # This is a legacy property for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead.
+        return [message["content"] for message in self.messages if message["role"] == "user"]
+
+    @property
+    def generated_responses(self):
+        # This is a legacy property for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead.
+        return [message["content"] for message in self.messages if message["role"] == "assistant"]
 
 
 @add_end_docstrings(
@@ -246,18 +262,7 @@ class ConversationalPipeline(Pipeline):
         return outputs
 
     def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
-        if not isinstance(conversation, Conversation):
-            raise ValueError("ConversationalPipeline, expects Conversation as inputs")
-        if conversation.new_user_input is None:
-            raise ValueError(
-                f"Conversation with UUID {type(conversation.uuid)} does not contain new user input to process. "
-                "Add user inputs with the conversation's `add_user_input` method"
-            )
-        if hasattr(self.tokenizer, "_build_conversation_input_ids"):
-            input_ids = self.tokenizer._build_conversation_input_ids(conversation)
-        else:
-            # If the tokenizer cannot handle conversations, we default to only the old version
-            input_ids = self._legacy_parse_and_tokenize(conversation)
+        input_ids = self.tokenizer.apply_chat_template(conversation)
 
         if self.framework == "pt":
             input_ids = torch.LongTensor([input_ids])
@@ -292,19 +297,5 @@ class ConversationalPipeline(Pipeline):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
         )
         conversation = model_outputs["conversation"]
-        conversation.mark_processed()
-        conversation.append_response(answer)
+        conversation.add_message({"role": "assistant", "content": answer})
         return conversation
-
-    def _legacy_parse_and_tokenize(self, conversation: Conversation) -> Dict:
-        eos_token_id = self.tokenizer.eos_token_id
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            if eos_token_id is not None:
-                input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False) + [eos_token_id])
-            else:
-                input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False))
-
-        if len(input_ids) > self.tokenizer.model_max_length:
-            input_ids = input_ids[-self.tokenizer.model_max_length :]
-        return input_ids
