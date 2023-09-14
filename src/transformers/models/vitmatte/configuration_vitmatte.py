@@ -15,6 +15,7 @@
 """ VitMatte model configuration"""
 
 import copy
+from typing import List
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -71,8 +72,8 @@ class VitMatteConfig(PretrainedConfig):
         backbone_config: PretrainedConfig = None,
         hidden_size: int = 384,
         initializer_range: float = 0.02,
-        convstream_hidden_sizes: list[int] = [48, 96, 192],
-        fusion_hidden_sizes: list[int] = [256, 128, 64, 32],
+        convstream_hidden_sizes: List[int] = [48, 96, 192],
+        fusion_hidden_sizes: List[int] = [256, 128, 64, 32],
         **kwargs,
     ):
         super().__init__(**kwargs)
