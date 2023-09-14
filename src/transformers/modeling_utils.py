@@ -128,7 +128,7 @@ def is_fsdp_enabled():
 
 
 def is_fsdp_enabled_and_dist_rank_0():
-    return is_fsdp_enabled() and torch.distributed.get_rank() == 0
+    return is_fsdp_enabled() and int(os.environ.get("LOCAL_RANK", -1)) == 0
 
 
 if is_sagemaker_mp_enabled():

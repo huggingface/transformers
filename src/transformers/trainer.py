@@ -1690,9 +1690,6 @@ class Trainer:
 
         model = self._wrap_model(self.model_wrapped)
 
-        if (is_sagemaker_mp_enabled() or self.is_fsdp_enabled) and resume_from_checkpoint is not None:
-            self._load_from_checkpoint(resume_from_checkpoint, model)
-
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
         # Fairscale Sharded DDP, FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
@@ -1728,16 +1725,20 @@ class Trainer:
         if self.is_deepspeed_enabled:
             self.deepspeed = self.model_wrapped
 
-        # deepspeed ckpt loading
-        if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
-            deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
+        # ckpt loading
+        if resume_from_checkpoint is not None:
+            if self.is_deepspeed_enabled:
+                deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
+            elif (is_sagemaker_mp_enabled() or self.is_fsdp_enabled) and resume_from_checkpoint is not None:
+                self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped)
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
         # important: at this point:
         # self.model         is the Transformers Model
-        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
+        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model),
+        # FSDP(Transformers Model), Dynamo Optimized Module(Transformers Model) etc.
 
         # Train!
         logger.info("***** Running training *****")
