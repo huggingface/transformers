@@ -857,7 +857,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
     ):
         batch_size = input_ids.size()[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        image1_values, image2_values = pixel_values.split(1,dim=1)
+        image1_values, image2_values = pixel_values.split(1, dim=1)
         image1_values = image1_values.squeeze(1)
         image2_values = image2_values.squeeze(1)
         vision_input = torch.cat((image1_values, image2_values), dim=0)

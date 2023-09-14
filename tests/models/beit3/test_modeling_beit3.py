@@ -138,7 +138,7 @@ class Beit3ModelTester:
 
     def prepare_config_and_inputs_for_visual_reasoning(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor([self.batch_size, 2 ,self.in_chans, self.img_size, self.img_size])
+        pixel_values = floats_tensor([self.batch_size, 2, self.in_chans, self.img_size, self.img_size])
         padding_mask = torch.zeros((self.batch_size, self.seq_length))
         config = self.get_config()
         model_input = {
@@ -241,8 +241,9 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 inputs_dict_to_return["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            inputs_dict_to_return["pixel_values"] = torch.cat((inputs_dict["pixel_values"].unsqueeze(1),inputs_dict["pixel_values"].unsqueeze(1))
-                                                              ,dim=1)
+            inputs_dict_to_return["pixel_values"] = torch.cat(
+                (inputs_dict["pixel_values"].unsqueeze(1), inputs_dict["pixel_values"].unsqueeze(1)), dim=1
+            )
             inputs_dict_to_return["padding_mask"] = inputs_dict["padding_mask"]
             inputs_dict_to_return["input_ids"] = inputs_dict["input_ids"]
             return inputs_dict_to_return
