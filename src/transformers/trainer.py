@@ -1729,7 +1729,8 @@ class Trainer:
         if resume_from_checkpoint is not None:
             if self.is_deepspeed_enabled:
                 deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
-            elif (is_sagemaker_mp_enabled() or self.is_fsdp_enabled) and resume_from_checkpoint is not None:
+            elif is_sagemaker_mp_enabled() or self.is_fsdp_enabled:
+                print(f"{self.model_wrapped=}")
                 self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped)
 
         # Check if saved optimizer or scheduler states exist
