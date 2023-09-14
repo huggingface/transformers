@@ -96,7 +96,7 @@ class VitMatteBasicConv3x3(nn.Module):
     Basic convolution layers including: Conv3x3, BatchNorm2d, ReLU layers.
     """
 
-    def __init__(self, in_channels, out_channels, stride=2, padding=1):
+    def __init__(self, config, in_channels, out_channels, stride=2, padding=1):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels=in_channels,
@@ -106,7 +106,7 @@ class VitMatteBasicConv3x3(nn.Module):
             padding=padding,
             bias=False,
         )
-        self.batch_norm = nn.BatchNorm2d(out_channels)
+        self.batch_norm = nn.BatchNorm2d(out_channels, eps=config.batch_norm_eps)
         self.relu = nn.ReLU()
 
     def forward(self, hidden_state):
@@ -134,7 +134,7 @@ class VitMatteConvStream(nn.Module):
         for i in range(len(self.conv_chans) - 1):
             in_chan_ = self.conv_chans[i]
             out_chan_ = self.conv_chans[i + 1]
-            self.convs.append(VitMatteBasicConv3x3(in_chan_, out_chan_))
+            self.convs.append(VitMatteBasicConv3x3(config, in_chan_, out_chan_))
 
     def forward(self, pixel_values):
         out_dict = {"detailed_feature_map_0": pixel_values}
@@ -152,9 +152,9 @@ class VitMatteFusionBlock(nn.Module):
     Simple fusion block to fuse features from ConvStream and Plain Vision Transformer.
     """
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, config, in_channels, out_channels):
         super().__init__()
-        self.conv = VitMatteBasicConv3x3(in_channels, out_channels, stride=1, padding=1)
+        self.conv = VitMatteBasicConv3x3(config, in_channels, out_channels, stride=1, padding=1)
 
     def forward(self, features, detailed_feature_map):
         upscaled_features = nn.functional.interpolate(features, scale_factor=2, mode="bilinear", align_corners=False)
@@ -209,6 +209,7 @@ class VitMatteDetailCaptureModule(nn.Module):
         for i in range(len(self.fusion_channels) - 1):
             self.fusion_blocks.append(
                 VitMatteFusionBlock(
+                    config=config,
                     in_channels=self.fusion_channels[i] + self.conv_chans[-(i + 1)],
                     out_channels=self.fusion_channels[i + 1],
                 )

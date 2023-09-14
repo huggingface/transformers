@@ -44,6 +44,8 @@ class VitMatteConfig(PretrainedConfig):
             The configuration of the backbone model.
         hidden_size (`int`, *optional*, defaults to 384):
             The number of input channels of the decoder.
+        batch_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the batch norm layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         convstream_hidden_sizes (`List[int]`, *optional*, defaults to `[48, 96, 192]`):
@@ -71,6 +73,7 @@ class VitMatteConfig(PretrainedConfig):
         self,
         backbone_config: PretrainedConfig = None,
         hidden_size: int = 384,
+        batch_norm_eps: float = 1e-5,
         initializer_range: float = 0.02,
         convstream_hidden_sizes: List[int] = [48, 96, 192],
         fusion_hidden_sizes: List[int] = [256, 128, 64, 32],
@@ -87,6 +90,7 @@ class VitMatteConfig(PretrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
+        self.batch_norm_eps = batch_norm_eps
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
         self.convstream_hidden_sizes = convstream_hidden_sizes
