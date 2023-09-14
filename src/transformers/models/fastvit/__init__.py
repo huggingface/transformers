@@ -20,7 +20,9 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_fastvit": ["FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastViTConfig", "FastViTOnnxConfig"]}
+_import_structure = {
+    "configuration_fastvit": ["FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastViTConfig", "FastViTOnnxConfig"]
+}
 
 try:
     if not is_torch_available():
@@ -31,7 +33,6 @@ else:
     _import_structure["modeling_fastvit"] = [
         "FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FastViTForImageClassification",
-        "FastViTForMaskedImageModeling",
         "FastViTModel",
         "FastViTPreTrainedModel",
     ]
@@ -48,7 +49,6 @@ if TYPE_CHECKING:
         from .modeling_fastvit import (
             FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FastViTForImageClassification,
-            FastViTForMaskedImageModeling,
             FastViTModel,
             FastViTPreTrainedModel,
         )
