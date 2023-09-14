@@ -107,7 +107,7 @@ class VitMatteBasicConv3x3(nn.Module):
             bias=False,
         )
         self.batch_norm = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU(True)
+        self.relu = nn.ReLU()
 
     def forward(self, hidden_state):
         hidden_state = self.conv(hidden_state)

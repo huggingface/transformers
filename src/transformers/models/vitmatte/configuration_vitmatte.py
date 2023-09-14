@@ -68,11 +68,11 @@ class VitMatteConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config=None,
-        hidden_size=384,
-        initializer_range=0.02,
-        convstream_hidden_sizes=[48, 96, 192],
-        fusion_hidden_sizes=[256, 128, 64, 32],
+        backbone_config: PretrainedConfig = None,
+        hidden_size: int = 384,
+        initializer_range: float = 0.02,
+        convstream_hidden_sizes: list[int] = [48, 96, 192],
+        fusion_hidden_sizes: list[int] = [256, 128, 64, 32],
         **kwargs,
     ):
         super().__init__(**kwargs)
