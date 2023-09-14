@@ -1274,3 +1274,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
         pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template(self):
+        pass
