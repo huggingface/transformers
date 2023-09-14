@@ -520,12 +520,13 @@ class ChannelAttentionTSTEncoder(nn.Module):
         """
         all_hidden_states = []
 
-        if output_hidden_states:
-            for mod in self.layers:
-                src = mod(src)
+        for mod in self.layers:
+            src = mod(src)
+            if output_hidden_states:
                 all_hidden_states.append(src)
-            return src, all_hidden_states
-        return src, None
+        if output_hidden_states is None:
+            return src, None
+        return src, all_hidden_states
 
 
 class ChannelAttentionTSTEncoderLayer(nn.Module):
