@@ -38,6 +38,7 @@ from . import (
     blip_2,
     bloom,
     bridgetower,
+    bros,
     byt5,
     camembert,
     canine,
