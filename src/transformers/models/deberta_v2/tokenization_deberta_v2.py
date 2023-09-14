@@ -23,6 +23,7 @@ import sentencepiece as sp
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 PRETRAINED_VOCAB_FILES_MAP = {
@@ -387,7 +388,9 @@ class SPMTokenizer:
         return self.id(token)
 
     def part_of_whole_word(self, token, is_bos=False):
-        logger.warning_once("The `DebertaTokenizer.part_of_whole_word` method is deprecated and will be removed in `transformers==4.35`")
+        logger.warning_once(
+            "The `DebertaTokenizer.part_of_whole_word` method is deprecated and will be removed in `transformers==4.35`"
+        )
         if is_bos:
             return True
         if (
@@ -418,7 +421,9 @@ class SPMTokenizer:
         return self.ids_to_tokens[id]
 
     def id(self, sym):
-        logger.warning_once("The `DebertaTokenizer.id` method is deprecated and will be removed in `transformers==4.35`")
+        logger.warning_once(
+            "The `DebertaTokenizer.id` method is deprecated and will be removed in `transformers==4.35`"
+        )
         return self.vocab[sym] if sym in self.vocab else 1
 
     def _encode_as_pieces(self, text):

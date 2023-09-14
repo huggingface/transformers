@@ -160,7 +160,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
         for i in range(1, self.offset - 1):
             self._added_tokens_decoder[len(self._added_tokens_decoder)] = AddedToken(f"<unk_{i}>")
 
-
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
@@ -209,7 +208,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
         if index < self.offset:
-
             return self.sp_model.IdToPiece(index)
         token = self.sp_model.IdToPiece(index - self.offset)
         return token

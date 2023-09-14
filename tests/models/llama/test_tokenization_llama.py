@@ -516,7 +516,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
         tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
-        tokenizer.add_tokens(["<REPR_END>"], special_tokens= False)
+        tokenizer.add_tokens(["<REPR_END>"], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
@@ -524,9 +524,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         out2 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=True
         )
-        self.assertEqual(out2, " <REPR_END> inform")
+        # decoding strips the added prefix space.
+        self.assertEqual(out2, "<REPR_END> inform")
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
-        self.assertEqual(input_ids, [29871, 32000, 262, 689])  # 29871 is the spiece underline, '▁'
+        self.assertEqual(input_ids, [29871, 32000, 262, 689])  # 29871 is the spiece underline, '▁' added as it should
 
         out2 = tokenizer.decode(
             tokenizer.encode(" <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False

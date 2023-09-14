@@ -81,8 +81,9 @@ else:
         """
         AddedToken represents a token to be added to a Tokenizer An AddedToken can have special options defining the
         way it should behave.
-        
-        The `normalized` will default to `not special` if it is not specified, similarly to the definition in `tokenizers`.
+
+        The `normalized` will default to `not special` if it is not specified, similarly to the definition in
+        `tokenizers`.
         """
 
         def __init__(
@@ -2335,9 +2336,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             filename_prefix=filename_prefix,
         )
         added_files = special_tokens_map_file
-        if self.get_added_vocab(): 
-            added_files = save_files[-1] + " and " + added_files 
-        logger.warning_once( f"Saving {added_files} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file" )     
+        if self.get_added_vocab():
+            added_files = save_files[-1] + " and " + added_files
+        logger.warning_once(
+            f"Saving {added_files} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file"
+        )
 
         if push_to_hub:
             self._upload_modified_files(

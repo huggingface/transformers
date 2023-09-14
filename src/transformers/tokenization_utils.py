@@ -1000,7 +1000,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if token in legacy_added_tokens:
                 if current_sub_text:
                     string = self.convert_tokens_to_string(current_sub_text)
-                    if len(string)>0:
+                    if len(string) > 0:
                         sub_texts.append(string)
                     current_sub_text = []
                 sub_texts.append(token)
