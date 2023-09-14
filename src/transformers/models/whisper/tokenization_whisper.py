@@ -493,7 +493,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
-    def _basic_normalize(self, text, remove_diacritics=False):
+    @staticmethod
+    def _basic_normalize(text, remove_diacritics=False):
         """
         Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
         multilingual text.
@@ -634,8 +635,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
-            kwargs (additional keyword arguments, *optional*):
-                Will be passed to the underlying model specific decode method.
             output_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
                 timestamps.

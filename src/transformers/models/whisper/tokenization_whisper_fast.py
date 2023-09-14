@@ -407,8 +407,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
+    @staticmethod
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
-    def _basic_normalize(self, text, remove_diacritics=False):
+    def _basic_normalize(text, remove_diacritics=False):
         """
         Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
         multilingual text.
