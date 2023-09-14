@@ -50,10 +50,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         }
 
         outputs = music_generator("This is a test", forward_params=forward_params)
-        self.assertEqual(
-            {"audio": ANY(np.ndarray), "sampling_rate": 32000},
-            outputs,
-        )
+        self.assertEqual({"audio": ANY(np.ndarray), "sampling_rate": 32000},outputs)
 
         # test two examples side-by-side
         outputs = music_generator(["This is a test", "This is a second test"], forward_params=forward_params)
