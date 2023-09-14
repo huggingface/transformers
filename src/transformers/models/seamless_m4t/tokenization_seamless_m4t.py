@@ -209,7 +209,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         language_code.extend(["<MINED_DATA>", "<MMT_BT_DATA>", "<SMT_BT_DATA>"])
 
-        self._additional_special_tokens = language_code  # list(self.fairseq_tokens_to_ids.keys())
+        self._additional_special_tokens = language_code
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
             self._additional_special_tokens.extend(
@@ -254,7 +254,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         tokenizer.fairseq_tokens_to_ids = {"<pad>": 0, "<unk>": 1, "<s>": 2, "</s>": 3}
 
-        language_code = tokenizer.additional_special_tokens
+        language_code = [tok for tok in tokenizer.additional_special_tokens if (tok.startswith("__") and tok.endswith("__"))]
 
         # update languages codes
         tokenizer.lang_code_to_id = {
@@ -263,6 +263,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         tokenizer.id_to_lang_code = {v: k for k, v in tokenizer.lang_code_to_id.items()}
         tokenizer.fairseq_tokens_to_ids.update(tokenizer.lang_code_to_id)
+        
+        current_id = len(tokenizer.sp_model) + len(tokenizer.lang_code_to_id) + tokenizer.fairseq_offset
+        tokenizer.fairseq_tokens_to_ids["<MINED_DATA>"] = current_id
+        tokenizer.fairseq_tokens_to_ids["<MMT_BT_DATA>"] = current_id + 1
+        tokenizer.fairseq_tokens_to_ids["<SMT_BT_DATA>"] = current_id + 2
 
         tokenizer.fairseq_ids_to_tokens = {v: k for k, v in tokenizer.fairseq_tokens_to_ids.items()}
 
@@ -290,7 +295,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + len(self.additional_special_tokens) + self.fairseq_offset
+        return len(self.sp_model) + len(self.fairseq_tokens_to_ids) - 3 # 3 for <unk>, <s> and </s> already in sp_model
 
     def add_special_tokens(self, special_tokens_dict, replace_additional_special_tokens=True) -> int:
         if replace_additional_special_tokens:

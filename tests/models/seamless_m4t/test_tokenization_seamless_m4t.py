@@ -450,6 +450,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
     def test_language_codes(self):
         self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__ace_Latn__"], 256002)
         self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__shn__"], 256152)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__eng__"], 256047)
         self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__fra__"], 256057)
         self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__quy__"], 256144)
 
