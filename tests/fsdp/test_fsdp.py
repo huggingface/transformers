@@ -49,6 +49,11 @@ from transformers.trainer_utils import get_last_checkpoint, set_seed, FSDPOption
 from transformers.utils import WEIGHTS_NAME, is_torch_bf16_gpu_available, is_accelerate_available
 
 
+# default torch.distributed port
+DEFAULT_MASTER_PORT = "10999"
+set_seed(42)
+
+
 def get_master_port(real_launcher=False):
     """
     When using a single gpu launcher emulation (i.e. not deepspeed or python -m torch.distributed)
@@ -111,8 +116,6 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 params = list(itertools.product(sharding_strategies, dtypes))
-
-set_seed(42)
 
 
 @require_accelerate
