@@ -695,7 +695,9 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
             )
 
         # Positional dropout
-        self.positional_dropout = nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
+        self.positional_dropout = (
+            nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
+        )
 
         # Encoder
         self.encoder = ChannelAttentionTSTEncoder(config)
@@ -732,7 +734,8 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
             past_values = self.w_p(past_values)  # x: [bs x nvars  x num_patches x d_model]
 
         if self.use_cls_token:
-            past_values = self.positional_dropout(past_values + self.w_pos[1:, :])  # x: [bs x nvars x num_patches x d_model]
+            # x: [bs x nvars x num_patches x d_model]
+            past_values = self.positional_dropout(past_values + self.w_pos[1:, :])
             # append cls token
             cls_token = self.cls_token + self.w_pos[:1, :]  # cls_token: [1 x 1 x 1 x d_model]
             cls_tokens = cls_token.expand(past_values.shape[0], -1, -1)  # get the same copy for all the batch samples
