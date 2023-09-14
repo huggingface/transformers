@@ -130,7 +130,7 @@ GPGを使用した署名済みコミットの検証などのベストプラク�
 
 TensorFlowおよびFlaxのチェックポイントには影響がなく、`from_pretrained`メソッドの`from_tf`および`from_flax`引数を使用してPyTorchアーキテクチャ内でロードできます。
 
-<Tip>
+</Tip>
 
 一般的に、事前学習済みモデルのインスタンスをロードするために`AutoTokenizer`クラスと`AutoModelFor`クラスの使用をお勧めします。
 これにより、常に正しいアーキテクチャをロードできます。
