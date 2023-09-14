@@ -18,16 +18,13 @@
 import json
 import os
 from functools import lru_cache
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 
@@ -354,10 +351,9 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+    @property
+    def default_chat_template(self):
+        """
+        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
+        """
+        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
