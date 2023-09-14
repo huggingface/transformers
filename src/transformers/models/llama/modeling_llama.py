@@ -410,7 +410,7 @@ class LlamaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class LlamaFlashAttention(nn.Module):
+class LlamaFlashAttention2(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__
@@ -479,7 +479,7 @@ class LlamaFlashAttention(nn.Module):
         use_cache: bool = False,
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # LlamaFlashAttention attention does not support output_attentions
+        # LlamaFlashAttention2 attention does not support output_attentions
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -576,7 +576,7 @@ class LlamaDecoderLayer(nn.Module):
         self.self_attn = (
             LlamaAttention(config=config)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else LlamaFlashAttention(config=config)
+            else LlamaFlashAttention2(config=config)
         )
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

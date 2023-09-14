@@ -544,7 +544,7 @@ class FalconAttention(nn.Module):
                 return output_tensor, present
 
 
-class FalconFlashAttention(nn.Module):
+class FalconFlashAttention2(nn.Module):
     # Copied from transformers.models.falcon.modeling_falcon.FalconAttention.__init__
     def __init__(self, config: FalconConfig):
         super().__init__()
@@ -794,7 +794,7 @@ class FalconDecoderLayer(nn.Module):
         self.self_attention = (
             FalconAttention(config)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else FalconFlashAttention(config)
+            else FalconFlashAttention2(config)
         )
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
