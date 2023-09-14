@@ -141,7 +141,7 @@ class IdeficsVisionEmbeddings(nn.Module):
             if height != self.image_size or width != self.image_size:
                 raise ValueError(
                     f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size}*{self.image_size})."
+                    f" ({self.image_size}*{self.image_size}). You should try to set `interpolate_pos_encoding=True`"
                 )
 
         target_dtype = self.patch_embedding.weight.dtype
