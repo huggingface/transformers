@@ -1283,7 +1283,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if _is_bettertransformer:
             raise ValueError(
-                "Flash Attention 2 and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing ..."
+                "Flash Attention 2 and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
             )
 
         if torch_dtype is None:
