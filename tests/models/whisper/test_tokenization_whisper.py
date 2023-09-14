@@ -52,14 +52,13 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
-    @unittest.skip("TODO @Sanchit. Let's make the CI green in the mean time")
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "!")
         self.assertEqual(vocab_keys[1], '"')
-        self.assertEqual(vocab_keys[-1], "<|notimestamps|>")
-        self.assertEqual(len(vocab_keys), 50364)
+        self.assertEqual(vocab_keys[-1], "<|30.00|>")
+        self.assertEqual(len(vocab_keys), 51865)
 
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 50258)
@@ -117,7 +116,6 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             expected_encoding=expected_encoding, model_name="openai/whisper-tiny.en", padding=False
         )
 
-    @unittest.skip("TODO @Sanchit. Let's make the CI green in the mean time")
     def test_output_offsets(self):
         tokenizer = self.get_tokenizer()
         previous_sequence = [51492, 406, 3163, 1953, 466, 13, 51612, 51612]
@@ -400,7 +398,6 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         transcription = multilingual_tokenizer.batch_decode(batch_encoding, skip_special_tokens=True)
         self.assertListEqual(batch, transcription)
 
-    @unittest.skip("TODO @Sanchit. Let's make the CI green in the mean time")
     def test_offset_decoding(self):
         multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
         # fmt: off
