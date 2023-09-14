@@ -61,7 +61,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}  # , "pad_token": "<pad>"}
+        self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
@@ -73,7 +73,6 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
-        return self.tokenizer_class(self.vocab_file, self.merges_file, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)

@@ -3649,9 +3649,9 @@ class TokenizerTesterMixin:
                     self.assertTrue(special_token_id in cr_output)
 
     def test_special_tokens_initialization_with_non_empty_additional_special_tokens(self):
-        # this test no longer support rust tokenizers. Because the only file that should be looked
-        # at by the fast tokenizer with the new saving format is `tokenizer_config.json`
-        # the previous behaviour is very strange too. Fast tokenizer should not save 3 files, but just one. Can never do slow from fast.
+        # This test no longer support rust tokenizers, because the only file that should be looked
+        # at by the fast tokenizer with the new saving format is `tokenizer_config.json`.
+        # The previous behaviour is very strange too. Fast tokenizer should not save 3 files, but just one. Can never do slow from fast.
         tokenizer_list = []
         if self.test_slow_tokenizer:
             tokenizer_list.append((self.tokenizer_class, self.get_tokenizer()))

@@ -452,7 +452,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if new_tokens is None:
             return added_tokens
         current_vocab = self.get_vocab().copy()
-        new_idx = len(set(current_vocab.keys()))  # only call this once, len gives the last index + 1
+        new_idx = len(current_vocab)  # only call this once, len gives the last index + 1
         for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
@@ -979,7 +979,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
-        if not spaces_between_special_tokens:
+        if spaces_between_special_tokens:
             logger.warning_once(
                 "spaces_between_special_tokens is deprecated and will be removed in transformers v5. It was adding spaces between `added_tokens`, not special tokens, "
                 "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
