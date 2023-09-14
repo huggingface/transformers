@@ -5,6 +5,9 @@
     title: インストール
   title: はじめに
 - sections:
+  - local: Quick tour
+    title: クイックツアー
+- sections:
   - local: accelerate
     title: 🤗 Accelerate を用いた分散学習
   title: チュートリアル
