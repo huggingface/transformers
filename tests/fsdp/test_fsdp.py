@@ -96,6 +96,19 @@ if is_accelerate_available():
 
     require_fsdp_version = partial(require_fsdp, min_version=FSDP_PYTORCH_VERSION)
 
+
+def get_launcher(distributed=False, use_accelerate=False):
+    # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
+    # - it won't be able to handle that
+    # 2. for now testing with just 2 gpus max (since some quality tests may give different
+    # results with mode gpus because we use very little data)
+    num_gpus = min(2, get_gpu_count()) if distributed else 1
+    master_port = get_master_port(real_launcher=True)
+    if use_accelerate:
+        return f"accelerate launch --num_processes={num_gpus} --main_process_port={master_port}".split()
+    return f"torchrun --nnodes 1 --nproc-per-node {num_gpus} --master-port {master_port}".split()
+
+
 FP16 = "fp16"
 BF16 = "bf16"
 if is_torch_bf16_gpu_available():
@@ -154,39 +167,19 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             "train_len": 128,
             "save_steps": 5,
             "learning_rate": 0.1,
-            "fsdp": f"{sharding_strategy} auto_wrap",
+            "fsdp": f"{sharding_strategy} offload auto_wrap",
             "fsdp_config": self.fsdp_config,
         }
         kwargs[dtype] = True
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
             self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.AUTO_WRAP)
-            for k, v in trainer.args.fsdp_config.items():
-                self.assertEqual(v, self.fsdp_config[k])
-            self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
-            trainer.train()
-
-    def test_fsdp_offload(self):
-        output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
-        kwargs = {
-            "output_dir": output_dir,
-            "train_len": 128,
-            "save_steps": 5,
-            "learning_rate": 0.1,
-            "fsdp": f"full_shard offload auto_wrap",
-            "fsdp_config": self.fsdp_config,
-        }
-        with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], FSDPOption.FULL_SHARD)
             self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
             self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
             for k, v in trainer.args.fsdp_config.items():
                 self.assertEqual(v, self.fsdp_config[k])
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
             trainer.train()
-            print(trainer.model_wrapped)
 
-    def test_can_resume_training_normal(self):
+    def test_basic_run(self):
         pass

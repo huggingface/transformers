@@ -2128,6 +2128,8 @@ class Trainer:
                     # release memory
                     del state_dict
             elif self.is_fsdp_enabled:
+                print(model)
+                print(self.accelerator.state.fsdp_plugin)
                 load_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, model, resume_from_checkpoint)
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
