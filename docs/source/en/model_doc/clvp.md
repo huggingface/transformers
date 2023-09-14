@@ -39,13 +39,10 @@ Tips:
 
 Brief Explanation:
 
-First the [`CLVPTokenizer`] tokenizes the `text` and [`CLVPFeatureExtractor`] extracts `log-melspectrogram` from the
-desired `audio`. Then both of the text tokens and audio representations are passed to the [`CLVPConditioningEncoder`] 
-which converts both of them into `conditioning_embeds` which preserves the text information as well as the properties 
-of the voice. [`CLVPAutoRegressiveLMHeadModel`] uses those embeds to generate multiple `speech candidates`. 
-Now the speech encoder converts each speech candidate into a vector representation and the text encoder converts the 
-text tokens into a vector with similar dimension. At the end we compare each speech vector with the text vector to see
-which speech vector is most similar to the text.
+Firstly, the [`CLVPTokenizer`] tokenizes the `text` and the [`CLVPFeatureExtractor`] extracts the `log-melspectrogram` from the desired `audio`. 
+Next, the text tokens and audio representations are passed to the [`CLVPConditioningEncoder`], which converts them into `conditioning_embeds` that preserve the text information as well as the voice properties. The [`CLVPAutoRegressiveLMHeadModel`] uses these embeds to generate multiple `speech candidates`. 
+The speech encoder converts each speech candidate into a vector representation, and the text encoder converts the text tokens into the same latent space. 
+At the end, we compare each speech vector with the text vector to see which speech vector is most similar to the text vector. 
 
 
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).

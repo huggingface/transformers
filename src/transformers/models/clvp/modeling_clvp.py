@@ -276,7 +276,7 @@ class CLVPRotaryPositionalEmbedding(nn.Module):
 
 class CLVPSelfAttention(nn.Module):
     """
-    Multi-headed attention to combine Absolute and Rotary Positional Embeddings into a single Attentrion module.
+    Multi-headed attention to combine Absolute and Rotary Positional Embeddings into a single Attention module.
     """
 
     def __init__(self, config, apply_hidden_states_norm=False):
@@ -510,9 +510,18 @@ class CLVPConditioningEncoder(nn.Module):
 
         text_embeds = token_embeds + position_embeds
 
-        # broadcast it for multiple batches of text
         mel_spec = mel_spec.unsqueeze(1)
-        mel_spec = mel_spec.repeat(text_embeds.shape[0], 1, 1)
+        # repeat if there is either (1 text vs N audios) or (N texts vs 1 audio)
+        if text_embeds.shape[0] == 1 and mel_spec.shape[0] != 1:
+            text_embeds = text_embeds.repeat(mel_spec.shape[0], 1, 1)
+        elif text_embeds.shape[0] != 1 and mel_spec.shape[0] == 1:
+            mel_spec = mel_spec.repeat(text_embeds.shape[0], 1, 1)
+        # If there is N texts and M audios we will raise error since the number of text and audio must be same.
+        elif text_embeds.shape[0] != mel_spec.shape[0]:
+            raise ValueError(
+                f"The number of texts and number of audios must be same. "
+                f"Found {text_embeds.shape[0]} texts vs {mel_spec.shape[0]} audios"
+            )
 
         return torch.concat([mel_spec, text_embeds], dim=1)
 
