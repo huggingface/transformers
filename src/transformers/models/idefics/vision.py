@@ -112,12 +112,21 @@ class IdeficsVisionEmbeddings(nn.Module):
         sqrt_num_positions = math.sqrt(num_positions)
         patch_pos_embed = patch_pos_embed.reshape(1, int(sqrt_num_positions), int(sqrt_num_positions), embed_dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        fp32_upcasting = patch_pos_embed.dtype == torch.bfloat16
+        if fp32_upcasting:
+            logger.warning_once(
+                "Upcasting patch_pos_embed to fp32 for interpolation since upsample_bicubic2d_out_frame in nn.functional.interpolate"
+                "is not implemented for 'BFloat16'. This will result in a slight overhead"
+            )
+            patch_pos_embed = patch_pos_embed.to(torch.float)
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
             scale_factor=(num_h_patches / sqrt_num_positions, num_w_patches / sqrt_num_positions),
             mode="bicubic",
             align_corners=False,
         )
+        if fp32_upcasting:
+            patch_pos_embed = patch_pos_embed.to(torch.bfloat16)
         if int(num_h_patches) != patch_pos_embed.shape[-2] or int(num_w_patches) != patch_pos_embed.shape[-1]:
             raise ValueError(
                 f"Number of patches for images ({int(num_h_patches), int(num_w_patches)}) don't match the "
