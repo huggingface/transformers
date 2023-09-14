@@ -18,3 +18,6 @@
 - sections:
   - local: Preprocessing
     title: データ前処理
+    - sections:
+  - local: Training
+    title: "訓練
