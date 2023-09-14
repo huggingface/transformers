@@ -458,7 +458,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("bloom", "BLOOM"),
         ("bort", "BORT"),
         ("bridgetower", "BridgeTower"),
-        ("bros", "Bros"),
+        ("bros", "BROS"),
         ("byt5", "ByT5"),
         ("camembert", "CamemBERT"),
         ("canine", "CANINE"),

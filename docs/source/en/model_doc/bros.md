@@ -18,7 +18,7 @@ The BROS model was proposed in [BROS: A Pre-trained Language Model Focusing on T
 
 BROS stands for *BERT Relying On Spatiality*. It is an encoder-only Transformer model that takes a sequence of tokens and their bounding boxes as inputs and outputs a sequence of hidden states. BROS encode relative spatial information instead of using absolute spatial information.
 
-It is pre-trained with two objectives: a token-masked LM (TMLM) used in BERT, and a novel area-masked LM (AMLM)
+It is pre-trained with two objectives: a token-masked language modeling objective (TMLM) used in BERT, and a novel area-masked language modeling objective (AMLM)
 In TMLM, tokens are randomly masked, and the model predicts the masked tokens using spatial information and other unmasked tokens.
 AMLM is a 2D version of TMLM. It randomly masks text tokens and predicts with the same information as TMLM, but it masks text blocks (areas).
 
