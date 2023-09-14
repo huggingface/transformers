@@ -1329,7 +1329,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
             hidden_states = backbone_hidden_states
 
-        hidden_states = self.neck(hidden_states, None)
+        hidden_states = self.neck(hidden_states=hidden_states, cls_tokens=None)
 
         logits = self.head(hidden_states)
 

@@ -254,7 +254,7 @@ class DPTImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
-        height, width = image.shape[:2] if input_data_format == ChannelDimension.LAST else image.shape[1:]
+        height, width = get_image_size(image, input_data_format)
 
         pad_size_left, pad_size_right = _get_pad(height, multiple)
         pad_size_top, pad_size_bottom = _get_pad(width, multiple)
