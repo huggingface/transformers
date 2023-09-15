@@ -281,6 +281,8 @@ Instruction: Classify the following image into a single category from the follow
 Category: Vegetables
 ```  
 
+In the example above we instruct the model to classify the image into a single category, however, you can also prompt the model to do rank classification.
+
 ## Image-guided text generation
 
 For more creative applications, you can use image-guided text generation to generate text based on an image. This can be 
