@@ -1123,12 +1123,14 @@ class BarkFineModel(BarkPreTrainedModel):
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
         model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        if new_num_tokens is None:
+        if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
         # Update base model and current model config
         self.config.output_vocab_size = model_embeds[0].weight.shape[0]
+        self.config.vocab_size = model_embeds[0].weight.shape[0]
         self.output_vocab_size = model_embeds[0].weight.shape[0]
+        self.vocab_size = model_embeds[0].weight.shape[0]
 
         # Tie weights again if needed
         self.tie_weights()
