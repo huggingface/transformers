@@ -260,11 +260,6 @@ def remove_slice_from_lines(lines, clean_text, sli) -> str:
     Returns:
         str: The removed slice of text as a single string.
     """
-    try:
-        from Levenshtein import ratio
-    except Exception:
-        raise ImportError("Postprocessing requires the `python-Levenshtein` package.")
-
     base = clean_text[sli[0]]
     section = list(sli)
     check_start_flag = False
