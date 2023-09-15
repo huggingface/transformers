@@ -55,6 +55,15 @@ WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> torch.Tensor:
+    """Returns sinusoids for positional embedding"""
+    assert channels % 2 == 0
+    log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
+    inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
+    scaled_time = torch.arange(length).view(-1, 1) * inv_timescales.view(1, -1)
+    return torch.cat([scaled_time.sin(), scaled_time.cos()], dim=1)
+
+
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
@@ -665,7 +674,12 @@ class WhisperPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            if not module.weight.requires_grad:
+                # sinusoidal positional encodings used in WhisperEncoder
+                with torch.no_grad():
+                    module.weight.copy_(sinusoids(*module.weight.shape))
+            else:
+                module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
