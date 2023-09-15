@@ -1576,7 +1576,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         all_inputs = []
         all_masks = []
 
-        for i in range(pixel_values.shape[0]):
+        for i in range(batch_size):
             pixel_values0 = pixel_values[i]
 
             image_embeds = self.vision_model(pixel_values0, return_dict=True).last_hidden_state
