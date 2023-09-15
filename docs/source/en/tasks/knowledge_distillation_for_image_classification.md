@@ -71,24 +71,31 @@ class ImageDistilTrainer(Trainer):
         super().__init__(*args, **kwargs)
         self.teacher = teacher_model
         self.student = student_model
+        self.loss_function = nn.KLDivLoss(reduction="batchmean")
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.teacher.to(device)
         self.teacher.eval()
+        self.temperature = temperature
+        self.lambda_param = lambda_param
 
     def compute_loss(self, student, inputs, return_outputs=False):
-        lambda_param = 0.5
-        temperature = 5
         student_output = self.student(**inputs)
 
         with torch.no_grad():
           teacher_output = self.teacher(**inputs)
 
-        loss_function = nn.KLDivLoss(reduction="batchmean")
-        loss_logits = (loss_function(
-            F.log_softmax(student_output.logits / temperature, dim=-1),
-            F.softmax(teacher_output.logits / temperature, dim=-1)) * (temperature ** 2))
+        # Compute soft targets for teacher and student
+        soft_teacher = F.softmax(teacher_output.logits / self.temperature, dim=-1)
+        soft_student = F.log_softmax(student_output.logits / self.temperature, dim=-1)
 
-        loss = lambda_param * student_output.loss + (1. - lambda_param) * loss_logits
+        # Compute the loss
+        distillation_loss = self.loss_function(soft_student, soft_teacher) * (self.temperature ** 2)
+
+        # Compute the true label loss
+        student_target_loss = student_output.loss
+
+        # Calculate final loss
+        loss = (1. - self.lambda_param) * student_target_loss + self.lambda_param * distillation_loss
         return (loss, student_output) if return_outputs else loss
 ```
 
@@ -157,14 +164,16 @@ Let's initialize the `Trainer` with the training arguments we defined.
 
 ```python
 trainer = ImageDistilTrainer(
-    student_model,
-    training_args,
+    student_model=student_model,
     teacher_model=teacher_model,
+    training_args=training_args,
     train_dataset=processed_datasets["train"],
     eval_dataset=processed_datasets["validation"],
     data_collator=data_collator,
     tokenizer=teacher_extractor,
     compute_metrics=compute_metrics,
+    temperature=5,
+    lambda_param=0.5
 )
 ```
 
@@ -180,4 +189,4 @@ We can evaluate the model on the test set.
 trainer.evaluate(processed_datasets["test"])
 ```
 
-On test set, our model reaches 65 percent accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on beans dataset from scratch with same hyperparameters and observed 63 percent accuracy on test set. We invite the readers to try different pre-trained teacher models, student architectures, distillation parameters and report their findings.
+On test set, our model reaches 65 percent accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on beans dataset from scratch with same hyperparameters and observed 63 percent accuracy on test set. We invite the readers to try different pre-trained teacher models, student architectures, distillation parameters and report their findings. The training logs can be found in [this repository](https://huggingface.co/merve/resnet-mobilenet-beans).
