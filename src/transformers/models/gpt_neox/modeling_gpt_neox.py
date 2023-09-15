@@ -285,7 +285,7 @@ def attention_mask_func(attention_scores, ltor_mask):
     attention_scores.masked_fill_(~ltor_mask, torch.finfo(attention_scores.dtype).min)
     return attention_scores
 
-
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LlamaRotary->GPTNeoXRotary
 class GPTNeoXRotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -308,8 +308,8 @@ class GPTNeoXRotaryEmbedding(torch.nn.Module):
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()[None, None, :, :].to(dtype=dtype)
-        self.sin_cached = emb.sin()[None, None, :, :].to(dtype=dtype)
+        self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -321,11 +321,11 @@ class GPTNeoXRotaryEmbedding(torch.nn.Module):
             self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
         )
 
-
+# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->GPTNeoX
 class GPTNeoXLinearScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
     """GPTNeoXRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def __init__(self, dim, max_position_embeddings, base=10000, device=None, scaling_factor=1.0):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
@@ -337,14 +337,14 @@ class GPTNeoXLinearScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()[None, None, :, :].to(dtype)
-        self.sin_cached = emb.sin()[None, None, :, :].to(dtype)
+        self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
-
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->GPTNeoX
 class GPTNeoXDynamicNTKScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
     """GPTNeoXRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def __init__(self, dim, max_position_embeddings, base=10000, device=None, scaling_factor=1.0):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
@@ -356,15 +356,15 @@ class GPTNeoXDynamicNTKScalingRotaryEmbedding(GPTNeoXRotaryEmbedding):
                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
             inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
-            self.register_buffer("inv_freq", inv_freq)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()[None, None, :, :].to(dtype)
-        self.sin_cached = emb.sin()[None, None, :, :].to(dtype)
+        self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
 
 def rotate_half(x):
