@@ -12,42 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import dataclasses
-import io
 import itertools
-import json
 import os
-import unittest
-from copy import deepcopy
 from functools import partial
 
-import datasets
 from parameterized import parameterized
 
 import tests.trainer.test_trainer
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
-from transformers import AutoModel, TrainingArguments, is_torch_available, logging
-from transformers.trainer_callback import TrainerState
-
+from transformers import is_torch_available
 from transformers.testing_utils import (
-    CaptureLogger,
-    CaptureStd,
-    CaptureStderr,
-    LoggingLevel,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
     mockenv_context,
-    require_deepspeed,
-    require_optuna,
-    require_torch_gpu,
     require_accelerate,
     require_fsdp,
+    require_torch_gpu,
     require_torch_multi_gpu,
     slow,
 )
-from transformers.trainer_utils import get_last_checkpoint, set_seed, FSDPOption
-from transformers.utils import WEIGHTS_NAME, is_torch_bf16_gpu_available, is_accelerate_available
+from transformers.trainer_callback import TrainerState
+from transformers.trainer_utils import FSDPOption, set_seed
+from transformers.utils import is_accelerate_available, is_torch_bf16_gpu_available
 
 
 # default torch.distributed port
@@ -88,11 +75,9 @@ if is_torch_available():
 
 if is_accelerate_available():
     from accelerate.utils.constants import (
-        FSDP_AUTO_WRAP_POLICY,
-        FSDP_BACKWARD_PREFETCH,
+        FSDP_PYTORCH_VERSION,
         FSDP_SHARDING_STRATEGY,
         FSDP_STATE_DICT_TYPE,
-        FSDP_PYTORCH_VERSION,
     )
 
     require_fsdp_version = partial(require_fsdp, min_version=FSDP_PYTORCH_VERSION)
@@ -208,7 +193,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --save_strategy epoch
             --do_eval
             --evaluation_strategy epoch
-            --load_best_model_at_end 
+            --load_best_model_at_end
             --skip_memory_metrics False
             --report_to none
         """.split()
@@ -243,7 +228,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --save_strategy epoch
             --do_eval
             --evaluation_strategy epoch
-            --load_best_model_at_end 
+            --load_best_model_at_end
             --skip_memory_metrics False
             --report_to none
             --{dtype}

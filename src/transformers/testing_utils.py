@@ -61,6 +61,7 @@ from .utils import (
     is_essentia_available,
     is_faiss_available,
     is_flax_available,
+    is_fsdp_available,
     is_ftfy_available,
     is_ipex_available,
     is_jieba_available,
@@ -105,7 +106,6 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
-    is_fsdp_available,
     strtobool,
 )
 
