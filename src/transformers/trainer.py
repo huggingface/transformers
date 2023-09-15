@@ -2082,16 +2082,23 @@ class Trainer:
         safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
 
-        if not any(
-            os.path.isfile(f)
-            for f in [
-                weights_file,
-                safe_weights_file,
-                weights_index_file,
-                safe_weights_index_file,
-                adapter_weights_file,
-                adapter_safe_weights_file,
-            ]
+        if not (
+            any(
+                os.path.isfile(f)
+                for f in [
+                    weights_file,
+                    safe_weights_file,
+                    weights_index_file,
+                    safe_weights_index_file,
+                    adapter_weights_file,
+                    adapter_safe_weights_file,
+                ]
+            )
+            or any(
+                WEIGHTS_NAME.split(".")[0] in folder_name
+                for folder_name in os.listdir(resume_from_checkpoint)
+                if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
+            )
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2179,6 +2186,10 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if self.is_deepspeed_enabled:
             deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
+        elif self.is_fsdp_enabled:
+            load_result = load_fsdp_model(
+                self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
+            )
         elif (
             os.path.exists(best_model_path)
             or os.path.exists(best_safe_model_path)
@@ -2206,10 +2217,6 @@ class Trainer:
 
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
-            elif self.is_fsdp_enabled:
-                load_result = load_fsdp_model(
-                    self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
-                )
             else:
                 if is_peft_available() and isinstance(model, PeftModel):
                     # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
@@ -2498,6 +2505,11 @@ class Trainer:
             else (
                 os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
                 or os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME_BIN))
+                or any(
+                    OPTIMIZER_NAME_BIN.split(".")[0] in folder_name
+                    for folder_name in os.listdir(checkpoint)
+                    if os.path.isdir(os.path.join(checkpoint, folder_name))
+                )
             )
         )
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
