@@ -1319,6 +1319,21 @@ class GenerationMixin:
 
         return model_kwargs
 
+    def _extend_token_type_ids(self, model_kwargs: Dict[str, Any], new_length: int) -> Dict[str, Any]:
+        if "token_type_ids" not in model_kwargs or model_kwargs["token_type_ids"] is None:
+            return model_kwargs
+
+        token_type_ids = model_kwargs["token_type_ids"]
+        final_token_type = token_type_ids[:, -1].unsqueeze(-1)
+        extension_length = new_length - token_type_ids.shape[1]
+        token_type_copies = final_token_type.repeat(1, extension_length)
+        model_kwargs["token_type_ids"] = torch.cat(
+            [model_kwargs["token_type_ids"], token_type_copies],
+            dim=-1,
+        )
+
+        return model_kwargs
+
     @torch.no_grad()
     def generate(
         self,
@@ -4466,14 +4481,7 @@ class GenerationMixin:
             # 2.1. Prepare the model inputs
             candidate_kwargs = copy.deepcopy(model_kwargs)
             candidate_kwargs = self._extend_attention_mask(candidate_kwargs, candidate_input_ids.shape[1])
-            if "token_type_ids" in candidate_kwargs and candidate_kwargs["token_type_ids"] is not None:
-                final_token_type = candidate_kwargs["token_type_ids"][:, -1].unsqueeze(-1)
-                n_copies = candidate_input_ids.shape[1] - candidate_kwargs["token_type_ids"].shape[1]
-                token_type_copies = final_token_type.repeat(1, n_copies)
-                candidate_kwargs["token_type_ids"] = torch.cat(
-                    [candidate_kwargs["token_type_ids"], token_type_copies],
-                    dim=-1,
-                )
+            candidate_kwargs = self._extend_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
 
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
 
