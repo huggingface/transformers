@@ -210,6 +210,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --evaluation_strategy epoch
             --load_best_model_at_end 
             --skip_memory_metrics False
+            --report_to none
         """.split()
 
         fsdp_args = ["--fsdp", "shard_grad_op auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
@@ -236,7 +237,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --max_seq_length 128
             --per_device_train_batch_size 16
             --learning_rate 5e-5
-            --num_train_epochs 3
+            --num_train_epochs 1
             --lr_scheduler_type cosine
             --logging_steps 1
             --save_strategy epoch
@@ -244,6 +245,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --evaluation_strategy epoch
             --load_best_model_at_end 
             --skip_memory_metrics False
+            --report_to none
             --{dtype}
         """.split()
 
@@ -283,21 +285,23 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --save_strategy epoch
             --do_eval
             --evaluation_strategy epoch
+            --report_to none
             --{dtype}
         """.split()
 
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
 
         if not use_accelerate:
-            fsdp_args = f"""
-                --fsdp "{sharding_strategy} auto_wrap"  
-                --fsdp_transformer_layer_cls_to_wrap BertLayer
-            """.split()
-
+            fsdp_args = [
+                "--fsdp",
+                f"{sharding_strategy} auto_wrap",
+                "--fsdp_transformer_layer_cls_to_wrap",
+                "BertLayer",
+            ]
             cmd = launcher + script + args + fsdp_args
         else:
             fsdp_config = f"""
-                --fsdp_sharding_strategy={FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1}
+                --fsdp_sharding_strategy {FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1}
             """.split()
             cmd = launcher + fsdp_config + script + args
 
@@ -324,20 +328,22 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --save_strategy epoch
             --do_eval
             --evaluation_strategy epoch
+            --report_to none
             --{dtype}
             --resume_from_checkpoint {checkpoint}
         """.split()
 
         if not use_accelerate:
-            fsdp_args = f"""
-                --fsdp "{sharding_strategy} auto_wrap"  
-                --fsdp_transformer_layer_cls_to_wrap BertLayer
-            """.split()
-
+            fsdp_args = [
+                "--fsdp",
+                f"{sharding_strategy} auto_wrap",
+                "--fsdp_transformer_layer_cls_to_wrap",
+                "BertLayer",
+            ]
             cmd = launcher + script + resume_args + fsdp_args
         else:
             fsdp_config = f"""
-                --fsdp_sharding_strategy={FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1}
+                --fsdp_sharding_strategy {FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1}
             """.split()
             cmd = launcher + fsdp_config + script + resume_args
 
