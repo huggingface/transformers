@@ -23,116 +23,117 @@ logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.univnet")
 
 
-def load_weights(checkpoint, hf_model, config):
-    hf_model.apply_weight_norm()
+def get_kernel_predictor_key_mapping(config: UnivNetGanConfig, old_prefix: str = "", new_prefix: str = ""):
+    mapping = {}
+    # Initial conv layer
+    mapping[f"{old_prefix}.input_conv.0.weight_g"] = f"{new_prefix}.input_conv.weight_g"
+    mapping[f"{old_prefix}.input_conv.0.weight_v"] = f"{new_prefix}.input_conv.weight_v"
+    mapping[f"{old_prefix}.input_conv.0.bias"] = f"{new_prefix}.input_conv.bias"
 
-    # Convert initial conv layer
-    hf_model.conv_pre.weight_g.data = checkpoint["conv_pre.weight_g"]
-    hf_model.conv_pre.weight_v.data = checkpoint["conv_pre.weight_v"]
-    hf_model.conv_pre.bias.data = checkpoint["conv_pre.bias"]
+    # Kernel predictor resnet blocks
+    for i in range(config.kernel_predictor_num_blocks):
+        mapping[f"{old_prefix}.residual_convs.{i}.1.weight_g"] = f"{new_prefix}.resblocks.{i}.conv1.weight_g"
+        mapping[f"{old_prefix}.residual_convs.{i}.1.weight_v"] = f"{new_prefix}.resblocks.{i}.conv1.weight_v"
+        mapping[f"{old_prefix}.residual_convs.{i}.1.bias"] = f"{new_prefix}.resblocks.{i}.conv1.bias"
 
-    # Convert location variable convolution (LVC) blocks
+        mapping[f"{old_prefix}.residual_convs.{i}.3.weight_g"] = f"{new_prefix}.resblocks.{i}.conv2.weight_g"
+        mapping[f"{old_prefix}.residual_convs.{i}.3.weight_v"] = f"{new_prefix}.resblocks.{i}.conv2.weight_v"
+        mapping[f"{old_prefix}.residual_convs.{i}.3.bias"] = f"{new_prefix}.resblocks.{i}.conv2.bias"
+
+    # Kernel output conv
+    mapping[f"{old_prefix}.kernel_conv.weight_g"] = f"{new_prefix}.kernel_conv.weight_g"
+    mapping[f"{old_prefix}.kernel_conv.weight_v"] = f"{new_prefix}.kernel_conv.weight_v"
+    mapping[f"{old_prefix}.kernel_conv.bias"] = f"{new_prefix}.kernel_conv.bias"
+
+    # Bias output conv
+    mapping[f"{old_prefix}.bias_conv.weight_g"] = f"{new_prefix}.bias_conv.weight_g"
+    mapping[f"{old_prefix}.bias_conv.weight_v"] = f"{new_prefix}.bias_conv.weight_v"
+    mapping[f"{old_prefix}.bias_conv.bias"] = f"{new_prefix}.bias_conv.bias"
+
+    return mapping
+
+
+def get_key_mapping(config: UnivNetGanConfig):
+    mapping = {}
+
+    # NOTE: inital conv layer keys are the same
+
+    # LVC Residual blocks
     for i in range(len(config.resblock_stride_sizes)):
-        # Convert LVCBlock initial convt layer
-        hf_model.resblocks[i].convt_pre.weight_g.data = checkpoint[f"res_stack.{i}.convt_pre.1.weight_g"]
-        hf_model.resblocks[i].convt_pre.weight_v.data = checkpoint[f"res_stack.{i}.convt_pre.1.weight_v"]
-        hf_model.resblocks[i].convt_pre.bias.data = checkpoint[f"res_stack.{i}.convt_pre.1.bias"]
+        # LVCBlock initial convt layer
+        mapping[f"res_stack.{i}.convt_pre.1.weight_g"] = f"resblocks.{i}.convt_pre.weight_g"
+        mapping[f"res_stack.{i}.convt_pre.1.weight_v"] = f"resblocks.{i}.convt_pre.weight_v"
+        mapping[f"res_stack.{i}.convt_pre.1.bias"] = f"resblocks.{i}.convt_pre.bias"
 
-        # Convert kernel predictor
-        hf_model.resblocks[i].kernel_predictor.input_conv.weight_g.data = checkpoint[
-            f"res_stack.{i}.kernel_predictor.input_conv.0.weight_g"
-        ]
-        hf_model.resblocks[i].kernel_predictor.input_conv.weight_v.data = checkpoint[
-            f"res_stack.{i}.kernel_predictor.input_conv.0.weight_v"
-        ]
-        hf_model.resblocks[i].kernel_predictor.input_conv.bias.data = checkpoint[
-            f"res_stack.{i}.kernel_predictor.input_conv.0.bias"
-        ]
+        # Kernel predictor
+        kernel_predictor_mapping = get_kernel_predictor_key_mapping(
+            config, old_prefix=f"res_stack.{i}.kernel_predictor", new_prefix=f"resblocks.{i}.kernel_predictor"
+        )
+        mapping.update(kernel_predictor_mapping)
 
-        for j in range(config.kernel_predictor_num_blocks):
-            hf_model.resblocks[i].kernel_predictor.resblocks[j].conv1.weight_g.data = checkpoint[
-                f"res_stack.{i}.kernel_predictor.residual_convs.{j}.1.weight_g"
-            ]
-            hf_model.resblocks[i].kernel_predictor.resblocks[j].conv1.weight_v.data = checkpoint[
-                f"res_stack.{i}.kernel_predictor.residual_convs.{j}.1.weight_v"
-            ]
-            hf_model.resblocks[i].kernel_predictor.resblocks[j].conv1.bias.data = checkpoint[
-                f"res_stack.{i}.kernel_predictor.residual_convs.{j}.1.bias"
-            ]
-
-            hf_model.resblocks[i].kernel_predictor.resblocks[j].conv2.weight_g.data = checkpoint[
-                f"res_stack.{i}.kernel_predictor.residual_convs.{j}.3.weight_g"
-            ]
-            hf_model.resblocks[i].kernel_predictor.resblocks[j].conv2.weight_v.data = checkpoint[
-                f"res_stack.{i}.kernel_predictor.residual_convs.{j}.3.weight_v"
-            ]
-            hf_model.resblocks[i].kernel_predictor.resblocks[j].conv2.bias.data = checkpoint[
-                f"res_stack.{i}.kernel_predictor.residual_convs.{j}.3.bias"
-            ]
-
-        hf_model.resblocks[i].kernel_predictor.kernel_conv.weight_g.data = checkpoint[
-            f"res_stack.{i}.kernel_predictor.kernel_conv.weight_g"
-        ]
-        hf_model.resblocks[i].kernel_predictor.kernel_conv.weight_v.data = checkpoint[
-            f"res_stack.{i}.kernel_predictor.kernel_conv.weight_v"
-        ]
-        hf_model.resblocks[i].kernel_predictor.kernel_conv.bias.data = checkpoint[
-            f"res_stack.{i}.kernel_predictor.kernel_conv.bias"
-        ]
-
-        hf_model.resblocks[i].kernel_predictor.bias_conv.weight_g.data = checkpoint[
-            f"res_stack.{i}.kernel_predictor.bias_conv.weight_g"
-        ]
-        hf_model.resblocks[i].kernel_predictor.bias_conv.weight_v.data = checkpoint[
-            f"res_stack.{i}.kernel_predictor.bias_conv.weight_v"
-        ]
-        hf_model.resblocks[i].kernel_predictor.bias_conv.bias.data = checkpoint[
-            f"res_stack.{i}.kernel_predictor.bias_conv.bias"
-        ]
-
-        # Convert LVC residual blocks
+        # LVC Residual blocks
         for j in range(len(config.resblock_dilation_sizes[i])):
-            hf_model.resblocks[i].resblocks[j].conv.weight_g.data = checkpoint[
-                f"res_stack.{i}.conv_blocks.{j}.1.weight_g"
-            ]
-            hf_model.resblocks[i].resblocks[j].conv.weight_v.data = checkpoint[
-                f"res_stack.{i}.conv_blocks.{j}.1.weight_v"
-            ]
-            hf_model.resblocks[i].resblocks[j].conv.bias.data = checkpoint[f"res_stack.{i}.conv_blocks.{j}.1.bias"]
+            mapping[f"res_stack.{i}.conv_blocks.{j}.1.weight_g"] = f"resblocks.{i}.resblocks.{j}.conv.weight_g"
+            mapping[f"res_stack.{i}.conv_blocks.{j}.1.weight_v"] = f"resblocks.{i}.resblocks.{j}.conv.weight_v"
+            mapping[f"res_stack.{i}.conv_blocks.{j}.1.bias"] = f"resblocks.{i}.resblocks.{j}.conv.bias"
 
-    # Convert output conv layer
-    hf_model.conv_post.weight_g.data = checkpoint["conv_post.1.weight_g"]
-    hf_model.conv_post.weight_v.data = checkpoint["conv_post.1.weight_v"]
-    hf_model.conv_post.bias.data = checkpoint["conv_post.1.bias"]
+    # Output conv layer
+    mapping["conv_post.1.weight_g"] = "conv_post.weight_g"
+    mapping["conv_post.1.weight_v"] = "conv_post.weight_v"
+    mapping["conv_post.1.bias"] = "conv_post.bias"
 
-    hf_model.remove_weight_norm()
+    return mapping
 
 
-@torch.no_grad()
+def rename_state_dict(state_dict, keys_to_modify, keys_to_remove):
+    model_state_dict = {}
+    for key, value in state_dict.items():
+        if key in keys_to_remove:
+            continue
+
+        if key in keys_to_modify:
+            new_key = keys_to_modify[key]
+            model_state_dict[new_key] = value
+        else:
+            model_state_dict[key] = value
+    return model_state_dict
+
+
 def convert_univnet_checkpoint(
     checkpoint_path,
     pytorch_dump_folder_path,
     config_path=None,
     repo_id=None,
+    safe_serialization=False,
 ):
+    model_state_dict_base = torch.load(checkpoint_path, map_location="cpu")
+    # Get the generator's state dict
+    state_dict = model_state_dict_base["model_g"]
+
     if config_path is not None:
         config = UnivNetGanConfig.from_pretrained(config_path)
     else:
         config = UnivNetGanConfig()
 
+    keys_to_modify = get_key_mapping(config)
+    keys_to_remove = set()
+    hf_state_dict = rename_state_dict(state_dict, keys_to_modify, keys_to_remove)
+
     model = UnivNetGan(config)
+    # Apply weight norm since the original checkpoint has weight norm applied
+    model.apply_weight_norm()
+    model.load_state_dict(hf_state_dict)
+    # Remove weight norm in preparation for inference
+    model.remove_weight_norm()
 
-    orig_checkpoint = torch.load(checkpoint_path)
-    load_weights(orig_checkpoint["model_g"], model, config)
-
-    model.save_pretrained(pytorch_dump_folder_path)
+    model.save_pretrained(pytorch_dump_folder_path, safe_serialization=safe_serialization)
 
     if repo_id:
         print("Pushing to the hub...")
         model.push_to_hub(repo_id)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
@@ -142,11 +143,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
     )
+    parser.add_argument(
+        "--safe_serialization", action="store_true", help="Whether to save the model using `safetensors`."
+    )
 
     args = parser.parse_args()
+
     convert_univnet_checkpoint(
         args.checkpoint_path,
         args.pytorch_dump_folder_path,
         args.config_path,
         args.push_to_hub,
+        args.safe_serialization,
     )
+
+
+if __name__ == "__main__":
+    main()
