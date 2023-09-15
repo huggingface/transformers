@@ -7,7 +7,6 @@ on:
     types: [completed]
   push:
     branches:
-      - ci-amdgpu
       - ci_*
       - ci-*
     paths:
