@@ -77,7 +77,6 @@ if is_accelerate_available():
     from accelerate.utils.constants import (
         FSDP_PYTORCH_VERSION,
         FSDP_SHARDING_STRATEGY,
-        FSDP_STATE_DICT_TYPE,
     )
 
     require_fsdp_version = partial(require_fsdp, min_version=FSDP_PYTORCH_VERSION)
@@ -112,6 +111,10 @@ FULL_SHARD = "full_shard"
 SHARD_GRAD_OP = "shard_grad_op"
 sharding_strategies = [FULL_SHARD, SHARD_GRAD_OP]
 
+FULL_STATE_DICT = "FULL_STATE_DICT"
+SHARDED_STATE_DICT = "SHARDED_STATE_DICT"
+STATE_DICT_TYPE = [FULL_STATE_DICT, SHARDED_STATE_DICT]
+
 
 def parameterized_custom_name_func(func, param_num, param):
     # customize the test name generator function as we want both params to appear in the sub-test
@@ -121,7 +124,7 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 params = list(itertools.product(sharding_strategies, dtypes))
-params_with_state_dict_type = list(itertools.product(sharding_strategies, dtypes, FSDP_STATE_DICT_TYPE))
+params_with_state_dict_type = list(itertools.product(dtypes, STATE_DICT_TYPE))
 
 
 @require_accelerate
@@ -173,13 +176,14 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertEqual(v, self.fsdp_config[k])
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
+    @parameterized.expand(sharding_strategies)
     @require_torch_multi_gpu
     @slow
-    def test_basic_run(self):
+    def test_basic_run(self, sharding_strategy):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
         args = self.get_base_args(output_dir, 3, 50).split()
-        fsdp_args = ["--fsdp", "full_shard auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
+        fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
@@ -199,12 +203,10 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @parameterized.expand(params_with_state_dict_type, name_func=parameterized_custom_name_func)
     @require_torch_multi_gpu
     @slow
-    def test_training_and_can_resume_normally(self, sharding_strategy, dtype, state_dict_type):
+    def test_training_and_can_resume_normally(self, dtype, state_dict_type):
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
 
-        if state_dict_type == "LOCAL_STATE_DICT":
-            return
-
+        sharding_strategy = "full_shard"
         use_accelerate = state_dict_type == "SHARDED_STATE_DICT"
         launcher = get_launcher(True, use_accelerate=use_accelerate)
         args = self.get_base_args(output_dir, 2, 25).split() + [f"--{dtype}"]
