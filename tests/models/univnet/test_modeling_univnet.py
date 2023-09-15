@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 from datasets import Audio, load_dataset
 
-from transformers import UnivNetGanFeatureExtractor, UnivNetGanConfig
+from transformers import UnivNetGanConfig, UnivNetGanFeatureExtractor
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
