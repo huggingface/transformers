@@ -27,6 +27,7 @@ from parameterized import parameterized
 import tests.trainer.test_trainer
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
+from transformers.trainer_callback import TrainerState
 
 from transformers.testing_utils import (
     CaptureLogger,
@@ -105,7 +106,13 @@ def get_launcher(distributed=False, use_accelerate=False):
     num_gpus = min(2, get_gpu_count()) if distributed else 1
     master_port = get_master_port(real_launcher=True)
     if use_accelerate:
-        return f"accelerate launch --num_processes={num_gpus} --main_process_port={master_port}".split()
+        return f"""accelerate launch
+        --num_processes {num_gpus}
+        --main_process_port {master_port}
+        --use_fsdp
+        --fsdp_auto_wrap_policy TRANSFORMER_BASED_WRAP
+        --fsdp_state_dict_type SHARDED_STATE_DICT
+        --fsdp_transformer_layer_cls_to_wrap BertLayer""".split()
     return f"torchrun --nnodes 1 --nproc-per-node {num_gpus} --master-port {master_port}".split()
 
 
@@ -129,6 +136,7 @@ def parameterized_custom_name_func(func, param_num, param):
 
 
 params = list(itertools.product(sharding_strategies, dtypes))
+params_with_state_dict_type = list(itertools.product(sharding_strategies, dtypes, FSDP_STATE_DICT_TYPE))
 
 
 @require_accelerate
@@ -161,7 +169,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     def test_fsdp_config(self, sharding_strategy, dtype):
-        output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
+        output_dir = self.get_auto_remove_tmp_dir()
         kwargs = {
             "output_dir": output_dir,
             "train_len": 128,
@@ -179,7 +187,172 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             for k, v in trainer.args.fsdp_config.items():
                 self.assertEqual(v, self.fsdp_config[k])
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
-            trainer.train()
 
+    @require_torch_multi_gpu
+    @slow
     def test_basic_run(self):
-        pass
+        launcher = get_launcher(distributed=True, use_accelerate=False)
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_name_or_path bert-base-cased
+            --task_name mrpc
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --do_train
+            --max_seq_length 128
+            --per_device_train_batch_size 16
+            --learning_rate 5e-5
+            --num_train_epochs 3
+            --lr_scheduler_type cosine
+            --logging_steps 1
+            --save_strategy epoch
+            --do_eval
+            --evaluation_strategy epoch
+            --load_best_model_at_end 
+            --skip_memory_metrics False
+        """.split()
+
+        fsdp_args = """
+            --fsdp shard_grad_op auto_wrap  
+            --fsdp_transformer_layer_cls_to_wrap BertLayer
+        """.split()
+
+        script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
+        cmd = launcher + script + args + fsdp_args
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+    @parameterized.expand(dtypes)
+    @require_torch_multi_gpu
+    @slow
+    def test_basic_run_with_cpu_offload(self, dtype):
+        launcher = get_launcher(distributed=True, use_accelerate=False)
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_name_or_path bert-base-cased
+            --task_name mrpc
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --do_train
+            --max_seq_length 128
+            --per_device_train_batch_size 16
+            --learning_rate 5e-5
+            --num_train_epochs 3
+            --lr_scheduler_type cosine
+            --logging_steps 1
+            --save_strategy epoch
+            --do_eval
+            --evaluation_strategy epoch
+            --load_best_model_at_end 
+            --skip_memory_metrics False
+            --{dtype}
+        """.split()
+
+        fsdp_args = """
+            --fsdp shard_grad_op auto_wrap offload 
+            --fsdp_transformer_layer_cls_to_wrap BertLayer
+        """.split()
+
+        script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
+        cmd = launcher + script + args + fsdp_args
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+    @parameterized.expand(params_with_state_dict_type, name_func=parameterized_custom_name_func)
+    @require_torch_multi_gpu
+    @slow
+    def test_training_and_can_resume_normally(self, sharding_strategy, dtype, state_dict_type):
+        output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
+
+        if state_dict_type == "LOCAL_STATE_DICT":
+            return
+
+        use_accelerate = state_dict_type == "SHARDED_STATE_DICT"
+        launcher = get_launcher(True, use_accelerate=use_accelerate)
+
+        args = f"""
+            --model_name_or_path bert-base-cased
+            --task_name mrpc
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --do_train
+            --max_seq_length 128
+            --per_device_train_batch_size 16
+            --learning_rate 5e-5
+            --num_train_epochs 2
+            --lr_scheduler_type cosine
+            --logging_steps 1
+            --save_strategy epoch
+            --do_eval
+            --evaluation_strategy epoch
+            --{dtype}
+        """.split()
+
+        script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
+
+        if not use_accelerate:
+            fsdp_args = f"""
+                --fsdp {sharding_strategy} auto_wrap  
+                --fsdp_transformer_layer_cls_to_wrap BertLayer
+            """.split()
+
+            cmd = launcher + script + args + fsdp_args
+        else:
+            fsdp_config = f"""
+                --fsdp_sharding_strategy={FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1}
+            """.split()
+            cmd = launcher + fsdp_config + script + args
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
+
+        # resume from ckpt
+        checkpoint = os.path.join(output_dir, "checkpoint-115")
+        resume_args = f"""
+            --model_name_or_path bert-base-cased
+            --task_name mrpc
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --do_train
+            --max_seq_length 128
+            --per_device_train_batch_size 16
+            --learning_rate 5e-5
+            --num_train_epochs 2
+            --lr_scheduler_type cosine
+            --logging_steps 1
+            --save_strategy epoch
+            --do_eval
+            --evaluation_strategy epoch
+            --{dtype}
+            --resume_from_checkpoint {checkpoint}
+        """.split()
+
+        if not use_accelerate:
+            fsdp_args = f"""
+                --fsdp {sharding_strategy} auto_wrap  
+                --fsdp_transformer_layer_cls_to_wrap BertLayer
+            """.split()
+
+            cmd = launcher + script + resume_args + fsdp_args
+        else:
+            fsdp_config = f"""
+                --fsdp_sharding_strategy={FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1}
+            """.split()
+            cmd = launcher + fsdp_config + script + resume_args
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        logs_resume = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
+
+        for log, log1 in zip(logs, logs_resume):
+            if "learning_rate" in log:
+                self.assertEqual(log["learning_rate"], log1["learning_rate"])

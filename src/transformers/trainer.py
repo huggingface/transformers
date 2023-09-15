@@ -1715,7 +1715,6 @@ class Trainer:
                 )
 
         if self.is_fsdp_enabled:
-            print(f"{model=}")
             self.model = self.model_wrapped = model
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
@@ -1731,7 +1730,6 @@ class Trainer:
             if self.is_deepspeed_enabled:
                 deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
             elif is_sagemaker_mp_enabled() or self.is_fsdp_enabled:
-                print(f"{self.model_wrapped=}")
                 self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped)
 
         # Check if saved optimizer or scheduler states exist
@@ -2138,8 +2136,6 @@ class Trainer:
                     # release memory
                     del state_dict
             elif self.is_fsdp_enabled:
-                print(model)
-                print(self.accelerator.state.fsdp_plugin)
                 load_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, model, resume_from_checkpoint)
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
