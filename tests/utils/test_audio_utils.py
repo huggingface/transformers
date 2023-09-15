@@ -44,7 +44,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         inputs = np.array([60, 100, 200, 1000, 1001, 2000])
         expected = np.array([0.9, 1.5, 3.0, 15.0, 15.01453781, 25.08188016])
         self.assertTrue(np.allclose(hertz_to_mel(inputs, "slaney"), expected))
-        
+
         inputs = np.array([60, 100, 200, 1000, 1001, 2000])
         expected = np.array([92.6824, 150.4899, 283.2313, 999.9907, 1000.6534, 1521.3674])
         self.assertTrue(np.allclose(hertz_to_mel(inputs, "kaldi"), expected))
@@ -66,12 +66,10 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         inputs = np.array([0.9, 1.5, 3.0, 15.0, 15.01453781, 25.08188016])
         expected = np.array([60, 100, 200, 1000, 1001, 2000])
         self.assertTrue(np.allclose(mel_to_hertz(inputs, "slaney"), expected))
-        
-        
+
         expected = np.array([60, 100, 200, 1000, 1001, 2000])
         inputs = np.array([92.6824, 150.4899, 283.2313, 999.9907, 1000.6534, 1521.3674])
         self.assertTrue(np.allclose(mel_to_hertz(inputs, "kaldi"), expected))
-
 
         with pytest.raises(ValueError):
             mel_to_hertz(100, mel_scale=None)
@@ -98,7 +96,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             mel_scale="slaney",
         )
         self.assertEqual(mel_filters.shape, (513, 13))
-        
+
         mel_filters = mel_filter_bank(
             num_frequency_bins=513,
             num_mel_filters=13,
@@ -110,7 +108,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             use_torchaudio_version=True,
         )
         self.assertEqual(mel_filters.shape, (513, 13))
-        
+
     def test_mel_filter_bank_htk(self):
         mel_filters = mel_filter_bank(
             num_frequency_bins=16,
@@ -174,8 +172,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         ])
         # fmt: on
         self.assertTrue(np.allclose(mel_filters, expected))
-        
-        
+
     def test_mel_filter_bank_kaldi(self):
         mel_filters = mel_filter_bank(
             num_frequency_bins=16,
@@ -326,8 +323,6 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         )
         self.assertEqual(spec.shape, (257, 732))
         self.assertTrue(np.allclose(spec[:64, 400], expected))
-        
-        
 
         mel_filters = mel_filter_bank(
             num_frequency_bins=256,
@@ -339,8 +334,8 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             mel_scale="kaldi",
             use_torchaudio_version=True,
         )
-        
-        mel_filters = np.pad(mel_filters, ((0,1), (0,0)))
+
+        mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
 
         spec = spectrogram(
             waveform,
