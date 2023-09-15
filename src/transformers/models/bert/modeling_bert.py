@@ -745,6 +745,7 @@ class BertPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["BertEmbeddings", "BertSelfAttention"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
