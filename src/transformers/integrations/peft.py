@@ -14,7 +14,7 @@
 import inspect
 from typing import Any, Dict, Optional, Union
 
-from ...utils import (
+from ..utils import (
     check_peft_version,
     find_adapter_config_file,
     is_accelerate_available,
@@ -356,7 +356,7 @@ class PeftAdapterMixin:
         offload_index: Optional[int] = None,
     ) -> None:
         """
-        Optionnal re-dispatch the model and attach new hooks to the model in case the model has been loaded with
+        Optional re-dispatch the model and attach new hooks to the model in case the model has been loaded with
         accelerate (i.e. with `device_map=xxx`)
 
         Args:

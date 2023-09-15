@@ -27,6 +27,7 @@ from collections import OrderedDict, UserDict
 from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
         import tensorflow as tf
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
+    from .pipelines.conversational import Conversation
 
 
 if is_tokenizers_available():
@@ -1426,6 +1428,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - **length** -- The length of the inputs (when `return_length=True`)
 """
 
+
 INIT_TOKENIZER_DOCSTRING = r"""
     Class attributes (overridden by derived classes)
 
@@ -1461,6 +1464,9 @@ INIT_TOKENIZER_DOCSTRING = r"""
         truncation_side (`str`, *optional*):
             The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
+        chat_template (`str`, *optional*):
+            A Jinja template string that will be used to format lists of chat messages. See
+            https://huggingface.co/docs/transformers/chat_templating for a full description.
         model_input_names (`List[string]`, *optional*):
             The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
             `"attention_mask"`). Default value is picked from the class attribute of the same name.
@@ -1558,6 +1564,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
         self._in_target_context_manager = False
+
+        # Stores a Jinja template that formats chat histories into tokenizable strings
+        self.chat_template = kwargs.pop("chat_template", None)
+
         super().__init__(**kwargs)
 
     @property
@@ -1626,6 +1636,109 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             `Dict[str, int]`: The vocabulary.
         """
         raise NotImplementedError()
+
+    def apply_chat_template(
+        self,
+        conversation: Union[List[Dict[str, str]], "Conversation"],
+        chat_template: Optional[str] = None,
+        tokenize: bool = True,
+        padding: bool = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **tokenizer_kwargs,
+    ) -> Union[str, List[int]]:
+        """
+        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
+        ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
+        determine the format and control tokens to use when converting. When chat_template is None, it will fall back
+        to the default_chat_template specified at the class level.
+
+        Args:
+            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
+                with "role" and "content" keys, representing the chat history so far.
+            chat_template (str, *optional*): A Jinja template to use for this conversion. If
+                this is not passed, the model's default chat template will be used instead.
+            tokenize (`bool`, defaults to `True`):
+                Whether to tokenize the output. If `False`, the output will be a string.
+            padding (`bool`, defaults to `False`):
+                Whether to pad sequences to the maximum length. Has no effect if tokenize is `False`.
+            truncation (`bool`, defaults to `False`):
+                Whether to truncate sequences at the maximum length. Has no effect if tokenize is `False`.
+            max_length (`int`, *optional*):
+                Maximum length (in tokens) to use for padding or truncation. Has no effect if tokenize is `False`. If
+                not specified, the tokenizer's `max_length` attribute will be used as a default.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
+                values are:
+                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+
+        Returns:
+            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            output is ready to pass to the model, either directly or via methods like `generate()`.
+        """
+
+        if hasattr(conversation, "messages"):
+            # Indicates it's a Conversation object
+            conversation = conversation.messages
+
+        # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
+        if chat_template is None:
+            if self.chat_template is not None:
+                chat_template = self.chat_template
+            else:
+                chat_template = self.default_chat_template
+
+        # Compilation function uses a cache to avoid recompiling the same template
+        compiled_template = self._compile_jinja_template(chat_template)
+
+        rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
+
+        if padding is True:
+            padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
+        if tokenize:
+            return self.encode(
+                rendered,
+                add_special_tokens=False,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
+        else:
+            return rendered
+
+    @lru_cache
+    def _compile_jinja_template(self, chat_template):
+        try:
+            from jinja2.exceptions import TemplateError
+            from jinja2.sandbox import ImmutableSandboxedEnvironment
+        except ImportError:
+            raise ImportError("apply_chat_template requires jinja2 to be installed.")
+
+        def raise_exception(message):
+            raise TemplateError(message)
+
+        jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+        jinja_env.globals["raise_exception"] = raise_exception
+        return jinja_env.from_string(chat_template)
+
+    @property
+    def default_chat_template(self):
+        """
+        This template formats inputs in the standard ChatML format. See
+        https://github.com/openai/openai-python/blob/main/chatml.md
+        """
+        return (
+            "{% for message in messages %}"
+            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
+            "{% endfor %}"
+        )
 
     @classmethod
     def from_pretrained(
@@ -2186,6 +2299,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
+
+        if self.chat_template is not None:
+            tokenizer_config["chat_template"] = self.chat_template
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
