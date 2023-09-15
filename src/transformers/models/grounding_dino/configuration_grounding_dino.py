@@ -204,7 +204,7 @@ class GroundingDINOConfig(PretrainedConfig):
         encoder_n_points=4,
         decoder_n_points=4,
         two_stage=True,
-        two_stage_num_proposals=300,
+        two_stage_num_proposals=900,
         with_box_refine=True,
         class_cost=1,
         bbox_cost=5,
