@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 
 from ..utils import (
     check_peft_version,
@@ -31,8 +31,9 @@ if is_accelerate_available():
 # Minimum PEFT version supported for the integration
 MIN_PEFT_VERSION = "0.5.0"
 
-if is_torch_available():
-    import torch
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
 
 
 logger = logging.get_logger(__name__)
@@ -66,7 +67,7 @@ class PeftAdapterMixin:
 
     def load_adapter(
         self,
-        peft_model_id: Union[str, Dict[str, "torch.Tensor"]],
+        peft_model_id_or_state_dict: Union[str, Dict[str, "torch.Tensor"]],
         adapter_name: Optional[str] = None,
         revision: Optional[str] = None,
         token: Optional[str] = None,
@@ -83,9 +84,9 @@ class PeftAdapterMixin:
         Requires peft as a backend to load the adapter weights.
 
         Args:
-            peft_model_id (`str` or dictionary of `torch.Tensor`):
+            peft_model_id_or_state_dict (`str` or dictionary of `torch.Tensor`):
                 The identifier of the model to look for on the Hub, or a local path to the saved adapter config file
-                and adapter weights.
+                and adapter weights. This argument can be also the PEFT state dict of the adapter to load.
             adapter_name (`str`, *optional*):
                 The adapter name to use. If not set, will use the default adapter.
             revision (`str`, *optional*, defaults to `"main"`):
@@ -120,6 +121,9 @@ class PeftAdapterMixin:
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_index (`int`, `optional`):
                 `offload_index` argument to be passed to `accelerate.dispatch_model` method.
+            peft_config (`Dict[str, Any]`, *optional*):
+                The configuration of the adapter to add, supported adapters are non-prefix tuning and adaption prompts
+                methods. This argument is used in case users directly pass PEFT state dicts
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
 
@@ -135,19 +139,19 @@ class PeftAdapterMixin:
 
         if peft_config is None:
             adapter_config_file = find_adapter_config_file(
-                peft_model_id,
+                peft_model_id_or_state_dict,
                 revision=revision,
                 token=token,
             )
 
             if adapter_config_file is None:
                 raise ValueError(
-                    f"adapter model file not found in {peft_model_id}. Make sure you are passing the correct path to the "
+                    f"adapter model file not found in {peft_model_id_or_state_dict}. Make sure you are passing the correct path to the "
                     "adapter model."
                 )
 
             peft_config = PeftConfig.from_pretrained(
-                peft_model_id,
+                peft_model_id_or_state_dict,
                 revision=revision,
                 use_auth_token=token,
             )
@@ -155,10 +159,12 @@ class PeftAdapterMixin:
         # Create and add fresh new adapters into the model.
         inject_adapter_in_model(peft_config, self, adapter_name)
 
-        if not isinstance(peft_model_id, dict):
-            adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=token)
+        if not isinstance(peft_model_id_or_state_dict, dict):
+            adapter_state_dict = load_peft_weights(
+                peft_model_id_or_state_dict, revision=revision, use_auth_token=token
+            )
         else:
-            adapter_state_dict = peft_model_id
+            adapter_state_dict = peft_model_id_or_state_dict
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
@@ -177,7 +183,7 @@ class PeftAdapterMixin:
             # check only for unexpected keys
             if hasattr(incompatible_keys, "unexpected_keys") and len(incompatible_keys.unexpected_keys) > 0:
                 logger.warning(
-                    f"Loading adapter weights from {peft_model_id} led to unexpected keys not found in the model: "
+                    f"Loading adapter weights from {peft_model_id_or_state_dict} led to unexpected keys not found in the model: "
                     f" {incompatible_keys.unexpected_keys}. "
                 )
 
