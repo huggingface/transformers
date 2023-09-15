@@ -136,13 +136,10 @@ class PeftAdapterMixin:
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
 
-        if not self._hf_peft_config_loaded:
-            self._hf_peft_config_loaded = True
-        elif adapter_name in self.peft_config:
+        if self._hf_peft_config_loaded and adapter_name in self.peft_config:
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
         if peft_model_id is None and (adapter_state_dict is None and peft_config is None):
-            self._hf_peft_config_loaded = False
             raise ValueError(
                 "You should either pass a `peft_model_id` or a `peft_config` and `adapter_state_dict` to load an adapter."
             )
@@ -168,6 +165,9 @@ class PeftAdapterMixin:
 
         # Create and add fresh new adapters into the model.
         inject_adapter_in_model(peft_config, self, adapter_name)
+
+        if not self._hf_peft_config_loaded:
+            self._hf_peft_config_loaded = True
 
         if peft_model_id is not None:
             adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=token)
