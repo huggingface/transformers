@@ -337,9 +337,9 @@ class UnivNetGanFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitte
         input_features_mean = torch.mean(input_features)
         input_features_stddev = torch.std(input_features)
 
-        EXPECTED_MEAN = np.array([-6.18862009])
-        EXPECTED_STDDEV = np.array([2.80845642])
+        EXPECTED_MEAN = torch.tensor(-6.18862009)
+        EXPECTED_STDDEV = torch.tensor(2.80845642)
 
-        self.assertTrue(np.allclose(input_features_mean, EXPECTED_MEAN))
-        self.assertTrue(np.allclose(input_features_stddev, EXPECTED_STDDEV))
-        self.assertTrue(torch.allclose(input_features[0, :30, 0], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        torch.testing.assert_close(input_features_mean, EXPECTED_MEAN, atol=5e-5, rtol=5e-6)
+        torch.testing.assert_close(input_features_stddev, EXPECTED_STDDEV)
+        torch.testing.assert_close(input_features[0, :30, 0], EXPECTED_INPUT_FEATURES, atol=1e-4, rtol=1e-5)
