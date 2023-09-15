@@ -169,10 +169,11 @@ class VitMatteHead(nn.Module):
     Simple Matting Head, containing only conv3x3 and conv1x1 layers.
     """
 
-    def __init__(self, config, mid_channels=16):
+    def __init__(self, config):
         super().__init__()
 
         in_channels = config.fusion_hidden_sizes[-1]
+        mid_channels = 16
 
         self.matting_convs = nn.Sequential(
             nn.Conv2d(in_channels, mid_channels, kernel_size=3, stride=1, padding=1),
@@ -242,7 +243,7 @@ VITMATTE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`SegformerImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`VitMatteImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers in case the backbone has them. See
             `attentions` under returned tensors for more detail.
