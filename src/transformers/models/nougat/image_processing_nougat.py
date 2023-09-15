@@ -72,9 +72,7 @@ class NougatImageProcessor(BaseImageProcessor):
         do_align_long_axis (`bool`, *optional*, defaults to `False`):
             Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image. If `random_padding` is set to `True` in `preprocess`, each image is padded with a
-            random amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
-            padded to the largest image size in the batch.
+            Whether to pad the images to the largest image size in the batch.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
@@ -214,7 +212,6 @@ class NougatImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        random_padding: bool = False,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -226,8 +223,6 @@ class NougatImageProcessor(BaseImageProcessor):
                 The image to be padded.
             size (`Dict[str, int]`):
                 The size `{"height": h, "width": w}` to pad the image to.
-            random_padding (`bool`, *optional*, defaults to `False`):
-                Whether to use random padding or not.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -239,12 +234,8 @@ class NougatImageProcessor(BaseImageProcessor):
         delta_width = output_width - input_width
         delta_height = output_height - input_height
 
-        if random_padding:
-            pad_top = np.random.randint(low=0, high=delta_height + 1)
-            pad_left = np.random.randint(low=0, high=delta_width + 1)
-        else:
-            pad_top = delta_height // 2
-            pad_left = delta_width // 2
+        pad_top = delta_height // 2
+        pad_left = delta_width // 2
 
         pad_bottom = delta_height - pad_top
         pad_right = delta_width - pad_left
@@ -352,7 +343,6 @@ class NougatImageProcessor(BaseImageProcessor):
         do_thumbnail: bool = None,
         do_align_long_axis: bool = None,
         do_pad: bool = None,
-        random_padding: bool = False,
         do_rescale: bool = None,
         rescale_factor: Union[int, float] = None,
         do_normalize: bool = None,
@@ -384,12 +374,7 @@ class NougatImageProcessor(BaseImageProcessor):
             do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
                 Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image. If `random_padding` is set to `True`, each image is padded with a random
-                amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
-                padded to the largest image size in the batch.
-            random_padding (`bool`, *optional*, defaults to `self.random_padding`):
-                Whether to use random padding when padding the image. If `True`, each image in the batch with be padded
-                with a random amount of padding on each side up to the size of the largest image in the batch.
+                Whether to pad the images to the largest image size in the batch.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image by the specified scale `rescale_factor`.
             rescale_factor (`int` or `float`, *optional*, defaults to `self.rescale_factor`):
@@ -475,12 +460,7 @@ class NougatImageProcessor(BaseImageProcessor):
             images = [self.thumbnail(image=image, size=size, input_data_format=input_data_format) for image in images]
 
         if do_pad:
-            images = [
-                self.pad_image(
-                    image=image, size=size, random_padding=random_padding, input_data_format=input_data_format
-                )
-                for image in images
-            ]
+            images = [self.pad_image(image=image, size=size, input_data_format=input_data_format) for image in images]
 
         if do_rescale:
             images = [
