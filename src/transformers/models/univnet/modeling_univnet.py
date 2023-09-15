@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" PyTorch UnivNetGan model."""
 
 from typing import List, Optional, Tuple, Union
 
@@ -66,20 +67,8 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         padding = (kernel_size - 1) // 2
 
         self.dropout = nn.Dropout(dropout)
-        self.conv1 = nn.Conv1d(
-            channels,
-            channels,
-            kernel_size,
-            padding=padding,
-            bias=True,
-        )
-        self.conv2 = nn.Conv1d(
-            channels,
-            channels,
-            kernel_size,
-            padding=padding,
-            bias=True,
-        )
+        self.conv1 = nn.Conv1d(channels, channels, kernel_size, padding=padding, bias=True)
+        self.conv2 = nn.Conv1d(channels, channels, kernel_size, padding=padding, bias=True)
 
     def forward(self, hidden_states: torch.FloatTensor):
         # hidden_states should have shape (batch_size, channels, seq_length)
@@ -303,7 +292,7 @@ class UnivNetLVCResidualBlock(nn.Module):
     ):
         """
         Performs location-variable convolution operation on the input sequence (hidden_states) using the local
-        convolution kernal. This was introduced in [LVCNet: Efficient Condition-Dependent Modeling Network for Waveform
+        convolution kernel. This was introduced in [LVCNet: Efficient Condition-Dependent Modeling Network for Waveform
         Generation](https://arxiv.org/abs/2102.10815) by Zhen Zheng, Jianzong Wang, Ning Cheng, and Jing Xiao.
 
         Time: 414 μs ± 309 ns per loop (mean ± std. dev. of 7 runs, 1000 loops each), test on NVIDIA V100.
@@ -332,27 +321,23 @@ class UnivNetLVCResidualBlock(nn.Module):
             )
 
         padding = dilation * int((kernel_size - 1) / 2)
-        hidden_states = nn.functional.pad(
-            hidden_states, (padding, padding), "constant", 0
-        )  # (batch, in_channels, in_length + 2*padding)
-        hidden_states = hidden_states.unfold(
-            2, hop_size + 2 * padding, hop_size
-        )  # (batch, in_channels, kernel_length, hop_size + 2*padding)
+
+        # (batch, in_channels, in_length + 2*padding)
+        hidden_states = nn.functional.pad(hidden_states, (padding, padding), "constant", 0)
+        # (batch, in_channels, kernel_length, hop_size + 2*padding)
+        hidden_states = hidden_states.unfold(2, hop_size + 2 * padding, hop_size)
 
         if hop_size < dilation:
             hidden_states = nn.functional.pad(hidden_states, (0, dilation), "constant", 0)
-        hidden_states = hidden_states.unfold(
-            3, dilation, dilation
-        )  # (batch, in_channels, kernel_length, (hop_size + 2*padding)/dilation, dilation)
+        # (batch, in_channels, kernel_length, (hop_size + 2*padding)/dilation, dilation)
+        hidden_states = hidden_states.unfold(3, dilation, dilation)
         hidden_states = hidden_states[:, :, :, :, :hop_size]
-        hidden_states = hidden_states.transpose(
-            3, 4
-        )  # (batch, in_channels, kernel_length, dilation, (hop_size + 2*padding)/dilation)
-        hidden_states = hidden_states.unfold(
-            4, kernel_size, 1
-        )  # (batch, in_channels, kernel_length, dilation, _, kernel_size)
+        # (batch, in_channels, kernel_length, dilation, (hop_size + 2*padding)/dilation)
+        hidden_states = hidden_states.transpose(3, 4)
+        # (batch, in_channels, kernel_length, dilation, _, kernel_size)
+        hidden_states = hidden_states.unfold(4, kernel_size, 1)
 
-        # Apply local convolutional kernel to hidden_states.
+        # Apply local convolution kernel to hidden_states.
         output_hidden_states = torch.einsum("bildsk,biokl->bolsd", hidden_states, kernel)
 
         output_hidden_states = output_hidden_states.to(memory_format=torch.channels_last_3d)
@@ -542,7 +527,7 @@ class UnivNetGan(PreTrainedModel):
                     dilations=config.resblock_dilation_sizes[i],
                     lvc_hop_size=hop_lengths[i],
                     resnet_leaky_relu_slope=config.leaky_relu_slope,
-                    cond_channels=config.num_mel_channels,
+                    cond_channels=config.num_mel_bins,
                     kernel_predictor_num_blocks=config.kernel_predictor_num_blocks,
                     kernel_predictor_hidden_channels=config.kernel_predictor_hidden_channels,
                     kernel_predictor_conv_size=config.kernel_predictor_conv_size,

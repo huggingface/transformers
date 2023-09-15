@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" UnivNetGan model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -37,12 +38,13 @@ class UnivNetGanConfig(PretrainedConfig):
 
     Args:
         model_in_channels (`int`, *optional*, defaults to 64):
-            The number of input channels for the UnivNet residual network. This corresponds to dimension 1 of the input
-            noise sequence to the vocoder, which should have shape (batch_size, model_in_dim, seq_length).
+            The number of input channels for the UnivNet residual network. This should correspond to
+            `noise_sequence.shape[1]` and the value used in the [`UnivNetFeatureExtractor`] class.
         model_hidden_channels ('int', *optional*, defaults to 32):
             The number of hidden channels of each residual block in the UnivNet residual network.
-        num_mel_channels ('int', *optional*, defaults to 100):
-            The number of frequency bins in the conditioning log-mel spectrogram.
+        num_mel_bins ('int', *optional*, defaults to 100):
+            The number of frequency bins in the conditioning log-mel spectrogram. This should correspond to the value
+            used in the [`UnivNetFeatureExtractor`] class.
         resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 3, 3]`):
             A tuple of integers defining the kernel sizes of the 1D convolutional layers in the UnivNet residual
             network. The length of `resblock_kernel_sizes` defines the number of resnet blocks and should match that of
@@ -91,7 +93,7 @@ class UnivNetGanConfig(PretrainedConfig):
         self,
         model_in_channels=64,
         model_hidden_channels=32,
-        num_mel_channels=100,
+        num_mel_bins=100,
         resblock_kernel_sizes=[3, 3, 3],
         resblock_stride_sizes=[8, 8, 4],
         resblock_dilation_sizes=[[1, 3, 9, 27], [1, 3, 9, 27], [1, 3, 9, 27]],
@@ -111,7 +113,7 @@ class UnivNetGanConfig(PretrainedConfig):
 
         self.model_in_channels = model_in_channels
         self.model_hidden_channels = model_hidden_channels
-        self.num_mel_channels = num_mel_channels
+        self.num_mel_bins = num_mel_bins
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_stride_sizes = resblock_stride_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes

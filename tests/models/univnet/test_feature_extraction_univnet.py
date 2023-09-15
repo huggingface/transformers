@@ -35,6 +35,7 @@ if is_torch_available():
 global_rng = random.Random()
 
 
+# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -336,9 +337,9 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         input_features_mean = torch.mean(input_features)
         input_features_stddev = torch.std(input_features)
 
-        expected_mean = np.array([-6.18862009])
-        expected_stddev = np.array([2.80845642])
+        EXPECTED_MEAN = np.array([-6.18862009])
+        EXPECTED_STDDEV = np.array([2.80845642])
 
-        self.assertTrue(np.allclose(input_features_mean, expected_mean))
-        self.assertTrue(np.allclose(input_features_stddev, expected_stddev))
+        self.assertTrue(np.allclose(input_features_mean, EXPECTED_MEAN))
+        self.assertTrue(np.allclose(input_features_stddev, EXPECTED_STDDEV))
         self.assertTrue(torch.allclose(input_features[0, :30, 0], EXPECTED_INPUT_FEATURES, atol=1e-4))

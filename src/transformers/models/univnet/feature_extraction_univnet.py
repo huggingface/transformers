@@ -46,9 +46,9 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly improve the
             performance for some models.
-        num_mel_bins (`int`, *optional*, defaults to 80):
+        num_mel_bins (`int`, *optional*, defaults to 100):
             The number of mel-frequency bins in the extracted spectrogram features. This should match
-            `UnivNetGan.config.num_mel_channels`.
+            `UnivNetGan.config.num_mel_bins`.
         hop_length (`int`, *optional*, defaults to 256):
             The direct number of samples between sliding windows. Otherwise referred to as "shift" in many papers. Note
             that this is different from other audio feature extractors such as [`SpeechT5FeatureExtractor`] which take
@@ -186,7 +186,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
     def mel_spectrogram(self, waveform: np.ndarray) -> np.ndarray:
         """
-        Calculates log MEL spectrograms from a batch of waveforms.
+        Calculates log MEL spectrograms from a batch of waveforms. Note that the input waveform(s) will be padded by
+        `int(self.n_fft - self.hop_length)` on both sides using the `reflect` padding mode.
 
         Args:
             waveform (`np.ndarray` of shape `(length,)`):
@@ -232,7 +233,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
     def generate_noise(
         self,
         noise_length: int,
-        model_in_channels: Optional[int] = None,
         generator: Optional[np.random.Generator] = None,
     ) -> np.ndarray:
         """
@@ -253,12 +253,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         Returns:
             `numpy.ndarray` containing random standard Gaussian noise of shape `(noise_length, model_in_channels)`.
         """
-        if model_in_channels is None:
-            model_in_channels = self.model_in_channels
         if generator is None:
             generator = np.random.default_rng()
 
-        noise_shape = (noise_length, model_in_channels)
+        noise_shape = (noise_length, self.model_in_channels)
         noise = generator.standard_normal(noise_shape, dtype=np.float32)
 
         return noise
@@ -306,7 +304,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: Optional[int] = None,
         return_noise: bool = True,
         generator: Optional[np.random.Generator] = None,
-        model_in_channels: Optional[int] = None,
         pad_end: bool = False,
         pad_length: Optional[int] = None,
         spectrogram_zero: Optional[float] = None,
@@ -348,9 +345,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 Whether to generate and return a noise waveform for use in [`UnivNetGan.forward`].
             generator (`numpy.random.Generator`, *optional*, defaults to `None`):
                 An optional `numpy.random.Generator` random number generator to use when generating noise.
-            model_in_channels (`int`, *optional*, defaults to `None`):
-                The number of input channels to the [`UnivNetGan`] model. If not set, this will default to
-                `self.config.model_in_channels`.
             pad_end (`bool`, *optional*, defaults to `False`):
                 Whether to pad the end of each spectrogram with "zero" values. This can help reduce artifacts at the
                 end of the generated audio sample; see https://github.com/seungwonpark/melgan/issues/8 for more
@@ -435,7 +429,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         if return_noise:
             noise = [
-                self.generate_noise(spectrogram.shape[0], model_in_channels, generator)
+                self.generate_noise(spectrogram.shape[0], generator)
                 for spectrogram in batched_speech["spectrogram"]
             ]
             batched_speech["noise_sequence"] = noise

@@ -83,7 +83,7 @@ class UnivNetGanTester:
         return UnivNetGanConfig(
             model_in_channels=self.in_channels,
             model_hidden_channels=self.hidden_channels,
-            num_mel_channels=self.num_mel_bins,
+            num_mel_bins=self.num_mel_bins,
             kernel_predictor_hidden_channels=self.kernel_predictor_hidden_channels,
         )
 
@@ -297,13 +297,13 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         waveform_stddev = torch.std(waveform)
         waveform_slice = waveform[-1, -9:].flatten().numpy()
 
-        expected_mean = np.array([-0.19989729])
-        expected_stddev = np.array([0.35230172])
-        expected_slice = np.array([-0.3408, -0.6045, -0.5052, 0.1160, -0.1556, -0.0405, -0.3024, -0.5290, -0.5019])
+        EXPECTED_MEAN = np.array([-0.19989729])
+        EXPECTED_STDDEV = np.array([0.35230172])
+        EXPECTED_SLICE = np.array([-0.3408, -0.6045, -0.5052, 0.1160, -0.1556, -0.0405, -0.3024, -0.5290, -0.5019])
 
-        self.assertTrue(np.allclose(waveform_mean, expected_mean, atol=1e-4))
-        self.assertTrue(np.allclose(waveform_stddev, expected_stddev, atol=1e-4))
-        self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))
+        self.assertTrue(np.allclose(waveform_mean, EXPECTED_MEAN, atol=1e-4))
+        self.assertTrue(np.allclose(waveform_stddev, EXPECTED_STDDEV, atol=1e-4))
+        self.assertTrue(np.allclose(waveform_slice, EXPECTED_SLICE, atol=5e-4))
 
     @torch.no_grad()
     def test_model_inference_unbatched(self):
@@ -319,13 +319,13 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         waveform_stddev = torch.std(waveform)
         waveform_slice = waveform[-9:].flatten().numpy()
 
-        expected_mean = np.array([-0.22895093])
-        expected_stddev = np.array([0.33986747])
-        expected_slice = np.array([-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162])
+        EXPECTED_MEAN = np.array([-0.22895093])
+        EXPECTED_STDDEV = np.array([0.33986747])
+        EXPECTED_SLICE = np.array([-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162])
 
-        self.assertTrue(np.allclose(waveform_mean, expected_mean, atol=1e-4))
-        self.assertTrue(np.allclose(waveform_stddev, expected_stddev, atol=1e-4))
-        self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))
+        self.assertTrue(np.allclose(waveform_mean, EXPECTED_MEAN, atol=1e-4))
+        self.assertTrue(np.allclose(waveform_stddev, EXPECTED_STDDEV, atol=1e-4))
+        self.assertTrue(np.allclose(waveform_slice, EXPECTED_SLICE, atol=5e-4))
 
     @torch.no_grad()
     def test_integration(self):
@@ -346,22 +346,12 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         waveform_stddev = torch.std(waveform)
         waveform_slice = waveform[-9:].flatten().numpy()
 
-        expected_mean = np.array([0.00051374])
-        expected_stddev = np.array([0.058105603])
-        expected_slice = np.array(
-            [
-                -4.3934e-04,
-                -1.8203e-04,
-                -3.3033e-04,
-                -3.8716e-04,
-                -1.6125e-04,
-                3.5389e-06,
-                -3.3149e-04,
-                -3.7613e-04,
-                -2.3331e-04,
-            ]
-        )
+        EXPECTED_MEAN = np.array([0.00051374])
+        EXPECTED_STDDEV = np.array([0.058105603])
+        # fmt: off
+        EXPECTED_SLICE = np.array([-4.3934e-04, -1.8203e-04, -3.3033e-04, -3.8716e-04, -1.6125e-04, 3.5389e-06, -3.3149e-04, -3.7613e-04, -2.3331e-04])
+        # fmt: on
 
-        self.assertTrue(np.allclose(waveform_mean, expected_mean, atol=5e-6))
-        self.assertTrue(np.allclose(waveform_stddev, expected_stddev, atol=1e-4))
-        self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-6))
+        self.assertTrue(np.allclose(waveform_mean, EXPECTED_MEAN, atol=5e-6))
+        self.assertTrue(np.allclose(waveform_stddev, EXPECTED_STDDEV, atol=1e-4))
+        self.assertTrue(np.allclose(waveform_slice, EXPECTED_SLICE, atol=5e-6))

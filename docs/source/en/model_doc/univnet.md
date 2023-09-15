@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The UnivNet model was proposed in [UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminators for High-Fidelity Waveform Generation](https://arxiv.org/abs/2106.07889) by Won Jang, Dan Lim, Jaesam Yoon, Bongwan Kin, and Juntae Kim.
-The UnivNet model is a generative adversarial network (GAN) trained to synthesize high fidelity speech waveforms. Only the generator of the model, which maps a conditioning log-mel spectrogram and optional noise sequence to a speech waveform (e.g. a vocoder), is implemented here.
+The UnivNet model is a generative adversarial network (GAN) trained to synthesize high fidelity speech waveforms. The UnivNet model shared in `transformers` is the `generator`, which maps a conditioning log-mel spectrogram and optional noise sequence to a speech waveform (e.g. a vocoder). The `discriminator` used to train the `generator` is not implemented.
 
 The abstract from the paper is the following:
 
@@ -31,7 +31,7 @@ Tips:
 - Padding the end of the input audio with zeros can reduce artifacting at the end of the generated sample. See [this issue](https://github.com/seungwonpark/melgan/issues/8) for more details.
 
 This model was contributed by [dg845](https://huggingface.co/dg845).
-To the best of my knowledge, there is no official code release, but an unofficial implementation can be found at [maum-ai/univnet](https://github.com/maum-ai/univnet).
+To the best of my knowledge, there is no official code release, but an unofficial implementation can be found at [maum-ai/univnet](https://github.com/maum-ai/univnet) with pretrained checkpoints [here](https://github.com/maum-ai/univnet#pre-trained-model).
 
 
 ## UnivNetGanConfig
