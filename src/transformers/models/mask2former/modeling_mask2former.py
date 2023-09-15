@@ -2011,13 +2011,12 @@ class Mask2FormerMaskPredictor(nn.Module):
     def forward(self, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: int = None):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
-        # Sum up over the channels
-        # (batch_size, num_queries, num_channels, 1, 1)
-        mask_embeddings = mask_embeddings.unsqueeze(-1).unsqueeze(-1)
-        # (batch_size, 1, num_channels, height, width)
-        pixel_embeddings = pixel_embeddings.unsqueeze(1)
-        # (batch_size, num_queries, height, width)
-        outputs_mask = (mask_embeddings * pixel_embeddings).sum(2)
+        # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
+        batch_size, num_queries, num_channels = mask_embeddings.shape
+        _, _, height, width = pixel_embeddings.shape
+        outputs_mask = torch.zeros((batch_size, num_queries, height, width), device=mask_embeddings.device)
+        for c in range(num_channels):
+            outputs_mask += mask_embeddings[..., c][..., None, None] * pixel_embeddings[:, None, c]
 
         attention_mask = nn.functional.interpolate(
             outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False

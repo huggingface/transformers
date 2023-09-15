@@ -734,10 +734,10 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
         if is_librosa_available() and is_scipy_available() and is_essentia_available() and is_torch_available():
             from transformers import Pop2PianoFeatureExtractor, Pop2PianoTokenizer
 
-            model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+            model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
             model.eval()
-            feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
-            tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+            feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+            tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
             ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
             output_fe = feature_extractor(

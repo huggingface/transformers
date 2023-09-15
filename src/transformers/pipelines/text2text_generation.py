@@ -181,9 +181,11 @@ class Text2TextGenerationPipeline(Pipeline):
         elif self.framework == "tf":
             in_b, input_length = tf.shape(model_inputs["input_ids"]).numpy()
 
-        generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
-        generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
-        self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
+        self.check_inputs(
+            input_length,
+            generate_kwargs.get("min_length", self.model.config.min_length),
+            generate_kwargs.get("max_length", self.model.config.max_length),
+        )
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         if self.framework == "pt":

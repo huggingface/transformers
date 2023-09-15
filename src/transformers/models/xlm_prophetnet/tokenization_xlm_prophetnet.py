@@ -189,6 +189,10 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         for k in self.fairseq_tokens_to_ids.keys():
             self.unique_no_split_tokens.append(k)
 
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
+
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None

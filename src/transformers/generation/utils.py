@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..deepspeed import is_deepspeed_zero3_enabled
+from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
     MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
@@ -33,7 +33,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ExplicitEnum, ModelOutput, logging
+from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
@@ -79,6 +79,9 @@ if TYPE_CHECKING:
     from .streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
+
+if is_accelerate_available():
+    from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
 
 @dataclass
@@ -631,8 +634,11 @@ class GenerationMixin:
         encoder = self.get_encoder()
         # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
         # as the inputs.
-        if hasattr(encoder, "_hf_hook"):
-            encoder._hf_hook.io_same_device = True
+        if hasattr(self, "hf_device_map"):
+            if hasattr(encoder, "_hf_hook"):
+                encoder._hf_hook.io_same_device = True
+            else:
+                add_hook_to_module(encoder, AlignDevicesHook(io_same_device=True))
 
         # 2. Prepare encoder args and encoder kwargs from model kwargs.
         irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
@@ -1252,7 +1258,7 @@ class GenerationMixin:
         if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
             # 20 is the default max_length of the generation config
             warnings.warn(
-                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) to control the"
+                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) to control the "
                 "generation length. We recommend setting `max_new_tokens` to control the maximum length of the "
                 "generation.",
                 UserWarning,
@@ -1403,16 +1409,20 @@ class GenerationMixin:
 
         # priority: `generation_config` argument > `model.generation_config` (the default generation config)
         if generation_config is None:
-            # legacy: users may modify the model configuration to control generation -- update the generation config
-            # model attribute accordingly, if it was created from the model config
-            if self.generation_config._from_model_config:
+            # legacy: users may modify the model configuration to control generation. To trigger this legacy behavior,
+            # two conditions must be met
+            # 1) the generation config must have been created from the model config (`_from_model_config` field);
+            # 2) the generation config must have seen no modification since its creation (the hash is the same).
+            if self.generation_config._from_model_config and self.generation_config._original_object_hash == hash(
+                self.generation_config
+            ):
                 new_generation_config = GenerationConfig.from_model_config(self.config)
                 if new_generation_config != self.generation_config:
                     warnings.warn(
                         "You have modified the pretrained model configuration to control generation. This is a"
                         " deprecated strategy to control generation and will be removed soon, in a future version."
-                        " Please use a generation configuration file (see"
-                        " https://huggingface.co/docs/transformers/main_classes/text_generation )"
+                        " Please use and modify the model generation configuration (see"
+                        " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )"
                     )
                     self.generation_config = new_generation_config
             generation_config = self.generation_config
@@ -1507,7 +1517,7 @@ class GenerationMixin:
         input_ids_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if generation_config.max_new_tokens is not None:
-            if not has_default_max_length:
+            if not has_default_max_length and generation_config.max_length is not None:
                 logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
@@ -3028,7 +3038,9 @@ class GenerationMixin:
             )  # (batch_size * num_beams, vocab_size)
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
-            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
+            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
+                next_token_scores_processed
+            )
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -3353,7 +3365,9 @@ class GenerationMixin:
             )  # (batch_size * num_beams, vocab_size)
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
-            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
+            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
+                next_token_scores_processed
+            )
             # Note: logits warpers are intentionally applied after adding running beam scores. On some logits warpers
             # (like top_p) this is indiferent, but on others (like temperature) it is not. For reference, see
             # https://github.com/huggingface/transformers/pull/5420#discussion_r449779867
@@ -4070,7 +4084,9 @@ class GenerationMixin:
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
 
-            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
+            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
+                next_token_scores_processed
+            )
 
             scores_for_all_vocab = next_token_scores.clone()
 

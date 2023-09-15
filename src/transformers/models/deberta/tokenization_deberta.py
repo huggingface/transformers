@@ -16,16 +16,13 @@
 
 import json
 import os
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 
@@ -433,12 +430,3 @@ class DebertaTokenizer(PreTrainedTokenizer):
         if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
         return (text, kwargs)
-
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids

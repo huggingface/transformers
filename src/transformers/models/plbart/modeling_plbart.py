@@ -1177,7 +1177,7 @@ class PLBartModel(PLBartPreTrainedModel):
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds=None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1302,7 +1302,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds=None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1402,7 +1402,8 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                + layer_past[2:],
             )
         return reordered_past
 
@@ -1751,5 +1752,7 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past
