@@ -56,25 +56,9 @@ jobs:
         run: |
           rocm-smi
 
-  check_runners_amdgpu:
-    name: Check Runners AMDGPU
-    needs: check_runner_status
-    strategy:
-      matrix:
-        machine_type: [single-amdgpu]
-    runs-on: [self-hosted, docker-amdgpu, '${{ matrix.machine_type }}']
-    container:
-      # --device /dev/dri/renderD128 == AMDGPU:0 (indexing for AMDGPU starts at 128 ...)
-      image: huggingface/transformers-pytorch-latest-amdgpu-push-ci  # <--- We test only for PyTorch for now
-      options: --device /dev/kfd --device /dev/dri/renderD128 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: ROCM-SMI
-        run: |
-          rocm-smi
-
   setup_amdgpu:
     name: Setup AMDGPU
-    needs: check_runners_amdgpu
+    needs: check_runners
     strategy:
       matrix:
         machine_type: [single-amdgpu]
