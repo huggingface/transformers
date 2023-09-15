@@ -2079,7 +2079,7 @@ class Trainer:
         weights_index_file = os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
         safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
-        is_fsdp_ckpt = resume_from_checkpoint.is_dir() and any(
+        is_fsdp_ckpt = os.path.isdir(resume_from_checkpoint) and any(
             WEIGHTS_NAME.split(".")[0] in folder_name
             for folder_name in os.listdir(resume_from_checkpoint)
             if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
@@ -2503,7 +2503,7 @@ class Trainer:
                 os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
                 or os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME_BIN))
                 or (
-                    checkpoint.is_dir()
+                    os.path.isdir(checkpoint)
                     and any(
                         OPTIMIZER_NAME_BIN.split(".")[0] in folder_name
                         for folder_name in os.listdir(checkpoint)
