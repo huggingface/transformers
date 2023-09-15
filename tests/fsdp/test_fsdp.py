@@ -182,7 +182,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def test_basic_run(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self.get_base_args(output_dir, 3, 50).split() + [f"--{dtype}"]
+        args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}"]
         fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
