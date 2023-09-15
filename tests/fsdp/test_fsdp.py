@@ -204,7 +204,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --learning_rate 5e-5
             --num_train_epochs 3
             --lr_scheduler_type cosine
-            --logging_steps 1
+            --logging_steps 50
             --save_strategy epoch
             --do_eval
             --evaluation_strategy epoch
@@ -239,7 +239,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --learning_rate 5e-5
             --num_train_epochs 1
             --lr_scheduler_type cosine
-            --logging_steps 1
+            --logging_steps 50
             --save_strategy epoch
             --do_eval
             --evaluation_strategy epoch
