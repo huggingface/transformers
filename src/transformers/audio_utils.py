@@ -160,7 +160,7 @@ def mel_filter_bank(
         norm (`str`, *optional*):
             If `"slaney"`, divide the triangular mel weights by the width of the mel band (area normalization).
         mel_scale (`str`, *optional*, defaults to `"htk"`):
-            The mel frequency scale to use, `"htk"` or `"slaney"`.
+            The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
         use_torchaudio_version (`bool`, *optional*, defaults to `False`):
             If set, uses the torchaudio way of computing the mel filters. Results in small numerical differences with
             the default version.
@@ -176,6 +176,7 @@ def mel_filter_bank(
     mel_min = hertz_to_mel(min_frequency, mel_scale=mel_scale)
     mel_max = hertz_to_mel(max_frequency, mel_scale=mel_scale)
     mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
+    filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_scale)
 
     if use_torchaudio_version:
         fft_bin_width = sampling_rate / (num_frequency_bins * 2)
@@ -184,7 +185,6 @@ def mel_filter_bank(
     else:
         # frequencies of FFT bins in Hz
         fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
-        filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_scale)
         mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
 
     if norm is not None and norm == "slaney":

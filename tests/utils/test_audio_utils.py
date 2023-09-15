@@ -98,7 +98,19 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             mel_scale="slaney",
         )
         self.assertEqual(mel_filters.shape, (513, 13))
-
+        
+        mel_filters = mel_filter_bank(
+            num_frequency_bins=513,
+            num_mel_filters=13,
+            min_frequency=100,
+            max_frequency=4000,
+            sampling_rate=16000,
+            norm="slaney",
+            mel_scale="slaney",
+            use_torchaudio_version=True,
+        )
+        self.assertEqual(mel_filters.shape, (513, 13))
+        
     def test_mel_filter_bank_htk(self):
         mel_filters = mel_filter_bank(
             num_frequency_bins=16,
@@ -162,6 +174,40 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         ])
         # fmt: on
         self.assertTrue(np.allclose(mel_filters, expected))
+        
+        
+    def test_mel_filter_bank_kaldi(self):
+        mel_filters = mel_filter_bank(
+            num_frequency_bins=16,
+            num_mel_filters=4,
+            min_frequency=0,
+            max_frequency=2000,
+            sampling_rate=4000,
+            norm=None,
+            mel_scale="kaldi",
+            use_torchaudio_version=True,
+        )
+        # fmt: off
+        expected = np.array(
+        [[0.0000, 0.0000, 0.0000, 0.0000],
+        [0.6086, 0.0000, 0.0000, 0.0000],
+        [0.8689, 0.1311, 0.0000, 0.0000],
+        [0.4110, 0.5890, 0.0000, 0.0000],
+        [0.0036, 0.9964, 0.0000, 0.0000],
+        [0.0000, 0.6366, 0.3634, 0.0000],
+        [0.0000, 0.3027, 0.6973, 0.0000],
+        [0.0000, 0.0000, 0.9964, 0.0036],
+        [0.0000, 0.0000, 0.7135, 0.2865],
+        [0.0000, 0.0000, 0.4507, 0.5493],
+        [0.0000, 0.0000, 0.2053, 0.7947],
+        [0.0000, 0.0000, 0.0000, 0.9752],
+        [0.0000, 0.0000, 0.0000, 0.7585],
+        [0.0000, 0.0000, 0.0000, 0.5539],
+        [0.0000, 0.0000, 0.0000, 0.3599],
+        [0.0000, 0.0000, 0.0000, 0.1756]]
+        )
+        # fmt: on
+        self.assertTrue(np.allclose(mel_filters, expected, atol=5e-5))
 
     def test_mel_filter_bank_slaney_norm(self):
         mel_filters = mel_filter_bank(
@@ -280,6 +326,65 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         )
         self.assertEqual(spec.shape, (257, 732))
         self.assertTrue(np.allclose(spec[:64, 400], expected))
+        
+        
+
+        mel_filters = mel_filter_bank(
+            num_frequency_bins=256,
+            num_mel_filters=400,
+            min_frequency=20,
+            max_frequency=8000,
+            sampling_rate=16000,
+            norm=None,
+            mel_scale="kaldi",
+            use_torchaudio_version=True,
+        )
+        
+        mel_filters = np.pad(mel_filters, ((0,1), (0,0)))
+
+        spec = spectrogram(
+            waveform,
+            window_function(400, "povey"),
+            frame_length=400,
+            hop_length=160,
+            fft_length=512,
+            power=2.0,
+            center=False,
+            pad_mode="reflect",
+            onesided=True,
+            preemphasis=0.97,
+            mel_filters=mel_filters,
+            log_mel="log",
+            mel_floor=1.1920928955078125e-07,
+            remove_dc_offset=True,
+        )
+        self.assertEqual(spec.shape, (400, 584))
+
+        # fmt: off
+        expected = np.array([-15.94238515,  -8.20712299,  -8.22704352, -15.94238515,
+       -15.94238515, -15.94238515, -15.94238515, -15.94238515,
+        -6.52463769,  -7.73677889, -15.94238515, -15.94238515,
+       -15.94238515, -15.94238515,  -4.18650018,  -3.37195286,
+       -15.94238515, -15.94238515, -15.94238515, -15.94238515,
+        -4.70190154,  -2.4217066 , -15.94238515, -15.94238515,
+       -15.94238515, -15.94238515,  -5.62755239,  -3.53385194,
+       -15.94238515, -15.94238515, -15.94238515, -15.94238515,
+        -9.43303023,  -8.77480925, -15.94238515, -15.94238515,
+       -15.94238515, -15.94238515,  -4.2951092 ,  -5.51585994,
+       -15.94238515, -15.94238515, -15.94238515,  -4.40151721,
+        -3.95228878, -15.94238515, -15.94238515, -15.94238515,
+        -6.10365415,  -4.59494697, -15.94238515, -15.94238515,
+       -15.94238515,  -8.10727767,  -6.2585298 , -15.94238515,
+       -15.94238515, -15.94238515,  -5.60161702,  -4.47217004,
+       -15.94238515, -15.94238515, -15.94238515,  -5.91641988]
+        )
+        # fmt: on
+        self.assertTrue(np.allclose(spec[:64, 400], expected, atol=5e-2))
+        
+        #from torchaudio.compliance.kaldi import fbank
+        #import torch
+        #expected = fbank(torch.tensor(waveform).unsqueeze(0), num_mel_bins=400, sample_frequency=16000)
+
 
     def test_spectrogram_center_padding(self):
         waveform = self._load_datasamples(1)[0]
