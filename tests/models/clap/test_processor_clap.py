@@ -123,3 +123,48 @@ class ClapProcessorTest(unittest.TestCase):
             feature_extractor.model_input_names,
             msg="`processor` and `feature_extractor` model input names do not match",
         )
+
+    def test_call_kwargs(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = ClapProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        input_audio = floats_list((3, 1000)) + floats_list((2, 1500))
+        input_str = ["This is a test string", "This is another test string with different length"]
+
+        input_feat_extract_pad = feature_extractor(input_audio, padding=True)
+
+        input_tok_pad = tokenizer(input_str, padding=True)
+        input_tok_no_pad = tokenizer(input_str, padding=False)
+
+        input_processor_shared_kwarg = processor(audios=input_audio, text=input_str, padding=True)
+        input_processor_different_kwarg = processor(
+            audios=input_audio, text=input_str, feature_extractor_padding=True, tokenizer_padding=False
+        )
+        input_processor_conflicting_kwarg = processor(
+            audios=input_audio, text=input_str, feature_extractor_padding=True, padding=False
+        )
+
+        self.assertAlmostEqual(
+            [i.sum() for i in input_feat_extract_pad["input_features"]],
+            [i.sum() for i in input_processor_shared_kwarg["input_features"]],
+            delta=1e-2,
+        )
+        self.assertAlmostEqual(
+            [i.sum() for i in input_feat_extract_pad["input_features"]],
+            [i.sum() for i in input_processor_different_kwarg["input_features"]],
+            delta=1e-2,
+        )
+        self.assertAlmostEqual(
+            [i.sum() for i in input_feat_extract_pad["input_features"]],
+            [i.sum() for i in input_processor_conflicting_kwarg["input_features"]],
+            delta=1e-2,
+        )
+
+        for key in input_tok_pad.keys():
+            self.assertListEqual(input_tok_pad[key], input_processor_shared_kwarg[key])
+
+        for key in input_tok_no_pad.keys():
+            self.assertListEqual(input_tok_no_pad[key], input_processor_different_kwarg[key])
+            self.assertListEqual(input_tok_no_pad[key], input_processor_conflicting_kwarg[key])
