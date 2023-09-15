@@ -2081,6 +2081,11 @@ class Trainer:
         weights_index_file = os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
         safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
+        is_fsdp_ckpt = any(
+            WEIGHTS_NAME.split(".")[0] in folder_name
+            for folder_name in os.listdir(resume_from_checkpoint)
+            if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
+        )
 
         if not (
             any(
@@ -2094,11 +2099,7 @@ class Trainer:
                     adapter_safe_weights_file,
                 ]
             )
-            or any(
-                WEIGHTS_NAME.split(".")[0] in folder_name
-                for folder_name in os.listdir(resume_from_checkpoint)
-                if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
-            )
+            or is_fsdp_ckpt
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2114,7 +2115,7 @@ class Trainer:
                     "yield to errors or unwanted behaviors."
                 )
 
-        if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file):
+        if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file) or is_fsdp_ckpt:
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
