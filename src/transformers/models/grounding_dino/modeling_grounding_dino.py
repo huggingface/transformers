@@ -1536,9 +1536,9 @@ class GroundingDINODecoderLayer(nn.Module):
         # Cross-Attention Text
         hidden_states, text_cross_attn_weights = self.encoder_attn_text(
             query=self.with_pos_embed(hidden_states, position_embeddings),
-            key=text_encoder_hidden_states.transpose(0, 1),
-            value=text_encoder_hidden_states.transpose(0, 1),
-            attn_mask=text_encoder_attention_mask,
+            key=text_encoder_hidden_states,
+            value=text_encoder_hidden_states,
+            key_padding_mask=text_encoder_attention_mask,
             average_attn_weights=False
         )
 
@@ -1590,12 +1590,12 @@ class GroundingDINOContrastiveEmbedding(nn.Module):
     def forward(
             self, 
             vision_hidden_state: torch.FloatTensor, 
-            text_hiddend_state: torch.FloatTensor, 
+            text_hidden_state: torch.FloatTensor, 
             text_token_mask: torch.BoolTensor
         ) -> torch.FloatTensor:
 
 
-        output = vision_hidden_state @ text_hiddend_state.transpose(-1, -2)
+        output = vision_hidden_state @ text_hidden_state.transpose(-1, -2)
         output.masked_fill_(~text_token_mask[:, None, :], float("-inf"))
 
         # padding to max_text_len
@@ -1867,7 +1867,7 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
                 text_position_embedding=text_position_embedding,
                 text_self_attention_masks=text_self_attention_masks,
                 text_position_ids=text_position_ids
-            )
+            )   
 
 
             if output_attentions:
@@ -2488,7 +2488,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             topk_coords_logits = topk_coords_logits.detach()
             reference_points = topk_coords_logits.sigmoid()
             init_reference_points = reference_points
-            if query_embeds:
+            if query_embeds is not None:
                 target = query_embeds.unsqueeze(0).repeat(batch_size, 1, 1)
             else:
                 target = torch.gather(
@@ -2679,6 +2679,7 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         )
 
         hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
+        enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[9]
         init_reference = outputs.init_reference_points if return_dict else outputs[0]
         inter_references = outputs.intermediate_reference_points if return_dict else outputs[3]
 
@@ -2692,7 +2693,11 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
             else:
                 reference = inter_references[:, level - 1]
             reference = inverse_sigmoid(reference)
-            outputs_class = self.class_embed[level](hidden_states[:, level])
+            outputs_class = self.class_embed[level](
+                vision_hidden_state=hidden_states[:, level],
+                text_hidden_state=enc_text_hidden_state,
+                text_token_mask=text_token_mask
+                )
             delta_bbox = self.bbox_embed[level](hidden_states[:, level])
             if reference.shape[-1] == 4:
                 outputs_coord_logits = delta_bbox + reference
