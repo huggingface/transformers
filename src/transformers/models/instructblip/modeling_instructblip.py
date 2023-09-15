@@ -1334,7 +1334,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: Tuple(torch.FloatTensor),
         qformer_input_ids: torch.FloatTensor,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         input_ids: Optional[torch.FloatTensor] = None,
@@ -1395,9 +1395,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         all_inputs = []
         all_masks = []
-
+        batch_size = len(pixel_values)
         # print(pixel_values.shape) #1,5,3,244,244
-        for i in range(pixel_values.shape[0]):
+        for i in range(batch_size):
             
             
             pixel_values0 = pixel_values[i]
@@ -1471,6 +1471,24 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             all_inputs.append(language_model_inputs)
             all_masks.append(language_model_attention_mask)
         
+        max_dim1 = max([x.shape[1] for x in all_inputs])
+        for i in range(len(all_inputs)):
+            if all_inputs[i].shape[1] < max_dim1:
+                pad = torch.zeros(
+                    (all_inputs[i].shape[0], max_dim1 - all_inputs[i].shape[1], all_inputs[i].shape[2]),
+                    device=all_inputs[i].device,
+                )
+                all_inputs[i] = torch.cat([all_inputs[i], pad], dim=1)
+
+        #very slight inefficiency here, could have padded together
+        max_dim1 = max([x.shape[1] for x in all_masks])
+        for i in range(len(all_masks)):
+            if all_masks[i].shape[1] < max_dim1:
+                pad = torch.zeros(
+                    (all_masks[i].shape[0], max_dim1 - all_masks[i].shape[1]), device=all_masks[i].device
+                )
+                all_masks[i] = torch.cat([all_masks[i], pad], dim=1)
+
         language_model_inputs = torch.cat(all_inputs, dim=0)
 
         # print("Xlanguage_model_inputs",language_model_inputs.shape)
