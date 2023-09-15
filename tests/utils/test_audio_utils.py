@@ -344,7 +344,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
 
         spec = spectrogram(
             waveform,
-            window_function(400, "povey"),
+            window_function(400, "povey", periodic=False),
             frame_length=400,
             hop_length=160,
             fft_length=512,
@@ -379,12 +379,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
        -15.94238515, -15.94238515, -15.94238515,  -5.91641988]
         )
         # fmt: on
-        self.assertTrue(np.allclose(spec[:64, 400], expected, atol=5e-2))
-        
-        #from torchaudio.compliance.kaldi import fbank
-        #import torch
-        #expected = fbank(torch.tensor(waveform).unsqueeze(0), num_mel_bins=400, sample_frequency=16000)
-
+        self.assertTrue(np.allclose(spec[:64, 400], expected, atol=1e-5))
 
     def test_spectrogram_center_padding(self):
         waveform = self._load_datasamples(1)[0]
