@@ -159,9 +159,9 @@ class NougatImageProcessor(BaseImageProcessor):
         gray = 255 * (data < 200).astype(np.uint8)
 
         coords = cv2.findNonZero(gray)  # Find all non-zero points (text)
-        a, b, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
+        top_left_x, top_left_y, width, height = cv2.boundingRect(coords)  # Find minimum spanning bounding box
 
-        image = image.crop((a, b, w + a, h + b))
+        image = image.crop((top_left_x, top_left_y, width + top_left_x, height + top_left_y))
         image = np.array(image).astype(np.uint8)
 
         image = image if input_data_format == ChannelDimension.LAST else np.moveaxis(image, -1, 0)

@@ -29,7 +29,7 @@ if is_levenshtein_available():
     from Levenshtein import ratio
 
 if is_nltk_available():
-    from nltk.corpus import words
+    import nltk
 
 from transformers.tokenization_utils_base import INIT_TOKENIZER_DOCSTRING
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
@@ -455,7 +455,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         else:
             try:
                 last_word = generation.split(" ")[-1]
-                if last_word in words.words():
+                if last_word in nltk.corpus.words.words():
                     generation += " "
             except LookupError:
                 # add space just in case. Will split words but better than concatenating them
