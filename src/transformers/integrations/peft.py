@@ -142,6 +142,7 @@ class PeftAdapterMixin:
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
         if peft_model_id is None and (adapter_state_dict is None and peft_config is None):
+            self._hf_peft_config_loaded = False
             raise ValueError(
                 "You should either pass a `peft_model_id` or a `peft_config` and `adapter_state_dict` to load an adapter."
             )
