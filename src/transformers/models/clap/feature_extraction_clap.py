@@ -238,15 +238,23 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
         else:
             longer = False
-            # only use repeat as a new possible value for padding. you repeat the audio before applying the usual max_length padding
             if waveform.shape[0] < max_length:
-                if padding == "repeat":
+                if padding is True:
+                    # use padding strategy specified during init.
+                    # If even it is `True` then use default strategy: `repeatpad`.
+                    padding = "repeatpad" if self.padding is True else self.padding
+
+                if padding == "pad":
+                    waveform = np.pad(waveform, (0, max_length - len(waveform)), mode="constant", constant_values=0)
+                elif padding == "repeat":
                     n_repeat = int(max_length / len(waveform))
                     waveform = np.stack(np.tile(waveform, n_repeat + 1))[:max_length]
-                if padding == "repeatpad":
+                elif padding == "repeatpad":
                     n_repeat = int(max_length / len(waveform))
                     waveform = np.stack(np.tile(waveform, n_repeat))
-                waveform = np.pad(waveform, (0, max_length - waveform.shape[0]), mode="constant", constant_values=0)
+                    waveform = np.pad(waveform, (0, max_length - len(waveform)), mode="constant", constant_values=0)
+                else:
+                    raise NotImplementedError(f"Padding {padding} not implemented")
 
             if truncation == "fusion":
                 input_mel = self._np_extract_fbank_features(waveform, self.mel_filters)
