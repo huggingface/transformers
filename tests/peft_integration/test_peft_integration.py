@@ -326,7 +326,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 dummy_state_dict = torch.load(state_dict_path)
 
                 model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
-
+                with self.assertRaises(ValueError):
+                    model.load_adapter(model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=None))
                 self.assertTrue(self._check_lora_correctly_converted(model))
 
                 # dummy generation
