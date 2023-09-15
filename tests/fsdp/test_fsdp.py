@@ -178,33 +178,10 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def test_basic_run(self):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
-        args = f"""
-            --model_name_or_path bert-base-cased
-            --task_name mrpc
-            --output_dir {output_dir}
-            --overwrite_output_dir
-            --do_train
-            --max_seq_length 128
-            --per_device_train_batch_size 16
-            --learning_rate 5e-5
-            --num_train_epochs 3
-            --lr_scheduler_type cosine
-            --logging_steps 50
-            --save_strategy epoch
-            --do_eval
-            --evaluation_strategy epoch
-            --load_best_model_at_end
-            --skip_memory_metrics False
-            --report_to none
-        """.split()
-
-        fsdp_args = ["--fsdp", "shard_grad_op auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
-
+        args = self.get_base_args(output_dir, 3, 50).split()
+        fsdp_args = ["--fsdp", "full_shard auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
-
-        # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
     @parameterized.expand(dtypes)
@@ -213,34 +190,10 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def test_basic_run_with_cpu_offload(self, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
-        args = f"""
-            --model_name_or_path bert-base-cased
-            --task_name mrpc
-            --output_dir {output_dir}
-            --overwrite_output_dir
-            --do_train
-            --max_seq_length 128
-            --per_device_train_batch_size 16
-            --learning_rate 5e-5
-            --num_train_epochs 1
-            --lr_scheduler_type cosine
-            --logging_steps 50
-            --save_strategy epoch
-            --do_eval
-            --evaluation_strategy epoch
-            --load_best_model_at_end
-            --skip_memory_metrics False
-            --report_to none
-            --{dtype}
-        """.split()
-
-        fsdp_args = ["--fsdp", "shard_grad_op auto_wrap offload", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
-
+        args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}"]
+        fsdp_args = ["--fsdp", "full_shard auto_wrap offload", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
-
-        # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
     @parameterized.expand(params_with_state_dict_type, name_func=parameterized_custom_name_func)
@@ -254,28 +207,27 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
         use_accelerate = state_dict_type == "SHARDED_STATE_DICT"
         launcher = get_launcher(True, use_accelerate=use_accelerate)
-
-        args = f"""
-            --model_name_or_path bert-base-cased
-            --task_name mrpc
-            --output_dir {output_dir}
-            --overwrite_output_dir
-            --do_train
-            --max_seq_length 128
-            --per_device_train_batch_size 16
-            --learning_rate 5e-5
-            --num_train_epochs 2
-            --lr_scheduler_type cosine
-            --logging_steps 1
-            --save_strategy epoch
-            --do_eval
-            --evaluation_strategy epoch
-            --report_to none
-            --{dtype}
-        """.split()
-
+        args = self.get_base_args(output_dir, 2, 50).split() + [f"--{dtype}"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
+        logs = self.run_cmd_and_get_logs(use_accelerate, sharding_strategy, launcher, script, args, output_dir)
 
+        # resume from ckpt
+        checkpoint = os.path.join(output_dir, "checkpoint-115")
+        resume_args = (
+            args
+            + f"""
+            --resume_from_checkpoint {checkpoint}
+        """.split()
+        )
+        logs_resume = self.run_cmd_and_get_logs(
+            use_accelerate, sharding_strategy, launcher, script, resume_args, output_dir
+        )
+
+        for log, log1 in zip(logs, logs_resume):
+            if "learning_rate" in log:
+                self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
+
+    def run_cmd_and_get_logs(self, use_accelerate, sharding_strategy, launcher, script, args, output_dir):
         if not use_accelerate:
             fsdp_args = [
                 "--fsdp",
@@ -293,12 +245,11 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
-
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
+        return logs
 
-        # resume from ckpt
-        checkpoint = os.path.join(output_dir, "checkpoint-115")
-        resume_args = f"""
+    def get_base_args(self, output_dir, num_epochs, logging_steps):
+        return f"""
             --model_name_or_path bert-base-cased
             --task_name mrpc
             --output_dir {output_dir}
@@ -307,37 +258,11 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --max_seq_length 128
             --per_device_train_batch_size 16
             --learning_rate 5e-5
-            --num_train_epochs 2
+            --num_train_epochs {num_epochs}
             --lr_scheduler_type cosine
-            --logging_steps 1
+            --logging_steps {logging_steps}
             --save_strategy epoch
             --do_eval
             --evaluation_strategy epoch
             --report_to none
-            --{dtype}
-            --resume_from_checkpoint {checkpoint}
-        """.split()
-
-        if not use_accelerate:
-            fsdp_args = [
-                "--fsdp",
-                f"{sharding_strategy} auto_wrap",
-                "--fsdp_transformer_layer_cls_to_wrap",
-                "BertLayer",
-            ]
-            cmd = launcher + script + resume_args + fsdp_args
-        else:
-            fsdp_config = f"""
-                --fsdp_sharding_strategy {FSDP_SHARDING_STRATEGY.index(sharding_strategy.upper()) + 1}
-            """.split()
-            cmd = launcher + fsdp_config + script + resume_args
-
-        # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
-        execute_subprocess_async(cmd, env=self.get_env())
-
-        logs_resume = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
-
-        for log, log1 in zip(logs, logs_resume):
-            if "learning_rate" in log:
-                self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
+        """
