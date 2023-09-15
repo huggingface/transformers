@@ -203,7 +203,7 @@ if is_peft_available():
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
-    from accelerate.utils import DistributedDataParallelKwargs, GradientAccumulationPlugin
+    from accelerate.utils import DistributedDataParallelKwargs, GradientAccumulationPlugin, PrecisionType
 
     if version.parse(accelerate_version) > version.parse("0.20.3"):
         from accelerate.utils import (
@@ -627,7 +627,7 @@ class Trainer:
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         self.do_grad_scaling = False
-        if (args.fp16 or args.bf16) and not (self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
+        if (args.fp16 or args.bf16) and not (self.is_megatron_lm_enabled or self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
             # deepspeed and SageMaker Model Parallel manage their own half precision
             if self.sharded_ddp is not None:
                 if args.half_precision_backend == "cuda_amp":
@@ -1546,6 +1546,7 @@ class Trainer:
             resume_from_checkpoint is not None
             and not is_sagemaker_mp_enabled()
             and not self.is_deepspeed_enabled
+            and not self.is_megatron_lm_enabled
             and not self.is_fsdp_enabled
         ):
             self._load_from_checkpoint(resume_from_checkpoint)
@@ -2403,7 +2404,11 @@ class Trainer:
                     partial=True,
                     v3=smp.state.cfg.shard_optimizer_state,
                 )
-        elif self.args.should_save and not self.is_deepspeed_enabled and not (self.fsdp or self.is_fsdp_enabled):
+        elif (self.args.should_save
+                and not self.is_deepspeed_enabled
+                and not self.is_megatron_lm_enabled
+                and not (self.fsdp or self.is_fsdp_enabled)
+        ):
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
 
@@ -2479,12 +2484,13 @@ class Trainer:
         if checkpoint is None:
             return
 
-        if self.is_deepspeed_enabled:
+        if self.is_deepspeed_enabled or self.is_megatron_lm_enabled:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             if not isinstance(self.lr_scheduler, DeepSpeedSchedulerWrapper):
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
                 reissue_pt_warnings(caught_warnings)
+            # megatron-lm loads optimizer/lr_scheduler together with the model in prepare
             return
 
         checkpoint_file_exists = (
@@ -2860,6 +2866,9 @@ class Trainer:
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
+
+        elif self.is_megatron_lm_enabled:
+            self.model_wrapped.save_checkpoint(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
@@ -3356,6 +3365,8 @@ class Trainer:
             self.args.distributed_state is None and self.args.local_rank != -1
         ):
             tensors = distributed_concat(tensors)
+            if self.args.distributed_state.distributed_type == "MEGATRON_LM":
+                tensors = tensors[-1:]
         return tensors
 
     def prediction_step(
@@ -3942,14 +3953,22 @@ class Trainer:
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
         # create accelerator object
+        mixed_precision = None
+        if self.args.fp16:
+            mixed_precision = PrecisionType.FP16
+        if self.args.bf16:
+            mixed_precision = PrecisionType.BF16
         self.accelerator = Accelerator(
             dispatch_batches=self.args.dispatch_batches,
             deepspeed_plugin=self.args.deepspeed_plugin,
+            megatron_lm_plugin=self.args.megatron_lm_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
+            mixed_precision=mixed_precision
         )
 
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
+        self.is_megatron_lm_enabled = getattr(self.accelerator.state, "megatron_lm_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
 
         # post accelerator creation setup

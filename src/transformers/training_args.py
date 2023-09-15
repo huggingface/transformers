@@ -1055,6 +1055,14 @@ class TrainingArguments:
             )
         },
     )
+    megatron_lm: Optional[str] = field(
+        default=False,
+        metadata={
+            "help": (
+                "Enable megatron-lm and pass the path to megatron-lm json config file (e.g. megatron_lm_config.json)"
+            )
+        },
+    )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
@@ -1695,6 +1703,21 @@ class TrainingArguments:
             mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
+
+        self.megatron_lm_plugin = None
+        if self.megatron_lm:
+            if not is_accelerate_available():
+                raise ValueError("--megatron_lm requires Accelerate to be installed: `pip install accelerate`.")
+            from accelerate.utils import MegatronLMPlugin
+            os.environ["ACCELERATE_USE_MEGATRON_LM"] = "true"
+            other_megatron_args = None
+            assert os.path.exists(self.megatron_lm), f"the specified path {self.megatron_lm} does not exist."
+            with io.open(self.megatron_lm, "r", encoding="utf-8") as f:
+                other_megatron_args = json.load(f)
+            self.megatron_lm_plugin = MegatronLMPlugin(
+                lr_warmup_fraction=self.warmup_ratio,
+                lr_decay_style=self.lr_scheduler_type,
+                other_megatron_args=other_megatron_args)
 
         if self.push_to_hub_token is not None:
             warnings.warn(
