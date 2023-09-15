@@ -257,7 +257,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         input_features = input_features.view(batch_size, num_frames // self.stride, num_channels * self.stride)
 
         indices = torch.arange(0, num_frames, device=attention_mask[0].device)
-        attention_mask = attention_mask[:, indices % self.stride == 0]
+        attention_mask = attention_mask[:, indices % self.stride == 1]
 
         padded_inputs["input_features"] = input_features
         padded_inputs["attention_mask"] = attention_mask
