@@ -1570,7 +1570,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             # preprocess for `accelerate`
             self._preprocess_accelerate()
 
-        batch_size = pixel_values.shape[0]
+        batch_size = len(pixel_values)
         # image_embedsX = self.vision_model(pixel_values, return_dict=True).last_hidden_state
 
         all_inputs = []
