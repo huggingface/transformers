@@ -17,7 +17,6 @@ import inspect
 import random
 import unittest
 
-import numpy as np
 from datasets import Audio, load_dataset
 
 from transformers import UnivNetGanConfig, UnivNetGanFeatureExtractor
