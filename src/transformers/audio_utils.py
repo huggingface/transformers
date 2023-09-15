@@ -162,7 +162,8 @@ def mel_filter_bank(
         mel_scale (`str`, *optional*, defaults to `"htk"`):
             The mel frequency scale to use, `"htk"` or `"slaney"`.
         use_torchaudio_version (`bool`, *optional*, defaults to `False`):
-            If set, uses the torchaudio way of computing the mel filters. Results in small numerical differences with the default version.
+            If set, uses the torchaudio way of computing the mel filters. Results in small numerical differences with
+            the default version.
 
     Returns:
         `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix. This is a
@@ -177,7 +178,7 @@ def mel_filter_bank(
     mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
 
     if use_torchaudio_version:
-        fft_bin_width = sampling_rate / (num_frequency_bins*2)
+        fft_bin_width = sampling_rate / (num_frequency_bins * 2)
         mel = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
         mel_filters = _create_triangular_filter_bank(mel, mel_freqs)
     else:
@@ -378,7 +379,7 @@ def spectrogram(
         db_range (`float`, *optional*):
             Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
             peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
-        remove_dc_offset (`bool`, *optional*): 
+        remove_dc_offset (`bool`, *optional*):
             Subtract mean from waveform on each frame, applied before pre-emphasis.
         dtype (`np.dtype`, *optional*, defaults to `np.float32`):
             Data type of the spectrogram tensor. If `power` is None, this argument is ignored and the dtype will be
@@ -433,7 +434,7 @@ def spectrogram(
 
         if remove_dc_offset:
             buffer[:frame_length] = buffer[:frame_length] - buffer[:frame_length].mean()
-            
+
         if preemphasis is not None:
             buffer[1:frame_length] -= preemphasis * buffer[: frame_length - 1]
             buffer[0] *= 1 - preemphasis
