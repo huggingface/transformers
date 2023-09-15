@@ -176,13 +176,13 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertEqual(v, self.fsdp_config[k])
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
-    @parameterized.expand(sharding_strategies)
+    @parameterized.expand(params, name_func=parameterized_custom_name_func)
     @require_torch_multi_gpu
     @slow
-    def test_basic_run(self, sharding_strategy):
+    def test_basic_run(self, sharding_strategy, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self.get_base_args(output_dir, 3, 50).split()
+        args = self.get_base_args(output_dir, 3, 50).split() + [f"--{dtype}"]
         fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
@@ -200,16 +200,16 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
 
-    @parameterized.expand(params_with_state_dict_type, name_func=parameterized_custom_name_func)
+    @parameterized.expand(STATE_DICT_TYPE, name_func=parameterized_custom_name_func)
     @require_torch_multi_gpu
     @slow
-    def test_training_and_can_resume_normally(self, dtype, state_dict_type):
+    def test_training_and_can_resume_normally(self, state_dict_type):
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
 
         sharding_strategy = "full_shard"
         use_accelerate = state_dict_type == "SHARDED_STATE_DICT"
         launcher = get_launcher(True, use_accelerate=use_accelerate)
-        args = self.get_base_args(output_dir, 2, 25).split() + [f"--{dtype}"]
+        args = self.get_base_args(output_dir, 2, 25).split()
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         logs = self.run_cmd_and_get_logs(use_accelerate, sharding_strategy, launcher, script, args, output_dir)
 
