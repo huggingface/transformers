@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     check_json_file_has_correct_format,
     get_tests_dir,
     is_pt_tf_cross_test,
+    require_jinja,
     require_tf,
     require_tokenizers,
     require_torch,
@@ -1051,6 +1052,40 @@ class TokenizerTesterMixin:
 
                 if tokenizer.num_special_tokens_to_add(pair=True):
                     self.assertIn(None, output.sequence_ids())
+
+    @require_jinja
+    def test_chat_template(self):
+        dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
+        dummy_conversation = [
+            {"role": "system", "content": "system message"},
+            {"role": "user", "content": "user message"},
+            {"role": "assistant", "content": "assistant message"},
+        ]
+        expected_output = "systemsystem messageuseruser messageassistantassistant message"
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False
+                )
+                self.assertEqual(output, expected_output)  # Test we can pass chat_template arg
+                # Check that no error raised when tokenize=True
+                tokenizer.apply_chat_template(dummy_conversation, chat_template=dummy_template, tokenize=True)
+
+                tokenizer.chat_template = dummy_template
+                self.assertEqual(tokenizer.chat_template, dummy_template)  # Test property setter
+                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False)
+                self.assertEqual(output, expected_output)  # Test chat_template attribute is used if no arg is passed
+                tokenizer.apply_chat_template(dummy_conversation, tokenize=True)  # Check that no error raised
+
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    tokenizer.save_pretrained(tmp_dir_name)
+                    tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+
+                self.assertEqual(tokenizer.chat_template, dummy_template)  # Test template has persisted
+                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False)
+                self.assertEqual(output, expected_output)  # Test output is the same after reloading
+                tokenizer.apply_chat_template(dummy_conversation, tokenize=True)  # Check that no error raised
 
     def test_number_of_added_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

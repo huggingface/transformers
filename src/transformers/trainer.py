@@ -3254,7 +3254,7 @@ class Trainer:
             if (
                 args.eval_accumulation_steps is not None
                 and (step + 1) % args.eval_accumulation_steps == 0
-                and self.accelerator.sync_gradients
+                and (self.accelerator.sync_gradients or version.parse(accelerate_version) > version.parse("0.20.3"))
             ):
                 if losses_host is not None:
                     losses = nested_numpify(losses_host)
