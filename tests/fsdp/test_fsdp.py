@@ -212,10 +212,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --skip_memory_metrics False
         """.split()
 
-        fsdp_args = """
-            --fsdp "shard_grad_op auto_wrap"  
-            --fsdp_transformer_layer_cls_to_wrap BertLayer
-        """.split()
+        fsdp_args = ["--fsdp", "shard_grad_op auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
 
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
@@ -250,14 +247,10 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
             --{dtype}
         """.split()
 
-        fsdp_args = """
-            --fsdp "shard_grad_op auto_wrap offload" 
-            --fsdp_transformer_layer_cls_to_wrap BertLayer
-        """.split()
+        fsdp_args = ["--fsdp", "shard_grad_op auto_wrap offload", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
 
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
-        cmd = cmd.replace('"', "")
 
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
