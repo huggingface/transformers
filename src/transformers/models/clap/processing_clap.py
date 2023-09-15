@@ -39,13 +39,7 @@ class ClapProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(
-        self,
-        text=None,
-        audios=None,
-        return_tensors=None,
-        **kwargs,
-    ):
+    def __call__(self, text=None, audios=None, return_tensors=None, **kwargs):
         """
         Main method to prepare one or several text sequences(s) and audio(s) for the model. If `text` is not `None`,
         this method forwards the `text` and tokenizer specific `kwargs` arguments to RobertaTokenizerFast's
@@ -74,7 +68,9 @@ class ClapProcessor(ProcessorMixin):
                 - Keyword arguments with `tokenizer_` prefix are passed only to RobertaTokenizerFast
                 - Keyword arguments with `feature_extractor_` prefix are passed only to ClapFeatureExtractor
                 - Keyword arguments without either of the prefix are passed to both RobertaTokenizerFast as well as
-                  ClapFeatureExtractor.
+                  ClapFeatureExtractor, **EXCEPT for `sampling_rate`**. `sampling_rate` is passed only to
+                  ClapFeatureExtractor. It is treated differently for backward compatibility and using
+                  `feature_extractor_sampling_rate` is preferred.
                 In case of a conflict, keyword arguments with prefix are given preference.
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
@@ -85,6 +81,10 @@ class ClapProcessor(ProcessorMixin):
               `None`).
             - **audio_features** -- Audio features to be fed to a model. Returned when `audios` is not `None`.
         """
+        # extract `sampling_rate` from kwargs. It is treated differently for backward compatibility.
+        # https://github.com/huggingface/transformers/pull/24503/files#r1315135061
+        sampling_rate = kwargs.pop("sampling_rate", None)
+
         if text is None and audios is None:
             raise ValueError("You have to specify either text or audios. Both cannot be none.")
 
@@ -102,7 +102,7 @@ class ClapProcessor(ProcessorMixin):
 
         # collect all tokenizer kwargs and feature_extractor kwargs
         tokenizer_kwargs = {**kwargs, **tokenizer_kwargs}
-        feature_extractor_kwargs = {**kwargs, **feature_extractor_kwargs}
+        feature_extractor_kwargs = {"sampling_rate": sampling_rate, **kwargs, **feature_extractor_kwargs}
 
         if text is not None:
             encoding = self.tokenizer(text, return_tensors=return_tensors, **tokenizer_kwargs)
