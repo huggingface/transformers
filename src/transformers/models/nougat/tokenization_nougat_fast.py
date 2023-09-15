@@ -449,6 +449,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
             generation = generation + "\n\n"
         else:
             try:
+                import nltk
                 last_word = generation.split(" ")[-1]
                 if last_word in nltk.corpus.words.words():
                     generation += " "
