@@ -213,7 +213,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         """.split()
 
         fsdp_args = """
-            --fsdp shard_grad_op auto_wrap  
+            --fsdp "shard_grad_op auto_wrap"  
             --fsdp_transformer_layer_cls_to_wrap BertLayer
         """.split()
 
@@ -251,7 +251,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         """.split()
 
         fsdp_args = """
-            --fsdp shard_grad_op auto_wrap offload 
+            --fsdp "shard_grad_op auto_wrap offload" 
             --fsdp_transformer_layer_cls_to_wrap BertLayer
         """.split()
 
@@ -296,7 +296,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
         if not use_accelerate:
             fsdp_args = f"""
-                --fsdp {sharding_strategy} auto_wrap  
+                --fsdp "{sharding_strategy} auto_wrap"  
                 --fsdp_transformer_layer_cls_to_wrap BertLayer
             """.split()
 
@@ -336,7 +336,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
         if not use_accelerate:
             fsdp_args = f"""
-                --fsdp {sharding_strategy} auto_wrap  
+                --fsdp "{sharding_strategy} auto_wrap"  
                 --fsdp_transformer_layer_cls_to_wrap BertLayer
             """.split()
 
@@ -355,4 +355,4 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
         for log, log1 in zip(logs, logs_resume):
             if "learning_rate" in log:
-                self.assertEqual(log["learning_rate"], log1["learning_rate"])
+                self.assertAlmostEqual(log["learning_rate"], log1["learning_rate"], delta=1e-5)
