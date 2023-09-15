@@ -31,9 +31,9 @@ VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class VitMatteConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`VitMatteForImageMatting`]. It is used to
-    instantiate an VitMatte model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the VitMatte
+    This is the configuration class to store the configuration of [`VitMatteForImageMatting`]. It is used to
+    instantiate a ViTMatte model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the ViTMatte
     [hustvl/vitmatte-small-composition-1k](https://huggingface.co/hustvl/vitmatte-small-composition-1k) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -58,10 +58,10 @@ class VitMatteConfig(PretrainedConfig):
     ```python
     >>> from transformers import VitMatteConfig, VitMatteForImageMatting
 
-    >>> # Initializing a VitMatte vitdet-base-patch16-224 style configuration
+    >>> # Initializing a ViTMatte hustvl/vitmatte-small-composition-1k style configuration
     >>> configuration = VitMatteConfig()
 
-    >>> # Initializing a model (with random weights) from the vitdet-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the hustvl/vitmatte-small-composition-1k style configuration
     >>> model = VitMatteForImageMatting(configuration)
 
     >>> # Accessing the model configuration
