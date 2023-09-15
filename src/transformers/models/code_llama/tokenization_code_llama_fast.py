@@ -362,9 +362,9 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
             "{% set system_message = messages[0]['content'] %}"
-            "{% elif USE_DEFAULT_PROMPT == true and not '<<SYS>>' in messages[0]['content'] %}"
+            "{% elif use_default_prompt == true and not '<<SYS>>' in messages[0]['content'] %}"
             "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
-            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
+            "{% set system_message = default_system_message %}"
             "{% else %}"
             "{% set loop_messages = messages %}"
             "{% set system_message = false %}"
@@ -387,11 +387,15 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             "{% endif %}"
             "{% endfor %}"
         )
-        template = template.replace("USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false")
-        default_message = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
-        template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
-
         return template
+
+    @property
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.default_chat_template_kwargs
+    def default_chat_template_kwargs(self):
+        return {
+            "use_default_prompt": self.use_default_system_prompt,
+            "default_system_message": DEFAULT_SYSTEM_PROMPT,
+        }
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

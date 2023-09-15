@@ -1567,6 +1567,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Stores a Jinja template that formats chat histories into tokenizable strings
         self.chat_template = kwargs.pop("chat_template", None)
+        self.chat_template_kwargs = kwargs.pop("chat_template_kwargs", None)
 
         super().__init__(**kwargs)
 
@@ -1641,6 +1642,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self,
         conversation: Union[List[Dict[str, str]], "Conversation"],
         chat_template: Optional[str] = None,
+        template_kwargs: Optional[Dict] = None,
         tokenize: bool = True,
         padding: bool = False,
         truncation: bool = False,
@@ -1659,6 +1661,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.
+            template_kwargs (Dict, *optional*): Additional kwargs that will be made available to the template.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             padding (`bool`, defaults to `False`):
@@ -1693,10 +1696,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             else:
                 chat_template = self.default_chat_template
 
+        if template_kwargs is None:
+            if self.chat_template_kwargs is not None:
+                template_kwargs = self.chat_template_kwargs
+            else:
+                template_kwargs = getattr(self, "default_chat_template_kwargs", {})
+
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
 
-        rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
+        # Add special tokens as template kwargs as well, but actual kwargs take priority over them
+        token_kwargs = {key: val for key, val in self.special_tokens_map.items() if key not in template_kwargs}
+        template_kwargs.update(token_kwargs)
+
+        rendered = compiled_template.render(messages=conversation, **template_kwargs)
 
         if padding is True:
             padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
