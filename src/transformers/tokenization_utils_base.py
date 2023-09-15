@@ -2315,6 +2315,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if self.chat_template is not None:
             tokenizer_config["chat_template"] = self.chat_template
+        if self.chat_template_kwargs is not None:
+            tokenizer_config["chat_template_kwargs"] = self.chat_template_kwargs
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
