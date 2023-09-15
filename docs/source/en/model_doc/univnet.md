@@ -38,9 +38,9 @@ To the best of my knowledge, there is no official code release, but an unofficia
 
 [[autodoc]] UnivNetGanConfig
 
-## UnivNetFeatureExtractor
+## UnivNetGanFeatureExtractor
 
-[[autodoc]] UnivNetFeatureExtractor
+[[autodoc]] UnivNetGanFeatureExtractor
     - __call__
 
 ## UnivNetGan

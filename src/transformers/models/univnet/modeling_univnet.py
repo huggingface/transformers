@@ -573,11 +573,11 @@ class UnivNetGan(PreTrainedModel):
         Example:
 
          ```python
-         >>> from transformers import UnivNetFeatureExtractor, UnivNetGan
+         >>> from transformers import UnivNetGanFeatureExtractor, UnivNetGan
          >>> from datasets import load_dataset, Audio
 
          >>> model = UnivNetGan.from_pretrained("dg845/univnet-dev")
-         >>> feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
+         >>> feature_extractor = UnivNetGanFeatureExtractor.from_pretrained("dg845/univnet-dev")
 
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> # Resample the audio to the feature extractor's sampling rate.

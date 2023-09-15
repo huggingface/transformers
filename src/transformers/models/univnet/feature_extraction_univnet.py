@@ -26,7 +26,7 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class UnivNetFeatureExtractor(SequenceFeatureExtractor):
+class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a UnivNet feature extractor.
 

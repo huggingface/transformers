@@ -572,7 +572,7 @@ _import_structure = {
     ],
     "models.univnet": [
         "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "UnivNetFeatureExtractor",
+        "UnivNetGanFeatureExtractor",
         "UnivNetGanConfig",
     ],
     "models.upernet": ["UperNetConfig"],
@@ -4653,7 +4653,7 @@ if TYPE_CHECKING:
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.univnet import (
         UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        UnivNetFeatureExtractor,
+        UnivNetGanFeatureExtractor,
         UnivNetGanConfig,
     )
     from .models.upernet import UperNetConfig

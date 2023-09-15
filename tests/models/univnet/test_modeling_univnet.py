@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 from datasets import Audio, load_dataset
 
-from transformers import UnivNetFeatureExtractor, UnivNetGanConfig
+from transformers import UnivNetGanFeatureExtractor, UnivNetGanConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -329,7 +329,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
     @torch.no_grad()
     def test_integration(self):
-        feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
+        feature_extractor = UnivNetGanFeatureExtractor.from_pretrained("dg845/univnet-dev")
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
 
