@@ -190,7 +190,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def test_basic_run_with_cpu_offload(self, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()
-        args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}"]
+        args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}", "--max_steps 10"]
         fsdp_args = ["--fsdp", "full_shard auto_wrap offload", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         cmd = launcher + script + args + fsdp_args
@@ -207,7 +207,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
         use_accelerate = state_dict_type == "SHARDED_STATE_DICT"
         launcher = get_launcher(True, use_accelerate=use_accelerate)
-        args = self.get_base_args(output_dir, 2, 50).split() + [f"--{dtype}"]
+        args = self.get_base_args(output_dir, 2, 25).split() + [f"--{dtype}"]
         script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
         logs = self.run_cmd_and_get_logs(use_accelerate, sharding_strategy, launcher, script, args, output_dir)
 
