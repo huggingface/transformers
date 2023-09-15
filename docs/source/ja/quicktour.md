@@ -294,7 +294,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
         [0.2084, 0.1826, 0.1969, 0.1755, 0.2365]], grad_fn=<SoftmaxBackward0>)
 ```
 
-<pt>
+</pt>
 <tf>
 🤗 Transformersは事前学習済みインスタンスをロードするためのシンプルで統一された方法を提供します。
 これは、[`TFAutoModel`]を[`AutoTokenizer`]をロードするのと同じようにロードできることを意味します。
@@ -424,7 +424,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 >>> my_model = AutoModel.from_config(my_config)
 ```
 
-<pt>
+</pt>
 <tf>
 カスタム構成からモデルを作成するには、[`TFAutoModel.from_config`]を使用します：
 

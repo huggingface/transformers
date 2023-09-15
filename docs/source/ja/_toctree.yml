@@ -5,7 +5,7 @@
     title: インストール
   title: はじめに
 - sections:
-  - local: Quick tour
+  - local: quicktour
     title: クイックツアー
 - sections:
   - local: accelerate
@@ -19,11 +19,14 @@
   - local: autoclass_tutorial
     title: AutoClassを使用してポータブルなコードを書く
 - sections:
-  - local: Preprocessing
+  - local: preprocessing
     title: データ前処理
 - sections:
-  - local: Training
+  - local: training
     title: 訓練
 - sections:
-  - local: Model Sharing
+  - local: model_sharing
     title: モデル共有
+- sections:
+  -local: pipeline_tutorial
+   title: パイプライン共有

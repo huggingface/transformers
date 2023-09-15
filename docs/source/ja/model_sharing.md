@@ -107,8 +107,9 @@ TensorFlowからPyTorchにチェックポイントを変換するには、`from_
 ```python
 >>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
 ```
-
+</tf>
 <tf>
+<jax>
 Flaxでモデルが利用可能な場合、PyTorchからFlaxへのチェックポイントの変換も行うことができます：
 
 ```py
@@ -163,7 +164,7 @@ Pass your training arguments as usual to [`Trainer`]:
 >>> trainer.push_to_hub()
 ```
 
-<pt>
+</pt>
 <tf>
 
 [`PushToHubCallback`]を使用してモデルをHubに共有します。[`PushToHubCallback`]関数には、次のものを追加します：
