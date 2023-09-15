@@ -22,6 +22,10 @@ from typing import List, Union
 
 import numpy as np
 
+from transformers.tokenization_utils_base import INIT_TOKENIZER_DOCSTRING
+from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+from transformers.utils import add_end_docstrings
+
 from ...utils import is_levenshtein_available, is_nltk_available, requires_backends
 
 
@@ -29,11 +33,7 @@ if is_levenshtein_available():
     from Levenshtein import ratio
 
 if is_nltk_available():
-    import nltk
-
-from transformers.tokenization_utils_base import INIT_TOKENIZER_DOCSTRING
-from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
-from transformers.utils import add_end_docstrings
+    from nltk.corpus import words
 
 
 INIT_TOKENIZER_DOCSTRING += """
@@ -79,10 +79,7 @@ def markdown_compatible(s: str) -> str:
     s = s.replace(r"\. ", ". ")
     # bold formatting
     s = s.replace(r"\bm{", r"\mathbf{").replace(r"{\\bm ", r"\mathbf{")
-    # s = s.replace(r"\it{", r"\mathit{").replace(r"{\\it ", r"\mathit{") # not needed
     s = re.sub(r"\\mbox{ ?\\boldmath\$(.*?)\$}", r"\\mathbf{\1}", s)
-    # s=re.sub(r'\\begin{table}(.+?)\\end{table}\nTable \d+: (.+?)\n',r'\\begin{table}\1\n\\capation{\2}\n\\end{table}\n',s,flags=re.S)
-    # s=re.sub(r'###### Abstract\n(.*?)\n\n',r'\\begin{abstract}\n\1\n\\end{abstract}\n\n',s,flags=re.S)
     # urls
     s = re.sub(
         r"((?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-]))",
@@ -449,9 +446,8 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
             generation = generation + "\n\n"
         else:
             try:
-                import nltk
                 last_word = generation.split(" ")[-1]
-                if last_word in nltk.corpus.words.words():
+                if last_word in words.words():
                     generation += " "
             except LookupError:
                 # add space just in case. Will split words but better than concatenating them

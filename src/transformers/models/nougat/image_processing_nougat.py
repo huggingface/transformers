@@ -146,7 +146,8 @@ class NougatImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
-        image = image if input_data_format == ChannelDimension.LAST else np.moveaxis(image, 0, -1)
+        # convert to Pillow image
+        image = to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
         image = Image.fromarray(image)
 
         data = np.array(image.convert("L")).astype(np.uint8)
@@ -170,7 +171,7 @@ class NougatImageProcessor(BaseImageProcessor):
         image = image.crop((top_left_x, top_left_y, width + top_left_x, height + top_left_y))
         image = np.array(image).astype(np.uint8)
 
-        image = image if input_data_format == ChannelDimension.LAST else np.moveaxis(image, -1, 0)
+        image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
 
         image = (
             to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image

@@ -213,24 +213,25 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     ).logits
     assert torch.allclose(original_logits, logits, atol=1e-3)
 
-    # TODO verify generation
-    # generated_ids = model.generate(pixel_values
-    #                                 min_length=1,
-    #                                 max_length=original_model.config.max_length,
-    #                                 pad_token_id=tokenizer.pad_token_id,
-    #                                 eos_token_id=tokenizer.eos_token_id,
-    #                                 use_cache=True,
-    #                                 bad_words_ids=[
-    #                                     [tokenizer.unk_token_id],
-    #                                 ],
-    #                                 return_dict_in_generate=True,
-    #                                 output_scores=True,
-    #                                 output_attentions=False,
-    #                                 do_sample=False,
-    #                                 stopping_criteria=StoppingCriteriaList([StoppingCriteriaScores()]),
-    # )
-    # print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
-
+    # verify generation
+    outputs = model.generate(
+        pixel_values,
+        min_length=1,
+        max_length=30,
+        pad_token_id=tokenizer.pad_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+        use_cache=True,
+        bad_words_ids=[
+            [tokenizer.unk_token_id],
+        ],
+        return_dict_in_generate=True,
+        do_sample=False,
+    )
+    generated = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)[0]
+    assert (
+        generated
+        == "# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher"
+    )
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
