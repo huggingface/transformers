@@ -221,6 +221,7 @@ _import_structure = {
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
     ],
+    "models.bros": ["BROS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BrosConfig", "BrosProcessor"],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -469,6 +470,7 @@ _import_structure = {
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
+    "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1352,6 +1354,17 @@ else:
             "BridgeTowerForMaskedLM",
             "BridgeTowerModel",
             "BridgeTowerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bros"].extend(
+        [
+            "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BrosForTokenClassification",
+            "BrosModel",
+            "BrosPreTrainedModel",
+            "BrosProcessor",
+            "BrosSpadeEEForTokenClassification",
+            "BrosSpadeELForTokenClassification",
         ]
     )
     _import_structure["models.camembert"].extend(
@@ -2431,6 +2444,9 @@ else:
             "PerceiverModel",
             "PerceiverPreTrainedModel",
         ]
+    )
+    _import_structure["models.persimmon"].extend(
+        ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
     )
     _import_structure["models.pix2struct"].extend(
         [
@@ -4320,6 +4336,7 @@ if TYPE_CHECKING:
         BridgeTowerTextConfig,
         BridgeTowerVisionConfig,
     )
+    from .models.bros import BROS_PRETRAINED_CONFIG_ARCHIVE_MAP, BrosConfig, BrosProcessor
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
@@ -4551,6 +4568,7 @@ if TYPE_CHECKING:
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
+    from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5332,6 +5350,15 @@ if TYPE_CHECKING:
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,
+        )
+        from .models.bros import (
+            BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BrosForTokenClassification,
+            BrosModel,
+            BrosPreTrainedModel,
+            BrosProcessor,
+            BrosSpadeEEForTokenClassification,
+            BrosSpadeELForTokenClassification,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6210,6 +6237,12 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
+        )
+        from .models.persimmon import (
+            PersimmonForCausalLM,
+            PersimmonForSequenceClassification,
+            PersimmonModel,
+            PersimmonPreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,

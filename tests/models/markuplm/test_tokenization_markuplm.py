@@ -2311,3 +2311,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Dummy warning",
             cm.records[0].message,
         )
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template(self):
+        pass

@@ -504,7 +504,7 @@ def main():
         # might be slower to preprocess.
         #
         # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-        # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+        # https://huggingface.co/docs/datasets/process#map
 
         with accelerator.main_process_first():
             tokenized_datasets = tokenized_datasets.map(
@@ -636,8 +636,8 @@ def main():
             # need to multiply `gradient_accumulation_steps` to reflect real steps
             resume_step = int(training_difference.replace("step_", "")) * args.gradient_accumulation_steps
             starting_epoch = resume_step // len(train_dataloader)
-            resume_step -= starting_epoch * len(train_dataloader)
             completed_steps = resume_step // args.gradient_accumulation_steps
+            resume_step -= starting_epoch * len(train_dataloader)
 
     # update the progress_bar if load from checkpoint
     progress_bar.update(completed_steps)
@@ -670,7 +670,7 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    output_dir = f"step_{completed_steps }"
+                    output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)

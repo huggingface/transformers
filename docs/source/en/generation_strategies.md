@@ -55,12 +55,10 @@ When you load a model explicitly, you can inspect the generation configuration t
 >>> from transformers import AutoModelForCausalLM
 
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
->>> model.generation_config  # doctest: +IGNORE_RESULT
+>>> model.generation_config
 GenerationConfig {
-    "_from_model_config": true,
     "bos_token_id": 50256,
     "eos_token_id": 50256,
-    "transformers_version": "4.26.0.dev0"
 }
 ```
 

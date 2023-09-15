@@ -64,6 +64,7 @@ from .utils import (
     is_ftfy_available,
     is_ipex_available,
     is_jieba_available,
+    is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
     is_librosa_available,
@@ -334,6 +335,13 @@ def require_jieba(test_case):
     Decorator marking a test that requires jieba. These tests are skipped when jieba isn't installed.
     """
     return unittest.skipUnless(is_jieba_available(), "test requires jieba")(test_case)
+
+
+def require_jinja(test_case):
+    """
+    Decorator marking a test that requires jinja. These tests are skipped when jinja isn't installed.
+    """
+    return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
 
 
 def require_tf2onnx(test_case):
