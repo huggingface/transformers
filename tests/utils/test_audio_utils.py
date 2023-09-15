@@ -44,6 +44,10 @@ class AudioUtilsFunctionTester(unittest.TestCase):
         inputs = np.array([60, 100, 200, 1000, 1001, 2000])
         expected = np.array([0.9, 1.5, 3.0, 15.0, 15.01453781, 25.08188016])
         self.assertTrue(np.allclose(hertz_to_mel(inputs, "slaney"), expected))
+        
+        inputs = np.array([60, 100, 200, 1000, 1001, 2000])
+        expected = np.array([92.6824, 150.4899, 283.2313, 999.9907, 1000.6534, 1521.3674])
+        self.assertTrue(np.allclose(hertz_to_mel(inputs, "kaldi"), expected))
 
         with pytest.raises(ValueError):
             hertz_to_mel(100, mel_scale=None)
