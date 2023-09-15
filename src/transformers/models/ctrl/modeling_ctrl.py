@@ -728,7 +728,9 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> from transformers import AutoTokenizer, CTRLForSequenceClassification
 
         >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/ctrl")
-        >>> model = CTRLForSequenceClassification.from_pretrained("Salesforce/ctrl", problem_type="multi_label_classification")
+        >>> model = CTRLForSequenceClassification.from_pretrained(
+        ...     "Salesforce/ctrl", problem_type="multi_label_classification"
+        ... )
 
         >>> # CTRL was trained with control codes as the first token
         >>> inputs = tokenizer("Opinion My dog is cute", return_tensors="pt")
