@@ -1245,18 +1245,37 @@ class Trainer:
                 self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
 
+    def _custom_save_checkpoint(self, checkpoint_dir, step):
+        """
+        Custom checkpointing logic for saving checkpoints during training.
+        Args:
+            checkpoint_dir (str): Directory where the checkpoint should be saved.
+            step (int): The current training step.
+        """
+        # Create a directory for the checkpoint if it doesn't exist
+        os.makedirs(checkpoint_dir, exist_ok=True)
+    
+        # Save the model's state_dict
+        model_to_save = self.model.module if hasattr(self.model, "module") else self.model
+        model_to_save.save_pretrained(os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{step}-model"))
+    
+        # Save other relevant information (e.g., optimizer state, trainer state, scheduler state)
+        self.state.save_to_json(os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{step}-trainer-state.json"))
+        torch.save(self.optimizer.state_dict(), os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{step}-optimizer.pt"))
+        torch.save(self.lr_scheduler.state_dict(), os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{step}-scheduler.pt"))
+    
+        # Optionally, add any custom logic or additional information you want to save with the checkpoint
+    
     def _tune_save_checkpoint(self):
-        from ray import tune
-
+        """
+        Save a checkpoint during training using custom logic.
+        """
         if not self.use_tune_checkpoints:
             return
         with tune.checkpoint_dir(step=self.state.global_step) as checkpoint_dir:
-            output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
-            self.save_model(output_dir, _internal_call=True)
-            if self.args.should_save:
-                self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
-                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+            self._custom_save_checkpoint(checkpoint_dir, self.state.global_step)
+
+
 
     def call_model_init(self, trial=None):
         model_init_argcount = number_of_arguments(self.model_init)
