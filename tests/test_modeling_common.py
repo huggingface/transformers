@@ -1431,6 +1431,9 @@ class ModelTesterMixin:
             model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
+            self.assertTrue(model_embed.weight.shape[0], model.config.vocab_size)
+            self.assertTrue(model.config.vocab_size, model.vocab_size)
+
             model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
 
