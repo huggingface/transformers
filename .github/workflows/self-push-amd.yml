@@ -45,8 +45,8 @@ jobs:
     needs: check_runner_status
     strategy:
       matrix:
-        machine_type: [single-amdgpu, mi210]
-    runs-on: [self-hosted, docker-amdgpu, '${{ matrix.machine_type }}']
+        machine_type: [mi210]
+    runs-on: [self-hosted, docker-amdgpu, single-amdgpu, '${{ matrix.machine_type }}']
     container:
       # --device /dev/dri/renderD128 == AMDGPU:0 (indexing for AMDGPU starts at 128 ...)
       image: huggingface/transformers-pytorch-latest-amdgpu-push-ci  # <--- We test only for PyTorch for now
@@ -61,8 +61,8 @@ jobs:
     needs: check_runners
     strategy:
       matrix:
-        machine_type: [single-amdgpu, mi210]
-    runs-on: [self-hosted, docker-amdgpu, '${{ matrix.machine_type }}']
+        machine_type: [mi210]
+    runs-on: [self-hosted, docker-amdgpu, single-amdgpu, '${{ matrix.machine_type }}']
     container:
       # --device /dev/dri/renderD128 == AMDGPU:0 (indexing for AMDGPU starts at 128 ...)
       image: huggingface/transformers-pytorch-latest-amdgpu-push-ci  # <--- We test only for PyTorch for now
@@ -160,8 +160,8 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup_amdgpu.outputs.matrix) }}
-        machine_type: [single-amdgpu, mi210]
-    runs-on: [ self-hosted, docker-amdgpu, '${{ matrix.machine_type }}' ]
+        machine_type: [mi210]
+    runs-on: [ self-hosted, docker-amdgpu, single-amdgpu, '${{ matrix.machine_type }}' ]
     container:
       # --device /dev/dri/renderD128 == AMDGPU:0 (indexing for AMDGPU starts at 128 ...)
       image: huggingface/transformers-pytorch-latest-amdgpu-push-ci  # <--- We test only for PyTorch for now
