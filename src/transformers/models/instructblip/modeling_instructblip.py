@@ -1613,6 +1613,25 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             all_inputs.append(language_model_inputs)
             all_masks.append(language_attention_mask)
 
+        # if the 0 dimension of all_inputs doesn't match, we need to pad
+
+        max_dim1 = max([x.shape[1] for x in all_inputs])
+        for i in range(len(all_inputs)):
+            if all_inputs[i].shape[1] < max_dim1:
+                pad = torch.zeros(
+                    (all_inputs[i].shape[0], max_dim1 - all_inputs[i].shape[1], all_inputs[i].shape[2]),
+                    device=all_inputs[i].device,
+                )
+                all_inputs[i] = torch.cat([all_inputs[i], pad], dim=1)
+
+        max_dim1 = max([x.shape[1] for x in all_masks])
+        for i in range(len(all_masks)):
+            if all_masks[i].shape[1] < max_dim1:
+                pad = torch.zeros(
+                    (all_masks[i].shape[0], max_dim1 - all_masks[i].shape[1]), device=all_masks[i].device
+                )
+                all_masks[i] = torch.cat([all_masks[i], pad], dim=1)
+
         language_model_inputs = torch.cat(all_inputs, dim=0)
         language_attention_mask = torch.cat(all_masks, dim=0)
 
