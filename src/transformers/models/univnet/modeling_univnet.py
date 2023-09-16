@@ -113,7 +113,9 @@ class UnivNetKernelPredictor(nn.Module):
         self.conv_kernel_size = conv_kernel_size
         self.conv_layers = conv_layers
 
-        self.kernel_channels = self.conv_in_channels * self.conv_out_channels * self.conv_kernel_size * self.conv_layers
+        self.kernel_channels = (
+            self.conv_in_channels * self.conv_out_channels * self.conv_kernel_size * self.conv_layers
+        )
         self.bias_channels = self.conv_out_channels * self.conv_layers
 
         self.resnet_in_channels = config.num_mel_bins
