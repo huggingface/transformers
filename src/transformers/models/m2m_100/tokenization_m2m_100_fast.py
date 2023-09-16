@@ -203,7 +203,7 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
-    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast.build_inputs_with_special_tokens
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast.build_inputs_with_special_tokens with NLLB->M2M100
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
