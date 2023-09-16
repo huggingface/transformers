@@ -56,7 +56,6 @@ def get_focalnet_config(model_name):
         embed_dim = 128
     elif "large" in model_name:
         embed_dim = 192
-        focal_windows = [5, 5, 5, 5]
     elif "xlarge" in model_name:
         embed_dim = 256
     elif "huge" in model_name:
@@ -130,7 +129,10 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         "focalnet-small-lrf": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_small_lrf.pth",
         "focalnet-base": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_base_srf.pth",
         "focalnet-base-lrf": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_base_lrf.pth",
-        "focalnet-large": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_large_lrf_384.pth",
+        "focalnet-large-lrf-fl3": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_large_lrf_384.pth",
+        "focalnet-large-lrf-fl4": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_large_lrf_384_fl4.pth",
+        "focalnet-xlarge-lrf-fl3": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_xlarge_lrf_384.pth",
+        "focalnet-xlarge-lrf-fl4": "https://projects4jw.blob.core.windows.net/focalnet/release/classification/focalnet_xlarge_lrf_384_fl4.pth",
     }
     # fmt: on
 

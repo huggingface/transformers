@@ -110,6 +110,7 @@ UNCONVERTIBLE_MODEL_ARCHITECTURES = {
     "MaskFormerSwinBackbone",
     "MT5Model",
     "MT5ForConditionalGeneration",
+    "UMT5ForConditionalGeneration",
     "TFMT5ForConditionalGeneration",
     "TFMT5Model",
     "QDQBertForSequenceClassification",
@@ -735,7 +736,7 @@ def build_model(model_arch, tiny_config, output_dir):
 
     tiny_config = copy.deepcopy(tiny_config)
 
-    if any([model_arch.__name__.endswith(x) for x in ["ForCausalLM", "LMHeadModel"]]):
+    if any(model_arch.__name__.endswith(x) for x in ["ForCausalLM", "LMHeadModel"]):
         tiny_config.is_encoder_decoder = False
         tiny_config.is_decoder = True
 
@@ -973,6 +974,10 @@ def get_token_id_from_tokenizer(token_id_name, tokenizer, original_token_id):
 
 
 def get_config_overrides(config_class, processors):
+    # `Bark` configuration is too special. Let's just not handle this for now.
+    if config_class.__name__ == "BarkConfig":
+        return {}
+
     config_overrides = {}
 
     # Check if there is any tokenizer (prefer fast version if any)

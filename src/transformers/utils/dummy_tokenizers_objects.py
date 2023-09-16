@@ -72,6 +72,13 @@ class CLIPTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class CodeLlamaTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class CodeGenTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -101,6 +108,13 @@ class DebertaTokenizerFast(metaclass=DummyObject):
 
 
 class DebertaV2TokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class RetriBertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):
@@ -325,13 +339,6 @@ class ReformerTokenizerFast(metaclass=DummyObject):
 
 
 class RemBertTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
-class RetriBertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

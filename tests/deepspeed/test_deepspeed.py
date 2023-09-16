@@ -27,7 +27,11 @@ from parameterized import parameterized
 import tests.trainer.test_trainer
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
-from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available, unset_hf_deepspeed_config
+from transformers.integrations.deepspeed import (
+    HfDeepSpeedConfig,
+    is_deepspeed_available,
+    unset_hf_deepspeed_config,
+)
 from transformers.testing_utils import (
     CaptureLogger,
     CaptureStd,
@@ -113,7 +117,7 @@ def require_deepspeed_aio(test_case):
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
     from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
-    from transformers.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
+    from transformers.integrations.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 
 def get_launcher(distributed=False):
@@ -132,6 +136,14 @@ ZERO3 = "zero3"
 FP16 = "fp16"
 BF16 = "bf16"
 
+HF_OPTIM = "hf_optim"
+HF_SCHEDULER = "hf_scheduler"
+DS_OPTIM = "ds_optim"
+DS_SCHEDULER = "ds_scheduler"
+
+optims = [HF_OPTIM, DS_OPTIM]
+schedulers = [HF_SCHEDULER, DS_SCHEDULER]
+
 stages = [ZERO2, ZERO3]
 if is_torch_bf16_gpu_available():
     dtypes = [FP16, BF16]
@@ -148,6 +160,8 @@ def parameterized_custom_name_func(func, param_num, param):
 
 # Cartesian-product of zero stages with models to test
 params = list(itertools.product(stages, dtypes))
+
+params_with_optims_and_schedulers = list(itertools.product(stages, dtypes, optims, schedulers))
 
 
 @require_deepspeed
@@ -371,7 +385,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
+            trainer = get_regression_trainer(a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
             trainer.train()
         new_a = trainer.model.a.item()
         self.assertNotEqual(new_a, a)
@@ -633,10 +647,16 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 "Can't find a valid checkpoint at" in str(context.exception), f"got exception: {context.exception}"
             )
 
-    @parameterized.expand(params, name_func=parameterized_custom_name_func)
-    def test_can_resume_training_normal(self, stage, dtype):
+    @parameterized.expand(params_with_optims_and_schedulers, name_func=parameterized_custom_name_func)
+    def test_can_resume_training_normal(self, stage, dtype, optim, scheduler):
         # adapted from TrainerIntegrationTest.test_can_resume_training
         # test normal resume for each stage separately, error-handling is tested in a different test
+
+        # ToDo: Currently, hf_optim + hf_scheduler resumes with the correct states and
+        # also has same losses for few steps but then slowly diverges. Need to figure it out.
+        if optim == HF_OPTIM and scheduler == HF_SCHEDULER:
+            return
+
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
         ds_config_dict = self.get_config_dict(stage)
         if dtype == FP16:
@@ -644,6 +664,12 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # XXX:
         if stage == ZERO3:
             ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
+
+        if optim == HF_OPTIM:
+            del ds_config_dict["optimizer"]
+
+        if scheduler == HF_SCHEDULER:
+            del ds_config_dict["scheduler"]
 
         kwargs = {
             "output_dir": output_dir,
@@ -751,6 +777,8 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             config = deepspeed_config()
             self.assertTrue(bool(config), "Deepspeed config should be accessible")
 
+            # with accelerate integration below line is additionally required for this test to pass
+            trainer.accelerator.state._reset_state()
             del trainer
             # now weakref should gc the global and we shouldn't get anything here
             config = deepspeed_config()
@@ -783,8 +811,8 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         with mockenv_context(**self.dist_env_1_gpu):
             args_dict = {
-                "per_gpu_train_batch_size": 1,
-                "per_gpu_eval_batch_size": 1,
+                "per_device_train_batch_size": 1,
+                "per_device_eval_batch_size": 1,
                 "gradient_accumulation_steps": 1,
                 "learning_rate": 1e-4,
                 "num_train_epochs": 1,

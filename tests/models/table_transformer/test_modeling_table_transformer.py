@@ -21,8 +21,8 @@ import unittest
 
 from huggingface_hub import hf_hub_download
 
-from transformers import TableTransformerConfig, is_timm_available, is_vision_available
-from transformers.testing_utils import require_timm, require_vision, slow, torch_device
+from transformers import ResNetConfig, TableTransformerConfig, is_torch_available, is_vision_available
+from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -30,16 +30,16 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_timm_available():
+if is_torch_available():
     import torch
 
-    from transformers import ResNetConfig, TableTransformerForObjectDetection, TableTransformerModel
+    from transformers import TableTransformerForObjectDetection, TableTransformerModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class TableTransformerModelTester:
@@ -49,7 +49,7 @@ class TableTransformerModelTester:
         batch_size=8,
         is_training=True,
         use_labels=True,
-        hidden_size=256,
+        hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=8,
         intermediate_size=4,
@@ -61,7 +61,7 @@ class TableTransformerModelTester:
         min_size=200,
         max_size=200,
         n_targets=8,
-        num_labels=91,
+        num_labels=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -107,6 +107,16 @@ class TableTransformerModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
         return TableTransformerConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -119,6 +129,8 @@ class TableTransformerModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             num_queries=self.num_queries,
             num_labels=self.num_labels,
+            use_timm_backbone=False,
+            backbone_config=resnet_config,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -175,19 +187,19 @@ class TableTransformerModelTester:
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
-@require_timm
+@require_torch
 class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TableTransformerModel,
             TableTransformerForObjectDetection,
         )
-        if is_timm_available()
+        if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {"feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
-        if is_timm_available()
+        if is_torch_available()
         else {}
     )
     is_encoder_decoder = True
@@ -453,6 +465,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
         # let's set num_channels to 1
         config.num_channels = 1
+        config.backbone_config.num_channels = 1
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -501,13 +514,13 @@ def prepare_img():
 @slow
 class TableTransformerModelIntegrationTests(unittest.TestCase):
     def test_table_detection(self):
-        feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/table-transformer-detection")
+        image_processor = AutoImageProcessor.from_pretrained("microsoft/table-transformer-detection")
         model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-detection")
         model.to(torch_device)
 
         file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
         image = Image.open(file_path).convert("RGB")
-        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

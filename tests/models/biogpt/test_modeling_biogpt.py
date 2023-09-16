@@ -51,7 +51,7 @@ class BioGptModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -289,9 +289,10 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": BioGptModel,
+            "text-classification": BioGptForSequenceClassification,
             "text-generation": BioGptForCausalLM,
             "token-classification": BioGptForTokenClassification,
-            "text-classification": BioGptForSequenceClassification,
+            "zero-shot": BioGptForSequenceClassification,
         }
         if is_torch_available()
         else {}

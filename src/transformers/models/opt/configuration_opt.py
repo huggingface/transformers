@@ -67,7 +67,7 @@ class OPTConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        layerdrop: (`float`, *optional*, defaults to 0.0):
+        layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.
         init_std (`float`, *optional*, defaults to 0.02):

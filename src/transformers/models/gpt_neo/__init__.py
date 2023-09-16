@@ -29,6 +29,7 @@ else:
     _import_structure["modeling_gpt_neo"] = [
         "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GPTNeoForCausalLM",
+        "GPTNeoForQuestionAnswering",
         "GPTNeoForSequenceClassification",
         "GPTNeoForTokenClassification",
         "GPTNeoModel",
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
         from .modeling_gpt_neo import (
             GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoForCausalLM,
+            GPTNeoForQuestionAnswering,
             GPTNeoForSequenceClassification,
             GPTNeoForTokenClassification,
             GPTNeoModel,

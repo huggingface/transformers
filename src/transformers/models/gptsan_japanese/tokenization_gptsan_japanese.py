@@ -17,7 +17,7 @@ import collections
 import json
 import os
 import re
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -31,10 +31,6 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, logging
-
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -55,7 +51,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-# Copied from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese.load_vocab_and_emoji
 def load_vocab_and_emoji(vocab_file, emoji_file):
     """Loads a vocabulary file and emoji file into a dictionary."""
     with open(emoji_file, "r", encoding="utf-8") as f:
@@ -66,7 +61,7 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
     ids_to_tokens = collections.OrderedDict()
     with open(vocab_file, "r", encoding="utf-8") as f:
         token = f.readlines()
-    token = [[t.rstrip("\n")] if (t == "," or "," not in t) else t.rstrip("\n").split(",") for t in token]
+    token = [[t.rstrip("\n")] if (t == ",\n" or "," not in t) else t.rstrip("\n").split(",") for t in token]
     for idx, b in enumerate(token):
         ids_to_tokens[idx] = b
         raw_vocab[",".join(b)] = idx
@@ -259,16 +254,18 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         text = "".join(words)
         return text
 
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """This corresponds to DialoGPT variants of models."""
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+    @property
+    def default_chat_template(self):
+        """
+        A simple chat template that adds standard BOS, SEP and EOS tokens between messages while discarding role
+        information.
+        """
+        return (
+            "{% for message in messages %}"
+            "{% if not loop.first %}{{ bos_token}}{% endif %}"
+            "{{ sep_token }}{{ message.content }} {{ eos_token }}"
+            "{% endfor %}"
+        )
 
     # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:

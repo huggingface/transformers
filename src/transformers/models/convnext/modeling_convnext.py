@@ -29,7 +29,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -37,6 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_convnext import ConvNextConfig
 
 
@@ -60,7 +61,7 @@ CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input, drop_prob: float = 0.0, training: bool = False):
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -480,21 +481,15 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
 class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
         self.embeddings = ConvNextEmbeddings(config)
         self.encoder = ConvNextEncoder(config)
-
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
         self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
-        if config.out_indices is not None:
-            self.out_indices = config.out_indices
-        else:
-            self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
-        for stage, num_channels in zip(self.out_features, self.channels):
+        for stage, num_channels in zip(self._out_features, self.channels):
             hidden_states_norms[stage] = ConvNextLayerNorm(num_channels, data_format="channels_first")
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 

@@ -89,8 +89,9 @@ class GPTJAttention(nn.Module):
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
+            persistent=False,
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e9))
+        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -211,7 +212,7 @@ class GPTJAttention(nn.Module):
         key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
 
-        if is_torch_fx_proxy(position_ids):
+        if is_torch_fx_proxy(position_ids) or torch.jit.is_tracing():
             # The logic to conditionally copy to GPU could not be traced, so we do this
             # every time in the torch.fx case
             embed_positions = get_embed_positions(self.embed_positions, position_ids)
@@ -339,6 +340,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
     is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTJBlock"]
+    _skip_keys_device_placement = "past_key_values"
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -575,6 +577,7 @@ class GPTJModel(GPTJPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
             batch_size = input_ids.shape[0]
@@ -639,7 +642,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
         hidden_states = self.drop(hidden_states)
 
-        output_shape = input_shape + (hidden_states.size(-1),)
+        output_shape = (-1,) + input_shape[1:] + (hidden_states.size(-1),)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -732,7 +735,7 @@ class GPTJModel(GPTJPreTrainedModel):
     GPTJ_START_DOCSTRING,
 )
 class GPTJForCausalLM(GPTJPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -930,8 +933,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     GPTJ_START_DOCSTRING,
 )
 class GPTJForSequenceClassification(GPTJPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1002,7 +1003,9 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).long().argmax(-1) - 1).to(
+                    logits.device
+                )
             else:
                 sequence_lengths = -1
                 logger.warning(
@@ -1056,8 +1059,6 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
     GPTJ_START_DOCSTRING,
 )
 class GPTJForQuestionAnswering(GPTJPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias", r"lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1127,9 +1128,9 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
+                start_positions = start_positions.squeeze(-1).to(start_logits.device)
             if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
+                end_positions = end_positions.squeeze(-1).to(end_logits.device)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
             start_positions = start_positions.clamp(0, ignored_index)

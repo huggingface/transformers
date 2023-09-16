@@ -53,7 +53,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import logging
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 
@@ -126,16 +126,7 @@ class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.vocab_size)
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
@@ -395,9 +386,9 @@ class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
-        encoder_hidden_states: Optional[tf.Tensor],
-        encoder_attention_mask: Optional[tf.Tensor],
-        past_key_value: Optional[Tuple[tf.Tensor]],
+        encoder_hidden_states: tf.Tensor | None,
+        encoder_attention_mask: tf.Tensor | None,
+        past_key_value: Tuple[tf.Tensor] | None,
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -474,9 +465,9 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
-        encoder_hidden_states: Optional[tf.Tensor],
-        encoder_attention_mask: Optional[tf.Tensor],
-        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]],
+        encoder_hidden_states: tf.Tensor | None,
+        encoder_attention_mask: tf.Tensor | None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] | None,
         use_cache: Optional[bool],
         output_attentions: bool,
         output_hidden_states: bool,
@@ -648,14 +639,14 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
+        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -812,23 +803,6 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
     config_class = {{cookiecutter.camelcase_modelname}}Config
     base_model_prefix = "{{cookiecutter.lowercase_modelname}}"
 
-    @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        dummy = {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int64)}
-        # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
-        if self.config.add_cross_attention:
-            batch_size, seq_len = tf.constant(DUMMY_INPUTS).shape
-            shape = (batch_size, seq_len) + (self.config.hidden_size,)
-            h = tf.random.uniform(shape=shape)
-            dummy["encoder_hidden_states"] = h
-
-        return dummy
 
 
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
@@ -877,7 +851,7 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]`, `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See
+            Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.__call__`] and [`PreTrainedTokenizer.encode`] for
             details.
 
@@ -946,14 +920,14 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
+        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1000,24 +974,6 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
 
         return outputs
 
-    def serving_output(
-        self, output: TFBaseModelOutputWithPastAndCrossAttentions
-    ) -> TFBaseModelOutputWithPastAndCrossAttentions:
-        output_cache = self.config.use_cache and self.config.is_decoder
-        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
-        if not (self.config.output_attentions and self.config.add_cross_attention):
-            cross_attns = None
-
-        return TFBaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=output.last_hidden_state,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-            cross_attentions=cross_attns,
-        )
 
 
 @add_start_docstrings("""{{cookiecutter.modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
@@ -1047,16 +1003,16 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1092,13 +1048,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
-    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1138,20 +1087,20 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
+        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
         r"""
@@ -1215,19 +1164,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
             cross_attentions=outputs.cross_attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
-    def serving_output(self, output: TFCausalLMOutputWithCrossAttentions) -> TFCausalLMOutputWithCrossAttentions:
-        output_cache = self.config.use_cache and self.config.is_decoder
-        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
-        if not (self.config.output_attentions and self.config.add_cross_attention):
-            cross_attns = None
-
-        return TFCausalLMOutputWithCrossAttentions(
-            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
-        )
 
 
 class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(tf.keras.layers.Layer):
@@ -1283,16 +1219,16 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1327,13 +1263,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """{{cookiecutter.modelname}} Model with a multiple choice classification head on top (a linear layer on top of
@@ -1352,16 +1281,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            tf.Tensor with dummy inputs
-        """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int64)}
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1371,16 +1290,16 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1450,24 +1369,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
             attentions=outputs.attentions,
         )
 
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-    }])
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving
-    def serving(self, inputs: Dict[str, tf.Tensor]) -> TFMultipleChoiceModelOutput:
-        output = self.call(input_ids=inputs)
-
-        return self.serving_output(output)
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
-    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """{{cookiecutter.modelname}} Model with a token classification head on top (a linear layer on top of
@@ -1496,16 +1397,16 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1541,13 +1442,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """{{cookiecutter.modelname}} Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
@@ -1575,17 +1469,17 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        start_positions: np.ndarray | tf.Tensor | None = None,
+        end_positions: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1634,14 +1528,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
-        )
 
 {% else %}
 import random
@@ -1670,7 +1556,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import ContextManagers, logging
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 
@@ -1786,12 +1672,12 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        key_value_states: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
+        key_value_states: tf.Tensor | None = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
         training=False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1908,7 +1794,7 @@ class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
     def call(self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training=False):
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`tf.Tensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
             attention_mask (`tf.Tensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
@@ -1971,20 +1857,20 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states,
-        attention_mask: Optional[tf.Tensor] = None,
-        encoder_hidden_states: Optional[tf.Tensor] = None,
-        encoder_attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[tf.Tensor]] = None,
+        attention_mask: tf.Tensor | None = None,
+        encoder_hidden_states: tf.Tensor | None = None,
+        encoder_attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
+        cross_attn_layer_head_mask: tf.Tensor | None = None,
+        past_key_value: Tuple[tf.Tensor] | None = None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`tf.Tensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
             attention_mask (`tf.Tensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`tf.Tensor`): cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+            encoder_hidden_states (`tf.Tensor`): cross attention input to the layer of shape *(batch, seq_len, embed_dim)*
             encoder_attention_mask (`tf.Tensor`): encoder attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
@@ -2051,34 +1937,6 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
 class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
     config_class = {{cookiecutter.camelcase_modelname}}Config
     base_model_prefix = "model"
-
-    @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
-        dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-            }
-        ]
-    )
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.serving
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
@@ -2311,16 +2169,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
             if hasattr(self.embed_tokens, "load_weight_prefix"):
                 context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
             with ContextManagers(context):
-                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-                tf.debugging.assert_less(
-                    input_ids,
-                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                    message=(
-                        "input_ids must be smaller than the embedding layer's input dimension (got"
-                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
-                    ),
-                )
+                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
@@ -2518,16 +2367,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
             if hasattr(self.embed_tokens, "load_weight_prefix"):
                 context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
             with ContextManagers(context):
-                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-                tf.debugging.assert_less(
-                    input_ids,
-                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                    message=(
-                        "input_ids must be smaller than the embedding layer's input dimension (got"
-                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
-                    ),
-                )
+                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
                 inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = inputs_embeds
@@ -2804,26 +2644,6 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
 
         return outputs
 
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartModel.serving_output
-    def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
-        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
-        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
-        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
-        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
-
-        return TFSeq2SeqModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            past_key_values=pkv,
-            decoder_hidden_states=dec_hs,
-            decoder_attentions=dec_attns,
-            cross_attentions=cross_attns,
-            encoder_last_hidden_state=output.encoder_last_hidden_state,
-            encoder_hidden_states=enc_hs,
-            encoder_attentions=enc_attns,
-        )
-
 
 # Copied from transformers.models.bart.modeling_tf_bart.BiasLayer
 class BiasLayer(tf.keras.layers.Layer):
@@ -2856,7 +2676,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="model")
-        self.model._set_save_spec(inputs=self.serving.input_signature)
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
         self.bias_layer = BiasLayer(
@@ -2969,26 +2788,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,  # index 0 of encoder outputs
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
-        )
-
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.serving_output
-    def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
-        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
-        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
-        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
-        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
-
-        return TFSeq2SeqLMOutput(
-            logits=output.logits,
-            past_key_values=pkv,
-            decoder_hidden_states=dec_hs,
-            decoder_attentions=dec_attns,
-            cross_attentions=cross_attns,
-            encoder_last_hidden_state=output.encoder_last_hidden_state,
-            encoder_hidden_states=enc_hs,
-            encoder_attentions=enc_attns,
         )
 
     def prepare_inputs_for_generation(

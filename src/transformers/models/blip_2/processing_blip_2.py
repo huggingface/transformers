@@ -18,6 +18,7 @@ Processor class for BLIP-2.
 
 from typing import List, Optional, Union
 
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
@@ -49,7 +50,7 @@ class Blip2Processor(ProcessorMixin):
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.__call__
     def __call__(
         self,
-        images=None,
+        images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,

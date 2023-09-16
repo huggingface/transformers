@@ -16,7 +16,6 @@
 
 
 import math
-import random
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -25,7 +24,7 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     MoEModelOutput,
     MoEModelOutputWithPastAndCrossAttentions,
@@ -85,7 +84,7 @@ def _make_causal_mask(
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -127,7 +126,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.load_balancing_loss_func with SwitchTransformers->NllbMoeModel
 def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -145,6 +143,9 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     Returns:
         The auxiliary loss.
     """
+    if router_probs is None:
+        return 0
+
     num_experts = router_probs.shape[-1]
 
     # cast the expert indices to int64, otherwise one-hot encoding will fail
@@ -184,7 +185,7 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights)
+        self.register_buffer("weights", emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -673,7 +674,7 @@ class NllbMoeEncoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`):
-                input to the layer of shape `(seq_len, batch, embed_dim)`
+                input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`):
                 attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very
                 large negative values.
@@ -700,7 +701,9 @@ class NllbMoeEncoderLayer(nn.Module):
         if self.is_sparse:
             hidden_states, router_states = self.ffn(hidden_states, attention_mask)
         else:
-            hidden_states = self.ffn(hidden_states)
+            # router_states set to None to track which layers have None gradients.
+            hidden_states, router_states = self.ffn(hidden_states), None
+
         hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
@@ -831,7 +834,8 @@ class NllbMoeDecoderLayer(nn.Module):
         if self.is_sparse:
             hidden_states, router_states = self.ffn(hidden_states, attention_mask)
         else:
-            hidden_states = self.ffn(hidden_states)
+            hidden_states, router_states = self.ffn(hidden_states), None
+
         hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
@@ -856,7 +860,7 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     config_class = NllbMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["NllbMoeAttention"]
+    _no_split_modules = ["NllbMoeEncoderLayer", "NllbMoeDecoderLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1106,6 +1110,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
@@ -1143,7 +1148,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
             else:
@@ -1405,7 +1410,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
             if not skip_the_layer or deepspeed_zero3_is_enabled:
@@ -1501,14 +1506,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
     NLLB_MOE_START_DOCSTRING,
 )
 class NllbMoeModel(NllbMoePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-        "encoder.embed_positions.weights",
-        "encoder.embed_positions.bias",
-        "decoder.embed_positions.weights",
-        "decoder.embed_positions.bias",
-    ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
@@ -1641,17 +1639,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
 )
 class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.version",
-        r"decoder.version",
-        r"lm_head.weight",
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-        r"encoder.embed_positions.weights",
-        r"encoder.embed_positions.bias",
-        r"decoder.embed_positions.weights",
-        r"decoder.embed_positions.bias",
-    ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
@@ -1668,10 +1656,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
 
     def get_decoder(self):
         return self.model.get_decoder()
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -1751,7 +1735,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
 
             if output_router_logits:
                 encoder_router_logits = outputs[-1]
-                decoder_router_logits = outputs[5 if output_attentions else 3]
+                decoder_router_logits = outputs[3 if output_attentions else 4]
 
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
                 encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(encoder_router_logits)
@@ -1796,7 +1780,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             decoder_router_logits=outputs.decoder_router_logits,
         )
 
-    # Copied from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration._unpack_router_logits
     def _unpack_router_logits(self, router_outputs):
         total_router_logits = []
         total_expert_indexes = []
@@ -1805,11 +1788,10 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 router_logits, expert_indexes = router_output
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
-        if len(total_expert_indexes) > 0:
-            total_router_logits = torch.cat(total_router_logits, dim=1)
-        if len(total_expert_indexes) > 0:
-            torch.cat(total_expert_indexes, dim=1)
-        return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
+
+        total_router_logits = torch.cat(total_router_logits, dim=1) if len(total_router_logits) > 0 else None
+        total_expert_indexes = torch.stack(total_expert_indexes, dim=1) if len(total_expert_indexes) > 0 else None
+        return total_router_logits, total_expert_indexes
 
     # Copied from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
@@ -1844,5 +1826,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past

@@ -242,7 +242,7 @@ class AlignTextModelTester:
         use_token_type_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -437,6 +437,10 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="Start to fail after using torch `cu118`.")
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -533,6 +537,17 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             }
 
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
 
             models_equal = True
             for layer_name, p1 in model_state_dict.items():

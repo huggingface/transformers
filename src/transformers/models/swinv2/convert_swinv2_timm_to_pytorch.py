@@ -24,7 +24,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import AutoFeatureExtractor, Swinv2Config, Swinv2ForImageClassification
+from transformers import AutoImageProcessor, Swinv2Config, Swinv2ForImageClassification
 
 
 def get_swinv2_config(swinv2_name):
@@ -180,9 +180,9 @@ def convert_swinv2_checkpoint(swinv2_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(swinv2_name.replace("_", "-")))
+    image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swinv2_name.replace("_", "-")))
     image = Image.open(requests.get(url, stream=True).raw)
-    inputs = feature_extractor(images=image, return_tensors="pt")
+    inputs = image_processor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])
     hf_outs = model(**inputs).logits
@@ -192,8 +192,8 @@ def convert_swinv2_checkpoint(swinv2_name, pytorch_dump_folder_path):
     print(f"Saving model {swinv2_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
     model.push_to_hub(
         repo_path_or_name=Path(pytorch_dump_folder_path, swinv2_name),

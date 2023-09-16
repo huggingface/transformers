@@ -1,20 +1,19 @@
+"""The tokenizer used by the GPT-SW3 models."""
+
 import os
 import re
 import unicodedata
-
-from ... import is_torch_available
-
-
-if is_torch_available():
-    import torch
-
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -104,6 +103,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -230,8 +230,10 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
+                # TODO: Check if this is needed, as it ensures that decode(encode(doc)) != doc by adding extra whitespace in the decoded document
                 if not prev_is_special:
                     out_string += " "
+
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 prev_is_special = True
                 current_sub_tokens = []
@@ -312,3 +314,19 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         """
 
         return self.sp_model.decode(token_ids)
+
+    @property
+    def default_chat_template(self):
+        """
+        This chat template formats messages like an instant messenger chat log, with "User:" and "Bot:" strings
+        preceding messages. BOS tokens are added between all messages.
+        """
+        return (
+            "{{ eos_token }}{{ bos_token }}"
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}{{ 'User: ' + message['content']}}"
+            "{% else %}{{ 'Bot: ' + message['content']}}{% endif %}"
+            "{{ message['text'] }}{{ bos_token }}"
+            "{% endfor %}"
+            "Bot:"
+        )

@@ -27,6 +27,7 @@ from collections import OrderedDict, UserDict
 from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -69,6 +70,7 @@ if TYPE_CHECKING:
         import tensorflow as tf
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
+    from .pipelines.conversational import Conversation
 
 
 if is_tokenizers_available():
@@ -233,15 +235,20 @@ class BatchEncoding(UserDict):
         etc.).
 
         If the key is an integer, get the `tokenizers.Encoding` for batch item with index `key`.
+
+        If the key is a slice, returns the value of the dict associated to `key` ('input_ids', 'attention_mask', etc.)
+        with the constraint of slice.
         """
         if isinstance(item, str):
             return self.data[item]
         elif self._encodings is not None:
             return self._encodings[item]
+        elif isinstance(item, slice):
+            return {key: self.data[key][item] for key in self.data.keys()}
         else:
             raise KeyError(
-                "Indexing with integers (to access backend Encoding for a given batch index) "
-                "is not available when using Python based tokenizers"
+                "Invalid key. Only three types of key are available: "
+                "(1) string, (2) integers for backend Encoding, and (3) slices for data subsetting."
             )
 
     def __getattr__(self, item: str):
@@ -695,8 +702,13 @@ class BatchEncoding(UserDict):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            as_tensor = torch.tensor
             is_tensor = torch.is_tensor
+
+            def as_tensor(value, dtype=None):
+                if isinstance(value, list) and isinstance(value[0], np.ndarray):
+                    return torch.tensor(np.array(value))
+                return torch.tensor(value)
+
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
@@ -705,7 +717,15 @@ class BatchEncoding(UserDict):
             as_tensor = jnp.array
             is_tensor = is_jax_tensor
         else:
-            as_tensor = np.asarray
+
+            def as_tensor(value, dtype=None):
+                if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
+                    value_lens = [len(val) for val in value]
+                    if len(set(value_lens)) > 1 and dtype is None:
+                        # we have a ragged list so handle explicitly
+                        value = as_tensor([np.asarray(val) for val in value], dtype=object)
+                return np.asarray(value, dtype=dtype)
+
             is_tensor = is_numpy_array
 
         # Do the tensor conversion in batch
@@ -1408,6 +1428,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - **length** -- The length of the inputs (when `return_length=True`)
 """
 
+
 INIT_TOKENIZER_DOCSTRING = r"""
     Class attributes (overridden by derived classes)
 
@@ -1443,6 +1464,9 @@ INIT_TOKENIZER_DOCSTRING = r"""
         truncation_side (`str`, *optional*):
             The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
+        chat_template (`str`, *optional*):
+            A Jinja template string that will be used to format lists of chat messages. See
+            https://huggingface.co/docs/transformers/chat_templating for a full description.
         model_input_names (`List[string]`, *optional*):
             The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
             `"attention_mask"`). Default value is picked from the class attribute of the same name.
@@ -1474,6 +1498,11 @@ INIT_TOKENIZER_DOCSTRING = r"""
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process.
+        split_special_tokens (`bool`, *optional*, defaults to `False`):
+            Whether or not the special tokens should be split during the tokenization process. The default behavior is
+            to not split special tokens. This means that if `<s>` is the `bos_token`, then `tokenizer.tokenize("<s>") =
+            ['<s>`]. Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<s>")` will be give `['<',
+            's', '>']`. This argument is only supported for `slow` tokenizers for the moment.
 """
 
 
@@ -1528,10 +1557,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
 
+        # By default, do not split special tokens for both fast and slow tokenizers
+        self.split_special_tokens = kwargs.pop("split_special_tokens", False)
+
         self.deprecation_warnings = (
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
         self._in_target_context_manager = False
+
+        # Stores a Jinja template that formats chat histories into tokenizable strings
+        self.chat_template = kwargs.pop("chat_template", None)
+
         super().__init__(**kwargs)
 
     @property
@@ -1601,8 +1637,121 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         raise NotImplementedError()
 
+    def apply_chat_template(
+        self,
+        conversation: Union[List[Dict[str, str]], "Conversation"],
+        chat_template: Optional[str] = None,
+        tokenize: bool = True,
+        padding: bool = False,
+        truncation: bool = False,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **tokenizer_kwargs,
+    ) -> Union[str, List[int]]:
+        """
+        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
+        ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
+        determine the format and control tokens to use when converting. When chat_template is None, it will fall back
+        to the default_chat_template specified at the class level.
+
+        Args:
+            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
+                with "role" and "content" keys, representing the chat history so far.
+            chat_template (str, *optional*): A Jinja template to use for this conversion. If
+                this is not passed, the model's default chat template will be used instead.
+            tokenize (`bool`, defaults to `True`):
+                Whether to tokenize the output. If `False`, the output will be a string.
+            padding (`bool`, defaults to `False`):
+                Whether to pad sequences to the maximum length. Has no effect if tokenize is `False`.
+            truncation (`bool`, defaults to `False`):
+                Whether to truncate sequences at the maximum length. Has no effect if tokenize is `False`.
+            max_length (`int`, *optional*):
+                Maximum length (in tokens) to use for padding or truncation. Has no effect if tokenize is `False`. If
+                not specified, the tokenizer's `max_length` attribute will be used as a default.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Has no effect if tokenize is `False`. Acceptable
+                values are:
+                - `'tf'`: Return TensorFlow `tf.Tensor` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+
+        Returns:
+            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            output is ready to pass to the model, either directly or via methods like `generate()`.
+        """
+
+        if hasattr(conversation, "messages"):
+            # Indicates it's a Conversation object
+            conversation = conversation.messages
+
+        # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
+        if chat_template is None:
+            if self.chat_template is not None:
+                chat_template = self.chat_template
+            else:
+                chat_template = self.default_chat_template
+
+        # Compilation function uses a cache to avoid recompiling the same template
+        compiled_template = self._compile_jinja_template(chat_template)
+
+        rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
+
+        if padding is True:
+            padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
+        if tokenize:
+            return self.encode(
+                rendered,
+                add_special_tokens=False,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
+        else:
+            return rendered
+
+    @lru_cache
+    def _compile_jinja_template(self, chat_template):
+        try:
+            from jinja2.exceptions import TemplateError
+            from jinja2.sandbox import ImmutableSandboxedEnvironment
+        except ImportError:
+            raise ImportError("apply_chat_template requires jinja2 to be installed.")
+
+        def raise_exception(message):
+            raise TemplateError(message)
+
+        jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
+        jinja_env.globals["raise_exception"] = raise_exception
+        return jinja_env.from_string(chat_template)
+
+    @property
+    def default_chat_template(self):
+        """
+        This template formats inputs in the standard ChatML format. See
+        https://github.com/openai/openai-python/blob/main/chatml.md
+        """
+        return (
+            "{% for message in messages %}"
+            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
+            "{% endfor %}"
+        )
+
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], *init_inputs, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        *init_inputs,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
+        **kwargs,
+    ):
         r"""
         Instantiate a [`~tokenization_utils_base.PreTrainedTokenizerBase`] (or a derived class) from a predefined
         tokenizer.
@@ -1632,7 +1781,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
-            use_auth_token (`str` or *bool*, *optional*):
+            token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`).
             local_files_only (`bool`, *optional*, defaults to `False`):
@@ -1653,7 +1802,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         <Tip>
 
-        Passing `use_auth_token=True` is required when you want to use a private model.
+        Passing `token=True` is required when you want to use a private model.
 
         </Tip>
 
@@ -1679,17 +1828,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Otherwise use tokenizer.add_special_tokens({'unk_token': '<unk>'}) instead)
         assert tokenizer.unk_token == "<unk>"
         ```"""
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
-        local_files_only = kwargs.pop("local_files_only", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
-        revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class, "is_fast": "Fast" in cls.__name__}
         if from_pipeline is not None:
@@ -1739,7 +1894,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     force_download=force_download,
                     resume_download=resume_download,
                     proxies=proxies,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     revision=revision,
                     local_files_only=local_files_only,
                     subfolder=subfolder,
@@ -1776,7 +1931,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
@@ -1814,7 +1969,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             pretrained_model_name_or_path,
             init_configuration,
             *init_inputs,
-            use_auth_token=use_auth_token,
+            token=token,
             cache_dir=cache_dir,
             local_files_only=local_files_only,
             _commit_hash=commit_hash,
@@ -1829,7 +1984,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         pretrained_model_name_or_path,
         init_configuration,
         *init_inputs,
-        use_auth_token=None,
+        token=None,
         cache_dir=None,
         local_files_only=False,
         _commit_hash=None,
@@ -1846,7 +2001,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 pretrained_model_name_or_path,
                 copy.deepcopy(init_configuration),
                 *init_inputs,
-                use_auth_token=use_auth_token,
+                token=token,
                 cache_dir=cache_dir,
                 local_files_only=local_files_only,
                 _commit_hash=_commit_hash,
@@ -1886,7 +2041,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             try:
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     cache_dir=cache_dir,
                     local_files_only=local_files_only,
                     _commit_hash=_commit_hash,
@@ -2093,18 +2248,30 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
                 If `True`, will save the tokenizer in legacy format. If the "slow" tokenizer doesn't exits, a value
                 error is raised.
-            filename_prefix: (`str`, *optional*):
+            filename_prefix (`str`, *optional*):
                 A prefix to add to the names of the files saved by the tokenizer.
             push_to_hub (`bool`, *optional*, defaults to `False`):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
 
         Returns:
             A tuple of `str`: The files saved.
         """
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if kwargs.get("token", None) is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            kwargs["token"] = use_auth_token
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -2132,6 +2299,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
+
+        if self.chat_template is not None:
+            tokenizer_config["chat_template"] = self.chat_template
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
@@ -2202,7 +2372,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=kwargs.get("token"),
             )
 
         return save_files
@@ -2449,7 +2619,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     max_length = self.model_max_length
 
         # Test if we have a padding token
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (not self.pad_token or self.pad_token_id < 0):
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.pad_token is None or self.pad_token_id < 0):
             raise ValueError(
                 "Asking to pad but the tokenizer does not have a padding token. "
                 "Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "

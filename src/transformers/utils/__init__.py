@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub import get_full_repo_name  # for backward compatibility
 from packaging import version
 
 from .. import __version__
@@ -39,6 +40,7 @@ from .generic import (
     expand_dims,
     find_labels,
     flatten_dict,
+    infer_framework,
     is_jax_tensor,
     is_numpy_array,
     is_tensor,
@@ -68,6 +70,7 @@ from .hub import (
     TRANSFORMERS_CACHE,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
     EntryNotFoundError,
+    PushInProgress,
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
@@ -78,7 +81,6 @@ from .hub import (
     extract_commit_hash,
     get_cached_models,
     get_file_from_repo,
-    get_full_repo_name,
     has_file,
     http_user_agent,
     is_offline_mode,
@@ -99,8 +101,10 @@ from .import_utils import (
     _LazyModule,
     ccl_version,
     direct_transformers_import,
+    get_torch_version,
     is_accelerate_available,
     is_apex_available,
+    is_auto_gptq_available,
     is_bitsandbytes_available,
     is_bs4_available,
     is_coloredlogs_available,
@@ -108,12 +112,14 @@ from .import_utils import (
     is_datasets_available,
     is_decord_available,
     is_detectron2_available,
+    is_essentia_available,
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
     is_in_notebook,
     is_ipex_available,
     is_jieba_available,
+    is_jinja_available,
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,
@@ -121,15 +127,18 @@ from .import_utils import (
     is_natten_available,
     is_ninja_available,
     is_onnx_available,
+    is_openai_available,
     is_optimum_available,
     is_pandas_available,
     is_peft_available,
     is_phonemizer_available,
+    is_pretty_midi_available,
     is_protobuf_available,
     is_psutil_available,
     is_py3nvml_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
+    is_pytest_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_sacremoses_available,
@@ -138,6 +147,7 @@ from .import_utils import (
     is_sagemaker_mp_enabled,
     is_scipy_available,
     is_sentencepiece_available,
+    is_seqio_available,
     is_sklearn_available,
     is_soundfile_availble,
     is_spacy_available,
@@ -157,10 +167,13 @@ from .import_utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_torch_xpu_available,
     is_torchaudio_available,
     is_torchdistx_available,
     is_torchdynamo_available,
@@ -169,7 +182,13 @@ from .import_utils import (
     is_vision_available,
     requires_backends,
     torch_only_method,
-    torch_version,
+)
+from .peft_utils import (
+    ADAPTER_CONFIG_NAME,
+    ADAPTER_SAFE_WEIGHTS_NAME,
+    ADAPTER_WEIGHTS_NAME,
+    check_peft_version,
+    find_adapter_config_file,
 )
 
 
@@ -203,13 +222,13 @@ def check_min_version(min_version):
         if "dev" in min_version:
             error_message = (
                 "This example requires a source install from HuggingFace Transformers (see "
-                "`https://huggingface.co/transformers/installation.html#installing-from-source`),"
+                "`https://huggingface.co/docs/transformers/installation#install-from-source`),"
             )
         else:
             error_message = f"This example requires a minimum version of {min_version},"
         error_message += f" but the version found is {__version__}.\n"
         raise ImportError(
             error_message
-            + "Check out https://huggingface.co/transformers/examples.html for the examples corresponding to other "
+            + "Check out https://github.com/huggingface/transformers/tree/main/examples#important-note for the examples corresponding to other "
             "versions of HuggingFace Transformers."
         )

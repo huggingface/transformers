@@ -15,9 +15,11 @@
 """ TF 2.0 ViT model."""
 
 
+from __future__ import annotations
+
 import collections.abc
 import math
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -487,8 +489,8 @@ class TFViTMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: TFModelInputType | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
@@ -547,38 +549,6 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
     config_class = ViTConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
 
 
 VIT_START_DOCSTRING = r"""
@@ -675,8 +645,8 @@ class TFViTModel(TFViTPreTrainedModel):
     )
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: TFModelInputType | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
@@ -694,17 +664,6 @@ class TFViTModel(TFViTPreTrainedModel):
         )
 
         return outputs
-
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
 
 
 class TFViTPooler(tf.keras.layers.Layer):
@@ -766,13 +725,13 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
     )
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: TFModelInputType | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -805,9 +764,3 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)

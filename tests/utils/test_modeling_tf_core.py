@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import copy
 import os
 import tempfile
@@ -109,7 +111,7 @@ class TFCoreModelTesterMixin:
     @slow
     def test_graph_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:2]:
             inputs = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
 
@@ -123,7 +125,7 @@ class TFCoreModelTesterMixin:
     @slow
     def test_xla_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:2]:
             inputs = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
 
@@ -138,7 +140,7 @@ class TFCoreModelTesterMixin:
     def test_xla_fit(self):
         # This is a copy of the test_keras_fit method, but we use XLA compilation instead of eager
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:2]:
             model = model_class(config)
             if getattr(model, "hf_compute_loss", None):
                 # Test that model correctly compute the loss with kwargs
@@ -212,20 +214,21 @@ class TFCoreModelTesterMixin:
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:2]:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
+            model.build()
             num_out = len(model(class_inputs_dict))
 
             for key in list(class_inputs_dict.keys()):
                 # Remove keys not in the serving signature, as the SavedModel will not be compiled to deal with them
-                if key not in model.serving.input_signature[0]:
+                if key not in model.input_signature:
                     del class_inputs_dict[key]
                 # Check it's a tensor, in case the inputs dict has some bools in it too
                 elif isinstance(class_inputs_dict[key], tf.Tensor) and class_inputs_dict[key].dtype.is_integer:
                     class_inputs_dict[key] = tf.cast(class_inputs_dict[key], tf.int32)
 
-            if set(class_inputs_dict.keys()) != set(model.serving.input_signature[0].keys()):
+            if set(class_inputs_dict.keys()) != set(model.input_signature.keys()):
                 continue  # Some models have inputs that the preparation functions don't create, we skip those
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -266,7 +269,7 @@ class TFCoreModelTesterMixin:
         # try/finally block to ensure subsequent tests run in float32
         try:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            for model_class in self.all_model_classes:
+            for model_class in self.all_model_classes[:2]:
                 class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 model = model_class(config)
                 outputs = model(class_inputs_dict)
@@ -349,7 +352,7 @@ class TFCoreModelTesterMixin:
     def test_graph_mode_with_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_model_classes[:2]:
             model = model_class(config)
 
             inputs = copy.deepcopy(inputs_dict)

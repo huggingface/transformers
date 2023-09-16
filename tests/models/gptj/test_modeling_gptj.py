@@ -37,6 +37,9 @@ if is_torch_available():
         GPTJForSequenceClassification,
         GPTJModel,
     )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_12
+else:
+    is_torch_greater_or_equal_than_1_12 = False
 
 
 class GPTJModelTester:
@@ -53,7 +56,7 @@ class GPTJModelTester:
         vocab_size=99,
         hidden_size=32,
         rotary_dim=4,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -385,6 +388,18 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_model_parallel = False
     test_head_masking = False
 
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12, reason="PR #22069 made changes that require torch v1.12+."
+    )
+    def test_torch_fx(self):
+        super().test_torch_fx()
+
+    @unittest.skipIf(
+        not is_torch_greater_or_equal_than_1_12, reason="PR #22069 made changes that require torch v1.12+."
+    )
+    def test_torch_fx_output_loss(self):
+        super().test_torch_fx_output_loss()
+
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
@@ -556,7 +571,7 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
 
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
+            all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
     @slow

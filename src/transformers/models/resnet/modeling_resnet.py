@@ -28,7 +28,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -36,6 +36,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_resnet import ResNetConfig
 
 
@@ -431,17 +432,11 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
 class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
+        self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = ResNetEmbeddings(config)
         self.encoder = ResNetEncoder(config)
-
-        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-        if config.out_indices is not None:
-            self.out_indices = config.out_indices
-        else:
-            self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
-        self.num_features = [config.embedding_size] + config.hidden_sizes
 
         # initialize weights and apply final processing
         self.post_init()

@@ -54,7 +54,7 @@ class RealmModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -392,7 +392,7 @@ class RealmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 b"This is the fourth record.",
                 b"This is the fifth record.",
             ],
-            dtype=np.object,
+            dtype=object,
         )
         retriever = RealmRetriever(block_records, tokenizer)
         model = RealmForOpenQA(openqa_config, retriever)

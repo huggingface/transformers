@@ -182,7 +182,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         try:
             if pointer.shape != array.shape:
                 raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
+        except ValueError as e:
             e.args += (pointer.shape, array.shape)
             raise
         print(f"Initialize PyTorch weight {name} from {original_name}")
@@ -208,7 +208,9 @@ class AlbertEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
@@ -507,7 +509,6 @@ class AlbertPreTrainedModel(PreTrainedModel):
     config_class = AlbertConfig
     load_tf_weights = load_tf_weights_in_albert
     base_model_prefix = "albert"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -687,9 +688,9 @@ class AlbertModel(AlbertPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[None] = None,
-        output_hidden_states: Optional[None] = None,
-        return_dict: Optional[None] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutputWithPooling, Tuple]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -700,6 +701,7 @@ class AlbertModel(AlbertPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -759,11 +761,7 @@ class AlbertModel(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForPreTraining(AlbertPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        "predictions.decoder.weight",
-        "predictions.decoder.bias",
-        "embeddings.position_ids",
-    ]
+    _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
 
     def __init__(self, config: AlbertConfig):
         super().__init__(config)
@@ -911,12 +909,7 @@ class AlbertSOPHead(nn.Module):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForMaskedLM(AlbertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [
-        "predictions.decoder.weight",
-        "predictions.decoder.bias",
-        "embeddings.position_ids",
-    ]
+    _tied_weights_keys = ["predictions.decoder.bias", "predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1131,8 +1124,6 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForTokenClassification(AlbertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config: AlbertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1216,8 +1207,6 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForQuestionAnswering(AlbertPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config: AlbertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
