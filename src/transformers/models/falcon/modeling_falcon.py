@@ -1143,7 +1143,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
             )
             for layer_past in standardized_past
         )
-        return reordered_past
+        return self._convert_to_rw_cache(reordered_past)
 
 
 @add_start_docstrings(
