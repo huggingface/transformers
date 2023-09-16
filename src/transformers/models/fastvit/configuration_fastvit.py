@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Apple and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,6 +28,12 @@ logger = logging.get_logger(__name__)
 
 FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "apple/fastvit-t8": "https://huggingface.co/apple/fastvit-t8/resolve/main/config.json",
+    "apple/fastvit-t12": "https://huggingface.co/apple/fastvit-t12/resolve/main/config.json",
+    "apple/fastvit-s12": "https://huggingface.co/apple/fastvit-s12/resolve/main/config.json",
+    "apple/fastvit-sa12": "https://huggingface.co/apple/fastvit-sa12/resolve/main/config.json",
+    "apple/fastvit-sa24": "https://huggingface.co/apple/fastvit-sa24/resolve/main/config.json",
+    "apple/fastvit-sa36": "https://huggingface.co/apple/fastvit-sa36/resolve/main/config.json",
+    "apple/fastvit-ma36": "https://huggingface.co/apple/fastvit-ma36/resolve/main/config.json",   
     # See all ViT models at https://huggingface.co/models?filter=fastvit
 }
 
@@ -44,35 +50,38 @@ class FastViTConfig(PretrainedConfig):
 
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        image_size (`int`, *optional*, defaults to `256`):
+            The size (resolution) of each image.
+        num_channels (`int`, *optional*, defaults to `3`):
+            The number of input channels.
+        patch_size (`int`, *optional*, defaults to `4`):
+            The size (resolution) of each patch.
+        depths (`List[int]`, *optional*, defaults to `[2, 2, 4, 2]`):
+            The number of Token Mixer blocks in each FastViTLayer Block.
+        num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        hidden_sizes (`List[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
+            Dimensionality of the encoder layers in each FastViTLayer Block.
+        pos_embeds (`List[Bool]`, *optional*, defaults to `False`, equivalent to `[False, False, False, False]`)
+            Wheter to add a Conditional Positional Encoding in each FastViTLayer Block.
+        token_mixers (`List[str]` *optional*, defaults to `[repmixer, repmixer, repmixer, repmixer]`)
+            Wheter to use RepMixer block or Attention block per each FastViTLayer Block.
+            `"repmixer"` and `"attention"` are supported.
+        mlp_ratio (`float`, *optional*, defaults to 3.0):
+            The ratio of the number of channels in the output of the MLP to the number of channels in the input.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to `224`):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `16`):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to `3`):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
+        qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
-        encoder_stride (`int`, `optional`, defaults to 16):
-            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
     Example:
     ```python
@@ -95,7 +104,7 @@ class FastViTConfig(PretrainedConfig):
         num_channels=3,
         patch_size=4,
         depths=[2, 2, 4, 2],
-        attention_head_dim=32,
+        num_attention_heads=32,
         hidden_sizes=[48, 96, 192, 384],
         pos_embeds=None,
         token_mixers=["repmixer", "repmixer", "repmixer", "repmixer"],
@@ -124,7 +133,7 @@ class FastViTConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.attention_head_dim = attention_head_dim
+        self.num_attention_heads = num_attention_heads
 
 
 class FastViTOnnxConfig(OnnxConfig):

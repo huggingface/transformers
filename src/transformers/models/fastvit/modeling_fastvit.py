@@ -280,111 +280,6 @@ class FastViTConvLayer(nn.Module):
 
         return out
 
-    def reparameterize(self):
-        """Following works like `RepVGG: Making VGG-style ConvNets Great Again` -
-        https://arxiv.org/pdf/2101.03697.pdf. We re-parameterize multi-branched architecture used at training time to
-        obtain a plain CNN-like structure for inference.
-        """
-        if self.inference_mode:
-            return
-        kernel, bias = self._get_kernel_bias()
-        self.reparam_conv = nn.Conv2d(
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
-            kernel_size=self.kernel_size,
-            stride=self.stride,
-            padding=self.padding,
-            dilation=self.dilation,
-            groups=self.groups,
-            bias=True,
-        )
-        self.reparam_conv.weight.data = kernel
-        self.reparam_conv.bias.data = bias
-
-        # Delete un-used branches
-        for para in self.parameters():
-            para.detach_()
-        self.__delattr__("rbr_conv")
-        self.__delattr__("rbr_scale")
-        if hasattr(self, "rbr_skip"):
-            self.__delattr__("rbr_skip")
-
-        self.inference_mode = True
-
-    def _get_kernel_bias(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Method to obtain re-parameterized kernel and bias.
-        Reference: https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py#L83
-
-        Returns:
-            Tuple of (kernel, bias) after fusing branches.
-        """
-        # get weights and bias of scale branch
-        kernel_scale = 0
-        bias_scale = 0
-        if self.rbr_scale is not None:
-            kernel_scale, bias_scale = self._fuse_bn_tensor(self.rbr_scale)
-            # Pad scale branch kernel to match conv branch kernel size.
-            pad = self.kernel_size // 2
-            kernel_scale = torch.nn.functional.pad(kernel_scale, [pad, pad, pad, pad])
-
-        # get weights and bias of skip branch
-        kernel_identity = 0
-        bias_identity = 0
-        if self.rbr_skip is not None:
-            kernel_identity, bias_identity = self._fuse_bn_tensor(self.rbr_skip)
-
-        # get weights and bias of conv branches
-        kernel_conv = 0
-        bias_conv = 0
-        if self.rbr_conv is not None:
-            for ix in range(self.num_conv_branches):
-                _kernel, _bias = self._fuse_bn_tensor(self.rbr_conv)
-                kernel_conv += _kernel
-                bias_conv += _bias
-
-        kernel_final = kernel_conv + kernel_scale + kernel_identity
-        bias_final = bias_conv + bias_scale + bias_identity
-        return kernel_final, bias_final
-
-    def _fuse_bn_tensor(self, branch: Union[nn.Sequential, nn.BatchNorm2d]) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Method to fuse batchnorm layer with preceeding conv layer.
-        Reference: https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py#L95
-
-        Args:
-            branch: Sequence of ops to be fused.
-
-        Returns:
-            Tuple of (kernel, bias) after fusing batchnorm.
-        """
-        if isinstance(branch, nn.Sequential):
-            kernel = branch.conv.weight
-            running_mean = branch.bn.running_mean
-            running_var = branch.bn.running_var
-            gamma = branch.bn.weight
-            beta = branch.bn.bias
-            eps = branch.bn.eps
-        else:
-            assert isinstance(branch, nn.BatchNorm2d)
-            if not hasattr(self, "id_tensor"):
-                input_dim = self.in_channels // self.groups
-                kernel_value = torch.zeros(
-                    (self.in_channels, input_dim, self.kernel_size, self.kernel_size),
-                    dtype=branch.weight.dtype,
-                    device=branch.weight.device,
-                )
-                for i in range(self.in_channels):
-                    kernel_value[i, i % input_dim, self.kernel_size // 2, self.kernel_size // 2] = 1
-                self.id_tensor = kernel_value
-            kernel = self.id_tensor
-            running_mean = branch.running_mean
-            running_var = branch.running_var
-            gamma = branch.weight
-            beta = branch.bias
-            eps = branch.eps
-        std = (running_var + eps).sqrt()
-        t = (gamma / std).reshape(-1, 1, 1, 1)
-        return kernel * t, beta - running_mean * gamma / std
-
 
 class FastViTSEBlock(nn.Module):
     """Squeeze and Excite module.
@@ -519,80 +414,21 @@ class FastViTReparamLKConv(nn.Module):
 
         return out
 
-    def get_kernel_bias(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Method to obtain re-parameterized kernel and bias.
-        Reference: https://github.com/DingXiaoH/RepLKNet-pytorch
-
-        Returns:
-            Tuple of (kernel, bias) after fusing branches.
-        """
-        eq_k, eq_b = self._fuse_bn(self.large_conv.conv, self.large_conv.bn)
-        if hasattr(self, "small_conv"):
-            small_k, small_b = self._fuse_bn(self.small_conv.conv, self.small_conv.bn)
-            eq_b += small_b
-            eq_k += nn.functional.pad(small_k, [(self.kernel_size - self.small_kernel) // 2] * 4)
-        return eq_k, eq_b
-
-    def reparameterize(self) -> None:
-        """
-        Following works like `RepVGG: Making VGG-style ConvNets Great Again` - https://arxiv.org/pdf/2101.03697.pdf. We
-        re-parameterize multi-branched architecture used at training time to obtain a plain CNN-like structure for
-        inference.
-        """
-        eq_k, eq_b = self.get_kernel_bias()
-        self.lkb_reparam = nn.Conv2d(
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
-            kernel_size=self.kernel_size,
-            stride=self.stride,
-            padding=self.padding,
-            dilation=self.large_conv.conv.dilation,
-            groups=self.groups,
-            bias=True,
-        )
-
-        self.lkb_reparam.weight.data = eq_k
-        self.lkb_reparam.bias.data = eq_b
-        self.__delattr__("large_conv")
-        if hasattr(self, "small_conv"):
-            self.__delattr__("small_conv")
-
-    @staticmethod
-    def _fuse_bn(conv: torch.Tensor, bn: nn.BatchNorm2d) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Method to fuse batchnorm layer with conv layer.
-
-        Args:
-            conv: Convolutional kernel weights.
-            bn: Batchnorm 2d layer.
-
-        Returns:
-            Tuple of (kernel, bias) after fusing batchnorm.
-        """
-        kernel = conv.weight
-        running_mean = bn.running_mean
-        running_var = bn.running_var
-        gamma = bn.weight
-        beta = bn.bias
-        eps = bn.eps
-        std = (running_var + eps).sqrt()
-        t = (gamma / std).reshape(-1, 1, 1, 1)
-        return kernel * t, beta - running_mean * gamma / std
-
 
 class FastViTSelfAttention(nn.Module):
     def __init__(self, config: FastViTConfig, stage: str) -> None:
         super().__init__()
         self.hidden_size = config.hidden_sizes[stage]
-        self.attention_head_dim = config.attention_head_dim
-        self.num_heads = int(self.hidden_size / self.attention_head_dim)
-        self.scale = self.attention_head_dim**-0.5
+        self.num_attention_heads = config.num_attention_heads
+        self.num_heads = int(self.hidden_size / self.num_attention_heads)
+        self.scale = self.num_attention_heads**-0.5
 
-        self.all_head_size = self.attention_head_dim * self.num_heads
+        self.all_head_size = self.num_attention_heads * self.num_heads
 
-        if self.hidden_size % config.attention_head_dim != 0 and not hasattr(config, "embedding_size"):
+        if self.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size {self.hidden_size,} is not a multiple of the number of attention "
-                f"heads {config.attention_head_dim}."
+                f"heads {config.num_attention_heads}."
             )
 
         self.qkv = nn.Linear(self.hidden_size, self.all_head_size * 3, bias=config.qkv_bias)
@@ -601,20 +437,15 @@ class FastViTSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.dropout_proj = nn.Dropout(config.hidden_dropout_prob)
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.attention_head_dim, self.num_heads)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
     def forward(self, hidden_states) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        B, C, H, W = hidden_states.shape
-        N = H * W
-        # Added this line, we expect always 4D Input convert
-        # from shape (batch_size, channels, orig_height, orig_width)
+        batch_size, channel, height, width = hidden_states.shape
+        num_patches = height * width
+
+        # Convert input from shape (batch_size, channels, orig_height, orig_width)
         # to the shape (batch_size * patch_area, num_patches, channels)
         hidden_states = torch.flatten(hidden_states, start_dim=2).transpose(-2, -1)  # B N C
 
-        qkv = self.qkv(hidden_states).reshape(B, N, 3, self.num_heads, self.attention_head_dim).permute(2, 0, 3, 1, 4)
+        qkv = self.qkv(hidden_states).reshape(batch_size, num_patches, 3, self.num_heads, self.num_attention_heads).permute(2, 0, 3, 1, 4)
         query_layer, key_layer, value_layer = qkv.unbind(0)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
@@ -627,13 +458,13 @@ class FastViTSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        context_layer = (attention_probs @ value_layer).transpose(1, 2).reshape(B, N, C)
+        context_layer = (attention_probs @ value_layer).transpose(1, 2).reshape(batch_size, num_patches, channel)
 
         attention_outputs = self.proj(context_layer)
         attention_outputs = self.dropout_proj(attention_outputs)
 
         # Convert to 4D tensor
-        attention_outputs = attention_outputs.transpose(-2, -1).reshape(B, C, H, W)
+        attention_outputs = attention_outputs.transpose(-2, -1).reshape(batch_size, channel, height, width)
 
         return attention_outputs
 
@@ -698,39 +529,6 @@ class FastViTRepMixer(nn.Module):
             features_probs = features + self.layer_scale * (features_mixer - features_norm)
 
         return features_probs
-
-    def reparameterize(self) -> None:
-        """Reparameterize mixer and norm into a single
-        convolutional layer for efficient inference.
-        """
-        if self.inference_mode:
-            return
-
-        self.mixer.reparameterize()
-        self.norm.reparameterize()
-
-        w = self.mixer.id_tensor + self.layer_scale.unsqueeze(-1) * (
-            self.mixer.reparam_conv.weight - self.norm.reparam_conv.weight
-        )
-        b = torch.squeeze(self.layer_scale) * (self.mixer.reparam_conv.bias - self.norm.reparam_conv.bias)
-
-        self.reparam_conv = nn.Conv2d(
-            in_channels=self.dimension,
-            out_channels=self.dimension,
-            kernel_size=self.kernel_size,
-            stride=1,
-            padding=self.kernel_size // 2,
-            groups=self.dimension,
-            bias=True,
-        )
-        self.reparam_conv.weight.data = w
-        self.reparam_conv.bias.data = b
-
-        for para in self.parameters():
-            para.detach_()
-        self.__delattr__("mixer")
-        self.__delattr__("norm")
-        self.__delattr__("layer_scale")
 
 
 class FastViTConvFFN(nn.Module):
@@ -912,51 +710,11 @@ class FastViTCPE(nn.Module):
 
         return CPE
 
-    def reparameterize(self) -> None:
-        # Build equivalent Id tensor
-        input_dim = self.in_channels // self.groups
-        kernel_value = torch.zeros(
-            (
-                self.in_channels,
-                input_dim,
-                self.spatial_shape[0],
-                self.spatial_shape[1],
-            ),
-            dtype=self.pos_enc.weight.dtype,
-            device=self.pos_enc.weight.device,
-        )
-        for i in range(self.in_channels):
-            kernel_value[
-                i,
-                i % input_dim,
-                self.spatial_shape[0] // 2,
-                self.spatial_shape[1] // 2,
-            ] = 1
-        id_tensor = kernel_value
-
-        # Reparameterize Id tensor and conv
-        w_final = id_tensor + self.pos_enc.weight
-        b_final = self.pos_enc.bias
-
-        # Introduce reparam conv
-        self.reparam_conv = nn.Conv2d(
-            in_channels=self.in_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.spatial_shape,
-            stride=1,
-            padding=int(self.spatial_shape[0] // 2),
-            groups=self.embed_dim,
-            bias=True,
-        )
-        self.reparam_conv.weight.data = w_final
-        self.reparam_conv.bias.data = b_final
-
-        for para in self.parameters():
-            para.detach_()
-        self.__delattr__("pe")
-
 
 class FastViTIntermediate(nn.Module):
+    """
+        Implementation of the Token Mixer Block
+    """
     def __init__(self, config: FastViTConfig, stage: str) -> None:
         super().__init__()
         token_mixer_type = config.token_mixers[stage]
@@ -982,6 +740,7 @@ class FastViTIntermediate(nn.Module):
             )
         else:
             raise ValueError("Token mixer type: {} not supported".format(token_mixer_type))
+        
         self.convffn = FastViTConvFFN(config, stage)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -995,7 +754,7 @@ class FastViTIntermediate(nn.Module):
 
 
 class FastViTLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
+    """This corresponds to the Block class."""
 
     def __init__(self, config: FastViTConfig, stage: int, inference_mode: bool = False) -> None:
         super().__init__()
@@ -1248,17 +1007,10 @@ class FastViTModel(FastViTPreTrainedModel):
     """
     FastViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state
     of the [CLS] token) e.g. for ImageNet.
-
-    <Tip>
-
-        Note that it's possible to fine-tune FastViT on higher resolution images than the ones it has been trained on,
-        by setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the
-        pre-trained position embeddings to the higher resolution.
-
-    </Tip>
     """,
     FASTVIT_START_DOCSTRING,
 )
+
 class FastViTForImageClassification(FastViTPreTrainedModel):
     def __init__(self, config: FastViTConfig, inference_mode: bool = False) -> None:
         super().__init__(config)

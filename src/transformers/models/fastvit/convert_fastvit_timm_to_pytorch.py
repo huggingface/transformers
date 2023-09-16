@@ -22,6 +22,7 @@ import timm
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from pathlib import Path
 
 from transformers import FastViTConfig, FastViTForImageClassification, ViTFeatureExtractor
 from transformers.utils import logging
@@ -212,11 +213,11 @@ def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path):
     assert outputs.shape == timm_logits.shape, f"Shape is not equal: {outputs.shape} and {timm_logits.shape}"
     assert torch.allclose(timm_logits, outputs, atol=1e-3), "The predicted logits are not the same."
 
-    # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    # print(f"Saving model {fastvit_name} to {pytorch_dump_folder_path}")
-    # model.save_pretrained(pytorch_dump_folder_path)
-    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    print(f"Saving model {fastvit_name} to {pytorch_dump_folder_path}")
+    model.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
