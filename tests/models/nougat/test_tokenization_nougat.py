@@ -45,61 +45,60 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 # Simple input
-                s = "This is a simple input"
-                s2 = ["This is a simple input 1", "This is a simple input 2"]
-                p = ("This is a simple input", "This is a pair")
-                p2 = [
+                sentence1 = "This is a simple input"
+                sentence2 = ["This is a simple input 1", "This is a simple input 2"]
+                pair1 = ("This is a simple input", "This is a pair")
+                pair2 = [
                     ("This is a simple input 1", "This is a simple input 2"),
                     ("This is a simple pair 1", "This is a simple pair 2"),
                 ]
 
                 # Simple input tests
                 try:
-                    tokenizer_r.encode(s, max_length=max_length)
-                    tokenizer_r.encode_plus(s, max_length=max_length)
+                    tokenizer_r.encode(sentence1, max_length=max_length)
+                    tokenizer_r.encode_plus(sentence1, max_length=max_length)
 
-                    tokenizer_r.batch_encode_plus(s2, max_length=max_length)
-                    tokenizer_r.encode(p, max_length=max_length)
-                    tokenizer_r.batch_encode_plus(p2, max_length=max_length)
+                    tokenizer_r.batch_encode_plus(sentence2, max_length=max_length)
+                    tokenizer_r.encode(pair1, max_length=max_length)
+                    tokenizer_r.batch_encode_plus(pair2, max_length=max_length)
                 except ValueError:
                     self.fail("Nougat Tokenizer should be able to deal with padding")
 
                 tokenizer_r.pad_token = None  # Hotfixing padding = None
-                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError, tokenizer_r.encode, sentence1, max_length=max_length, padding="max_length"
+                )
 
                 # Simple input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError, tokenizer_r.encode_plus, sentence1, max_length=max_length, padding="max_length"
+                )
 
                 # Simple input
                 self.assertRaises(
                     ValueError,
                     tokenizer_r.batch_encode_plus,
-                    s2,
+                    sentence2,
                     max_length=max_length,
                     padding="max_length",
                 )
 
                 # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+                self.assertRaises(ValueError, tokenizer_r.encode, pair1, max_length=max_length, padding="max_length")
 
                 # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError, tokenizer_r.encode_plus, pair1, max_length=max_length, padding="max_length"
+                )
 
                 # Pair input
                 self.assertRaises(
                     ValueError,
                     tokenizer_r.batch_encode_plus,
-                    p2,
+                    pair2,
                     max_length=max_length,
                     padding="max_length",
                 )
-
-    def test_pretrained_model_lists(self):
-        # The test has to be overriden because BLOOM uses ALiBi positional embeddings that does not have
-        # any sequence length constraints. This test of the parent class will fail since it relies on the
-        # maximum sequence length of the positoonal embeddings.
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
     @unittest.skip("NougatTokenizerFast does not have tokenizer_file in its signature")
     def test_rust_tokenizer_signature(self):
