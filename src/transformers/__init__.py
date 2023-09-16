@@ -1780,6 +1780,8 @@ else:
             "FalconForTokenClassification",
             "FalconModel",
             "FalconPreTrainedModel",
+        ]
+    )
     _import_structure["models.fastvit"].extend(
         [
             "FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5704,6 +5706,7 @@ if TYPE_CHECKING:
             FalconForTokenClassification,
             FalconModel,
             FalconPreTrainedModel,
+        )
         from .models.fastvit import (
             FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FastViTForImageClassification,
