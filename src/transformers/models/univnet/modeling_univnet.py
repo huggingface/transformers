@@ -426,7 +426,7 @@ UNIVNET_START_DOCSTRING = r"""
 )
 class UnivNetGan(PreTrainedModel):
     config_class = UnivNetGanConfig
-    main_input_name = "spectrogram"
+    main_input_name = "input_features"
 
     def __init__(self, config: UnivNetGanConfig):
         super().__init__(config)
@@ -471,7 +471,7 @@ class UnivNetGan(PreTrainedModel):
 
     def forward(
         self,
-        spectrogram: torch.FloatTensor,
+        input_features: torch.FloatTensor,
         noise_sequence: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
     ):
@@ -481,7 +481,7 @@ class UnivNetGan(PreTrainedModel):
         single, un-batched speech waveform.
 
         Args:
-            spectrogram (`torch.FloatTensor`):
+            input_features (`torch.FloatTensor`):
                 Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
                 config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
             noise_sequence (`torch.FloatTensor`, *optional*):
@@ -515,10 +515,10 @@ class UnivNetGan(PreTrainedModel):
          ```
         """
         # Resolve batch sizes for noise_sequence and spectrogram
-        spectrogram_batched = spectrogram.dim() == 3
+        spectrogram_batched = input_features.dim() == 3
         if not spectrogram_batched:
-            spectrogram = spectrogram.unsqueeze(0)
-        spectrogram_batch_size, spectrogram_length, _ = spectrogram.shape
+            input_features = input_features.unsqueeze(0)
+        spectrogram_batch_size, spectrogram_length, _ = input_features.shape
 
         if noise_sequence is not None:
             noise_sequence_batched = noise_sequence.dim() == 3
@@ -528,7 +528,7 @@ class UnivNetGan(PreTrainedModel):
             # Randomly generate noise_sequence
             noise_sequence_shape = (spectrogram_batch_size, spectrogram_length, self.config.model_in_channels)
             noise_sequence = torch.randn(
-                noise_sequence_shape, generator=generator, dtype=spectrogram.dtype, device=spectrogram.device
+                noise_sequence_shape, generator=generator, dtype=input_features.dtype, device=input_features.device
             )
             noise_sequence_batched = True
         noise_sequence_batch_size = noise_sequence.shape[0]
@@ -538,7 +538,7 @@ class UnivNetGan(PreTrainedModel):
             noise_sequence = noise_sequence.repeat(spectrogram_batch_size, 1, 1)
         elif noise_sequence_batch_size > 1 and spectrogram_batch_size == 1:
             # Repeat spectrogram noise_sequence_batch_size times
-            spectrogram = spectrogram.repeat(noise_sequence_batch_size, 1, 1)
+            input_features = input_features.repeat(noise_sequence_batch_size, 1, 1)
 
         if noise_sequence_batch_size != spectrogram_batch_size:
             raise ValueError(
@@ -548,12 +548,12 @@ class UnivNetGan(PreTrainedModel):
 
         # Change shapes to have channels before sequence lengths
         hidden_states = noise_sequence.transpose(2, 1)
-        spectrogram = spectrogram.transpose(2, 1)
+        input_features = input_features.transpose(2, 1)
 
         hidden_states = self.conv_pre(hidden_states)
 
         for resblock in self.resblocks:
-            hidden_states = resblock(hidden_states, spectrogram)
+            hidden_states = resblock(hidden_states, input_features)
 
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
         hidden_states = self.conv_post(hidden_states)

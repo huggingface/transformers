@@ -93,7 +93,7 @@ class UnivNetGanTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, spectrogram, noise_sequence = self.prepare_config_and_inputs()
-        inputs_dict = {"spectrogram": spectrogram, "noise_sequence": noise_sequence}
+        inputs_dict = {"input_features": spectrogram, "noise_sequence": noise_sequence}
         return config, inputs_dict
 
 
@@ -111,7 +111,7 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     has_attentions = False
 
-    input_name = "spectrogram"
+    input_name = "input_features"
 
     def setUp(self):
         self.model_tester = UnivNetGanTester(self)
@@ -140,7 +140,7 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = [
-                "spectrogram",
+                "input_features",
             ]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
@@ -172,7 +172,7 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            batched_spectrogram = inputs["spectrogram"].unsqueeze(0).repeat(2, 1, 1)
+            batched_spectrogram = inputs["input_features"].unsqueeze(0).repeat(2, 1, 1)
             batched_noise_sequence = inputs["noise_sequence"].unsqueeze(0).repeat(2, 1, 1)
             with torch.no_grad():
                 batched_outputs = model(
@@ -195,7 +195,7 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             with torch.no_grad():
-                outputs = model(inputs["spectrogram"].to(torch_device), inputs["noise_sequence"].to(torch_device))
+                outputs = model(inputs["input_features"].to(torch_device), inputs["noise_sequence"].to(torch_device))
             self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")
 
     def test_unbatched_batched_outputs_consistency(self):
@@ -206,9 +206,9 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            unbatched_spectrogram = inputs["spectrogram"].detach().clone()
+            unbatched_spectrogram = inputs["input_features"].detach().clone()
             unbatched_noise_sequence = inputs["noise_sequence"].detach().clone()
-            batched_spectrogram = inputs["spectrogram"].unsqueeze(0)
+            batched_spectrogram = inputs["input_features"].unsqueeze(0)
             batched_noise_sequence = inputs["noise_sequence"].unsqueeze(0)
 
             with torch.no_grad():
@@ -275,7 +275,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
             spectrogram = spectrogram.transpose(2, 1)
 
         inputs = {
-            "spectrogram": spectrogram,
+            "input_features": spectrogram,
             "noise_sequence": noise_sequence,
             "generator": generator,
         }
@@ -334,11 +334,11 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
         audio, sr = self._load_datasamples(1, sampling_rate=feature_extractor.sampling_rate)
 
-        input_features = feature_extractor(audio, sampling_rate=sr[0], return_tensors="pt").spectrogram
+        input_features = feature_extractor(audio, sampling_rate=sr[0], return_tensors="pt").input_features
         input_features = input_features.to(device=torch_device)
 
         input_speech = self.get_inputs(torch_device, num_samples=1, noise_length=input_features.shape[1])
-        input_speech["spectrogram"] = input_features
+        input_speech["input_features"] = input_features
 
         waveform = model(**input_speech).detach().cpu()
         waveform_mean = torch.mean(waveform)
