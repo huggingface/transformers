@@ -1821,15 +1821,6 @@ else:
             "FNetPreTrainedModel",
         ]
     )
-    _import_structure["models.fastvit"].extend(
-        [
-            "FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "FastViTForImageClassification",
-            "FastViTForMaskedImageModeling",
-            "FastViTModel",
-            "FastViTPreTrainedModel",
-        ]
-    )
     _import_structure["models.focalnet"].extend(
         [
             "FOCALNET_PRETRAINED_MODEL_ARCHIVE_LIST",
