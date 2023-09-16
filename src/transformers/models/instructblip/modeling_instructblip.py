@@ -1334,7 +1334,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: Tuple(torch.FloatTensor),
+        pixel_values: Tuple[torch.FloatTensor],
         qformer_input_ids: torch.FloatTensor,
         qformer_attention_mask: Optional[torch.LongTensor] = None,
         input_ids: Optional[torch.FloatTensor] = None,
