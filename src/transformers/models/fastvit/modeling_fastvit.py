@@ -42,11 +42,11 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "FastViTConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "apple/fastvit-t8"
+_CHECKPOINT_FOR_DOC = "jorgeav/fastvit_t8"
 _EXPECTED_OUTPUT_SHAPE = [1, 48, 64, 64]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "apple/fastvit-t8"
+_IMAGE_CLASS_CHECKPOINT = "jorgeav/fastvit_t8"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby cat"
 
 # TODO: Add more new models there are atleast 5 more
