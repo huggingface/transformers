@@ -42,7 +42,9 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate (`int`, *optional*, defaults to 24000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
-            The value that is used to fill the padding values.
+            The value to pad with when applying the padding strategy defined by the `padding` argument to
+            [`UnivNetGanFeatureExtractor.__call__`]. Note that this is used to pad the raw input waveforms; if
+            `pad_end` is specified, we will pad the output spectrograms using `self.spectrogram_zero`.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly improve the
             performance for some models.
@@ -86,7 +88,7 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
         model_in_channels (`int`, *optional*, defaults to 64):
             The number of input channels to the [`UnivNetGan`] model. This should match
             `UnivNetGan.config.model_in_channels`.
-        pad_end_len (`int`, *optional*, defaults to 10):
+        pad_end_length (`int`, *optional*, defaults to 10):
             If padding the end of the spectrograms, the number of frames to append to the end of each spectrogram.
     """
 
@@ -323,8 +325,8 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
+                Select a strategy to pad the input `raw_speech` waveforms (according to the model's padding side and
+                padding index) among:
 
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
                   sequence if provided).
@@ -332,6 +334,9 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
                   lengths).
+
+                `raw_speech` is then converted into log mel spectrograms, which may be further padded if `pad_end` is
+                specified.
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`, *optional*, defaults to `True`):
@@ -348,7 +353,8 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
             pad_end (`bool`, *optional*, defaults to `False`):
                 Whether to pad the end of each spectrogram with "zero" values. This can help reduce artifacts at the
                 end of the generated audio sample; see https://github.com/seungwonpark/melgan/issues/8 for more
-                details.
+                details. Note that the spectrograms may already contain padding based on the padding strategy set in
+                `padding`.
             pad_length (`int`, *optional*, defaults to `None`):
                 If padding the end of each spectrogram, the length of the padding. If not set, this will default to
                 `self.config.pad_end_length`.
