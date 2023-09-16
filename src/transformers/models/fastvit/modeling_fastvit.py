@@ -43,16 +43,15 @@ _CONFIG_FOR_DOC = "FastViTConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "JorgeAV/fastvit_t8"
-_EXPECTED_OUTPUT_SHAPE = [1, 48, 64, 64]
+_EXPECTED_OUTPUT_SHAPE = [1, 384, 8, 8]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "JorgeAV/fastvit_t8"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby cat"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 # TODO: Add more new models there are atleast 5 more
 FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "JorgeAV/fastvit_t8",
-    "JorgeAV/fastvit_t12"
+    "JorgeAV/fastvit_t8"
     # See all FastViT models at https://huggingface.co/models?filter=fastvit
 ]
 
