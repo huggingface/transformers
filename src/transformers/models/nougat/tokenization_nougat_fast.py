@@ -93,17 +93,19 @@ def markdown_compatible(text: str) -> str:
     return text
 
 
-def find_next_punctuation(s: str, start_inx=0):
+def find_next_punctuation(text: str, start_idx=0):
     """
-    Find the index of the next punctuation mark
+    Find the index of the next punctuation mark.
 
     Args:
-        s: String to examine
-        start_inx: Index where to start
+        text (`str`):
+            String to examine
+        start_idx (`int`, *optional*)
+            Index where to start
     """
 
-    for i in range(start_inx, len(s)):
-        if s[i] in [".", "?", "!", "\n"]:
+    for i in range(start_idx, len(text)):
+        if text[i] in [".", "?", "!", "\n"]:
             return i
 
     return None
