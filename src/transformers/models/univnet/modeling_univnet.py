@@ -44,31 +44,25 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
     block (LVCBlock).
 
     Parameters:
-        channels (`int`, *optional*, defaults to 64):
-            The number of hidden channels for the residual block.
-        kernel_size (`int`, *optional*, defaults to 3):
-            The kernel size for the 1D convolutional layers in the residual block.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the Dropout layer in the residual block.
-        leaky_relu_slope (`float`, *optional*, defaults to 0.1):
-            The angle of the negative slope used by the leaky ReLU activation.
+        config: (`UnivNetGanConfig`):
+            Config for the `UnivNetGan` model.
     """
 
     def __init__(
         self,
-        channels: int = 64,
-        kernel_size: int = 3,
-        dropout: float = 0.0,
-        leaky_relu_slope: float = 0.1,
+        config: UnivNetGanConfig,
     ):
         super().__init__()
-        self.leaky_relu_slope = leaky_relu_slope
+        self.channels = config.model_in_channels
+        self.kernel_size = config.kernel_predictor_conv_size
+        self.dropout_prob = config.kernel_predictor_dropout
+        self.leaky_relu_slope = config.leaky_relu_slope
 
-        padding = (kernel_size - 1) // 2
+        padding = (self.kernel_size - 1) // 2
 
-        self.dropout = nn.Dropout(dropout)
-        self.conv1 = nn.Conv1d(channels, channels, kernel_size, padding=padding, bias=True)
-        self.conv2 = nn.Conv1d(channels, channels, kernel_size, padding=padding, bias=True)
+        self.dropout = nn.Dropout(self.dropout_prob)
+        self.conv1 = nn.Conv1d(self.channels, self.channels, self.kernel_size, padding=padding, bias=True)
+        self.conv2 = nn.Conv1d(self.channels, self.channels, self.kernel_size, padding=padding, bias=True)
 
     def forward(self, hidden_states: torch.FloatTensor):
         # hidden_states should have shape (batch_size, channels, seq_length)
@@ -98,75 +92,48 @@ class UnivNetKernelPredictor(nn.Module):
     [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L7).
 
     Parameters:
-        conv_layers (`int`):
-            The number of location variable convolutional layers to output kernels and biases for.
-        conv_in_channels (`int`):
-            The number of input channels for the location variable convolutional layer kernels (convolutional weight
-            tensor).
-        conv_out_channels (`int`):
-            The number of output channels for the location variable convolutional layer kernels (convolutional weight
-            tensor).
+        config: (`UnivNetGanConfig`):
+            Config for the `UnivNetGan` model.
         conv_kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the location variable convolutional layer kernels (convolutional weight tensor).
-        num_blocks (`int`, *optional*, defaults to 3):
-            The number of residual blocks in the kernel predictor residual network.
-        resnet_in_channels (`int`, *optional*, defaults to 100):
-            The number of input channels to the kernel predictor residual network. This should be the same as the
-            number of frequency bins in the conditioning log-mel spectrogram.
-        resnet_hidden_channels (`int`, *optional*, defaults to 64):
-            The number of hidden channels for each residual block in the kernel predictor residual network.
-        resnet_kernel_size (`int`, *optional*, defaults to 3):
-            The kernel size of each 1D convolutional layer in the kernel predictor residual network.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the kernel predictor.
-        leaky_relu_slope (`float`, *optional*, defaults 0.1):
-            The angle of the negative slope used by the leaky ReLU activation.
+        conv_layers (`int`, *optional*, defaults to 4):
+            The number of location variable convolutional layers to output kernels and biases for.
     """
 
     def __init__(
         self,
-        conv_layers: int,
-        conv_in_channels: int,
-        conv_out_channels: int,
+        config: UnivNetGanConfig,
         conv_kernel_size: int = 3,
-        num_blocks: int = 3,
-        resnet_in_channels: int = 100,
-        resnet_hidden_channels: int = 64,
-        resnet_kernel_size: int = 3,
-        dropout: float = 0.0,
-        leaky_relu_slope: float = 0.1,
+        conv_layers: int = 4,
     ):
         super().__init__()
 
-        self.conv_in_channels = conv_in_channels
-        self.conv_out_channels = conv_out_channels
+        self.conv_in_channels = config.model_hidden_channels
+        self.conv_out_channels = 2 * config.model_hidden_channels
         self.conv_kernel_size = conv_kernel_size
         self.conv_layers = conv_layers
-        self.leaky_relu_slope = leaky_relu_slope
 
-        kernel_channels = conv_in_channels * conv_out_channels * conv_kernel_size * conv_layers
-        bias_channels = conv_out_channels * conv_layers
-        padding = (resnet_kernel_size - 1) // 2
+        self.kernel_channels = self.conv_in_channels * self.conv_out_channels * self.conv_kernel_size * self.conv_layers
+        self.bias_channels = self.conv_out_channels * self.conv_layers
 
-        self.input_conv = nn.Conv1d(resnet_in_channels, resnet_hidden_channels, 5, padding=2, bias=True)
+        self.resnet_in_channels = config.num_mel_bins
+        self.resnet_hidden_channels = config.kernel_predictor_hidden_channels
+        self.resnet_kernel_size = config.kernel_predictor_conv_size
+        self.num_blocks = config.kernel_predictor_num_blocks
 
-        self.resblocks = nn.ModuleList(
-            [
-                UnivNetKernelPredictorResidualBlock(
-                    channels=resnet_hidden_channels,
-                    kernel_size=resnet_kernel_size,
-                    dropout=dropout,
-                    leaky_relu_slope=leaky_relu_slope,
-                )
-                for _ in range(num_blocks)
-            ]
-        )
+        self.leaky_relu_slope = config.leaky_relu_slope
+
+        padding = (self.resnet_kernel_size - 1) // 2
+
+        self.input_conv = nn.Conv1d(self.resnet_in_channels, self.resnet_hidden_channels, 5, padding=2, bias=True)
+
+        self.resblocks = nn.ModuleList([UnivNetKernelPredictorResidualBlock(config) for _ in range(self.num_blocks)])
 
         self.kernel_conv = nn.Conv1d(
-            resnet_hidden_channels, kernel_channels, resnet_kernel_size, padding=padding, bias=True
+            self.resnet_hidden_channels, self.kernel_channels, self.resnet_kernel_size, padding=padding, bias=True
         )
         self.bias_conv = nn.Conv1d(
-            resnet_hidden_channels, bias_channels, resnet_kernel_size, padding=padding, bias=True
+            self.resnet_hidden_channels, self.bias_channels, self.resnet_kernel_size, padding=padding, bias=True
         )
 
     def forward(self, spectrogram: torch.FloatTensor):
@@ -235,35 +202,34 @@ class UnivNetLVCResidualBlock(nn.Module):
     Implementation of the location variable convolution (LVC) residual block for the UnivNet residual network.
 
     Parameters:
-        hidden_channels (`int`):
-            The number of hidden channels for the residual block.
+        config: (`UnivNetGanConfig`):
+            Config for the `UnivNetGan` model.
         kernel_size (`int`):
             The kernel size for the dilated 1D convolutional layer.
         dilation (`int`):
             The dilation for the dilated 1D convolutional layer.
-        leaky_relu_slope (`float`, *optional*, defaults to 0.2):
-            The angle of the negative slope used by the leaky ReLU activation.
     """
 
     def __init__(
         self,
-        hidden_channels: int,
+        config: UnivNetGanConfig,
         kernel_size: int,
         dilation: int,
-        leaky_relu_slope: float = 0.2,
     ):
         super().__init__()
-        self.hidden_channels = hidden_channels
-        self.leaky_relu_slope = leaky_relu_slope
+        self.hidden_channels = config.model_hidden_channels
+        self.kernel_size = kernel_size
+        self.dilation = dilation
+        self.leaky_relu_slope = config.leaky_relu_slope
 
-        padding = dilation * (kernel_size - 1) // 2
+        padding = self.dilation * (self.kernel_size - 1) // 2
 
         self.conv = nn.Conv1d(
-            hidden_channels,
-            hidden_channels,
-            kernel_size,
+            self.hidden_channels,
+            self.hidden_channels,
+            self.kernel_size,
             padding=padding,
-            dilation=dilation,
+            dilation=self.dilation,
         )
 
     def forward(self, hidden_states, kernel, bias, hop_size=256):
@@ -362,8 +328,8 @@ class UnivNetLVCBlock(nn.Module):
     Based on LVCBlock in [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L98)
 
     Parameters:
-        hidden_channels (`int`, *optional*, defaults to 32):
-            The number of hidden channels for the `UnivNetLVCResidualBlock`s.
+        config: (`UnivNetGanConfig`):
+            Config for the `UnivNetGan` model.
         kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the dilated 1D convolutional layers in the residual blocks.
         stride (`int`, *optional*, defaults to 8):
@@ -373,73 +339,38 @@ class UnivNetLVCBlock(nn.Module):
             `dilations` determines how many residual blocks are in `UnivNetLVCBlock`.
         lvc_hop_size (`int`, *optional*, defaults to 256):
             The hop size for the location variable convolutional layers.
-        resnet_leaky_relu_slope (`float`, *optional*, defaults to 0.2):
-            The angle of the negative slope used by the leaky ReLU activation for the resnet blocks.
-        cond_channels (`int`, *optional*, defaults to 100):
-            The number of frequency bins in the conditioning log-mel spectrogram.
-        kernel_predictor_num_blocks (`int`, *optional*, defaults to 3):
-            The number of residual blocks for the kernel predictor.
-        kernel_predictor_hidden_channels (`int`, *optional*, defaults to 64):
-            The number of hidden channels for the residual blocks of the kernel predictor.
-        kernel_predictor_conv_size (`int`, *optional*, defaults to 3):
-            The kernel size for the 1D convolutional layers in the kernel predictor.
-        kernel_predictor_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the Dropout layers in the kernel predictor.
-        kernel_predictor_leaky_relu_slope (`float`, *optional*, defaults to 0.2):
-            The angle of the negative slope used by the leaky ReLU activation for the kernel predictor.
     """
 
     def __init__(
         self,
-        hidden_channels: int = 32,
+        config: UnivNetGanConfig,
         kernel_size: int = 3,
         stride: int = 8,
         dilations: Union[Tuple[int], List[int]] = [1, 3, 9, 27],
         lvc_hop_size: int = 256,
-        resnet_leaky_relu_slope: float = 0.2,
-        cond_channels: int = 100,
-        kernel_predictor_num_blocks: int = 3,
-        kernel_predictor_hidden_channels: int = 64,
-        kernel_predictor_conv_size: int = 3,
-        kernel_predictor_dropout: float = 0.0,
-        kernel_predictor_leaky_relu_slope: float = 0.2,
     ):
         super().__init__()
+        self.hidden_channels = config.model_hidden_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.dilations = dilations
         self.cond_hop_length = lvc_hop_size
-        self.leaky_relu_slope = resnet_leaky_relu_slope
+        self.leaky_relu_slope = config.leaky_relu_slope
+        self.num_blocks = len(self.dilations)
 
         self.convt_pre = nn.ConvTranspose1d(
-            hidden_channels,
-            hidden_channels,
-            2 * stride,
-            stride=stride,
-            padding=stride // 2 + stride % 2,
-            output_padding=stride % 2,
+            self.hidden_channels,
+            self.hidden_channels,
+            2 * self.stride,
+            stride=self.stride,
+            padding=self.stride // 2 + self.stride % 2,
+            output_padding=self.stride % 2,
         )
 
-        self.kernel_predictor = UnivNetKernelPredictor(
-            conv_layers=len(dilations),
-            conv_in_channels=hidden_channels,
-            conv_out_channels=2 * hidden_channels,
-            conv_kernel_size=kernel_size,
-            num_blocks=kernel_predictor_num_blocks,
-            resnet_in_channels=cond_channels,
-            resnet_hidden_channels=kernel_predictor_hidden_channels,
-            resnet_kernel_size=kernel_predictor_conv_size,
-            dropout=kernel_predictor_dropout,
-            leaky_relu_slope=kernel_predictor_leaky_relu_slope,
-        )
+        self.kernel_predictor = UnivNetKernelPredictor(config, self.kernel_size, self.num_blocks)
 
         self.resblocks = nn.ModuleList(
-            [
-                UnivNetLVCResidualBlock(
-                    hidden_channels=hidden_channels,
-                    kernel_size=kernel_size,
-                    dilation=dilations[i],
-                    leaky_relu_slope=resnet_leaky_relu_slope,
-                )
-                for i in range(len(dilations))
-            ]
+            [UnivNetLVCResidualBlock(config, self.kernel_size, self.dilations[i]) for i in range(self.num_blocks)]
         )
 
     def forward(self, hidden_states: torch.FloatTensor, spectrogram: torch.FloatTensor):
@@ -521,18 +452,11 @@ class UnivNetGan(PreTrainedModel):
         self.resblocks = nn.ModuleList(
             [
                 UnivNetLVCBlock(
-                    hidden_channels=config.model_hidden_channels,
+                    config,
                     kernel_size=config.resblock_kernel_sizes[i],
                     stride=config.resblock_stride_sizes[i],
                     dilations=config.resblock_dilation_sizes[i],
                     lvc_hop_size=hop_lengths[i],
-                    resnet_leaky_relu_slope=config.leaky_relu_slope,
-                    cond_channels=config.num_mel_bins,
-                    kernel_predictor_num_blocks=config.kernel_predictor_num_blocks,
-                    kernel_predictor_hidden_channels=config.kernel_predictor_hidden_channels,
-                    kernel_predictor_conv_size=config.kernel_predictor_conv_size,
-                    kernel_predictor_dropout=config.kernel_predictor_dropout,
-                    kernel_predictor_leaky_relu_slope=config.leaky_relu_slope,
                 )
                 for i in range(num_layers)
             ]
