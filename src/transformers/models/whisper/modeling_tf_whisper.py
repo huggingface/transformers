@@ -677,7 +677,7 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
         inputs_embeds = tf.keras.activations.gelu(self.conv2(inputs_embeds))
         inputs_embeds = tf.transpose(inputs_embeds, perm=(0, 1, 2))
 
-        embed_pos = self.embed_positions.weight
+        embed_pos = self.embed_positions(input_ids=tf.zeros((1, self.max_source_positions), dtype=tf.int32))
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.dropout(hidden_states, training=training)
