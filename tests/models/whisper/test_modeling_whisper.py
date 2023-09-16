@@ -355,12 +355,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config = self.model_tester.get_config()
         for model_class in self.all_model_classes:
             model = model_class(config)
-
-            try:
-                encoder = model.encoder
-            except AttributeError:
-                encoder = model.model.encoder
-
+            encoder = model.get_encoder()
             self.assertFalse(encoder.embed_positions.weight.requires_grad)
 
     def test_decoder_model_past_with_large_inputs(self):
