@@ -55,42 +55,42 @@ PRETRAINED_VOCAB_FILES_MAP = {
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 
-def markdown_compatible(s: str) -> str:
+def markdown_compatible(text: str) -> str:
     """
     Make text compatible with Markdown formatting.
 
     This function makes various text formatting adjustments to make it compatible with Markdown.
 
     Args:
-        s (str): The input text to be made Markdown-compatible.
+        text (`str`):
+            The input text to be made Markdown-compatible.
 
     Returns:
-        str: The Markdown-compatible text.
+        `str`: The Markdown-compatible text.
     """
     # equation tag
-    s = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", s, flags=re.M)
-    s = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", s, flags=re.M)
-    s = re.sub(
+    text = re.textub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M)
+    text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.M)
+    text = re.sub(
         r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\) (\\\[.+?\\\])$",
         r"\[\1 \\tag{\2}\] \3",
-        s,
+        text,
         flags=re.M,
     )  # multi line
-    s = s.replace(r"\. ", ". ")
+    text = text.replace(r"\. ", ". ")
     # bold formatting
-    s = s.replace(r"\bm{", r"\mathbf{").replace(r"{\\bm ", r"\mathbf{")
-    s = re.sub(r"\\mbox{ ?\\boldmath\$(.*?)\$}", r"\\mathbf{\1}", s)
+    text = text.replace(r"\bm{", r"\mathbf{").replace(r"{\\bm ", r"\mathbf{")
+    text = re.sub(r"\\mbox{ ?\\boldmath\$(.*?)\$}", r"\\mathbf{\1}", text)
     # urls
-    s = re.sub(
+    text = re.sub(
         r"((?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-]))",
         r"[\1](\1)",
-        s,
+        text,
     )
     # algorithms
-    s = re.sub(r"```\s*(.+?)\s*```", r"```\n\1\n```", s, flags=re.S)
-    # lists
+    text = re.sub(r"```\s*(.+?)\s*```", r"```\n\1\n```", text, flags=re.S)
 
-    return s
+    return text
 
 
 def find_next_punctuation(s: str, start_inx=0):
@@ -209,12 +209,21 @@ def get_slices(lines, clean_lines):
 
     This function identifies and returns slices of text from the input lines based on certain conditions.
 
+    These conditions were chosen by the Nougat authors:
+    - The slice is less than 200 characters long.
+    - The slice is more than 3 characters long.
+    - The slice does not start with "[MISSING_PAGE".
+    - The slice is either the same as the next slice or the ratio of the two in terms of Levensthein distance is
+      greater than 0.9.
+
     Args:
-        lines (list of str): The list of lines containing the text.
-        clean_lines (list of str): A cleaned version of the text (without numbers).
+        lines (`List[str]`):
+            The list of lines containing the text.
+        clean_lines (`List[str]`):
+            A cleaned version of the text (without numbers).
 
     Returns:
-        list of tuple: A list of tuples representing the start and end indices of text slices.
+        `List[tuple]`: A list of tuples representing the start and end indices of text slices.
     """
     inds = np.zeros(len(lines))
     for i in range(len(lines) - 1):
@@ -243,7 +252,7 @@ def get_slices(lines, clean_lines):
     return [sli for sli in slices if sli[1] - sli[0] > 15]
 
 
-def remove_slice_from_lines(lines, clean_text, sli) -> str:
+def remove_slice_from_lines(lines, clean_text, slice) -> str:
     """
     Remove a slice of text from the lines based on specific criteria.
 
@@ -252,32 +261,32 @@ def remove_slice_from_lines(lines, clean_text, sli) -> str:
     Args:
         lines (list of str): The list of lines containing the text.
         clean_text (list of str): A cleaned version of the text (without numbers).
-        sli (tuple): A tuple representing the start and end indices of the slice to be removed.
+        slice (tuple): A tuple representing the start and end indices of the slice to be removed.
 
     Returns:
         str: The removed slice of text as a single string.
     """
-    base = clean_text[sli[0]]
-    section = list(sli)
+    base = clean_text[slice[0]]
+    section = list(slice)
     check_start_flag = False
-    # backwards pass
-    for i in range(max(0, sli[0] - 1), max(0, sli[0] - 5), -1):
-        if not lines[i]:
+    # backwards pass, at most 5 lines
+    for line_idx in range(max(0, slice[0] - 1), max(0, slice[0] - 5), -1):
+        if not lines[line_idx]:
             continue
-        if lines[i] == "## References":
-            section[0] = i
+        if lines[line_idx] == "## References":
+            section[0] = line_idx
             break
-        elif ratio(base, remove_numbers(lines[i])) < 0.9:
-            section[0] = i + 1
-            potential_ref = remove_numbers(lines[max(0, i - 1)].partition("* [")[-1])
+        elif ratio(base, remove_numbers(lines[line_idx])) < 0.9:
+            section[0] = line_idx + 1
+            potential_ref = remove_numbers(lines[max(0, line_idx - 1)].partition("* [")[-1])
             if len(potential_ref) >= 0.75 * len(base) and ratio(base, potential_ref) < 0.9:
-                section[0] = i
+                section[0] = line_idx
             check_start_flag = True
             break
-    # forward pass
-    for i in range(min(len(lines), sli[1]), min(len(lines), sli[1] + 5)):
-        if ratio(base, remove_numbers(lines[i])) < 0.9:
-            section[1] = i
+    # forward pass, at most 5 lines
+    for line_idx in range(min(len(lines), slice[1]), min(len(lines), slice[1] + 5)):
+        if ratio(base, remove_numbers(lines[line_idx])) < 0.9:
+            section[1] = line_idx
             break
     if len(lines) <= section[1]:
         section[1] = len(lines) - 1
@@ -340,8 +349,8 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         clean_lines = remove_numbers(lines)
         slices = get_slices(lines, clean_lines)
         to_delete = []
-        for sli in slices:
-            to_delete.append(remove_slice_from_lines(lines, clean_lines, sli))
+        for slice in slices:
+            to_delete.append(remove_slice_from_lines(lines, clean_lines, slice))
         for to_delete in reversed(to_delete):
             text = text.replace(to_delete, "\n\n[MISSING_PAGE_POST]\n\n")
         text = re.sub(
