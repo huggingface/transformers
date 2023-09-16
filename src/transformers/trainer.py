@@ -1068,6 +1068,14 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer failed to import syncfree AdamW from torch_xla.")
+        elif args.optim == OptimizerNames.ADAMW_TORCH_NPU_FUSED:
+            try:
+                from torch_npu.optim import NpuFusedAdamW
+
+                optimizer_cls = NpuFusedAdamW
+                optimizer_kwargs.update(adam_kwargs)
+            except ImportError:
+                raise ValueError("Trainer failed to import FusedAdamW from torch_npu.")
         elif args.optim == OptimizerNames.ADAMW_APEX_FUSED:
             try:
                 from apex.optimizers import FusedAdam
