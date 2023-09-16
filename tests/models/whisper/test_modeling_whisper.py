@@ -351,6 +351,18 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             self.assertFalse(all(encoder_grads))
             self.assertTrue(all(decoder_grads))
 
+    def test_requires_grad_encoder_embed_positions(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            try:
+                encoder = model.encoder
+            except AttributeError:
+                encoder = model.model.encoder
+
+            self.assertFalse(encoder.embed_positions.weight.requires_grad)
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
