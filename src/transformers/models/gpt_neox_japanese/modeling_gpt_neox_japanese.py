@@ -239,7 +239,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding
-class GPTNeoXRotaryEmbedding(torch.nn.Module):
+class RotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings, base=10000, device=None):
         super().__init__()
 
