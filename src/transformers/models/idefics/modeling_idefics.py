@@ -236,6 +236,7 @@ def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
     image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
     perceiver_embeddings = kwargs.get("perceiver_embeddings", None)
     image_attention_mask = kwargs.get("image_attention_mask", None)
+    interpolate_pos_encoding = kwargs.get("interpolate_pos_encoding", False)
 
     return {
         "input_ids": input_ids,
@@ -248,6 +249,7 @@ def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
         "image_encoder_embeddings": image_encoder_embeddings,
         "perceiver_embeddings": perceiver_embeddings,
         "image_attention_mask": image_attention_mask,
+        "interpolate_pos_encoding": interpolate_pos_encoding,
     }
 
 
@@ -1157,6 +1159,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, IdeficsBaseModelOutputWithPast]:
         device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -1212,7 +1215,9 @@ class IdeficsModel(IdeficsPreTrainedModel):
             pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
 
             # Get sequence from the vision encoder
-            image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
+            image_hidden_states = self.vision_model(
+                pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
+            ).last_hidden_state
 
         elif image_encoder_embeddings is not None:
             batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
@@ -1468,6 +1473,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, IdeficsCausalLMOutputWithPast]:
         r"""
@@ -1516,6 +1522,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 

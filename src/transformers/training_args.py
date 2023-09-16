@@ -633,6 +633,12 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
+        include_tokens_per_second (`bool`, *optional*):
+            Whether or not to compute the number of tokens per second per device for training speed metrics.
+
+            This will iterate over the entire training dataloader once beforehand,
+
+            and will slow down the entire process.
     """
 
     framework = "pt"
@@ -1232,6 +1238,11 @@ class TrainingArguments:
         },
     )
 
+    include_tokens_per_second: Optional[bool] = field(
+        default=False,
+        metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
+    )
+
     def __post_init__(self):
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
@@ -1414,12 +1425,13 @@ class TrainingArguments:
             and is_torch_available()
             and (self.device.type != "cuda")
             and (self.device.type != "npu")
+            and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) != "GPU")
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices."
+                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices or certain XPU devices (with IPEX)."
             )
 
         if (
@@ -1792,6 +1804,7 @@ class TrainingArguments:
             torch.cuda.set_device(device)
         elif is_torch_xpu_available() and "ACCELERATE_USE_XPU" not in os.environ:
             os.environ["ACCELERATE_USE_XPU"] = "true"
+            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             device = torch.device("xpu:0")
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():

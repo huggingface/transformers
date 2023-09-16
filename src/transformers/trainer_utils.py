@@ -46,9 +46,6 @@ from .utils import (
 if is_torch_available():
     import torch
 
-if is_tf_available():
-    import tensorflow as tf
-
 
 def seed_worker(_):
     """
@@ -80,6 +77,8 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         torch.backends.cudnn.benchmark = False
 
     if is_tf_available():
+        import tensorflow as tf
+
         tf.config.experimental.enable_op_determinism()
 
 
@@ -101,6 +100,8 @@ def set_seed(seed: int):
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
     if is_tf_available():
+        import tensorflow as tf
+
         tf.random.set_seed(seed)
 
 
@@ -214,7 +215,7 @@ class BestRun(NamedTuple):
     """
 
     run_id: str
-    objective: float
+    objective: Union[float, List[float]]
     hyperparameters: Dict[str, Any]
     run_summary: Optional[Any] = None
 
@@ -335,7 +336,7 @@ def total_processes_number(local_rank):
     return 1
 
 
-def speed_metrics(split, start_time, num_samples=None, num_steps=None):
+def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_tokens=None):
     """
     Measure and return speed performance metrics.
 
@@ -346,6 +347,7 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed
+    - num_tokens: number of tokens processed
     """
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
@@ -357,6 +359,9 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     if num_steps is not None:
         steps_per_second = num_steps / runtime
         result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
+    if num_tokens is not None:
+        tokens_per_second = num_tokens / runtime
+        result[f"{split}_tokens_per_second"] = round(tokens_per_second, 3)
     return result
 
 
@@ -660,7 +665,7 @@ def find_executable_batch_size(
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function` `function` must take in a `batch_size` parameter as
+    CUDNN, the batch size is cut in half and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
         function (`callable`, *optional*)
             A function to wrap

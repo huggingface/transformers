@@ -2439,3 +2439,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # This should not fail
                 model(encoded_sequence)
                 model(batch_encoded_sequence)
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template(self):
+        pass
