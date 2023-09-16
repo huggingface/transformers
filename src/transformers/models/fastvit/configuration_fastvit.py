@@ -33,7 +33,7 @@ FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "apple/fastvit-sa12": "https://huggingface.co/apple/fastvit-sa12/resolve/main/config.json",
     "apple/fastvit-sa24": "https://huggingface.co/apple/fastvit-sa24/resolve/main/config.json",
     "apple/fastvit-sa36": "https://huggingface.co/apple/fastvit-sa36/resolve/main/config.json",
-    "apple/fastvit-ma36": "https://huggingface.co/apple/fastvit-ma36/resolve/main/config.json",   
+    "apple/fastvit-ma36": "https://huggingface.co/apple/fastvit-ma36/resolve/main/config.json",
     # See all ViT models at https://huggingface.co/models?filter=fastvit
 }
 
@@ -65,8 +65,8 @@ class FastViTConfig(PretrainedConfig):
         pos_embeds (`List[Bool]`, *optional*, defaults to `False`, equivalent to `[False, False, False, False]`)
             Wheter to add a Conditional Positional Encoding in each FastViTLayer Block.
         token_mixers (`List[str]` *optional*, defaults to `[repmixer, repmixer, repmixer, repmixer]`)
-            Wheter to use RepMixer block or Attention block per each FastViTLayer Block.
-            `"repmixer"` and `"attention"` are supported.
+            Wheter to use RepMixer block or Attention block per each FastViTLayer Block. `"repmixer"` and `"attention"`
+            are supported.
         mlp_ratio (`float`, *optional*, defaults to 3.0):
             The ratio of the number of channels in the output of the MLP to the number of channels in the input.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):

@@ -445,7 +445,11 @@ class FastViTSelfAttention(nn.Module):
         # to the shape (batch_size * patch_area, num_patches, channels)
         hidden_states = torch.flatten(hidden_states, start_dim=2).transpose(-2, -1)  # B N C
 
-        qkv = self.qkv(hidden_states).reshape(batch_size, num_patches, 3, self.num_heads, self.num_attention_heads).permute(2, 0, 3, 1, 4)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, num_patches, 3, self.num_heads, self.num_attention_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
         query_layer, key_layer, value_layer = qkv.unbind(0)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
@@ -713,8 +717,9 @@ class FastViTCPE(nn.Module):
 
 class FastViTIntermediate(nn.Module):
     """
-        Implementation of the Token Mixer Block
+    Implementation of the Token Mixer Block
     """
+
     def __init__(self, config: FastViTConfig, stage: str) -> None:
         super().__init__()
         token_mixer_type = config.token_mixers[stage]
@@ -740,7 +745,7 @@ class FastViTIntermediate(nn.Module):
             )
         else:
             raise ValueError("Token mixer type: {} not supported".format(token_mixer_type))
-        
+
         self.convffn = FastViTConvFFN(config, stage)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -1010,7 +1015,6 @@ class FastViTModel(FastViTPreTrainedModel):
     """,
     FASTVIT_START_DOCSTRING,
 )
-
 class FastViTForImageClassification(FastViTPreTrainedModel):
     def __init__(self, config: FastViTConfig, inference_mode: bool = False) -> None:
         super().__init__(config)

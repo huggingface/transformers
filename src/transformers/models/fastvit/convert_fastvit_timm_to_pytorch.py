@@ -16,13 +16,13 @@
 
 import argparse
 import json
+from pathlib import Path
 
 import requests
 import timm
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
-from pathlib import Path
 
 from transformers import FastViTConfig, FastViTForImageClassification, ViTFeatureExtractor
 from transformers.utils import logging
