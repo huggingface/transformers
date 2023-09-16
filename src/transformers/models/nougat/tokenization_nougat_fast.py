@@ -109,22 +109,6 @@ def find_next_punctuation(s: str, start_inx=0):
     return None
 
 
-def find_last_punctuation(s: str, start_inx=0):
-    """
-    Find the index of the last punctuation mark before start_inx
-
-    Args:
-        s: String to examine
-        start_inx: Index where to look before
-    """
-
-    for i in range(start_inx - 1, 0, -1):
-        if s[i] in [".", "?", "!", "\n"]:
-            return i
-
-    return None
-
-
 def truncate_repetitions(s: str, min_len=30):
     """
     Attempt to truncate repeating segments in the input string.
@@ -177,7 +161,7 @@ def truncate_repetitions(s: str, min_len=30):
     st_lower_out = st_lower
     while True:
         sentence_end = find_next_punctuation(s_lower, len(st_lower_out))
-        sentence_start = find_last_punctuation(s_lower, len(st_lower_out))
+        sentence_start = find_next_punctuation(s_lower[::-1], len(st_lower_out))
         if sentence_end and sentence_start:
             sentence = s_lower[sentence_start:sentence_end]
             st_lower_out = s_lower[: sentence_end + 1]
