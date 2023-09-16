@@ -427,8 +427,8 @@ class FalconAttention(nn.Module):
         if layer_past is not None:
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:
-            #  - key: [batch_size * self.num_heads, kv_length, head_dim]
-            #  - value: [batch_size * self.num_heads, kv_length, head_dim]
+            #  - key: [num_kv_heads, kv_length, head_dim]
+            #  - value: [num_kv_heads, kv_length, head_dim]
             key_layer = torch.cat((past_key, key_layer), dim=1)
             value_layer = torch.cat((past_value, value_layer), dim=1)
 
@@ -893,8 +893,6 @@ class FalconModel(FalconPreTrainedModel):
 
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.h))
-        else:
-            past_key_values = self._convert_to_rw_cache(past_key_values)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -990,9 +988,6 @@ class FalconModel(FalconPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if presents is not None:
-            presents = self._convert_cache_to_standard_format(presents, batch_size)
-
         if not return_dict:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_self_attentions] if v is not None)
 
@@ -1035,6 +1030,10 @@ class FalconForCausalLM(FalconPreTrainedModel):
     ) -> dict:
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
+
+            # the cache may be in the stardard format (e.g. in contrastive search), convert to falcon's format if needed
+            if len(past_key_values[0][0].shape) == 4:
+                past_key_values = self._convert_to_rw_cache(past_key_values)
 
         # Note: versions of Falcon with alibi do not use position_ids. It is used with RoPE.
         if not self.transformer.use_alibi and attention_mask is not None and position_ids is None:
@@ -1131,6 +1130,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
 
         Output shares the same memory storage as `past`.
         """
+        standardized_past = self._convert_cache_to_standard_format(past, batch_size=len(beam_idx))
 
         # Get a copy of `beam_idx` on all the devices where we need those indices.
         device_to_beam_idx = {
@@ -1141,7 +1141,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
                 layer_past[0].index_select(0, device_to_beam_idx[layer_past[0].device]),
                 layer_past[1].index_select(0, device_to_beam_idx[layer_past[0].device]),
             )
-            for layer_past in past
+            for layer_past in standardized_past
         )
         return reordered_past
 
