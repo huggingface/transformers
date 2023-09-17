@@ -167,8 +167,8 @@ class NougatImageProcessor(BaseImageProcessor):
 
         image = image.crop((top_left_x, top_left_y, width + top_left_x, height + top_left_y))
         image = np.array(image).astype(np.uint8)
-
         image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
+
         image = (
             to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
         )
