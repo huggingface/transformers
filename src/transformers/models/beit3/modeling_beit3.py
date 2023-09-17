@@ -272,43 +272,43 @@ class Beit3MultiwayFeedForwardNetwork(nn.Module):
 class Beit3Linear(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.linear_1 = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
-        self.linear_2 = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
+        self.first = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
+        self.second = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
 
     def forward(self, hidden_states, split_position=-1):
         if split_position == -1:
-            return self.linear_1(hidden_states)
+            return self.first(hidden_states)
         if split_position == 0:
-            return self.linear_2(hidden_states)
+            return self.second(hidden_states)
         text_hidden, image_hidden = torch.split(
             hidden_states,
             [split_position, hidden_states.size(1) - split_position],
             dim=1,
         )
-        y1, y2 = self.linear_1(text_hidden), self.linear_2(image_hidden)
+        y1, y2 = self.first(text_hidden), self.second(image_hidden)
         return torch.cat([y1, y2], dim=1)
 
 
 class Beit3LayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layernorm_1 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
-        self.layernorm_2 = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
+        self.first = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
+        self.second = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, split_position=-1):
         if split_position == -1:
-            return self.layernorm_1(hidden_states)
+            return self.first(hidden_states)
 
         if split_position == 0:
-            return self.layernorm_2(hidden_states)
+            return self.second(hidden_states)
 
         text_hidden, image_hidden = torch.split(
             hidden_states,
             [split_position, hidden_states.size(1) - split_position],
             dim=1,
         )
-        text_hidden = self.layernorm_1(text_hidden)
-        image_hidden = self.layernorm_2(image_hidden)
+        text_hidden = self.first(text_hidden)
+        image_hidden = self.second(image_hidden)
         hidden_states = torch.cat([text_hidden, image_hidden], dim=1)
         return hidden_states
 

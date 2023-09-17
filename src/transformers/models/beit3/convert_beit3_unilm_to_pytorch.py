@@ -29,10 +29,11 @@ from transformers import (
     Beit3ForImageTextRetrieval,
     Beit3ForVisualQuestionAnswering,
     Beit3ForVisualReasoning,
-    Beit3ImageProcessor,
     Beit3Processor,
+    BeitImageProcessor,
     XLMRobertaTokenizer,
 )
+from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 model_type_to_class_mapping = {
@@ -55,6 +56,7 @@ rename_key_mappings = {
     "layer_norm": "fc_norm",
     "self_attn_fc_norm": "self_attn_layer_norm",
     "final_fc_norm": "final_layer_norm",
+    "first": "first",
 }
 
 
@@ -206,7 +208,9 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
     model_state_dict = rename_keys(model_state_dict)
     model.load_state_dict(model_state_dict)
 
-    image_processor = Beit3ImageProcessor(do_resize=True, size=img_size)
+    image_processor = BeitImageProcessor(
+        do_resize=True, size=img_size, do_center_crop=False, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD
+    )
     tokenizer = get_tokenizer()
     beit3_processor = Beit3Processor(image_processor, tokenizer)
     image = prepare_img()
@@ -229,14 +233,16 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
             output.logits.detach().numpy()[:, :3], torch.tensor([[-10.862484, -12.388088, -7.6599636]]), rtol=1e-05
         )
     elif "beit3_base_patch16_224_nlvr2" in checkpoint_url:
+        pixel_values = torch.cat(
+            (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)), dim=1
+        )
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
-            pixel_values1=torch.tensor(input["pixel_values"]),
-            pixel_values2=torch.tensor(input["pixel_values"]),
+            pixel_values=pixel_values,
             padding_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 2])
-        np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[6.5938, -6.5821]]), rtol=1e-05)
+        np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[4.533413, -4.529263]]), rtol=1e-05)
     elif "beit3_base_patch16_480_coco_captioning" in checkpoint_url:
         language_masked_pos = torch.zeros(input["input_ids"].shape)
         to_fill = list(range(0, input["input_ids"].shape[1], 3))
@@ -249,7 +255,7 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
         )
         assert output.logits.shape == torch.Size([3, 64010])
         np.testing.assert_allclose(
-            output.logits.detach().numpy()[0, :3], torch.tensor([-19.36987, -19.369905, -17.022049]), rtol=1e-05
+            output.logits.detach().numpy()[0, :3], torch.tensor([-5.82426, -5.824292, -5.83322]), rtol=1e-05
         )
     elif "beit3_base_patch16_384_coco_retrieval" in checkpoint_url:
         another_input_ids = beit3_processor(text=["This is photo of a dog"], images=image)["input_ids"]
@@ -264,6 +270,7 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
     model.save_pretrained(pytorch_dump_folder_path)
     # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
