@@ -24,6 +24,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from transformers import (
+    AutoTokenizer,
     BatchEncoding,
     BertTokenizer,
     BertTokenizerFast,
@@ -283,3 +284,48 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+
+class TestTruncation(unittest.TestCase):
+    def setUp(self):
+        self.tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf", use_fast=False)
+        self.tokenizer_fast = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf", use_fast=True)
+
+        self.text = "Example to test truncation"
+
+    def test_consistent_with_fast_tokenizer(self):
+        tokens = self.tokenizer(self.text)
+        tokens_fast = self.tokenizer_fast(self.text)
+        self.assertEqual(tokens, tokens_fast)
+
+        tokens = self.tokenizer(self.text, max_length=1, truncation=True, add_special_tokens=False)
+        tokens_fast = self.tokenizer_fast(self.text, max_length=1, truncation=True, add_special_tokens=False)
+        self.assertEqual(tokens, tokens_fast)
+
+        tokens = self.tokenizer(self.text, max_length=0, truncation=True, add_special_tokens=False)
+        tokens_fast = self.tokenizer_fast(self.text, max_length=0, truncation=True, add_special_tokens=False)
+        self.assertEqual(tokens, tokens_fast)
+
+        tokens = self.tokenizer(self.text, max_length=1, truncation=True, add_special_tokens=True)
+        tokens_fast = self.tokenizer_fast(self.text, max_length=1, truncation=True, add_special_tokens=True)
+        self.assertEqual(tokens, tokens_fast)
+
+        tokens = self.tokenizer(self.text, max_length=0, truncation=True, add_special_tokens=True)
+        tokens_fast = self.tokenizer_fast(self.text, max_length=0, truncation=True, add_special_tokens=True)
+        self.assertEqual(tokens, tokens_fast)
+
+    def test_max_length_1_no_special_tokens(self):
+        tokens = self.tokenizer(self.text, max_length=1, truncation=True, add_special_tokens=False)
+        self.assertEqual(len(tokens["input_ids"]), 1)
+
+    def test_max_length_0_no_special_tokens(self):
+        tokens = self.tokenizer(self.text, max_length=0, truncation=True, add_special_tokens=False)
+        self.assertEqual(len(tokens["input_ids"]), 0)
+
+    def test_max_length_1_with_special_tokens(self):
+        tokens = self.tokenizer(self.text, max_length=1, truncation=True, add_special_tokens=True)
+        self.assertEqual(len(tokens["input_ids"]), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
