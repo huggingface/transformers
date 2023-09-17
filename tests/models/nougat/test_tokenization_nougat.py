@@ -16,6 +16,7 @@
 import unittest
 
 from transformers import NougatTokenizerFast
+from transformers.models.nougat.tokenization_nougat_fast import markdown_compatible
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -111,3 +112,20 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("NougatTokenizerFast directly inherits from PreTrainedTokenizerFast")
     def test_prepare_for_model(self):
         pass
+
+
+class MarkdownCompatibleTest(unittest.TestCase):
+    def test_bold_formatting(self):
+        input_text = r"This is \bm{bold} text."
+        expected_output = r"This is \mathbf{bold} text."
+        self.assertEqual(markdown_compatible(input_text), expected_output)
+
+    def test_url_conversion(self):
+        input_text = "Visit my website at https://www.example.com"
+        expected_output = "Visit my website at [https://www.example.com](https://www.example.com)"
+        self.assertEqual(markdown_compatible(input_text), expected_output)
+
+    def test_algorithm_code_block(self):
+        input_text = "```python\nprint('Hello, world!')\n```"
+        expected_output = "```\npython\nprint('Hello, world!')\n```"
+        self.assertEqual(markdown_compatible(input_text), expected_output)

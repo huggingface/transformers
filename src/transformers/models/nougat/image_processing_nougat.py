@@ -310,8 +310,7 @@ class NougatImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
-        resized to keep the input aspect ratio.
+        Resizes `image` to `(height, width)` specified by `size` using the PIL library.
 
         Args:
             image (`np.ndarray`):

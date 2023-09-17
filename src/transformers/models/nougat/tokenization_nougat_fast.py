@@ -70,14 +70,15 @@ def markdown_compatible(text: str) -> str:
         `str`: The Markdown-compatible text.
     """
     # equation tag
-    text = re.textub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M)
+    text = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M)
     text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.M)
     text = re.sub(
         r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\) (\\\[.+?\\\])$",
         r"\[\1 \\tag{\2}\] \3",
         text,
         flags=re.M,
-    )  # multi line
+    )
+    # multi line
     text = text.replace(r"\. ", ". ")
     # bold formatting
     text = text.replace(r"\bm{", r"\mathbf{").replace(r"{\\bm ", r"\mathbf{")
