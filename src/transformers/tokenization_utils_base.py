@@ -3337,7 +3337,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Truncation: Handle max sequence length
         overflowing_tokens = []
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
                 pair_ids=pair_ids,
@@ -3444,7 +3444,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if truncation_strategy == TruncationStrategy.ONLY_FIRST or (
             truncation_strategy == TruncationStrategy.LONGEST_FIRST and pair_ids is None
         ):
-            if len(ids) > num_tokens_to_remove:
+            if len(ids) >= num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
                 if self.truncation_side == "left":
                     overflowing_tokens = ids[:window_len]
@@ -3489,7 +3489,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     else:
                         raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
-            if len(pair_ids) > num_tokens_to_remove:
+            if len(pair_ids) >= num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
                 if self.truncation_side == "right":
                     overflowing_tokens = pair_ids[-window_len:]
