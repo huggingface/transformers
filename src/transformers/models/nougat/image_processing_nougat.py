@@ -17,7 +17,6 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -25,6 +24,7 @@ from ...image_transforms import (
     pad,
     resize,
     to_channel_dimension_format,
+    to_pil_image,
 )
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -146,10 +146,7 @@ class NougatImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
-        # convert to Pillow image
-        image = to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format)
-        image = Image.fromarray(image)
-
+        image = to_pil_image(image, input_data_format=input_data_format)
         data = np.array(image.convert("L")).astype(np.uint8)
         max_val = data.max()
         min_val = data.min()
@@ -172,7 +169,6 @@ class NougatImageProcessor(BaseImageProcessor):
         image = np.array(image).astype(np.uint8)
 
         image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
-
         image = (
             to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
         )
