@@ -1013,7 +1013,7 @@ def main():
                     _ = batch.pop("example_id")
                     _ = batch.pop("offset_mapping")
                     predictions = pad_shard_unpad(p_eval_step)(
-                        state, batch, min_device_batch=per_device_eval_batch_size
+                        state, batch, min_device_batch=training_args.per_device_eval_batch_size
                     )
                     start_logits = np.array(predictions[0])
                     end_logits = np.array(predictions[1])
@@ -1061,7 +1061,9 @@ def main():
         ):
             _ = batch.pop("example_id")
             _ = batch.pop("offset_mapping")
-            predictions = pad_shard_unpad(p_eval_step)(state, batch, min_device_batch=per_device_eval_batch_size)
+            predictions = pad_shard_unpad(p_eval_step)(
+                state, batch, min_device_batch=training_args.per_device_eval_batch_size
+                )
             start_logits = np.array(predictions[0])
             end_logits = np.array(predictions[1])
             all_start_logits.append(start_logits)

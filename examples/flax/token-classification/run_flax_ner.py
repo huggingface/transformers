@@ -764,7 +764,7 @@ def main():
                 ):
                     labels = batch.pop("labels")
                     predictions = pad_shard_unpad(p_eval_step)(
-                        state, batch, min_device_batch=per_device_eval_batch_size
+                        state, batch, min_device_batch=training_args.per_device_eval_batch_size
                     )
                     predictions = np.array(predictions)
                     labels[np.array(chain(*batch["attention_mask"])) == 0] = -100
@@ -803,7 +803,7 @@ def main():
         eval_loader = eval_data_collator(eval_dataset, eval_batch_size)
         for batch in tqdm(eval_loader, total=len(eval_dataset) // eval_batch_size, desc="Evaluating ...", position=2):
             labels = batch.pop("labels")
-            predictions = pad_shard_unpad(p_eval_step)(state, batch, min_device_batch=per_device_eval_batch_size)
+            predictions = pad_shard_unpad(p_eval_step)(state, batch, min_device_batch=training_args.per_device_eval_batch_size)
             predictions = np.array(predictions)
             labels[np.array(chain(*batch["attention_mask"])) == 0] = -100
             preds, refs = get_labels(predictions, labels)

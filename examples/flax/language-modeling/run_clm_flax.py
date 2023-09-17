@@ -804,7 +804,7 @@ def main():
                     # Model forward
                     batch = next(eval_loader)
                     metrics = pad_shard_unpad(p_eval_step, static_return=True)(
-                        state.params, batch, min_device_batch=per_device_eval_batch_size
+                        state.params, batch, min_device_batch=training_args.per_device_eval_batch_size
                     )
                     eval_metrics.append(metrics)
 
@@ -847,7 +847,7 @@ def main():
             # Model forward
             batch = next(eval_loader)
             metrics = pad_shard_unpad(p_eval_step, static_return=True)(
-                state.params, batch, min_device_batch=per_device_eval_batch_size
+                state.params, batch, min_device_batch=training_args.per_device_eval_batch_size
             )
             eval_metrics.append(metrics)
 

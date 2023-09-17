@@ -655,7 +655,7 @@ def main():
                 ):
                     labels = batch.pop("labels")
                     predictions = pad_shard_unpad(p_eval_step)(
-                        state, batch, min_device_batch=per_device_eval_batch_size
+                        state, batch, min_device_batch=training_args.per_device_eval_batch_size
                     )
                     metric.add_batch(predictions=np.array(predictions), references=labels)
 
