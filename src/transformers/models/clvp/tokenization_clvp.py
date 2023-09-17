@@ -24,6 +24,8 @@ import regex as re
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
+from .number_normalizer import EnglishNormalizer
+
 
 logger = logging.get_logger(__name__)
 
@@ -44,226 +46,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "clvp_dev": 1024,
 }
-
-
-# List of (regular expression, replacement) pairs for abbreviations:
-_abbreviations = [
-    (re.compile("\\b%s\\." % x[0], re.IGNORECASE), x[1])
-    for x in [
-        ("mrs", "misess"),
-        ("mr", "mister"),
-        ("dr", "doctor"),
-        ("st", "saint"),
-        ("co", "company"),
-        ("jr", "junior"),
-        ("maj", "major"),
-        ("gen", "general"),
-        ("drs", "doctors"),
-        ("rev", "reverend"),
-        ("lt", "lieutenant"),
-        ("hon", "honorable"),
-        ("sgt", "sergeant"),
-        ("capt", "captain"),
-        ("esq", "esquire"),
-        ("ltd", "limited"),
-        ("col", "colonel"),
-        ("ft", "fort"),
-    ]
-]
-
-
-def number_to_words(num: int) -> str:
-    """
-    Converts numbers(`int`) to words(`str`).
-
-    Please note that it only supports upto - "'nine hundred ninety-nine quadrillion, nine hundred ninety-nine trillion,
-    nine hundred ninety-nine billion, nine hundred ninety-nine million, nine hundred ninety-nine thousand, nine hundred
-    ninety-nine'" or `number_to_words(999_999_999_999_999_999)`.
-
-    Example:
-
-    ```python
-    >>> print(number_to_words(1_101_000_000_000))
-    one trillion, one hundred one billion
-    ```
-    """
-
-    ones = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
-    teens = [
-        "ten",
-        "eleven",
-        "twelve",
-        "thirteen",
-        "fourteen",
-        "fifteen",
-        "sixteen",
-        "seventeen",
-        "eighteen",
-        "nineteen",
-    ]
-    tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
-
-    if num == 0:
-        return "zero"
-    elif num < 0:
-        return "minus " + number_to_words(abs(num))
-    elif num < 10:
-        return ones[num]
-    elif num < 20:
-        return teens[num - 10]
-    elif num < 100:
-        return tens[num // 10] + ("-" + number_to_words(num % 10) if num % 10 != 0 else "")
-    elif num < 1000:
-        return ones[num // 100] + " hundred" + (" " + number_to_words(num % 100) if num % 100 != 0 else "")
-    elif num < 1_000_000:
-        return (
-            number_to_words(num // 1000)
-            + " thousand"
-            + (", " + number_to_words(num % 1000) if num % 1000 != 0 else "")
-        )
-    elif num < 1_000_000_000:
-        return (
-            number_to_words(num // 1_000_000)
-            + " million"
-            + (", " + number_to_words(num % 1_000_000) if num % 1_000_000 != 0 else "")
-        )
-    elif num < 1_000_000_000_000:
-        return (
-            number_to_words(num // 1_000_000_000)
-            + " billion"
-            + (", " + number_to_words(num % 1_000_000_000) if num % 1_000_000_000 != 0 else "")
-        )
-    elif num < 1_000_000_000_000_000:
-        return (
-            number_to_words(num // 1_000_000_000_000)
-            + " trillion"
-            + (", " + number_to_words(num % 1_000_000_000_000) if num % 1_000_000_000_000 != 0 else "")
-        )
-    elif num < 1_000_000_000_000_000_000:
-        return (
-            number_to_words(num // 1_000_000_000_000_000)
-            + " quadrillion"
-            + (", " + number_to_words(num % 1_000_000_000_000_000) if num % 1_000_000_000_000_000 != 0 else "")
-        )
-    else:
-        return "number out of range"
-
-
-def convert_to_ascii(text: str) -> str:
-    """Converts unicode to ascii"""
-    return text.encode("ascii", "ignore").decode("utf-8")
-
-
-def _expand_dollars(m: str) -> str:
-    """
-    This method is used to expand numerical dollar values into spoken words.
-    """
-    match = m.group(1)
-    parts = match.split(".")
-    if len(parts) > 2:
-        return match + " dollars"  # Unexpected format
-
-    dollars = int(parts[0]) if parts[0] else 0
-    cents = int(parts[1]) if len(parts) > 1 and parts[1] else 0
-    if dollars and cents:
-        dollar_unit = "dollar" if dollars == 1 else "dollars"
-        cent_unit = "cent" if cents == 1 else "cents"
-        return "%s %s, %s %s" % (dollars, dollar_unit, cents, cent_unit)
-    elif dollars:
-        dollar_unit = "dollar" if dollars == 1 else "dollars"
-        return "%s %s" % (dollars, dollar_unit)
-    elif cents:
-        cent_unit = "cent" if cents == 1 else "cents"
-        return "%s %s" % (cents, cent_unit)
-    else:
-        return "zero dollars"
-
-
-def _remove_commas(m: str) -> str:
-    """This method is used to remove commas from sentences."""
-    return m.group(1).replace(",", "")
-
-
-def _expand_decimal_point(m: str) -> str:
-    """This method is used to expand '.' into spoken word ' point '."""
-    return m.group(1).replace(".", " point ")
-
-
-def _expand_ordinal(num: str) -> str:
-    """This method is used to expand ordinals such as '1st', '2nd' into spoken words."""
-    ordinal_suffixes = {1: "st", 2: "nd", 3: "rd"}
-
-    num = int(num.group(0)[:-2])
-    if 10 <= num % 100 and num % 100 <= 20:
-        suffix = "th"
-    else:
-        suffix = ordinal_suffixes.get(num % 10, "th")
-    return number_to_words(num) + suffix
-
-
-def _expand_number(m: str) -> str:
-    """
-    This method acts as a preprocessing step for numbers between 1000 and 3000 (same as the original repository, link :
-    https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/utils/tokenizer.py#L86)
-    """
-
-    num = int(m.group(0))
-
-    if num > 1000 and num < 3000:
-        if num == 2000:
-            return "two thousand"
-        elif num > 2000 and num < 2010:
-            return "two thousand " + number_to_words(num % 100)
-        elif num % 100 == 0:
-            return number_to_words(num // 100) + " hundred"
-        else:
-            return number_to_words(num)
-    else:
-        return number_to_words(num)
-
-
-def normalize_numbers(text: str) -> str:
-    """
-    This method is used to normalize numbers within a text such as converting the numbers to words, removing commas,
-    etc.
-
-    Example:
-
-    ```python
-    >>> print(normalize_numbers("$1000.51"))
-    one thousand dollars, fifty-one cents
-    ```
-    """
-
-    text = re.sub(re.compile(r"([0-9][0-9\,]+[0-9])"), _remove_commas, text)
-    text = re.sub(re.compile(r"£([0-9\,]*[0-9]+)"), r"\1 pounds", text)
-    text = re.sub(re.compile(r"\$([0-9\.\,]*[0-9]+)"), _expand_dollars, text)
-    text = re.sub(re.compile(r"([0-9]+\.[0-9]+)"), _expand_decimal_point, text)
-    text = re.sub(re.compile(r"[0-9]+(st|nd|rd|th)"), _expand_ordinal, text)
-    text = re.sub(re.compile(r"[0-9]+"), _expand_number, text)
-    return text
-
-
-def expand_abbreviations(text: str) -> str:
-    """
-    Expands the abbreviate words.
-
-    Example:
-
-    ```python
-    >>> print(expand_abbreviations("mrs."))
-    misess
-    ```
-    """
-
-    for regex, replacement in _abbreviations:
-        text = re.sub(regex, replacement, text)
-    return text
-
-
-def collapse_whitespace(text: str) -> str:
-    """Removes multiple whitespaces"""
-    return re.sub(re.compile(r"\s+"), " ", text)
 
 
 @lru_cache()
@@ -390,6 +172,7 @@ class CLVPTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         self.add_bos_token = add_bos_token
+        self._normalizer = None
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -410,6 +193,12 @@ class CLVPTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return len(self.encoder)
+
+    @property
+    def normalizer(self):
+        if self._normalizer is None:
+            self._normalizer = EnglishNormalizer()
+        return self._normalizer
 
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
@@ -504,26 +293,25 @@ class CLVPTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0))
         return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
 
+    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
+        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
+        if is_split_into_words or add_prefix_space:
+            text = " " + text
+
+        # don't apply preprocessing on unique_no_split_tokens
+        text = self.tokens_trie.split(text)
+        text = " ".join([self.normalizer(sub_text) if sub_text not in self.unique_no_split_tokens else sub_text for sub_text in text])
+
+        return (text, kwargs)
+
     def _tokenize(self, text):
         """Tokenize a string."""
-        text = convert_to_ascii(text)
-        text = text.lower()
-        text = normalize_numbers(text)
-        text = expand_abbreviations(text)
-        text = collapse_whitespace(text)
-        text = text.replace('"', "")
-
         bpe_tokens = []
         for token in re.findall(self.pat, text):
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
             )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
-            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
-
-        bpe_tokens = [
-            "[SPACE]" if bpe_token == "\u0120" and "[SPACE]" in self.encoder.keys() else bpe_token
-            for bpe_token in bpe_tokens
-        ]
+            bpe_tokens.extend("[SPACE]" if bpe_token == "\u0120" and "[SPACE]" in self.encoder.keys() else bpe_token for bpe_token in self.bpe(token).split(" "))
 
         return bpe_tokens
 
@@ -578,9 +366,3 @@ class CLVPTokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.prepare_for_tokenization
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if is_split_into_words or add_prefix_space:
-            text = " " + text
-        return (text, kwargs)
