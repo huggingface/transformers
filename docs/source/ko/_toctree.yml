@@ -53,7 +53,7 @@
         title: 오디오 분류
       - local: tasks/asr
         title: 자동 음성 인식
-    title: (번역중) 오디오
+    title: 오디오
     isExpanded: false
   - sections:
       - local: tasks/image_classification
