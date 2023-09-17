@@ -38,7 +38,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import is_cv2_available, is_vision_available
 
 
@@ -142,7 +142,7 @@ class NougatImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If unset, will use the inferred format from the input.
         """
-
+        requires_backends(self, "cv2")
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
