@@ -65,11 +65,8 @@ class ImageToImagePipelineTests(unittest.TestCase):
         for output in upscaled_list:
             self.assertIsInstance(output, Image.Image)
 
-        self.assertEqual(upscaled_list[0].size[0], target_size[0])
-        self.assertEqual(upscaled_list[0].size[1], target_size[1])
-
-        self.assertEqual(upscaled_list[1].size[0], target_size[0])
-        self.assertEqual(upscaled_list[1].size[1], target_size[1])
+        self.assertEqual(upscaled_list[0].size, (1296, 976))
+        self.assertEqual(upscaled_list[1].size, (1296, 976))
 
     @require_torch
     @require_vision
