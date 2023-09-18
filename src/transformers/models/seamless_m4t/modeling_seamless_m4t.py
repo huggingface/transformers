@@ -297,7 +297,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: Optional[torch.Tensor] = None):
+def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
     """
     Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
     stops at the corresponding element in `seq_lens`.
@@ -311,9 +311,6 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: Optional[
     Returns:
         `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
     """
-    if seq_lens is None:
-        return None
-
     batch_size, mask_seq_len = hidden_states.shape[:2]
 
     indices = torch.arange(mask_seq_len, device=seq_lens.device).expand(batch_size, -1)
@@ -952,8 +949,6 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         self.ffn_dropout = nn.Dropout(dropout)
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
-        if attention_mask is None:
-            return None
         pad = self.kernel_size // 2
         seq_lens = attention_mask.size(1) - (1 - attention_mask.int()).sum(1)
 
@@ -987,9 +982,9 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
         hidden_states = hidden_states.transpose(1, 2)
 
-        sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask)
-        attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
         if attention_mask is not None:
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask)
+            attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
             attention_mask = _expand_mask(
                 attention_mask,
                 hidden_states.dtype,
@@ -1545,8 +1540,6 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
-        if attention_mask is None:
-            return None
         kernel_size, stride = self.config.adaptor_kernel_size, self.config.adaptor_stride
         pad = kernel_size // 2
         seq_lens = attention_mask.size(1) - (1 - attention_mask.int()).sum(1)
