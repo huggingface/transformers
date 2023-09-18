@@ -226,12 +226,20 @@ class CircleCIJob:
             test_command += " || true"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
-        check_test_command = f'if [ -s reports/{self.job_name}/failures_short.txt ] || [ -s reports/{self.job_name}/errors.txt ]; '
-        check_test_command += 'then echo "Some test failed!"; echo ""; '
+        check_test_command = f'if [ -s reports/{self.job_name}/errors.txt ]; '
+        check_test_command += 'then echo "Some tests errored out!"; echo ""; '
+        check_test_command += f'cat reports/{self.job_name}/errors.txt; '
+        check_test_command += 'echo ""; echo ""; '
+
+        py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("ERROR ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
+        check_test_command += f"$(python3 -c '{py_command}'); "
+
+        check_test_command = f'elif [ -s reports/{self.job_name}/failures_short.txt ]; '
+        check_test_command += 'then echo "Some tests failed!"; echo ""; '
         check_test_command += f'cat reports/{self.job_name}/failures_short.txt; '
         check_test_command += 'echo ""; echo ""; '
 
-        py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith(("FAILED ", "ERROR "))]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
+        py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("FAILED ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
         check_test_command += f"$(python3 -c '{py_command}'); "
 
         check_test_command += f'cat summary_short.txt; echo ""; exit -1; '
