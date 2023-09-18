@@ -226,7 +226,7 @@ class CircleCIJob:
             test_command += " || true"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
-        check_test_command = f'if [ -s reports/{self.job_name}/failures_short.txt ]; '
+        check_test_command = f'if [ -s reports/{self.job_name}/failures_short.txt ] || [ -s reports/{self.job_name}/errors.txt ]; '
         check_test_command += 'then echo "Some test failed!"; echo ""; '
         check_test_command += f'cat reports/{self.job_name}/failures_short.txt; '
         check_test_command += 'echo ""; echo ""; '
