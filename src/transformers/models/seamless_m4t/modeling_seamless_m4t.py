@@ -3009,24 +3009,30 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
         """
         # prepare text_decoder_input_ids
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
-        if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
+        # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
+        if tgt_lang is not None:
             batch_size = len(input_ids) if input_ids is not None else len(kwargs.get("inputs_embeds"))
-            if tgt_lang is None:
-                # only a warning, otherwise errors appear in the tests
-                logger.warning(
-                    "You must specify a `tgt_lang` to get a proper generation. `tgt_lang` was set by default to `eng`."
-                )
-            elif tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
-                raise ValueError(
-                    f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
-                )
-            else:
+
+            if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
+                if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
+                    raise ValueError(
+                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
+                    )
                 # also accept __xxx__
                 tgt_lang = tgt_lang.replace("__", "")
-
-            if text_decoder_input_ids is None:
+                
+                # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
                 text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+            else:
+               raise ValueError(
+                    f"This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
+                ) 
+        else:
+            # only a warning, otherwise errors appear in the tests
+            logger.warning(
+                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
+            )
 
         return super().generate(
                     input_ids,             
@@ -3285,28 +3291,32 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
                 - [`~generation.SampleEncoderDecoderOutput`],
                 - [`~generation.BeamSearchEncoderDecoderOutput`],
                 - [`~generation.BeamSampleEncoderDecoderOutput`]
-        """
-        # prepare text_decoder_input_ids
+        """                    
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
-        if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
+        # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
+        if tgt_lang is not None:
             batch_size = len(input_features) if input_features is not None else len(kwargs.get("inputs_embeds"))
-            if tgt_lang is None:
-                # only a warning, otherwise errors appear in the tests
-                logger.warning(
-                    "You must specify a `tgt_lang` to get a proper generation. `tgt_lang` was set by default to `eng`."
-                )
-            elif tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
-                raise ValueError(
-                    f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
-                )
-            else:
+
+            if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
+                if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
+                    raise ValueError(
+                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
+                    )
                 # also accept __xxx__
                 tgt_lang = tgt_lang.replace("__", "")
-
-            if text_decoder_input_ids is None:
+                
+                # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
                 text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
-
+            else:
+               raise ValueError(
+                    f"This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
+                ) 
+        else:
+            # only a warning, otherwise errors appear in the tests
+            logger.warning(
+                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
+            )
         return super().generate(input_features, 
                     generation_config,
                     logits_processor,
@@ -3564,29 +3574,8 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         """
         batch_size = len(input_ids) if input_ids is not None else len(kwargs.get("inputs_embeds"))
 
-        # prepare text_decoder_input_ids
-        text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
-        if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
-            if tgt_lang is None:
-                # only a warning, otherwise errors appear in the tests
-                logger.warning(
-                    "You must specify a `tgt_lang` to get a proper generation. `tgt_lang` was set by default to `eng`."
-                )
-            elif tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
-                raise ValueError(
-                    f"`tgt_lang={tgt_lang}` is not supported by this model."
-                    "Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
-                )
-            else:
-                # also accept __xxx__
-                tgt_lang = tgt_lang.replace("__", "")
-
-            if text_decoder_input_ids is None:
-                text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
-
         # attribute kwargs to models
-        kwargs_text = {"decoder_input_ids": text_decoder_input_ids}
+        kwargs_text = {}
         kwargs_speech = {}
         for key, value in kwargs.items():
             if key.startswith("text_"):
@@ -3605,6 +3594,32 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         kwargs_text["output_hidden_states"] = True
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
+
+                    
+        text_decoder_input_ids = kwargs_text.get("decoder_input_ids")
+        # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
+        if tgt_lang is not None:
+            if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
+                if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
+                    raise ValueError(
+                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
+                    )
+                # also accept __xxx__
+                tgt_lang = tgt_lang.replace("__", "")
+                
+                # tgt_lang gets priority over decoder input ids
+                text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
+                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+            else:
+               raise ValueError(
+                    f"This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
+                ) 
+        else:
+            # only a warning, otherwise errors appear in the tests
+            logger.warning(
+                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
+            )
+        kwargs_text["decoder_input_ids"] = text_decoder_input_ids
 
         # first generation
         text_generation_output = super().generate(input_ids, **kwargs_text)
@@ -3938,28 +3953,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         """
         batch_size = len(input_features) if input_features is not None else len(kwargs.get("inputs_embeds"))
 
-        # prepare text_decoder_input_ids
-        text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
-        if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
-            if tgt_lang is None:
-                # only a warning, otherwise errors appear in the tests
-                logger.warning(
-                    "You must specify a `tgt_lang` to get a proper generation. `tgt_lang` was set by default to `eng`."
-                )
-            elif tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
-                raise ValueError(
-                    f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
-                )
-            else:
-                # also accept __xxx__
-                tgt_lang = tgt_lang.replace("__", "")
-
-            if text_decoder_input_ids is None:
-                text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
-
         # attribute kwargs to models
-        kwargs_text = {"decoder_input_ids": text_decoder_input_ids}
+        kwargs_text = {}
         kwargs_speech = {}
         for key, value in kwargs.items():
             if key.startswith("text_"):
@@ -3978,6 +3973,32 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         kwargs_text["output_hidden_states"] = True
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
+
+                    
+        text_decoder_input_ids = kwargs_text.get("decoder_input_ids")
+        # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
+        if tgt_lang is not None:
+            if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
+                if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
+                    raise ValueError(
+                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
+                    )
+                # also accept __xxx__
+                tgt_lang = tgt_lang.replace("__", "")
+                
+                # tgt_lang gets priority over decoder input ids
+                text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
+                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+            else:
+               raise ValueError(
+                    f"This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
+                ) 
+        else:
+            # only a warning, otherwise errors appear in the tests
+            logger.warning(
+                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
+            )
+        kwargs_text["decoder_input_ids"] = text_decoder_input_ids
 
         # first generation
         text_generation_output = super().generate(input_features, **kwargs_text)
@@ -4398,28 +4419,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             else (len(input_ids) if input_ids is not None else len(kwargs.get("inputs_embeds")))
         )
 
-        # prepare text_decoder_input_ids
-        text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
-        if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
-            if tgt_lang is None:
-                # only a warning, otherwise errors appear in the tests
-                logger.warning(
-                    "You must specify a `tgt_lang` to get a proper generation. `tgt_lang` was set by default to `eng`."
-                )
-            elif tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
-                raise ValueError(
-                    f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
-                )
-            else:
-                # also accept __xxx__
-                tgt_lang = tgt_lang.replace("__", "")
-
-            if text_decoder_input_ids is None:
-                text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
-
         # attribute kwargs to models
-        kwargs_text = {"decoder_input_ids": text_decoder_input_ids}
+        kwargs_text = {}
         kwargs_speech = {}
         for key, value in kwargs.items():
             if key.startswith("text_"):
@@ -4438,6 +4439,33 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         kwargs_text["output_hidden_states"] = True
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
+
+                    
+        text_decoder_input_ids = kwargs_text.get("decoder_input_ids")
+        # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
+        if tgt_lang is not None:
+            if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
+                if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
+                    raise ValueError(
+                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
+                    )
+                # also accept __xxx__
+                tgt_lang = tgt_lang.replace("__", "")
+                
+                # tgt_lang gets priority over decoder input ids
+                text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
+                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+            else:
+               raise ValueError(
+                    f"This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
+                ) 
+        else:
+            # only a warning, otherwise errors appear in the tests
+            logger.warning(
+                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
+            )
+        kwargs_text["decoder_input_ids"] = text_decoder_input_ids
+
 
         # first generation
         if input_features is not None:
