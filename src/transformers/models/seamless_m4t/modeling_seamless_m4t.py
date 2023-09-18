@@ -3302,12 +3302,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
-        logger.warning(
-            "This is the same forward method as `SeamlessM4TForTextToText`."
-            "It doesn't use the text-to-unit model `SeamlessM4TTextToUnitForConditionalGeneration`."
-            "If you want to generate speech, use the `.generate` method."
-        )
-
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -3325,6 +3319,12 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
+            # if encoder_outputs is not None, it's probably used within a .generate method so no need to warn
+            logger.warning(
+                "This is the same forward method as `SeamlessM4TForTextToText`."
+                "It doesn't use the text-to-unit model `SeamlessM4TTextToUnitForConditionalGeneration`."
+                "If you want to generate speech, use the `.generate` method."
+            )
             encoder_outputs = self.text_encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -3665,11 +3665,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
-        logger.warning(
-            "This is the same forward method as `SeamlessM4TForSpeechToText`. It doesn't use `self.t2u_model`."
-            "If you want to generate speech, use the `generate` method."
-        )
-
         if labels is not None:
             if use_cache:
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
@@ -3687,6 +3682,12 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
+            # if encoder_outputs is not None, it's probably used within a .generate method so no need to warn
+            logger.warning(
+                "This is the same forward method as `SeamlessM4TForSpeechToText`. It doesn't use `self.t2u_model`."
+                "If you want to generate speech, use the `generate` method."
+            )
+            
             encoder_outputs = self.speech_encoder(
                 input_features=input_features,
                 attention_mask=attention_mask,
@@ -4074,12 +4075,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
-        # TODO: keep it or not ?
-        logger.warning(
-            "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText` depending on the input modality."
-            "If you want to generate speech, use the `generate` method."
-        )
-
         if input_ids is None and input_features is None and inputs_embeds is None and encoder_outputs is None:
             raise ValueError(
                 "`input_ids`,`input_features`, `inputs_embeds` and `encoder_outputs` are all empty. Make sure at least one of them is not."
@@ -4096,6 +4091,12 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                     "`inputs_embeds` is not `None` but `input_features` has been given. `input_features` will be used in priority through `speech_encoder`. "
                     "`inputs_embeds` will be ignored."
                 )
+                
+            # if encoder_outputs is not None, it's probably used within a .generate method so no need to warn
+            logger.warning(
+                "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText` depending on the input modality."
+                "If you want to generate speech, use the `generate` method."
+            )
 
             self.set_modality("speech")
 
@@ -4109,6 +4110,11 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             )
 
         elif input_ids is not None or inputs_embeds is not None:
+            # if encoder_outputs is not None, it's probably used within a .generate method so no need to warn
+            logger.warning(
+                "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText` depending on the input modality."
+                "If you want to generate speech, use the `generate` method."
+            )
             self.set_modality("text")
             encoder_outputs = self.text_encoder(
                 input_ids=input_ids,
