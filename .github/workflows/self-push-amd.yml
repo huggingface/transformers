@@ -55,7 +55,7 @@ jobs:
         run: |
           rocm-smi
 
-  setup_amdgpu:
+  setup_gpu:
     name: Setup AMDGPU
     needs: check_runners
     strategy:
@@ -150,15 +150,15 @@ jobs:
           echo "matrix=$keys" >> $GITHUB_OUTPUT
           echo "test_map=$test_map" >> $GITHUB_OUTPUT
 
-  run_tests_single_amdgpu:
+  run_tests_single_gpu:
     name: Model tests
-    needs: setup_amdgpu
+    needs: setup_gpu
     # `dummy` means there is no test to run
-    if: contains(fromJson(needs.setup_amdgpu.outputs.matrix), 'dummy') != true
+    if: contains(fromJson(needs.setup_gpu.outputs.matrix), 'dummy') != true
     strategy:
       fail-fast: false
       matrix:
-        folders: ${{ fromJson(needs.setup_amdgpu.outputs.matrix) }}
+        folders: ${{ fromJson(needs.setup_gpu.outputs.matrix) }}
         machine_type: [mi210]
     runs-on: [ self-hosted, docker-gpu, single-gpu, amd-gpu, '${{ matrix.machine_type }}' ]
     container:
@@ -208,7 +208,7 @@ jobs:
         # set the artifact folder names (because the character `/` is not allowed).
         run: |
           echo "${{ matrix.folders }}"
-          echo "${{ fromJson(needs.setup_amdgpu.outputs.test_map)[matrix.folders] }}"
+          echo "${{ fromJson(needs.setup_gpu.outputs.test_map)[matrix.folders] }}"
           matrix_folders=${{ matrix.folders }}
           matrix_folders=${matrix_folders/'models/'/'models_'}
           echo "$matrix_folders"
@@ -230,7 +230,7 @@ jobs:
       - name: Run all non-slow selected tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup_amdgpu.outputs.test_map)[matrix.folders] }}
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup_gpu.outputs.test_map)[matrix.folders] }}
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -251,9 +251,9 @@ jobs:
     needs: [
         check_runner_status,
         check_runners,
-        setup_amdgpu,
-        run_tests_single_amdgpu,
-#        run_tests_multi_amdgpu,
+        setup_gpu,
+        run_tests_single_gpu,
+#        run_tests_multi_gpu,
 #        run_tests_torch_cuda_extensions_single_gpu,
 #        run_tests_torch_cuda_extensions_multi_gpu
     ]
@@ -263,7 +263,7 @@ jobs:
         # For the meaning of these environment variables, see the job `Setup`
         run: |
           echo "Runner availability: ${{ needs.check_runner_status.result }}"
-          echo "Setup status: ${{ needs.setup_amdgpu.result }}"
+          echo "Setup status: ${{ needs.setup_gpu.result }}"
           echo "Runner status: ${{ needs.check_runners.result }}"
 
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
@@ -319,11 +319,11 @@ jobs:
           CI_SHA: ${{ env.CI_SHA }}
           RUNNER_STATUS: ${{ needs.check_runner_status.result }}
           RUNNER_ENV_STATUS: ${{ needs.check_runners.result }}
-          SETUP_STATUS: ${{ needs.setup_amdgpu.result }}
+          SETUP_STATUS: ${{ needs.setup_gpu.result }}
 
-        # We pass `needs.setup_amdgpu.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+        # We pass `needs.setup_gpu.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           pip install slack_sdk
           pip show slack_sdk
-          python utils/notification_service.py "${{ needs.setup_amdgpu.outputs.matrix }}"
+          python utils/notification_service.py "${{ needs.setup_gpu.outputs.matrix }}"
