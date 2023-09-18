@@ -75,8 +75,6 @@ class Beit3Config(PretrainedConfig):
             in the loss calculation. If set to 0, no label smoothing is performed.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
-        num_labels (`int`, *optional*):
-            Number of labels to use in the last layer added to the model, typically for a classification task.
 
     Example:
 
@@ -116,7 +114,6 @@ class Beit3Config(PretrainedConfig):
         initializer_range=0.02,
         label_smoothing=0.1,
         logit_scale_init_value=2.65926,
-        num_labels=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -141,7 +138,6 @@ class Beit3Config(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
 
-        self.num_labels = num_labels
         self.label_smoothing = label_smoothing
         self.logit_scale_init_value = logit_scale_init_value
         self.layer_norm_eps = layer_norm_eps

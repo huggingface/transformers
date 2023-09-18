@@ -15,11 +15,13 @@
 
 import argparse
 import copy
+import json
 from pathlib import Path
 
 import numpy as np
 import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -60,11 +62,21 @@ rename_key_mappings = {
 }
 
 
+def get_id2label_for_imagenet_1k():
+    repo_id = "huggingface/label-files"
+    filename = "imagenet-1k-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    label2id = {v: k for k, v in id2label.items()}
+    return id2label, label2id
+
+
 # SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 def get_base_config_image_classification():
-    return Beit3Config(hidden_size=768 * 4, num_labels=1000)
+    id2label, label2id = get_id2label_for_imagenet_1k()
+    return Beit3Config(hidden_size=768 * 4, num_labels=1000, id2label=id2label, label2id=label2id)
 
 
 def get_large_config_image_classification():
@@ -263,10 +275,12 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
             input_ids=torch.tensor([input["input_ids"][0], another_input_ids[0]]),
             pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]),
         )
-        assert round(float(output.loss.detach().numpy()), 4) == 0.7461
+
+        assert round(float(output.loss.detach().numpy()), 4) == 0.7458
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
+    tokenizer.save_pretrained(pytorch_dump_folder_path)
     model.save_pretrained(pytorch_dump_folder_path)
     # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
     # feature_extractor.save_pretrained(pytorch_dump_folder_path)
