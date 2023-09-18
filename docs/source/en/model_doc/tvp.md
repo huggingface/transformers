@@ -14,11 +14,9 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The TVP model was proposed in [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://arxiv.org/abs/2209.14156) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding. The goal of
-this model is to incorporate trainable prompts into both visual inputs and textual features to temporal video grounding (TVG) problems, so we need no more compute-heavy 3D visual encoders and still get SOTA
-accuracy on TVG tasks which predicts the interval of clips which was described by a text sentence within a long untrimmed video.
+The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://arxiv.org/abs/2303.04995) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding.
 
-The paper has been accepted to the [CVPR'23](https://cvpr2023.thecvf.com/) conference.
+TVP framework is an effective and efficient framework to train time-efficient 2D TVG models, in which we leverage TVP (text-visual prompting) to improve the utility of sparse 2D visual features without resorting to costly 3D features. To the best of our knowledge, it is the first work to expand the application of prompt learning for resolving TVG problems.
 
 The abstract from the paper is the following:
 
@@ -41,17 +39,17 @@ TVP consists of a visual encoder and cross-modal encoder, and also textual promp
 The goal of this model is to incorporate trainable prompts into both visual inputs and textual features to temporal video grounding(TVG) problems.
 In principle, one can apply any visual, cross-modal encoder in the proposed architecture.
 
-The [`TVPProcessor`] wraps [`BertTokenizer`] and [`TVPImageProcessor`] into a single instance to both
+The [`TvpProcessor`] wraps [`BertTokenizer`] and [`TvpImageProcessor`] into a single instance to both
 encode the text and prepare the images respectively.
 
-The following example shows how to run temporal video grounding using [`TVPProcessor`] and [`TVPModel`].
+The following example shows how to run temporal video grounding using [`TvpProcessor`] and [`TvpForVideoGrounding`].
 ```python
 import av
 import cv2
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, TvpForVideoGrounding
 
 
 def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
@@ -114,10 +112,33 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
 
     return frames
 
+def get_resize_size(image, max_size):
+    """
+    Args:
+        image: np.ndarray
+        max_size: The max size of height and width
 
-file = hf_hub_download(repo_id="Intel/tvp_demo", filename="0A8ZT.mp4", repo_type="dataset")
+    Returns:
+        (height, width)
+    Note the height/width order difference >>> pil_img = Image.open("raw_img_tensor.jpg") >>> pil_img.size (640,
+    480) # (width, height) >>> np_img = np.array(pil_img) >>> np_img.shape (480, 640, 3) # (height, width, 3)
+    """
+    height, width = image.shape[-2:]
 
-model = AutoModel.from_pretrained("Intel/tvp-base")
+    if height >= width:
+        ratio = width * 1.0 / height
+        new_height = max_size
+        new_width = new_height * ratio
+    else:
+        ratio = height * 1.0 / width
+        new_width = max_size
+        new_height = new_width * ratio
+    size = {"height": int(new_height), "width": int(new_width)}
+    return size
+
+file = hf_hub_download(repo_id="Intel/tvp_demo", filename="3MSZA.mp4", repo_type="dataset")
+
+model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
 
 decoder_kwargs = dict(
     container=av.open(file, metadata_errors="ignore"),
@@ -130,11 +151,15 @@ decoder_kwargs = dict(
 raw_sampled_frms = decode(**decoder_kwargs)
 raw_sampled_frms = raw_sampled_frms.permute(0, 3, 1, 2)
 
+text = "person turn a light on."
 processor = AutoProcessor.from_pretrained("Intel/tvp-base")
+size = get_resize_size(raw_sampled_frms, model.config.max_img_size)
 data = processor(
-    text=["person turn a light on."], videos=list(raw_sampled_frms.numpy()), return_tensors="pt", max_text_length=100
+    text=[text], videos=list(raw_sampled_frms.numpy()), return_tensors="pt", max_text_length=100, size=size
 )
 
+data["pixel_values"] = data["pixel_values"].to(model.dtype)
+data["labels"] = torch.tensor([30.96, 24.3, 30.4])
 output = model(**data)
 
 print(f"The model's output is {output}")
@@ -143,7 +168,7 @@ def get_video_duration(filename):
     cap = cv2.VideoCapture(filename)
     if cap.isOpened():
         rate = cap.get(5)
-        frame_num =cap.get(7)
+        frame_num = cap.get(7)
         duration = frame_num/rate
         return duration
     return -1
@@ -151,7 +176,7 @@ def get_video_duration(filename):
 duration = get_video_duration(file)
 timestamp = output['logits'].tolist()
 start, end = round(timestamp[0][0]*duration, 1), round(timestamp[0][1]*duration, 1)
-print(f"The time slot of the video corresponding to the text is from {start}s to {end}s")
+print(f"The time slot of the video corresponding to the text \"{text}\" is from {start}s to {end}s")
 ```
 
 
@@ -166,30 +191,35 @@ Tips:
 - The PyTorch version of this model is only available in torch 1.10 and higher.
 
 
-## TVPConfig
+## TvpConfig
 
-[[autodoc]] TVPConfig
+[[autodoc]] TvpConfig
 
-## TVPVisionConfig
+## TvpVisionConfig
 
-[[autodoc]] TVPVisionConfig
+[[autodoc]] TvpVisionConfig
 
-## TVPImageProcessor
+## TvpImageProcessor
 
-[[autodoc]] TVPImageProcessor
+[[autodoc]] TvpImageProcessor
     - preprocess
 
-## TVPProcessor
+## TvpProcessor
 
-[[autodoc]] TVPProcessor
+[[autodoc]] TvpProcessor
     - __call__
 
-## TVPModel
+## TvpModel
 
-[[autodoc]] TVPModel
+[[autodoc]] TvpModel
     - forward
 
-## TVPVisionModel
+## TvpVisionModel
 
-[[autodoc]] TVPVisionModel
+[[autodoc]] TvpVisionModel
+    - forward
+
+## TvpForVideoGrounding
+
+[[autodoc]] TvpForVideoGrounding
     - forward

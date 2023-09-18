@@ -1,42 +1,41 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2023 The Intel AIA Team Authors, and HuggingFace Inc. team. All rights reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License=, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# Unless required by applicable law or agreed to in writing=, software
+# distributed under the License is distributed on an "AS IS" BASIS=,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Image/Text processor class for TVP
+Image/Text processor class for Tvp
 """
 
-import warnings
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-class TVPProcessor(ProcessorMixin):
+class TvpProcessor(ProcessorMixin):
     r"""
-    Constructs an TVP processor which wraps a VideoMAE image processor and a Bert tokenizer into a single processor.
+    Constructs an Tvp processor which wraps a Tvp image processor and a Bert tokenizer into a single processor.
 
-    [`TVPProcessor`] offers all the functionalities of [`TVPImageProcessor`] and [`BertTokenizerFast`]. See the
-    [`~TVPProcessor.__call__`] and [`~TVPProcessor.decode`] for more information.
+    [`TvpProcessor`] offers all the functionalities of [`TvpImageProcessor`] and [`BertTokenizerFast`]. See the
+    [`~TvpProcessor.__call__`] and [`~TvpProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`TVPImageProcessor`]):
+        image_processor ([`TvpImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`BertTokenizerFast`]):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "TVPImageProcessor"
+    image_processor_class = "TvpImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
@@ -52,8 +51,8 @@ class TVPProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `videos` and `kwargs` arguments to
-        VideoMAEImageProcessor's [`~VideoMAEImageProcessor.__call__`] if `videos` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        TvpImageProcessor's [`~TvpImageProcessor.__call__`] if `videos` is not `None`. Please refer to the doctsring of
+        the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -85,29 +84,25 @@ class TVPProcessor(ProcessorMixin):
         """
 
         max_text_length = kwargs.pop("max_text_length", None)
+        size = kwargs.pop("size", None)
 
         if text is None and videos is None:
             raise ValueError("You have to specify either text or videos. Both cannot be none.")
 
+        encoding = {}
         if text is not None:
             textual_input = self.tokenizer.batch_encode_plus(
-                text, max_length=max_text_length, pad_to_max_length=True, return_tensors="pt", **kwargs
+                text, max_length=max_text_length, pad_to_max_length=True, return_tensors=return_tensors, **kwargs
             )
-            encoding = {
-                "input_ids": textual_input["input_ids"],
-                "attention_mask": textual_input["attention_mask"],
-            }
+            # Tvp model do not need token_type_ids currently
+            del textual_input["token_type_ids"]
+            encoding.update(textual_input)
 
         if videos is not None:
-            image_features = self.image_processor(videos, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(videos, return_tensors=return_tensors, size=size, **kwargs)
+            encoding.update(image_features)
 
-        if text is not None and videos is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None:
-            return encoding
-        else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+        return BatchEncoding(data=encoding, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -126,11 +121,3 @@ class TVPProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         return ["input_ids", "attention_mask", "pixel_values"]
-
-    @property
-    def feature_extractor_class(self):
-        warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
-            FutureWarning,
-        )
-        return self.image_processor_class

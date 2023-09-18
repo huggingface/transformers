@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2023 The Intel AIA Team Authors, and HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License=, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing=, software
+# distributed under the License is distributed on an "AS IS" BASIS=,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import copy
 import os
 from typing import Union
@@ -14,19 +28,17 @@ TVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class TVPVisionConfig(PretrainedConfig):
+class TvpVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TVPModel`]. It is used to instantiate an TVP
+    This is the configuration class to store the configuration of a [`TvpModel`]. It is used to instantiate an Tvp
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the TVP
+    defaults will yield a similar configuration to that of the Tvp
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        input_format (`str`, *optional*, defaults to BGR):
-            The input format of image.
         features (`List[str]`, *optional*, defaults to ["res5"]):
             The feature extractor of the vision model. Other options can be "res2", "res3" and "res4".
         resnets_depth (`int`, *optional*, defaults to 50):
@@ -43,8 +55,6 @@ class TVPVisionConfig(PretrainedConfig):
             The output channels of resnet.
         resnets_res_dilation (`int`, *optional*, defaults to 1):
             The dilation of torch.nn.Conv2d.
-        backbone_freeze_at (`int`, *optional*, defaults to 2):
-            Freeze the first `backbone_freeze_at` layers in resnet.
         grid_encoder_conv_input_size (`int`, *optional*, defaults to 2048):
             The input size of grid encoder conv layer.
         grid_encoder_conv_output_size (`int`, *optional*, defaults to 768):
@@ -53,13 +63,13 @@ class TVPVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import TVPVisionModel, TVPVisionConfig
+    >>> from transformers import TvpVisionModel, TvpVisionConfig
 
-    >>> # Initializing a TVPVisionModel
-    >>> configuration = TVPVisionConfig()
+    >>> # Initializing a TvpVisionModel
+    >>> configuration = TvpVisionConfig()
 
-    >>> # Initializing a TVPVisionModel model
-    >>> model = TVPVisionModel(configuration)
+    >>> # Initializing a TvpVisionModel model
+    >>> model = TvpVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -69,32 +79,30 @@ class TVPVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        input_format="BGR",
         features=["res5"],
         resnets_depth=50,
         resnets_num_groups=1,
         resnets_width_per_group=64,
         resnets_stem_input_channels=3,
         resnets_stem_out_channels=64,
+        resnets_stem_stride=4,
         resnets_res_out_channels=256,
         resnets_res_dilation=1,
-        backbone_freeze_at=2,
         grid_encoder_conv_input_size=2048,
         grid_encoder_conv_output_size=768,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.input_format = input_format
         self.features = features
         self.resnets_depth = resnets_depth
         self.resnets_num_groups = resnets_num_groups
         self.resnets_width_per_group = resnets_width_per_group
         self.resnets_stem_input_channels = resnets_stem_input_channels
         self.resnets_stem_out_channels = resnets_stem_out_channels
+        self.resnets_stem_stride = resnets_stem_stride
         self.resnets_res_out_channels = resnets_res_out_channels
         self.resnets_res_dilation = resnets_res_dilation
-        self.backbone_freeze_at = backbone_freeze_at
         self.grid_encoder_conv_input_size = grid_encoder_conv_input_size
         self.grid_encoder_conv_output_size = grid_encoder_conv_output_size
 
@@ -115,11 +123,11 @@ class TVPVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class TVPConfig(PretrainedConfig):
+class TvpConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TVPModel`]. It is used to instantiate an TVP
+    This is the configuration class to store the configuration of a [`TvpModel`]. It is used to instantiate an Tvp
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the TVP
+    defaults will yield a similar configuration to that of the Tvp
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -142,8 +150,8 @@ class TVPConfig(PretrainedConfig):
         num_frm (`int`, *optional*, defaults to 48):
             There are num_frm frames extracted from a video.
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the TVP text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`TVPModel`].
+            Vocabulary size of the Tvp text model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`TvpModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers.
         intermediate_size (`int`, *optional*, defaults to 3072):
@@ -173,7 +181,7 @@ class TVPConfig(PretrainedConfig):
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability of attention layers.
         vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`TVPVisionConfig`].
+            Dictionary of configuration options used to initialize [`TvpVisionConfig`].
     """
 
     model_type = "tvp"
@@ -210,7 +218,7 @@ class TVPConfig(PretrainedConfig):
         if vision_config is None:
             vision_config = {}
 
-        self.vision_config = TVPVisionConfig(**vision_config)
+        self.vision_config = TvpVisionConfig(**vision_config)
         self.alpha = alpha
         self.beta = beta
         self.vp_type = vp_type
@@ -234,10 +242,10 @@ class TVPConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
     @classmethod
-    def from_vision_configs(cls, vision_config: TVPVisionConfig, **kwargs):
+    def from_vision_configs(cls, vision_config: TvpVisionConfig, **kwargs):
         r"""
-        Instantiate a [`TVPConfig`] (or a derived class) from TVP vision model configuration. Returns:
-            [`TVPConfig`]: An instance of a configuration object
+        Instantiate a [`TvpConfig`] (or a derived class) from Tvp vision model configuration. Returns:
+            [`TvpConfig`]: An instance of a configuration object
         """
 
         return cls(vision_config=vision_config.to_dict(), **kwargs)

@@ -19,10 +19,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_tvp": [
         "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TVPConfig",
-        "TVPVisionConfig",
+        "TvpConfig",
+        "TvpVisionConfig",
     ],
-    "processing_tvp": ["TVPProcessor"],
+    "processing_tvp": ["TvpProcessor"],
 }
 
 try:
@@ -31,7 +31,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_tvp"] = ["TVPImageProcessor"]
+    _import_structure["image_processing_tvp"] = ["TvpImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -41,19 +41,19 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_tvp"] = [
         "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TVPModel",
-        "TVPPreTrainedModel",
-        "TVPVisionModel",
-        "TVPTransformer",
+        "TvpModel",
+        "TvpPreTrainedModel",
+        "TvpVisionModel",
+        "TvpForVideoGrounding",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_TVP import (
+    from .configuration_tvp import (
         TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TVPConfig,
-        TVPVisionConfig,
+        TvpConfig,
+        TvpVisionConfig,
     )
-    from .processing_tvp import TVPProcessor
+    from .processing_tvp import TvpProcessor
 
     try:
         if not is_vision_available():
@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_tvp import TVPImageProcessor
+        from .image_processing_tvp import TvpImageProcessor
 
     try:
         if not is_torch_available():
@@ -71,10 +71,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_tvp import (
             TVP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TVPModel,
-            TVPPreTrainedModel,
-            TVPTransformer,
-            TVPVisionModel,
+            TvpForVideoGrounding,
+            TvpModel,
+            TvpPreTrainedModel,
+            TvpVisionModel,
         )
 
 else:

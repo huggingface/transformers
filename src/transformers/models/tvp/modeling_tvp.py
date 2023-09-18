@@ -1,84 +1,47 @@
+# coding=utf-8
+# Copyright 2023 The Intel AIA Team Authors, and HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License=, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing=, software
+# distributed under the License is distributed on an "AS IS" BASIS=,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ...activations import gelu, gelu_new
-from ...activations import silu as swish
+from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
-from .configuration_tvp import TVPConfig
+from .configuration_tvp import TvpConfig
 
 
 TVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Intel/tvp-base",
-    # See all TVP models at https://huggingface.co/models?filter=tvp
+    "Intel/tvp-base-ANet",
+    # See all Tvp models at https://huggingface.co/models?filter=tvp
 ]
 
 
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
-
-
-def c2_msra_fill(module: nn.Module) -> None:
-    """
-    Initialize `module.weight` using the "MSRAFill" implemented in Conv2D. Also initializes `module.bias` to 0.
-
-    Args:
-        module (torch.nn.Module): module to initialize.
-    """
-    nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-    if module.bias is not None:
-        nn.init.constant_(module.bias, 0)
-
-
-def tvp_loss(logits: torch.Tensor, labels: Tuple[torch.Tensor], alpha: float = 1.0, beta: float = 0.1) -> torch.Tensor:
-    """
-    Labels contain:
-        1. duration: torch.Tensor, size = (batch_size, 1)
-        2. start_time: torch.Tensor, size = (batch_size)
-        3. end_time: torch.Tensor, size = (batch_size)
-    """
-    duration, start_time, end_time = labels
-    candidates = torch.mul(logits, duration)
-    candidates_start_time, candidates_end_time = candidates[:, 0].float(), candidates[:, 1].float()
-    mid_c = torch.div(torch.add(candidates_start_time, candidates_end_time), 2.0)
-    mid_g = torch.div(torch.add(start_time, end_time), 2.0)
-
-    inter = torch.min(candidates_end_time, end_time) - torch.max(candidates_start_time, start_time)
-    union = torch.max(candidates_end_time, end_time) - torch.min(candidates_start_time, start_time)
-    iou = inter.clamp(min=0) / union
-
-    duration_es = torch.sub(candidates_end_time, candidates_start_time)
-    duration_gt = torch.sub(end_time, start_time)
-
-    iou_loss = 1 - iou
-
-    d_c = torch.div(torch.max(mid_g, mid_c) - torch.min(mid_g, mid_c), duration)
-    d_c = d_c.clamp(min=0.2)
-
-    duration_diff = torch.square(torch.div(torch.sub(duration_es, duration_gt), duration))
-    duration_diff = duration_diff.clamp(min=0.4)
-
-    loss = iou_loss + alpha * d_c + beta * duration_diff
-
-    return loss
-
-
 @dataclass
-class TVPOutput(ModelOutput):
+class TvpOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Temporal-Distance IoU loss for video grounding.
+        loss_dict (`Dict`, *optional*):
+            A dictionary containing the individual losses. Useful for logging.
         logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
             Contains start_time/duration and end_time/duration. It is the time slot of the videos corresponding to the
             input texts.
@@ -92,12 +55,88 @@ class TVPOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
+    loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class TVPVisionConv2d(torch.nn.Conv2d):
+class TvpLoss(nn.Module):
+    """
+    This class computes the losses for TvpForVideoGrounding. The process happens in two steps: 1) we compute hungarian
+    assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of matched
+    ground-truth / prediction (supervise class and box).
+
+    Args:
+        losses (`List[str]`):
+            List of all the losses to be applied. See `get_loss` for a list of all available losses.
+    """
+
+    def __init__(self, losses):
+        super().__init__()
+        self.losses = losses
+
+    def loss_IoU(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
+        inter = torch.min(candidates_end_time, end_time) - torch.max(candidates_start_time, start_time)
+        union = torch.max(candidates_end_time, end_time) - torch.min(candidates_start_time, start_time)
+        iou = inter.clamp(min=0) / union
+        iou_loss = 1 - iou
+
+        return iou_loss
+
+    def loss_distance(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
+        mid_candidates = torch.div(torch.add(candidates_start_time, candidates_end_time), 2.0)
+        mid_groundtruth = torch.div(torch.add(start_time, end_time), 2.0)
+        d_c = torch.div(
+            torch.max(mid_candidates, mid_groundtruth) - torch.min(mid_candidates, mid_groundtruth), duration
+        )
+        d_c = d_c.clamp(min=0.2)
+
+        return d_c
+
+    def loss_duration(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
+        duration_candidates = torch.sub(candidates_end_time, candidates_start_time)
+        duration_groundtruth = torch.sub(end_time, start_time)
+        duration_diff = torch.square(torch.div(torch.sub(duration_candidates, duration_groundtruth), duration))
+        duration_diff = duration_diff.clamp(min=0.4)
+
+        return duration_diff
+
+    def get_loss(self, loss, start_time, end_time, candidates_start_time, candidates_end_time, duration):
+        loss_map = {
+            "IoU": self.loss_IoU,
+            "distance": self.loss_distance,
+            "duration": self.loss_duration,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](start_time, end_time, candidates_start_time, candidates_end_time, duration)
+
+    def forward(self, logits, labels):
+        """
+        This performs the loss computation.
+
+        Args:
+            logits (`torch.FloatTensor`):
+                The output logits of head module.
+            labels (`List[torch.FloatTensor]`):
+                List of tensors, which contains start time, end time of the video corresponding to the text, and also
+                the duration.
+        """
+        duration, start_time, end_time = labels
+        candidates = torch.mul(logits, duration)
+        candidates_start_time, candidates_end_time = candidates[:, 0].float(), candidates[:, 1].float()
+
+        losses_dict = {}
+        for loss in self.losses:
+            losses_dict.update(
+                {loss: self.get_loss(loss, start_time, end_time, candidates_start_time, candidates_end_time, duration)}
+            )
+
+        return losses_dict
+
+
+class TvpVisionConv2d(torch.nn.Conv2d):
     """
     A wrapper around :class:`torch.nn.Conv2d` to support empty inputs and more features.
     """
@@ -128,7 +167,7 @@ class TVPVisionConv2d(torch.nn.Conv2d):
         return x
 
 
-class TVPVisionFrozenBatchNorm2d(nn.Module):
+class TvpVisionBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
@@ -146,6 +185,7 @@ class TVPVisionFrozenBatchNorm2d(nn.Module):
         self.register_buffer("bias", torch.zeros(num_features))
         self.register_buffer("running_mean", torch.zeros(num_features))
         self.register_buffer("running_var", torch.ones(num_features) - eps)
+        self.register_buffer("num_batches_tracked", torch.tensor(0, dtype=torch.long))
 
     def forward(self, x):
         return F.batch_norm(
@@ -158,23 +198,22 @@ class TVPVisionFrozenBatchNorm2d(nn.Module):
             eps=self.eps,
         )
 
-    def __repr__(self):
-        return "TVPVisionFrozenBatchNorm2d(num_features={}, eps={})".format(self.num_features, self.eps)
 
-
-class TVPVisionBasicStem(nn.Module):
-    def __init__(self, in_channels=3, out_channels=64):
+class TvpVisionBasicStem(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.conv1 = TVPVisionConv2d(
-            in_channels,
-            out_channels,
+
+        self.in_channels = config.resnets_stem_input_channels
+        self.out_channels = config.resnets_stem_out_channels
+        self.conv1 = TvpVisionConv2d(
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
             kernel_size=7,
             stride=2,
             padding=3,
             bias=False,
-            norm=TVPVisionFrozenBatchNorm2d(out_channels),
+            norm=TvpVisionBatchNorm2d(self.out_channels),
         )
-        c2_msra_fill(self.conv1)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -182,32 +221,8 @@ class TVPVisionBasicStem(nn.Module):
         x = F.max_pool2d(x, kernel_size=3, stride=2, padding=1)
         return x
 
-    @property
-    def out_channels(self):
-        return self.conv1.out_channels
 
-    @property
-    def stride(self):
-        return 4  # = stride 2 conv -> stride 2 max pool
-
-
-class TVPVisionBlockBase(nn.Module):
-    def __init__(self, in_channels, out_channels, stride):
-        """
-        The `__init__` method of any subclass should also contain these arguments.
-        """
-        super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.stride = stride
-
-    def freeze(self):
-        for p in self.parameters():
-            p.requires_grad = False
-        return self
-
-
-class TVPVisionBasicBlock(TVPVisionBlockBase):
+class TvpVisionBasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         """
         Args:
@@ -215,43 +230,42 @@ class TVPVisionBasicBlock(TVPVisionBlockBase):
             out_channels (int): Number of output channels.
             stride (int): Stride for the first conv.
         """
-        super().__init__(in_channels, out_channels, stride)
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.stride = stride
 
         if in_channels != out_channels:
-            self.shortcut = TVPVisionConv2d(
+            self.shortcut = TvpVisionConv2d(
                 in_channels,
                 out_channels,
                 kernel_size=1,
                 stride=stride,
                 bias=False,
-                norm=TVPVisionFrozenBatchNorm2d(out_channels),
+                norm=TvpVisionBatchNorm2d(out_channels),
             )
         else:
             self.shortcut = None
 
-        self.conv1 = TVPVisionConv2d(
+        self.conv1 = TvpVisionConv2d(
             in_channels,
             out_channels,
             kernel_size=3,
             stride=stride,
             padding=1,
             bias=False,
-            norm=TVPVisionFrozenBatchNorm2d(out_channels),
+            norm=TvpVisionBatchNorm2d(out_channels),
         )
 
-        self.conv2 = TVPVisionConv2d(
+        self.conv2 = TvpVisionConv2d(
             out_channels,
             out_channels,
             kernel_size=3,
             stride=1,
             padding=1,
             bias=False,
-            norm=TVPVisionFrozenBatchNorm2d(out_channels),
+            norm=TvpVisionBatchNorm2d(out_channels),
         )
-
-        for layer in [self.conv1, self.conv2, self.shortcut]:
-            if layer is not None:  # shortcut can be None
-                c2_msra_fill(layer)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -268,7 +282,7 @@ class TVPVisionBasicBlock(TVPVisionBlockBase):
         return out
 
 
-class TVPVisionBottleneckBlock(TVPVisionBlockBase):
+class TvpVisionBottleneckBlock(nn.Module):
     def __init__(
         self,
         in_channels,
@@ -278,30 +292,33 @@ class TVPVisionBottleneckBlock(TVPVisionBlockBase):
         num_groups=1,
         dilation=1,
     ):
-        super().__init__(in_channels, out_channels, stride)
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.stride = stride
 
         if in_channels != out_channels:
-            self.shortcut = TVPVisionConv2d(
+            self.shortcut = TvpVisionConv2d(
                 in_channels,
                 out_channels,
                 kernel_size=1,
                 stride=stride,
                 bias=False,
-                norm=TVPVisionFrozenBatchNorm2d(out_channels),
+                norm=TvpVisionBatchNorm2d(out_channels),
             )
         else:
             self.shortcut = None
 
-        self.conv1 = TVPVisionConv2d(
+        self.conv1 = TvpVisionConv2d(
             in_channels,
             bottleneck_channels,
             kernel_size=1,
             stride=stride,
             bias=False,
-            norm=TVPVisionFrozenBatchNorm2d(bottleneck_channels),
+            norm=TvpVisionBatchNorm2d(bottleneck_channels),
         )
 
-        self.conv2 = TVPVisionConv2d(
+        self.conv2 = TvpVisionConv2d(
             bottleneck_channels,
             bottleneck_channels,
             kernel_size=3,
@@ -310,20 +327,16 @@ class TVPVisionBottleneckBlock(TVPVisionBlockBase):
             bias=False,
             groups=num_groups,
             dilation=dilation,
-            norm=TVPVisionFrozenBatchNorm2d(bottleneck_channels),
+            norm=TvpVisionBatchNorm2d(bottleneck_channels),
         )
 
-        self.conv3 = TVPVisionConv2d(
+        self.conv3 = TvpVisionConv2d(
             bottleneck_channels,
             out_channels,
             kernel_size=1,
             bias=False,
-            norm=TVPVisionFrozenBatchNorm2d(out_channels),
+            norm=TvpVisionBatchNorm2d(out_channels),
         )
-
-        for layer in [self.conv1, self.conv2, self.conv3, self.shortcut]:
-            if layer is not None:  # shortcut can be None
-                c2_msra_fill(layer)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -344,46 +357,20 @@ class TVPVisionBottleneckBlock(TVPVisionBlockBase):
         return out
 
 
-class TVPVisionBackbone(nn.Module):
+class TvpVisionBackbone(nn.Module):
     def __init__(self, config):
-        super(TVPVisionBackbone, self).__init__()
+        super(TvpVisionBackbone, self).__init__()
         self.config = config
-        self.stem = TVPVisionBasicStem(
-            in_channels=config.resnets_stem_input_channels,
-            out_channels=config.resnets_stem_out_channels,
-        )
-        if config.backbone_freeze_at >= 1:
-            for p in self.stem.parameters():
-                p.requires_grad = False
-
-        current_stride = self.stem.stride
-        self._out_feature_strides = {"stem": current_stride}
-        self._out_feature_channels = {"stem": self.stem.out_channels}
+        self.stem = TvpVisionBasicStem(config)
 
         stages = self.build_backbone(config)
 
         self.stages_and_names = []
         for i, blocks in enumerate(stages):
-            for block in blocks:
-                assert isinstance(block, TVPVisionBlockBase), block
             stage = nn.Sequential(*blocks)
             name = "res" + str(i + 2)
             self.add_module(name, stage)
             self.stages_and_names.append((stage, name))
-            self._out_feature_strides[name] = current_stride = int(
-                current_stride * np.prod([k.stride for k in blocks])
-            )
-            self._out_feature_channels[name] = blocks[-1].out_channels
-
-        out_features = config.features
-
-        if out_features is None:
-            out_features = [name]
-        self._out_features = out_features
-        assert len(self._out_features)
-        children = [x[0] for x in self.named_children()]
-        for out_feature in self._out_features:
-            assert out_feature in children, "Available children: {}".format(", ".join(children))
 
     def forward(self, x):
         x = self.stem(x)
@@ -394,10 +381,10 @@ class TVPVisionBackbone(nn.Module):
 
     def make_stage(self, block_class, num_blocks, first_stride, **kwargs):
         """
-        Create a TVPVisionBackbone stage by creating many blocks.
+        Create a TvpVisionBackbone stage by creating many blocks.
 
         Args:
-            block_class (class): A subclass of TVPVisionBlockBase.
+            block_class (class): A class of TvpVisionBasicBlock or TvpVisionBottleneckBlock.
             num_blocks (int): The number of blocks.
             first_stride (int): The stride of the first block. The other blocks will have stride=1.
                 A `stride` argument will be passed to the block constructor.
@@ -415,7 +402,7 @@ class TVPVisionBackbone(nn.Module):
 
     def build_backbone(self, config):
         """
-        Return stages of TVPVisionBackbone
+        Return stages of TvpVisionBackbone
         """
         out_features = config.features
         depth = config.resnets_depth
@@ -456,32 +443,29 @@ class TVPVisionBackbone(nn.Module):
                 "in_channels": in_channels,
                 "out_channels": out_channels,
             }
-            # Use TVPVisionBasicBlock for R18 and R34.
+            # Use TvpVisionBasicBlock for R18 and R34.
             if depth in [18, 34]:
-                stage_kargs["block_class"] = TVPVisionBasicBlock
+                stage_kargs["block_class"] = TvpVisionBasicBlock
             else:
                 stage_kargs["bottleneck_channels"] = bottleneck_channels
                 stage_kargs["dilation"] = dilation
                 stage_kargs["num_groups"] = num_groups
-                stage_kargs["block_class"] = TVPVisionBottleneckBlock
+                stage_kargs["block_class"] = TvpVisionBottleneckBlock
             blocks = self.make_stage(**stage_kargs)
             in_channels = out_channels
             out_channels *= 2
             bottleneck_channels *= 2
 
-            if config.backbone_freeze_at >= stage_idx:
-                for block in blocks:
-                    block.freeze()
             stages.append(blocks)
 
         return stages
 
 
-class TVPVisionModel(nn.Module):
+class TvpVisionModel(nn.Module):
     def __init__(self, config):
-        super(TVPVisionModel, self).__init__()
+        super(TvpVisionModel, self).__init__()
         self.in_features = config.features
-        self.backbone = TVPVisionBackbone(config)
+        self.backbone = TvpVisionBackbone(config)
         self.grid_encoder = nn.Sequential(
             nn.Conv2d(
                 config.grid_encoder_conv_input_size,
@@ -495,32 +479,29 @@ class TVPVisionModel(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2),
             nn.ReLU(inplace=True),
         )
-        self.input_format = config.input_format
-
         self.config = config
 
     def forward(self, pixel_values):
-        bsz, n_frms, c, h, w = pixel_values.shape
-        pixel_values = pixel_values.view(bsz * n_frms, c, h, w)
-        if self.input_format == "BGR":
-            # RGB->BGR, images are read in as RGB by default
-            pixel_values = pixel_values[:, [2, 1, 0], :, :]
+        batch_size, num_frames, num_channels, height, width = pixel_values.shape
+        # (batch_size * num_frames, num_channels, height, width)
+        pixel_values = pixel_values.view(batch_size * num_frames, num_channels, height, width)
         grid_feat_outputs = self.backbone(pixel_values)
-        grid = self.grid_encoder(grid_feat_outputs)  # (B * n_frm, C, H, W)
-        new_c, new_h, new_w = grid.shape[-3:]
-        grid = grid.view(bsz, n_frms, new_c, new_h, new_w)  # (B, n_frm, C, H, W)
-
-        grid = grid.permute(0, 1, 3, 4, 2)  # (B, n_frm, H, W, C)
+        grid = self.grid_encoder(grid_feat_outputs)
+        new_channel, new_height, new_width = grid.shape[-3:]
+        # (batch_size, num_frames, num_channels, height, width)
+        grid = grid.view(batch_size, num_frames, new_channel, new_height, new_width)
+        # (batch_size, num_frames, height, width, num_channels)
+        grid = grid.permute(0, 1, 3, 4, 2)
         return grid
 
 
-class VisualInputEmbedding(nn.Module):
+class TvpVisualInputEmbedding(nn.Module):
     """
     Takes input of both image and video (multi-frame)
     """
 
     def __init__(self, config):
-        super(VisualInputEmbedding, self).__init__()
+        super(TvpVisualInputEmbedding, self).__init__()
         self.config = config
 
         # sequence embedding
@@ -534,18 +515,21 @@ class VisualInputEmbedding(nn.Module):
     def forward(self, grid):
         """
         Args:
-            grid: (B, n_frm, H, W, C), note that #frm can be 1
+            grid: Array of shape (batch_size, num_frames, height, width, num_channels).
+                It contains processed frames extracted from videos, and is generated by Tvp image preprocessor. Note,
+                num_frames can be 1
 
         Returns:
+            embeddings: The embedding of grid with size (batch_size, height*width, num_channels)
 
         """
-        bsz, _, _, _, hsz = grid.shape
-        # temporal mean pooling
-        grid = grid.mean(1)  # (B, H, W, d)
-        grid = self.add_2d_positional_embeddings(grid)  # (B, H, W, d)
-        # image token sequence
-        visual_tokens = grid.view(bsz, -1, hsz)  # (B, H*W, d)
-        visual_tokens_shape = visual_tokens.shape[:-1]  # (B, H*W)
+        batch_size, num_frames, height, width, num_channels = grid.shape
+        # temporal mean pooling, (batch_size, height, width, hidden_size)
+        grid = grid.mean(1)
+        grid = self.add_2d_positional_embeddings(grid)
+        # image token sequence, (batch_size, height*width, num_channels)
+        visual_tokens = grid.view(batch_size, -1, num_channels)
+        visual_tokens_shape = visual_tokens.shape[:-1]
         device = visual_tokens.device
 
         # image token type embeddings.
@@ -555,7 +539,7 @@ class VisualInputEmbedding(nn.Module):
         embeddings = visual_tokens + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
-        return embeddings  # (B, H*W, d)
+        return embeddings
 
     def add_2d_positional_embeddings(self, grid):
         """
@@ -580,7 +564,7 @@ class VisualInputEmbedding(nn.Module):
         return grid + col_position_embeddings.view(*col_shape)  # broadcast automatically
 
 
-class TextInputEmbeddings(nn.Module):
+class TvpTextInputEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -616,7 +600,7 @@ class TextInputEmbeddings(nn.Module):
         return embeddings
 
 
-class TVPSelfAttention(nn.Module):
+class TvpSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -693,7 +677,7 @@ class TVPSelfAttention(nn.Module):
         return outputs
 
 
-class TVPSelfOutput(nn.Module):
+class TvpSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -707,11 +691,11 @@ class TVPSelfOutput(nn.Module):
         return hidden_states
 
 
-class TVPAttention(nn.Module):
+class TvpAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = TVPSelfAttention(config)
-        self.output = TVPSelfOutput(config)
+        self.self = TvpSelfAttention(config)
+        self.output = TvpSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -754,7 +738,7 @@ class TVPAttention(nn.Module):
         return outputs
 
 
-class TVPIntermediate(nn.Module):
+class TvpIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -769,7 +753,7 @@ class TVPIntermediate(nn.Module):
         return hidden_states
 
 
-class TVPOutputLayer(nn.Module):
+class TvpOutputLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -783,12 +767,12 @@ class TVPOutputLayer(nn.Module):
         return hidden_states
 
 
-class TVPEncodeLayer(nn.Module):
+class TvpEncodeLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = TVPAttention(config)
-        self.intermediate = TVPIntermediate(config)
-        self.output = TVPOutputLayer(config)
+        self.attention = TvpAttention(config)
+        self.intermediate = TvpIntermediate(config)
+        self.output = TvpOutputLayer(config)
 
     def forward(
         self,
@@ -800,7 +784,12 @@ class TVPEncodeLayer(nn.Module):
         output_attentions: Optional[bool] = None,
     ):
         self_attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, output_attentions=output_attentions
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions=output_attentions,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -810,11 +799,11 @@ class TVPEncodeLayer(nn.Module):
         return outputs
 
 
-class TVPEncoder(nn.Module):
+class TvpEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([TVPEncodeLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([TvpEncodeLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -871,7 +860,7 @@ class TVPEncoder(nn.Module):
         )
 
 
-class TVPPooler(nn.Module):
+class TvpPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -886,12 +875,12 @@ class TVPPooler(nn.Module):
         return pooled_output
 
 
-class TVPPreTrainedModel(PreTrainedModel):
+class TvpPreTrainedModel(PreTrainedModel):
     """An abstract class to handle weights initialization and
     a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = TVPConfig
+    config_class = TvpConfig
     base_model_prefix = "tvp"
 
     def _init_weights(self, module):
@@ -903,19 +892,26 @@ class TVPPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0)
 
-class TVPTransformerBase(TVPPreTrainedModel):
+
+class TvpTransformer(TvpPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.embeddings = TextInputEmbeddings(config)
-        self.visual_embeddings = VisualInputEmbedding(config)
-        self.encoder = TVPEncoder(config)
-        self.pooler = TVPPooler(config)
+        self.embeddings = TvpTextInputEmbeddings(config)
+        self.visual_embeddings = TvpVisualInputEmbedding(config)
+        self.encoder = TvpEncoder(config)
+        self.pooler = TvpPooler(config)
         self.text_prompt = nn.Parameter(torch.randn([1, 10, 768]))
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -970,6 +966,8 @@ class TVPTransformerBase(TVPPreTrainedModel):
         )
         last_hidden_state = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
+        last_hidden_state = self.dropout(last_hidden_state)
+        pooled_output = self.dropout(pooled_output)
         if not return_dict:
             return (
                 last_hidden_state,
@@ -984,65 +982,9 @@ class TVPTransformerBase(TVPPreTrainedModel):
         )
 
 
-class TVPTransformer(TVPPreTrainedModel):
-    def __init__(self, config):
-        super(TVPTransformer, self).__init__(config)
-        self.config = config
-
-        self.base = TVPTransformerBase(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-        self.classifier = nn.Sequential(
-            nn.Linear(config.hidden_size, config.hidden_size * 2),
-            nn.ReLU(True),
-            nn.Linear(config.hidden_size * 2, 2),
-            nn.Sigmoid(),
-        )
-        self.init_weights()
-
-    def forward(
-        self,
-        input_ids,
-        pixel_values,
-        attention_mask,
-        labels=None,
-        sample_size=-1,
-        head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ):
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        outputs = self.base(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,  # (B, Lt) note this mask is text only!!!
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)  # rank (B, 1) or ce (B, 2)
-        if labels is None:
-            loss = None
-        else:
-            loss = tvp_loss(logits, labels, self.config.alpha, self.config.beta)
-
-        if not return_dict:
-            outputs = (logits,) + outputs[2:]
-            if loss:
-                outputs = (loss,) + outputs
-            return outputs
-
-        return TVPOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
-
-
-class PadPrompter(nn.Module):
+class TvpPadPrompter(nn.Module):
     def __init__(self, image_size, prompt_size):
-        super(PadPrompter, self).__init__()
+        super(TvpPadPrompter, self).__init__()
         pad_size = prompt_size
         image_size = image_size
 
@@ -1061,9 +1003,9 @@ class PadPrompter(nn.Module):
         return prompt
 
 
-class DownPadPrompter(nn.Module):
+class TvpDownPadPrompter(nn.Module):
     def __init__(self, image_size, pad_size):
-        super(DownPadPrompter, self).__init__()
+        super(TvpDownPadPrompter, self).__init__()
         self.pad_size = pad_size
         self.image_size = image_size
 
@@ -1076,9 +1018,9 @@ class DownPadPrompter(nn.Module):
         return prompt
 
 
-class FrameDownPadPrompter(nn.Module):
+class TvpFrameDownPadPrompter(nn.Module):
     def __init__(self, image_size, pad_size, frame_num):
-        super(FrameDownPadPrompter, self).__init__()
+        super(TvpFrameDownPadPrompter, self).__init__()
         self.pad_size = pad_size
         self.image_size = image_size
         self.frame_num = frame_num
@@ -1092,9 +1034,9 @@ class FrameDownPadPrompter(nn.Module):
         return prompt
 
 
-class FramePadPrompter(nn.Module):
+class TvpFramePadPrompter(nn.Module):
     def __init__(self, image_size, prompt_size, frame_num):
-        super(FramePadPrompter, self).__init__()
+        super(TvpFramePadPrompter, self).__init__()
         pad_size = prompt_size
         image_size = image_size
         self.frame_num = frame_num
@@ -1113,28 +1055,67 @@ class FramePadPrompter(nn.Module):
         return prompt
 
 
-class TVPModel(TVPPreTrainedModel):
+class TvpModel(TvpPreTrainedModel):
     def __init__(self, config):
-        super(TVPModel, self).__init__(config)
+        super(TvpModel, self).__init__(config)
         self.config = config
-        self.cnn = TVPVisionModel(config.vision_config)
-        self.transformer = TVPTransformer(config)
-        if config.vp_type == "downpad":
-            self.tp = DownPadPrompter(config.max_img_size, config.pad_size)
-        elif config.vp_type == "pad":
-            self.tp = PadPrompter(config.max_img_size, config.pad_size)
-        elif config.vp_type == "framedownpad":
-            self.tp = FrameDownPadPrompter(config.max_img_size, config.pad_size, config.num_frm)
-        elif config.vp_type == "framepad":
-            self.tp = FramePadPrompter(config.max_img_size, config.pad_size, config.num_frm)
+        self.cnn = TvpVisionModel(config.vision_config)
+        self.transformer = TvpTransformer(config)
+        if config.visual_prompter_type == "downpad":
+            self.visual_prompter = TvpDownPadPrompter(config.max_img_size, config.pad_size)
+        elif config.visual_prompter_type == "pad":
+            self.visual_prompter = TvpPadPrompter(config.max_img_size, config.pad_size)
+        elif config.visual_prompter_type == "framedownpad":
+            self.visual_prompter = TvpFrameDownPadPrompter(config.max_img_size, config.pad_size, config.num_frm)
+        elif config.visual_prompter_type == "framepad":
+            self.visual_prompter = TvpFramePadPrompter(config.max_img_size, config.pad_size, config.num_frm)
+
+    def add_vision_prompt(self, pixel_values):
+        if self.config.visual_prompter_apply != "remove":
+            visual_prompt = self.visual_prompter(pixel_values).to(pixel_values.dtype)
+
+        if self.config.visual_prompter_apply == "add":
+            pixel_values = pixel_values + visual_prompt
+        elif self.config.visual_prompter_apply == "remove":
+            visual_prompter_mask = torch.ones(
+                [self.config.max_img_size, self.config.max_img_size], dtype=pixel_values.dtype
+            )
+            start_point = self.config.pad_size
+            end_point = self.config.max_img_size - self.config.pad_size
+
+            if self.config.visual_prompter_type == "downpad" or self.config.visual_prompter_type == "framedownpad":
+                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
+            elif self.config.visual_prompter_type == "pad":
+                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
+                visual_prompter_mask[:start_point, :] = 0.0
+                visual_prompter_mask[:, end_point : self.config.max_img_size] = 0.0
+                visual_prompter_mask[:, :start_point] = 0.0
+
+            pixel_values = pixel_values * visual_prompter_mask
+        elif self.config.visual_prompter_apply == "replace":
+            visual_prompter_mask = torch.ones(
+                [self.config.max_img_size, self.config.max_img_size], dtype=pixel_values.dtype
+            )
+            start_point = self.config.pad_size
+            end_point = self.config.max_img_size - self.config.pad_size
+
+            if self.config.visual_prompter_type == "downpad" or self.config.visual_prompter_type == "framedownpad":
+                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
+            elif self.config.visual_prompter_type == "pad":
+                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
+                visual_prompter_mask[:start_point, :] = 0.0
+                visual_prompter_mask[:, end_point : self.config.max_img_size] = 0.0
+                visual_prompter_mask[:, :start_point] = 0.0
+
+            pixel_values = pixel_values * visual_prompter_mask + visual_prompt
+
+        return pixel_values
 
     def forward(
         self,
-        input_ids,
-        pixel_values,
-        attention_mask,
-        labels=None,
-        sample_size=-1,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1146,8 +1127,6 @@ class TVPModel(TVPPreTrainedModel):
             input_ids,
             pixel_values,
             attention_mask,
-            labels=labels,
-            sample_size=sample_size,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1155,45 +1134,81 @@ class TVPModel(TVPPreTrainedModel):
         )
         return outputs
 
-    def freeze_cnn_backbone(self):
-        for n, p in self.cnn.feature.named_parameters():
-            p.requires_grad = False
 
-    def add_vision_prompt(self, pixel_values):
-        if self.config.vp_apply == "remove":
-            pass
+class TvpVideoGroundingHead(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+        self.layer = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size * 2),
+            nn.ReLU(True),
+            nn.Linear(hidden_size * 2, 2),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        x = self.layer(x)
+        return x
+
+
+class TvpForVideoGrounding(TvpPreTrainedModel):
+    def __init__(self, config):
+        super(TvpForVideoGrounding, self).__init__(config)
+        self.config = config
+        self.model = TvpModel(config)
+        self.video_grounding_head = TvpVideoGroundingHead(config.hidden_size)
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        labels: Tuple[torch.Tensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        outputs = self.model(
+            input_ids,
+            pixel_values,
+            attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        if not return_dict:
+            pooler_output = outputs[1]
         else:
-            vp = self.tp(pixel_values).to(pixel_values.dtype)
+            pooler_output = outputs.pooler_output
 
-        if self.config.vp_apply == "add":
-            pixel_values = pixel_values + vp
-        elif self.config.vp_apply == "remove":
-            tp_mask = torch.ones([self.config.max_img_size, self.config.max_img_size], dtype=pixel_values.dtype)
-            start_point = self.config.pad_size
-            end_point = self.config.max_img_size - self.config.pad_size
+        logits = self.video_grounding_head(pooler_output)
 
-            if self.config.vp_type == "downpad" or self.config.vp_type == "framedownpad":
-                tp_mask[end_point : self.config.max_img_size, :] = 0.0
-            elif self.config.vp_type == "pad":
-                tp_mask[end_point : self.config.max_img_size, :] = 0.0
-                tp_mask[:start_point, :] = 0.0
-                tp_mask[:, end_point : self.config.max_img_size] = 0.0
-                tp_mask[:, :start_point] = 0.0
+        if labels is None:
+            loss = None
+        else:
+            losses = ["IoU", "distance", "duration"]
+            criterion = TvpLoss(losses)
+            criterion.to(self.device)
+            loss_dict = criterion(logits, labels)
+            alpha = self.config.alpha or 1.0
+            beta = self.config.beta or 0.1
+            loss = loss_dict["IoU"] + alpha * loss_dict["distance"] + beta * loss_dict["duration"]
 
-            pixel_values = pixel_values * tp_mask
-        elif self.config.vp_apply == "replace":
-            tp_mask = torch.ones([self.config.max_img_size, self.config.max_img_size], dtype=pixel_values.dtype)
-            start_point = self.config.pad_size
-            end_point = self.config.max_img_size - self.config.pad_size
+        if not return_dict:
+            outputs = (logits,) + outputs[2:]
+            if loss is not None:
+                outputs = (
+                    loss,
+                    loss_dict,
+                ) + outputs
+            return outputs
 
-            if self.config.vp_type == "downpad" or self.config.vp_type == "framedownpad":
-                tp_mask[end_point : self.config.max_img_size, :] = 0.0
-            elif self.config.vp_type == "pad":
-                tp_mask[end_point : self.config.max_img_size, :] = 0.0
-                tp_mask[:start_point, :] = 0.0
-                tp_mask[:, end_point : self.config.max_img_size] = 0.0
-                tp_mask[:, :start_point] = 0.0
-
-            pixel_values = pixel_values * tp_mask + vp
-
-        return pixel_values
+        return TvpOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )

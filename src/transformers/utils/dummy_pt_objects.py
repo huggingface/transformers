@@ -7482,28 +7482,35 @@ class TvltPreTrainedModel(metaclass=DummyObject):
 TVP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class TVPModel(metaclass=DummyObject):
+class TvpModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class TVPPreTrainedModel(metaclass=DummyObject):
+class TvpPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class TVPVisionModel(metaclass=DummyObject):
+class TvpVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class TVPTransformer(metaclass=DummyObject):
+class TvpTransformer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TvpForVideoGrounding(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

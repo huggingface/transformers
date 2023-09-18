@@ -1,30 +1,29 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The Intel AIA Team Authors, and HuggingFace Inc. team. All rights reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License=, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# Unless required by applicable law or agreed to in writing=, software
+# distributed under the License is distributed on an "AS IS" BASIS=,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for TVP."""
+"""Image processor class for Tvp."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    center_crop,
+    PaddingMode,
+    flip_channel_order,
     get_resize_output_image_size,
-    normalize,
     pad,
-    rescale,
     resize,
     to_channel_dimension_format,
 )
@@ -34,6 +33,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_image_size,
     is_valid_image,
     to_numpy_array,
     valid_images,
@@ -61,9 +61,9 @@ def make_batched(videos) -> List[List[ImageInput]]:
     raise ValueError(f"Could not make batched video from {videos}")
 
 
-class TVPImageProcessor(BaseImageProcessor):
+class TvpImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a TVP image processor.
+    Constructs a Tvp image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -73,8 +73,6 @@ class TVPImageProcessor(BaseImageProcessor):
             Size of the output image after resizing. The shortest edge of the image will be resized to
             `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
             `size` in the `preprocess` method.
-        max_size (`int` *optional*, defaults to None):
-                Size of the output image. If `max_size` is not None, it will compute the size from max_size and image.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
@@ -92,16 +90,19 @@ class TVPImageProcessor(BaseImageProcessor):
             in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess` method.
-        padding_size (`Dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
-            Size of the image after applying the padding. Can be overridden by the `padding_size` parameter in the
+        pad_size (`Dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
+            Size of the image after applying the padding. Can be overridden by the `pad_size` parameter in the
             `preprocess` method.
-        fill (`int`, *optional*, defaults to 0):
-            The element of padding.
-        padding_mode (`str`, *optional*, defaults to "constant"):
+        constant_values (`Union[float, Iterable[float]]`, *optional*, defaults to 0):
+            The fill value to use when padding the image.
+        pad_mode (`PaddingMode`, *optional*, defaults to PaddingMode.CONSTANT):
             Use what kind of mode in padding.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
+        do_flip_channel_order (`bool`, *optional*, defaults to `True`):
+            Whether to flip the color channels from RGB to BGR. Can be overridden by the `do_flip_channel_order`
+            parameter in the `preprocess` method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
@@ -116,17 +117,17 @@ class TVPImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        max_size: int = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
-        padding_size: Dict[str, int] = None,
-        fill: int = None,
-        padding_mode: str = None,
+        pad_size: Dict[str, int] = None,
+        constant_values: Union[float, Iterable[float]] = None,
+        pad_mode: PaddingMode = None,
         do_normalize: bool = True,
+        do_flip_channel_order: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         **kwargs,
@@ -136,24 +137,24 @@ class TVPImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size, param_name="crop_size")
-        padding_size = padding_size if padding_size is not None else {"height": 448, "width": 448}
-        padding_size = get_size_dict(padding_size, param_name="crop_size")
-        fill = fill if fill is not None else 0
-        padding_mode = padding_mode if padding_mode is not None else "constant"
+        pad_size = pad_size if pad_size is not None else {"height": 448, "width": 448}
+        pad_size = get_size_dict(pad_size, param_name="crop_size")
+        constant_values = constant_values if constant_values is not None else 0
+        pad_mode = pad_mode if pad_mode is not None else PaddingMode.CONSTANT
 
         self.do_resize = do_resize
         self.size = size
-        self.max_size = max_size
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
-        self.padding_size = padding_size
-        self.fill = fill
-        self.padding_mode = padding_mode
+        self.pad_size = pad_size
+        self.constant_values = constant_values
+        self.pad_mode = pad_mode
         self.do_normalize = do_normalize
+        self.do_flip_channel_order = do_flip_channel_order
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
@@ -161,9 +162,9 @@ class TVPImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        max_size: int = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -176,158 +177,100 @@ class TVPImageProcessor(BaseImageProcessor):
                 Size of the output image. If `size` is of the form `{"height": h, "width": w}`, the output image will
                 have the size `(h, w)`. If `size` is of the form `{"shortest_edge": s}`, the output image will have its
                 shortest edge of length `s` while keeping the aspect ratio of the original image.
-            max_size (`int`):
-                Size of the output image. If `max_size` is not None, it will compute the size from max_size and image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        if max_size is None:
-            size = get_size_dict(size, default_to_square=False)
-            if "shortest_edge" in size:
-                output_size = get_resize_output_image_size(image, size["shortest_edge"], default_to_square=False)
-            elif "height" in size and "width" in size:
-                output_size = (size["height"], size["width"])
-            else:
-                raise ValueError(f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
+        size = get_size_dict(size, default_to_square=False)
+        if "shortest_edge" in size:
+            output_size = get_resize_output_image_size(image, size["shortest_edge"], default_to_square=False)
+        elif "height" in size and "width" in size:
+            output_size = (size["height"], size["width"])
         else:
-            output_size = self.get_resize_size(image, max_size)
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
-
-    def get_resize_size(
-        self,
-        image: np.ndarray,
-        max_size: int = None,
-    ):
-        """
-        Args:
-            image: np.ndarray
-            max_size: The max size of height and width
-
-        Returns:
-            (height, width)
-        Note the height/width order difference >>> pil_img = Image.open("raw_img_tensor.jpg") >>> pil_img.size (640,
-        480) # (width, height) >>> np_img = np.array(pil_img) >>> np_img.shape (480, 640, 3) # (height, width, 3)
-        """
-        height, width = image.shape[-2:]
-
-        if height >= width:
-            ratio = width * 1.0 / height
-            new_height = max_size
-            new_width = new_height * ratio
-        else:
-            ratio = height * 1.0 / width
-            new_width = max_size
-            new_height = new_width * ratio
-        size = (int(new_height), int(new_width))
-        return size
-
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `size` along any
-        edge, the image is padded with 0's and then center cropped.
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            size (`Dict[str, int]`):
-                Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"Size must have 'height' and 'width' as keys. Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
-
-    def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ):
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+            raise ValueError(f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
+        return resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def pad(
         self,
         image: np.ndarray,
-        padding_size: Dict[str, int] = None,
-        fill: int = 0,
-        padding_mode: str = "constant",
+        pad_size: Dict[str, int] = None,
+        constant_values: Union[float, Iterable[float]] = 0,
+        pad_mode: PaddingMode = PaddingMode.CONSTANT,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ):
-        h, w = image.shape[-2:]
-        max_w, max_h = padding_size["width"], padding_size["height"]
-        pad_right, pad_bottom = max_w - w, max_h - h
+        """
+        Pad an image with zeros to the given size.
+
+        Args:
+            image (`np.ndarray`):
+                Image to pad.
+            pad_size (`Dict[str, int]`)
+                Size of the output image with pad.
+            constant_values (`Union[float, Iterable[float]]`)
+                The fill value to use when padding the image.
+            pad_mode (`PaddingMode`)
+                The pad mode, default to PaddingMode.CONSTANT
+            data_format (`ChannelDimension` or `str`, *optional*)
+                The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
+        """
+        height, width = get_image_size(image, channel_dim=input_data_format)
+        max_width, max_height = width, height
+        if "width" in pad_size.keys():
+            max_width = pad_size["width"]
+        if "height" in pad_size.keys():
+            max_height = pad_size["height"]
+
+        pad_right, pad_bottom = max_width - width, max_height - height
         if pad_right < 0 or pad_bottom < 0:
             raise ValueError("The padding size must be greater than image size")
 
         padding = ((0, pad_bottom), (0, pad_right))
-        padded_image = pad(image, padding, mode=padding_mode, constant_values=fill)
+        padded_image = pad(
+            image,
+            padding,
+            mode=pad_mode,
+            constant_values=constant_values,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
         return padded_image
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Normalize an image. image = (image - image_mean) / image_std.
-
-        Args:
-            image (`torch.Tensor`):
-                Image to normalize.
-            image_mean (`float` or `List[float]`):
-                Image mean.
-            image_std (`float` or `List[float]`):
-                Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return normalize(image.astype(np.float32), mean=mean, std=std, data_format=data_format, **kwargs)
 
     def _preprocess_image(
         self,
         image: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        max_size: int = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_pad: bool = True,
-        padding_size: Dict[str, int] = None,
-        fill: int = None,
-        padding_mode: str = None,
+        pad_size: Dict[str, int] = None,
+        constant_values: Union[float, Iterable[float]] = None,
+        pad_mode: PaddingMode = None,
         do_normalize: bool = None,
+        do_flip_channel_order: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> np.ndarray:
         """Preprocesses a single image."""
         if do_resize and size is None or resample is None:
@@ -339,7 +282,7 @@ class TVPImageProcessor(BaseImageProcessor):
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
-        if do_pad and padding_size is None:
+        if do_pad and pad_size is None:
             raise ValueError("Padding size must be specified if do_pad is True.")
 
         if do_normalize and (image_mean is None or image_std is None):
@@ -349,22 +292,33 @@ class TVPImageProcessor(BaseImageProcessor):
         image = to_numpy_array(image)
 
         if do_resize:
-            image = self.resize(image=image, size=size, max_size=max_size, resample=resample)
+            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
         if do_center_crop:
-            image = self.center_crop(image, size=crop_size)
+            image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor)
-
-        # Padding requires channel first format
-        image = to_channel_dimension_format(image, data_format)
-
-        if do_pad:
-            image = self.pad(image=image, padding_size=padding_size, fill=fill, padding_mode=padding_mode)
+            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
         if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std)
+            image = self.normalize(
+                image=image.astype(np.float32), mean=image_mean, std=image_std, input_data_format=input_data_format
+            )
+
+        if do_pad:
+            image = self.pad(
+                image=image,
+                pad_size=pad_size,
+                constant_values=constant_values,
+                pad_mode=pad_mode,
+                input_data_format=input_data_format,
+            )
+
+        # the pretrained checkpoints assume images are BGR, not RGB
+        if do_flip_channel_order:
+            image = flip_channel_order(image=image, input_data_format=input_data_format)
+
+        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
         return image
 
@@ -373,21 +327,22 @@ class TVPImageProcessor(BaseImageProcessor):
         videos: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        max_size: int = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
-        do_pad: bool = True,
-        padding_size: Dict[str, int] = None,
-        fill: int = None,
-        padding_mode: str = None,
+        do_pad: bool = None,
+        pad_size: Dict[str, int] = None,
+        constant_values: Union[float, Iterable[float]] = None,
+        pad_mode: PaddingMode = None,
         do_normalize: bool = None,
+        do_flip_channel_order: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -400,8 +355,6 @@ class TVPImageProcessor(BaseImageProcessor):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after applying resize.
-            max_size (`int`):
-                If `max_size` is not None, it will compute the size from max_size and image.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
@@ -415,15 +368,17 @@ class TVPImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `True`):
                 Whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess` method.
-            padding_size (`Dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
-                Size of the image after applying the padding. Can be overridden by the `padding_size` parameter in the
+            pad_size (`Dict[str, int]`, *optional*, defaults to `{"height": 448, "width": 448}`):
+                Size of the image after applying the padding. Can be overridden by the `pad_size` parameter in the
                 `preprocess` method.
-            fill (`int`, *optional*, defaults to 0):
-                The element of padding.
-            padding_mode (`str`, *optional*, defaults to "constant"):
+            constant_values (`Union[float, Iterable[float]]`, *optional*, defaults to 0):
+                The fill value to use when padding the image.
+            pad_mode (`PaddingMode`, *optional*, defaults to "PaddingMode.CONSTANT"):
                 Use what kind of mode in padding.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
+            do_flip_channel_order (`bool`, *optional*, defaults to `self.do_flip_channel_order`):
+                Whether to flip the channel order of the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
@@ -440,6 +395,12 @@ class TVPImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                     - Unset: Use the inferred channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
@@ -447,15 +408,17 @@ class TVPImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_pad = do_pad if do_pad is not None else self.do_pad
-        padding_size = padding_size if padding_size is not None else self.padding_size
-        fill = fill if fill is not None else self.fill
-        padding_mode = padding_mode if padding_mode else self.padding_mode
+        pad_size = pad_size if pad_size is not None else self.pad_size
+        constant_values = constant_values if constant_values is not None else self.constant_values
+        pad_mode = pad_mode if pad_mode else self.pad_mode
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        do_flip_channel_order = (
+            do_flip_channel_order if do_flip_channel_order is not None else self.do_flip_channel_order
+        )
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
         size = size if size is not None else self.size
-        max_size = max_size if max_size is not None else self.max_size
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
@@ -474,20 +437,21 @@ class TVPImageProcessor(BaseImageProcessor):
                     image=img,
                     do_resize=do_resize,
                     size=size,
-                    max_size=max_size,
                     resample=resample,
                     do_center_crop=do_center_crop,
                     crop_size=crop_size,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
                     do_pad=do_pad,
-                    padding_size=padding_size,
-                    fill=fill,
-                    padding_mode=padding_mode,
+                    pad_size=pad_size,
+                    constant_values=constant_values,
+                    pad_mode=pad_mode,
                     do_normalize=do_normalize,
+                    do_flip_channel_order=do_flip_channel_order,
                     image_mean=image_mean,
                     image_std=image_std,
                     data_format=data_format,
+                    input_data_format=input_data_format,
                 )
                 for img in video
             ]

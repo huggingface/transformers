@@ -563,9 +563,9 @@ _import_structure = {
     ],
     "models.tvp": [
         "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TVPConfig",
-        "TVPProcessor",
-        "TVPVisionConfig",
+        "TvpConfig",
+        "TvpProcessor",
+        "TvpVisionConfig",
     ],
     "models.umt5": ["UMT5Config"],
     "models.unispeech": [
@@ -978,7 +978,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
-    _import_structure["models.tvp"].append("TVPImageProcessor")
+    _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -2826,10 +2826,10 @@ else:
     _import_structure["models.tvp"].extend(
         [
             "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TVPModel",
-            "TVPPreTrainedModel",
-            "TVPTransformer",
-            "TVPVisionModel",
+            "TvpForVideoGrounding",
+            "TvpModel",
+            "TvpPreTrainedModel",
+            "TvpVisionModel",
         ]
     )
     _import_structure["models.umt5"].extend(
@@ -4631,9 +4631,9 @@ if TYPE_CHECKING:
     from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltFeatureExtractor, TvltProcessor
     from .models.tvp import (
         TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TVPConfig,
-        TVPProcessor,
-        TVPVisionConfig,
+        TvpConfig,
+        TvpProcessor,
+        TvpVisionConfig,
     )
     from .models.umt5 import UMT5Config
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
@@ -4998,7 +4998,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
-        from .models.tvp import TVPImageProcessor
+        from .models.tvp import TvpImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -6518,10 +6518,10 @@ if TYPE_CHECKING:
         )
         from .models.tvp import (
             TVP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TVPModel,
-            TVPPreTrainedModel,
-            TVPTransformer,
-            TVPVisionModel,
+            TvpForVideoGrounding,
+            TvpModel,
+            TvpPreTrainedModel,
+            TvpVisionModel,
         )
         from .models.umt5 import (
             UMT5EncoderModel,
