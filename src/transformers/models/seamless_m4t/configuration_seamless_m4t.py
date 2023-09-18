@@ -180,10 +180,6 @@ class SeamlessM4TConfig(PretrainedConfig):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer text-to-unit decoder.
         t2u_decoder_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer text-to-unit decoder.
-        t2u_num_langs (`int`, *optional*, defaults to 32):
-            Number of langs supported by the text-to-unit component.
-        t2u_offset_tgt_lang (`int`, *optional*, defaults to 10005):
-            Used to offset the target language id before passing it to the text decoder.
         t2u_max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
@@ -308,8 +304,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_decoder_layers=6,
         t2u_decoder_ffn_dim=8192,
         t2u_decoder_attention_heads=16,
-        t2u_num_langs=38,
-        t2u_offset_tgt_lang=10005,
         t2u_max_position_embeddings=2048,
         # hifi-gan vocoder config
         sampling_rate=16000,
@@ -385,7 +379,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_eos_token_id = t2u_eos_token_id
         self.t2u_decoder_start_token_id = t2u_decoder_start_token_id
         self.t2u_max_new_tokens = t2u_max_new_tokens
-        self.t2u_num_langs = t2u_num_langs
         self.t2u_encoder_layers = t2u_encoder_layers
         self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
         self.t2u_encoder_attention_heads = t2u_encoder_attention_heads
@@ -413,7 +406,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.vocoder_num_spkrs = vocoder_num_spkrs
         self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
-        self.t2u_offset_tgt_lang = t2u_offset_tgt_lang
         self.vocoder_offset = vocoder_offset
 
         super().__init__(

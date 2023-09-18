@@ -3673,9 +3673,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         # Compute decoder_input_ids if necessary
         t2u_decoder_input_ids = kwargs_speech.get("decoder_input_ids")
         t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
-
-        # + 5 for EOS/PAD/BOS/UNK token + mask token
-        t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
         t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
             self.device
         )
@@ -4055,13 +4052,9 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         # Compute decoder_input_ids if necessary
         t2u_decoder_input_ids = kwargs_speech.get("decoder_input_ids")
         t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
-
-        # + 5 for EOS/PAD/BOS/UNK token + mask token
-        t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
         t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
             self.device
         )
-
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
@@ -4535,13 +4528,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # Compute decoder_input_ids if necessary
         t2u_decoder_input_ids = kwargs_speech.get("decoder_input_ids")
         t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
-
-        # + 5 for EOS/PAD/BOS/UNK token + mask token
-        t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
         t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
             self.device
         )
-
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)

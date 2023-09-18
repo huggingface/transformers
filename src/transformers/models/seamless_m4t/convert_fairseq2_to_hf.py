@@ -282,7 +282,8 @@ def load_model(save_dir, model_type, repo_id):
 
     ####### get language to ids dict
     text_decoder_lang_code_to_id = {lang: tokenizer.lang_code_to_id[f"__{lang}__"] for lang in langs}
-    t2u_lang_code_to_id = {code.replace("__", ""): i for i, code in enumerate(UNIT_SUPPORTED_LANGUAGES)}
+    # offset: vocoder unit vocab size + 5 (for EOS/PAD/BOS/UNK/MSK) + len(supported_languages)
+    t2u_lang_code_to_id = {code.replace("__", ""): i + 10005 + len(UNIT_SUPPORTED_LANGUAGES) for i, code in enumerate(UNIT_SUPPORTED_LANGUAGES)}
     vocoder_lang_code_to_id = {code.replace("__", ""): i for i, code in enumerate(VOCODER_SUPPORTED_LANGUAGES)}
 
     ######### FE
