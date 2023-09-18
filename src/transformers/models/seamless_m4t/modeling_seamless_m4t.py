@@ -3538,13 +3538,9 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1] :]
         # replace eos per pad
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
-        # offset pad
-        unit_ids[unit_ids == self.config.t2u_pad_token_id] = (
-            self.config.t2u_pad_token_id + self.config.control_symbol_vocoder_offset
-        )
         # offset of control symbols
-        unit_ids = unit_ids - self.config.control_symbol_vocoder_offset
-
+        unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.control_symbol_vocoder_offset)
+        
         # TODO: warnings for vocoder tgt lang id
 
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
@@ -3916,12 +3912,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1] :]
         # replace eos per pad
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
-        # offset pad
-        unit_ids[unit_ids == self.config.t2u_pad_token_id] = (
-            self.config.t2u_pad_token_id + self.config.control_symbol_vocoder_offset
-        )
         # offset of control symbols
-        unit_ids = unit_ids - self.config.control_symbol_vocoder_offset
+        unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.control_symbol_vocoder_offset)
 
         # TODO: warnings for vocoder tgt lang id
 
@@ -4382,12 +4374,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1] :]
         # replace eos per pad
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
-        # offset pad
-        unit_ids[unit_ids == self.config.t2u_pad_token_id] = (
-            self.config.t2u_pad_token_id + self.config.control_symbol_vocoder_offset
-        )
         # offset of control symbols
-        unit_ids = unit_ids - self.config.control_symbol_vocoder_offset
+        unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.control_symbol_vocoder_offset)
 
         # TODO: warnings for vocoder tgt lang id
 
