@@ -3522,7 +3522,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         return_intermediate_token_ids: Optional[bool] = None,
         tgt_lang: Optional[str] = None,
-        spkr_id: Optional[int] = None,
+        spkr_id: Optional[int] = 0,
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         """
@@ -3551,7 +3551,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
                 want to get translated text alongside the audio.
             tgt_lang (`str`, *optional*):
                 The language to use as target language for translation.
-            spkr_id (`int`, *optional*):
+            spkr_id (`int`, *optional*, defaults to 0):
                 The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
             kwargs (*optional*):
                 Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
@@ -3692,7 +3692,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
         vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids)).to(self.device)
 
-        spkr_id = 0 if spkr_id is None else spkr_id
         spkr_id = torch.tensor([[spkr_id]] * len(unit_ids)).to(self.device)
 
         waveform, waveform_lengths = self.vocoder(input_ids=unit_ids, spkr_id=spkr_id, lang_id=vocoder_tgt_lang_id)
@@ -3904,7 +3903,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         input_features: Optional[torch.Tensor] = None,
         return_intermediate_token_ids: Optional[bool] = None,
         tgt_lang: Optional[str] = None,
-        spkr_id: Optional[int] = None,
+        spkr_id: Optional[int] = 0,
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         """
@@ -3929,7 +3928,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                 want to get translated text alongside the audio.
             tgt_lang (`str`, *optional*):
                 The language to use as target language for translation.
-            spkr_id (`int`, *optional*):
+            spkr_id (`int`, *optional*, defaults to 0):
                 The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
 
             kwargs (*optional*):
@@ -4082,7 +4081,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
         vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids)).to(self.device)
 
-        spkr_id = 0 if spkr_id is None else spkr_id
         spkr_id = torch.tensor([[spkr_id]] * len(unit_ids)).to(self.device)
 
         waveform, waveform_lengths = self.vocoder(input_ids=unit_ids, spkr_id=spkr_id, lang_id=vocoder_tgt_lang_id)
@@ -4349,7 +4347,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         input_features: Optional[torch.Tensor] = None,
         return_intermediate_token_ids: Optional[bool] = None,
         tgt_lang: Optional[str] = None,
-        spkr_id: Optional[int] = None,
+        spkr_id: Optional[int] = 0,
         generate_speech: Optional[bool] = True,
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
@@ -4384,7 +4382,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 will be ignored.
             tgt_lang (`str`, *optional*):
                 The language to use as target language for translation.
-            spkr_id (`int`, *optional*):
+            spkr_id (`int`, *optional*, defaults to 0):
                 The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
             generate_speech (`bool`, *optional*, defaults to `True`):
                 If `False`, will only returns the text tokens and won't generate speech.
@@ -4567,7 +4565,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
         vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids)).to(self.device)
 
-        spkr_id = 0 if spkr_id is None else spkr_id
         spkr_id = torch.tensor([[spkr_id]] * len(unit_ids)).to(self.device)
 
         waveform, waveform_lengths = self.vocoder(input_ids=unit_ids, spkr_id=spkr_id, lang_id=vocoder_tgt_lang_id)
