@@ -2957,10 +2957,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
             # Check if `_keep_in_fp32_modules` is not None
-            use_keep_in_fp32_modules = (
-                (cls._keep_in_fp32_modules is not None)
-                and is_accelerate_available()
-                and (torch_dtype == torch.float16 or load_in_4bit or load_in_8bit)
+            use_keep_in_fp32_modules = (cls._keep_in_fp32_modules is not None) and (
+                torch_dtype == torch.float16 or load_in_4bit or load_in_8bit
             )
             if (
                 (cls._keep_in_fp32_modules is not None)
@@ -2976,7 +2974,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = list(state_dict.keys())
-            if low_cpu_mem_usage or use_keep_in_fp32_modules:
+            if low_cpu_mem_usage:
                 state_dict = None
 
         config.name_or_path = pretrained_model_name_or_path
@@ -3472,7 +3470,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if keep_in_fp32_modules is not None:
             for name, param in model.named_parameters():
                 if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
-                    param = param.to(torch.float32)
+                    param.data = param.data.to(torch.float32)
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
@@ -3599,7 +3597,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     remove_prefix_from_model,
                     ignore_mismatched_sizes,
                 )
-
                 if low_cpu_mem_usage:
                     if not is_fsdp_enabled() or is_fsdp_enabled_and_dist_rank_0():
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
