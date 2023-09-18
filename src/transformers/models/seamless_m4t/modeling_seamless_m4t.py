@@ -3670,7 +3670,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         t2u_model_attention_mask = _compute_new_attention_mask(t2u_input_embeds, seq_lens)
         kwargs_speech["attention_mask"] = t2u_model_attention_mask
 
-        # Compute decoder_input_ids if necessary
+        # Compute t2u decoder_input_ids
         t2u_decoder_input_ids = kwargs_speech.get("decoder_input_ids")
         t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
         t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
@@ -3678,6 +3678,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         )
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
+        # second generation
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
         output_unit_ids = unit_ids.detach().clone()
         unit_ids = unit_ids
@@ -4049,7 +4050,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         t2u_model_attention_mask = _compute_new_attention_mask(t2u_input_embeds, seq_lens)
         kwargs_speech["attention_mask"] = t2u_model_attention_mask
 
-        # Compute decoder_input_ids if necessary
+        # Compute t2u decoder_input_ids
         t2u_decoder_input_ids = kwargs_speech.get("decoder_input_ids")
         t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
         t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
@@ -4057,6 +4058,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         )
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
+        # second generation
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
         output_unit_ids = unit_ids.detach().clone()
         unit_ids = unit_ids
@@ -4525,7 +4527,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         t2u_model_attention_mask = _compute_new_attention_mask(t2u_input_embeds, seq_lens)
         kwargs_speech["attention_mask"] = t2u_model_attention_mask
 
-        # Compute decoder_input_ids if necessary
+        # Compute t2u decoder_input_ids
         t2u_decoder_input_ids = kwargs_speech.get("decoder_input_ids")
         t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
         t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
@@ -4533,6 +4535,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         )
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
+        # second generation
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
         output_unit_ids = unit_ids.detach().clone()
         unit_ids = unit_ids
