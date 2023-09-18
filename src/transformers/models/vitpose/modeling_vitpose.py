@@ -867,8 +867,25 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             device = -1
 
         # add whole body thing
-        flip_pairs = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12],
-                     [13, 14], [15, 16]]
+
+        body = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12],[13, 14], [15, 16]]
+        foot = [[17, 20], [18, 21], [19, 22]]
+
+        face = [[23, 39], [24, 38], [25, 37], [26, 36], [27, 35], [28, 34],
+               [29, 33], [30, 32], [40, 49], [41, 48], [42, 47], [43, 46],
+               [44, 45], [54, 58], [55, 57], [59, 68], [60, 67], [61, 66],
+               [62, 65], [63, 70], [64, 69], [71, 77], [72, 76], [73, 75],
+               [78, 82], [79, 81], [83, 87], [84, 86], [88, 90]]
+
+        hand = [[91, 112], [92, 113], [93, 114], [94, 115], [95, 116],
+               [96, 117], [97, 118], [98, 119], [99, 120], [100, 121],
+               [101, 122], [102, 123], [103, 124], [104, 125], [105, 126],
+               [106, 127], [107, 128], [108, 129], [109, 130], [110, 131],
+               [111, 132]]
+        flip_pairs = body + foot + face + hand
+
+        #flip_pairs = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12],
+        #      [13, 14], [15, 16]]
 
         batch_data = []
         for bbox in bboxes:
@@ -896,7 +913,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             batch_data.append(data)
 
         with torch.no_grad():
-            results = model(pixel_values = img, pixel_metas = batch_data)
+            results = self.vitpose(pixel_values = img, pixel_metas = batch_data)
 
         return results['preds'], results['output_heatmap']
 
@@ -924,7 +941,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             return_heatmap = False)
 
         pose_results.append(pixel_values)
-        for pose, person_result, bbox in zip(poses, person_results, bboxes):
+        for pose, person_result, bbox in zip(poses, person_results, bboxes_xywh):
             pose_result = person_result.copy()
             pose_result['keypoints'] = pose
             pose_result['bbox'] = bbox

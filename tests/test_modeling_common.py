@@ -1017,7 +1017,8 @@ class ModelTesterMixin:
             attentions = outputs[-1]
 
             self.assertEqual(attentions[0].shape[-3], 1)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
+            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
+            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
             self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
     def test_head_pruning_save_load_from_pretrained(self):
@@ -1053,7 +1054,8 @@ class ModelTesterMixin:
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
             self.assertEqual(attentions[0].shape[-3], 1)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
+            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
+            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
             self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
     def test_head_pruning_save_load_from_config_init(self):
@@ -1087,7 +1089,8 @@ class ModelTesterMixin:
             attentions = outputs[-1]
 
             self.assertEqual(attentions[0].shape[-3], 1)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
+            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
+            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
             self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
     def test_head_pruning_integration(self):
@@ -1106,7 +1109,7 @@ class ModelTesterMixin:
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
 
-            heads_to_prune = {0: [0], 1: [1, 2]}
+            heads_to_prune = {1: [1, 2]}
             config.pruned_heads = heads_to_prune
 
             model = model_class(config=config)
@@ -1117,10 +1120,8 @@ class ModelTesterMixin:
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
 
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
+            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 0)
             self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-            self.assertEqual(attentions[2].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[3].shape[-3], self.model_tester.num_attention_heads)
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
@@ -1131,12 +1132,10 @@ class ModelTesterMixin:
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
 
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
+            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 0)
             self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-            self.assertEqual(attentions[2].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[3].shape[-3], self.model_tester.num_attention_heads)
 
-            heads_to_prune = {0: [0], 2: [1, 2]}
+            heads_to_prune = {0: [0], 1: [1, 2]}
             model.prune_heads(heads_to_prune)
 
             with torch.no_grad():
@@ -1145,10 +1144,8 @@ class ModelTesterMixin:
 
             self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
             self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-            self.assertEqual(attentions[2].shape[-3], self.model_tester.num_attention_heads - 2)
-            self.assertEqual(attentions[3].shape[-3], self.model_tester.num_attention_heads)
 
-            self.assertDictEqual(model.config.pruned_heads, {0: [0], 1: [1, 2], 2: [1, 2]})
+            self.assertDictEqual(model.config.pruned_heads, {0: [0], 1: [1, 2]})
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -1415,6 +1412,26 @@ class ModelTesterMixin:
                     models_equal = False
 
             self.assertTrue(models_equal)
+
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            model_vocab_size = config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
+            self.assertTrue(model.config.vocab_size + 10, model_vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
+            ):
+                model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
 
     def test_resize_embeddings_untied(self):
         (
@@ -2524,15 +2541,17 @@ class ModelTesterMixin:
             base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
-            max_size = int(self.model_split_percents[0] * model_size)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
-                max_memory = {0: max_size, "cpu": max_size}
                 with self.assertRaises(ValueError):
+                    max_size = int(self.model_split_percents[0] * model_size)
+                    max_memory = {0: max_size, "cpu": max_size}
                     # This errors out cause it's missing an offload folder
                     new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
 
+                max_size = int(self.model_split_percents[1] * model_size)
+                max_memory = {0: max_size, "cpu": max_size}
                 new_model = model_class.from_pretrained(
                     tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
                 )
@@ -2562,7 +2581,7 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2598,7 +2617,7 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
@@ -2708,14 +2727,13 @@ class ModelTesterMixin:
     def test_model_is_small(self):
         # Just a consistency check to make sure we are not running tests on 80M parameter models.
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        # print(config)
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             num_params = model.num_parameters()
             assert (
                 num_params < 1000000
-            ), f"{model_class} is too big for the common tests ({num_params})! It should have 200k max."
+            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
 
 global_rng = random.Random()

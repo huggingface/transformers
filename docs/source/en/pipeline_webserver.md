@@ -87,6 +87,13 @@ of the model on the webserver. This way, no unnecessary RAM is being used.
 Then the queuing mechanism allows you to do fancy stuff like maybe accumulating a few
 items before inferring to use dynamic batching:
 
+<Tip warning={true}>
+
+The code sample below is intentionally written like pseudo-code for readability.
+Do not run this without checking if it makes sense for your system resources!
+
+</Tip>
+
 ```py
 (string, rq) = await q.get()
 strings = []
@@ -104,11 +111,7 @@ for rq, out in zip(queues, outs):
     await rq.put(out)
 ```
 
-<Tip warning={true}>
-Do not activate this without checking it makes sense for your load!
-</Tip>
-
-The proposed code is optimized for readability, not for being the best code.
+Again, the proposed code is optimized for readability, not for being the best code.
 First of all, there's no batch size limit which is usually not a 
 great idea. Next, the timeout is reset on every queue fetch, meaning you could
 wait much more than 1ms before running the inference (delaying the first request 

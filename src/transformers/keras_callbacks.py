@@ -12,7 +12,6 @@ from tensorflow.keras.callbacks import Callback
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .modelcard import TrainingSummary
-from .utils import get_full_repo_name
 
 
 logger = logging.getLogger(__name__)
@@ -334,14 +333,13 @@ class PushToHubCallback(Callback):
             raise ValueError("Please supply a positive integer argument for save_steps when save_strategy == 'steps'!")
         self.save_steps = save_steps
         output_dir = Path(output_dir)
+
+        # Create repo and retrieve repo_id
         if hub_model_id is None:
             hub_model_id = output_dir.absolute().name
-        if "/" not in hub_model_id:
-            hub_model_id = get_full_repo_name(hub_model_id, token=hub_token)
+        self.hub_model_id = create_repo(repo_id=hub_model_id, exist_ok=True, token=hub_token).repo_id
 
         self.output_dir = output_dir
-        self.hub_model_id = hub_model_id
-        create_repo(self.hub_model_id, exist_ok=True)
         self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id, token=hub_token)
 
         self.tokenizer = tokenizer

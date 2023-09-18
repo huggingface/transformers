@@ -769,6 +769,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     config_class = PegasusXConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = [r"PegasusXEncoderLayer", r"PegasusXDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1013,6 +1014,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
@@ -1298,6 +1300,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         # embed positions
         positions = self.embed_positions(inputs_embeds, past_key_values_length)
 
+        positions = positions.to(inputs_embeds.device)
+
         hidden_states = inputs_embeds + positions
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1550,10 +1554,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
 
     def get_decoder(self):
         return self.model.get_decoder()
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
 
     def get_output_embeddings(self):
         return self.lm_head

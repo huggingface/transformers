@@ -42,22 +42,22 @@ class GraphormerModelTester:
         self,
         parent,
         num_classes=1,
-        num_atoms=512 * 9,
-        num_edges=512 * 3,
-        num_in_degree=512,
-        num_out_degree=512,
-        num_spatial=512,
-        num_edge_dis=128,
+        num_atoms=32 * 9,
+        num_edges=32 * 3,
+        num_in_degree=32,
+        num_out_degree=32,
+        num_spatial=32,
+        num_edge_dis=16,
         multi_hop_max_dist=5,  # sometimes is 20
-        spatial_pos_max=1024,
+        spatial_pos_max=32,
         edge_type="multi_hop",
         init_fn=None,
-        max_nodes=512,
+        max_nodes=32,
         share_input_output_embed=False,
-        num_hidden_layers=12,
-        embedding_dim=768,
-        ffn_embedding_dim=768,
-        num_attention_heads=32,
+        num_hidden_layers=2,
+        embedding_dim=32,
+        ffn_embedding_dim=32,
+        num_attention_heads=4,
         dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.1,
@@ -469,10 +469,6 @@ class GraphormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_for_graph_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_graph_classification(*config_and_inputs)
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):

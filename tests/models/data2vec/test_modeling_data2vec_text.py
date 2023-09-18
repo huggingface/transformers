@@ -57,7 +57,7 @@ class Data2VecTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -388,6 +388,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         if is_torch_available()
         else {}
     )
+    model_split_percents = [0.5, 0.9]
 
     def setUp(self):
         self.model_tester = Data2VecTextModelTester(self)

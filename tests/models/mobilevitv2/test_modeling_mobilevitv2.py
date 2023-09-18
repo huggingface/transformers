@@ -115,6 +115,9 @@ class MobileViTV2ModelTester:
             width_multiplier=self.width_multiplier,
             ffn_dropout=self.ffn_dropout_prob,
             attn_dropout=self.attn_dropout_prob,
+            base_attn_unit_dims=[16, 24, 32],
+            n_attn_blocks=[1, 1, 2],
+            aspp_out_channels=32,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -223,10 +226,6 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     @require_torch_multi_gpu
     @unittest.skip(reason="Got `CUDA error: misaligned address` for tests after this one being run.")
     def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
         pass
 
     def test_forward_signature(self):

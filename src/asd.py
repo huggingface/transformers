@@ -1,40 +1,57 @@
 from transformers.models.vitpose import ViTPoseModel, ViTPoseConfig, ViTPoseForPoseEstimation
 from transformers.models.vitpose.image_processing_vitpose import ViTPoseImageProcessor
-from transformers import YolosImageProcessor, YolosForObjectDetection
+from transformers import DetrImageProcessor, DetrForObjectDetection
 import torch
 from PIL import Image
 import requests
 from torchvision.transforms.functional import to_pil_image
+from PIL import Image, ImageDraw
 
-url = "https://images.pexels.com/photos/16931314/pexels-photo-16931314/free-photo-of-portrait-of-a-senior-man-at-a-table-in-a-bar.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
-url = "./test.jpg"
-image = Image.open(url)
-im1 = image.resize((256,192))
-url = "https://images.pexels.com/photos/4045762/pexels-photo-4045762.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
-image = Image.open(requests.get(url, stream=True).raw)
-im1 = image
-im1 = image.resize((256,192))
+#im1 = image.resize((256,192))
+#url = "https://images.pexels.com/photos/4045762/pexels-photo-4045762.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
+# model predicts bounding boxes and corresponding COCO classes
+model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
+processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 
-model = YolosForObjectDetection.from_pretrained('hustvl/yolos-small')
-processor = YolosImageProcessor.from_pretrained("hustvl/yolos-small")
+# Load and preprocess the image
+image_path = "./test.jpg"
+image = Image.open(image_path).resize((256,192))
+inputs = processor(images=image, return_tensors="pt")
 
-print(model)
-inputs = processor(images=image, return_tensors="pt",size={"height":256, "width":192})
+# Perform object detection
+with torch.no_grad():
+    outputs = model(**inputs)
 
-outputs = model(**inputs)
-target_sizes = torch.tensor([inputs.pixel_values.shape[2:]])
-results = processor.post_process_object_detection(outputs, target_sizes=target_sizes, threshold=0.9)[0]
+# Extract bounding box coordinates and class predictions
+target_sizes = torch.tensor([image.size[::-1]])
+results = processor.post_process_object_detection(outputs, target_sizes=target_sizes, threshold=.70)[0]
+
+# Draw bounding boxes on the image
+#draw = ImageDraw.Draw(image)
+#for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+#    box = [round(i, 2) for i in box.tolist()]
+#    draw.rectangle(box, outline="red", width=3)
+#    draw.text((box[0], box[1]), f"Class: {label.item()}", fill="red")
+#    draw.text((box[0], box[1] - 20), f"Score: {round(score.item(), 2)}", fill="red")
+
+# Save the annotated image
+#annotated_image_path = "path_to_save_annotated_image.jpg"
+#image.save(annotated_image_path)
 print("result boxes", results['boxes'])
+
+
 processor = ViTPoseImageProcessor.from_pretrained("shauray/vitpose")
 anothermodel = ViTPoseForPoseEstimation.from_pretrained("shauray/ViTPose")
 print(anothermodel)
-inputs = processor(images=im1, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt")
 
-result = anothermodel(**inputs,pred_boxes=results["boxes"])
+with torch.no_grad():
+  result = anothermodel(**inputs,pred_boxes=results["boxes"])
 print(result)
-show = processor.post_processing(im1, result)
+show = processor.post_processing(image, result)
 to_pil_image(show).save("pred.png")
-def some():
+
+def some(result):
     for i in result:
         print(i['bbox'])
         boxes_xywh = i['bbox'].reshape(1,-1)

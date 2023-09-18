@@ -409,6 +409,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("bert", "TFBertForMultipleChoice"),
         ("camembert", "TFCamembertForMultipleChoice"),
         ("convbert", "TFConvBertForMultipleChoice"),
+        ("deberta-v2", "TFDebertaV2ForMultipleChoice"),
         ("distilbert", "TFDistilBertForMultipleChoice"),
         ("electra", "TFElectraForMultipleChoice"),
         ("flaubert", "TFFlaubertForMultipleChoice"),

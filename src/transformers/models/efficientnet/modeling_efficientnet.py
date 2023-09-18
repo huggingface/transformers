@@ -588,7 +588,6 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         # Classifier head
         self.dropout = nn.Dropout(p=config.dropout_rate)
         self.classifier = nn.Linear(config.hidden_dim, self.num_labels) if self.num_labels > 0 else nn.Identity()
-        self.classifier_act = nn.Softmax(dim=1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -620,7 +619,6 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
-        logits = self.classifier_act(logits)
 
         loss = None
         if labels is not None:

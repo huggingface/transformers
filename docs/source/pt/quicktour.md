@@ -228,6 +228,7 @@ Assim como o [`pipeline`], o tokenizer aceitará uma lista de entradas. Além di
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> pt_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 transformers library.", "We hope you don't hate it."],
@@ -239,6 +240,7 @@ Assim como o [`pipeline`], o tokenizer aceitará uma lista de entradas. Além di
 ```
 </pt>
 <tf>
+
 ```py
 >>> tf_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -377,6 +379,7 @@ Um recurso particularmente interessante dos 🤗 Transformers é a capacidade de
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import AutoModel
 
@@ -385,6 +388,7 @@ Um recurso particularmente interessante dos 🤗 Transformers é a capacidade de
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import TFAutoModel
 

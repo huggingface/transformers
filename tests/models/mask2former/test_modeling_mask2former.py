@@ -21,7 +21,14 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -54,6 +61,8 @@ class Mask2FormerModelTester:
         max_size=32 * 8,
         num_labels=4,
         hidden_dim=64,
+        num_attention_heads=4,
+        num_hidden_layers=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -66,6 +75,8 @@ class Mask2FormerModelTester:
         self.num_labels = num_labels
         self.hidden_dim = hidden_dim
         self.mask_feature_size = hidden_dim
+        self.num_attention_heads = num_attention_heads
+        self.num_hidden_layers = num_hidden_layers
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -85,15 +96,25 @@ class Mask2FormerModelTester:
     def get_config(self):
         config = Mask2FormerConfig(
             hidden_size=self.hidden_dim,
+            num_attention_heads=self.num_attention_heads,
+            num_hidden_layers=self.num_hidden_layers,
+            encoder_feedforward_dim=16,
+            dim_feedforward=32,
+            num_queries=self.num_queries,
+            num_labels=self.num_labels,
+            decoder_layers=2,
+            encoder_layers=2,
+            feature_size=16,
         )
         config.num_queries = self.num_queries
         config.num_labels = self.num_labels
 
+        config.backbone_config.embed_dim = 16
         config.backbone_config.depths = [1, 1, 1, 1]
+        config.backbone_config.hidden_size = 16
         config.backbone_config.num_channels = self.num_channels
+        config.backbone_config.num_heads = [1, 1, 2, 2]
 
-        config.encoder_feedforward_dim = 64
-        config.dim_feedforward = 128
         config.hidden_dim = self.hidden_dim
         config.mask_feature_size = self.hidden_dim
         config.feature_size = self.hidden_dim
@@ -218,10 +239,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         reason="Mask2Former has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
     )
     def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
         pass
 
     def test_forward_signature(self):
@@ -409,6 +426,20 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+
+    @require_torch_gpu
+    def test_inference_fp16(self):
+        model = (
+            Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
+            .to(torch_device, dtype=torch.float16)
+            .eval()
+        )
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        with torch.no_grad():
+            _ = model(**inputs)
 
     def test_with_segmentation_maps_and_loss(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()

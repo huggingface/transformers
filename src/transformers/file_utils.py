@@ -17,6 +17,8 @@ File utilities: utilities related to download and cache models
 This module should not be update anymore and is only left for backward compatibility.
 """
 
+from huggingface_hub import get_full_repo_name  # for backward compatibility
+
 from . import __version__
 
 # Backward compatibility imports, to make sure all those objects can be found in file_utils
@@ -71,7 +73,6 @@ from .utils import (
     define_sagemaker_information,
     get_cached_models,
     get_file_from_repo,
-    get_full_repo_name,
     get_torch_version,
     has_file,
     http_user_agent,

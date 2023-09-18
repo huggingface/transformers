@@ -67,10 +67,10 @@ class LevitModelTester:
         stride=2,
         padding=1,
         patch_size=16,
-        hidden_sizes=[128, 256, 384],
-        num_attention_heads=[4, 6, 8],
+        hidden_sizes=[16, 32, 48],
+        num_attention_heads=[1, 2, 3],
         depths=[2, 3, 4],
-        key_dim=[16, 16, 16],
+        key_dim=[8, 8, 8],
         drop_path_rate=0,
         mlp_ratio=[2, 2, 2],
         attention_ratio=[2, 2, 2],
@@ -281,10 +281,6 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)

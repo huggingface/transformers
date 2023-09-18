@@ -118,9 +118,11 @@ class ConfigTester(object):
 
     def check_config_can_be_init_without_params(self):
         if self.config_class.is_composition:
-            return
-        config = self.config_class()
-        self.parent.assertIsNotNone(config)
+            with self.parent.assertRaises(ValueError):
+                config = self.config_class()
+        else:
+            config = self.config_class()
+            self.parent.assertIsNotNone(config)
 
     def check_config_arguments_init(self):
         kwargs = copy.deepcopy(config_common_kwargs)

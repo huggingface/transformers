@@ -14,7 +14,6 @@
 # limitations under the License.
 """ FLAVA model configurations"""
 
-import copy
 import os
 from typing import Any, Dict, Union
 
@@ -536,7 +535,6 @@ class FlavaConfig(PretrainedConfig):
     """
 
     model_type = "flava"
-    is_composition = True
 
     def __init__(
         self,
@@ -764,18 +762,3 @@ class FlavaConfig(PretrainedConfig):
             image_codebook_config=image_codebook_config.to_dict(),
             **kwargs,
         )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["image_config"] = self.image_config.to_dict()
-        output["text_config"] = self.text_config.to_dict()
-        output["multimodal_config"] = self.multimodal_config.to_dict()
-        output["image_codebook_config"] = self.image_codebook_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

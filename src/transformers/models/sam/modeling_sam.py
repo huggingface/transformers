@@ -507,8 +507,8 @@ class SamMaskDecoder(nn.Module):
 
         # Expand per-image data in batch direction to be per-point
         image_embeddings = image_embeddings + dense_prompt_embeddings
-        image_embeddings = image_embeddings.repeat(point_batch_size, 1, 1, 1)
-        image_positional_embeddings = image_positional_embeddings.repeat(point_batch_size, 1, 1, 1)
+        image_embeddings = image_embeddings.repeat_interleave(point_batch_size, 0)
+        image_positional_embeddings = image_positional_embeddings.repeat_interleave(point_batch_size, 0)
 
         # Run the transformer, image_positional_embedding are consumed
         point_embedding, image_embeddings, attentions = self.transformer(
@@ -1296,7 +1296,7 @@ class SamModel(SamPreTrainedModel):
         target_embedding: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict=None,
+        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""

@@ -29,6 +29,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -55,8 +56,8 @@ class VivitModelTester:
         num_frames=8,  # decreased, because default 32 takes too much RAM at inference
         tubelet_size=[2, 4, 4],
         num_channels=3,
-        hidden_size=768,
-        num_hidden_layers=5,
+        hidden_size=32,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu_fast",
@@ -153,13 +154,18 @@ class VivitModelTester:
 
 
 @require_torch
-class VivitModelTest(ModelTesterMixin, unittest.TestCase):
+class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Vivit does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (VivitModel, VivitForVideoClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": VivitModel, "video-classification": VivitForVideoClassification}
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_torchscript = False
@@ -310,10 +316,6 @@ class VivitModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
-
 
 # We will verify our results on a video of eating spaghetti
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
@@ -349,6 +351,6 @@ class VivitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         # taken from original model
-        expected_slice = torch.tensor([-1.0543, 2.0764, -0.2104, 0.4439, -0.9658]).to(torch_device)
+        expected_slice = torch.tensor([-0.9498, 2.7971, -1.4049, 0.1024, -1.8353]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))

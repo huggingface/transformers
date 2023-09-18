@@ -52,7 +52,7 @@ class FlaxGPT2ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -187,6 +187,26 @@ class FlaxGPT2ModelTester:
         diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
+    def check_bool_attention_mask_in_generation(self, model_class_name, config, input_ids, attention_mask):
+        model = model_class_name(config)
+
+        output_int_att_mask = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=3,
+        )
+
+        output_bool_att_mask = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask.astype(bool),
+            max_new_tokens=3,
+        )
+
+        self.parent.assertTrue(
+            (output_bool_att_mask.sequences == output_int_att_mask.sequences).all(),
+            "Generated response differ between boolean and integer attention mask",
+        )
+
 
 @require_flax
 class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
@@ -205,6 +225,13 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
         for model_class_name in self.all_model_classes:
             config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
             self.model_tester.check_use_cache_forward_with_attn_mask(
+                model_class_name, config, input_ids, attention_mask
+            )
+
+    def test_bool_attention_mask_in_generation(self):
+        for model_class_name in self.all_generative_model_classes:
+            config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+            self.model_tester.check_bool_attention_mask_in_generation(
                 model_class_name, config, input_ids, attention_mask
             )
 

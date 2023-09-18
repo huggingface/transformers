@@ -138,7 +138,9 @@ class DonutProcessor(ProcessorMixin):
             if start_token is None:
                 break
             key = start_token.group(1)
-            end_token = re.search(rf"</s_{key}>", tokens, re.IGNORECASE)
+            key_escaped = re.escape(key)
+
+            end_token = re.search(rf"</s_{key_escaped}>", tokens, re.IGNORECASE)
             start_token = start_token.group()
             if end_token is None:
                 tokens = tokens.replace(start_token, "")

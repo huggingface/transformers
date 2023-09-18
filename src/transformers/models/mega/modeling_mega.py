@@ -1533,6 +1533,7 @@ class MegaModel(MegaPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             device = input_ids.device
         elif inputs_embeds is not None:
@@ -1540,6 +1541,9 @@ class MegaModel(MegaPreTrainedModel):
             device = inputs_embeds.device
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if self.config.use_chunking:
+            input_shape = torch.tensor([input_shape[0], self.config.chunk_size])
 
         batch_size, sequence_length = input_shape
 

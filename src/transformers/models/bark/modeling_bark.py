@@ -23,8 +23,13 @@ from torch.nn import functional as F
 
 from ...generation.logits_process import AlternatingCodebooksLogitsProcessor, SuppressTokensLogitsProcessor
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...modeling_utils import PreTrainedModel, get_parameter_device
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_accelerate_available,
+    logging,
+)
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -287,6 +292,26 @@ class BarkPreTrainedModel(PreTrainedModel):
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
+
+    @property
+    def device(self) -> torch.device:
+        """
+        `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
+        device).
+        """
+
+        # if has _hf_hook, has been offloaded so the device has to be found in the hook
+        if not hasattr(self, "_hf_hook"):
+            return get_parameter_device(self)
+        for module in self.modules():
+            if (
+                hasattr(module, "_hf_hook")
+                and hasattr(module._hf_hook, "execution_device")
+                and module._hf_hook.execution_device is not None
+            ):
+                return torch.device(module._hf_hook.execution_device)
+
+        return get_parameter_device(self)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BarkCausalModel) or isinstance(module, BarkFineModel) or isinstance(module, BarkModel):
@@ -1052,18 +1077,25 @@ class BarkFineModel(BarkPreTrainedModel):
         # one lm_head for each codebook
         self.lm_heads = new_output_embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens):
+    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
         old_embeddings_list = self.get_input_embeddings()
         new_embeddings_list = nn.ModuleList(
-            [self._get_resized_embeddings(old_embeddings, new_num_tokens) for old_embeddings in old_embeddings_list]
+            [
+                self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
+                for old_embeddings in old_embeddings_list
+            ]
         )
         self.set_input_embeddings(new_embeddings_list)
+        new_num_tokens = [embed.weight.shape[0] for embed in new_embeddings_list]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head_list = self.get_output_embeddings()
             new_lm_head_list = nn.ModuleList(
-                [self._get_resized_lm_head(old_lm_head, new_num_tokens) for old_lm_head in old_lm_head_list]
+                [
+                    self._get_resized_lm_head(old_lm_head, new_num_token)
+                    for old_lm_head, new_num_token in zip(old_lm_head_list, new_num_tokens)
+                ]
             )
             self.set_output_embeddings(new_lm_head_list)
 
@@ -1199,13 +1231,6 @@ class BarkFineModel(BarkPreTrainedModel):
             attentions=all_self_attentions,
         )
 
-    def can_generate(self) -> bool:
-        """
-        Returns True. Despite being an autoencoder, BarkFineModel shares some characteristics with generative models
-        due to the way audio are generated.
-        """
-        return True
-
     def generate(
         self,
         coarse_output: torch.Tensor,
@@ -1311,7 +1336,7 @@ class BarkFineModel(BarkPreTrainedModel):
             input_buffer = fine_input[:, start_idx : start_idx + max_fine_input_length, :]
             for n_inner in range(n_coarse, fine_generation_config.n_fine_codebooks):
                 logits = self.forward(n_inner, input_buffer).logits
-                if temperature is None:
+                if temperature is None or temperature == 1.0:
                     relevant_logits = logits[:, rel_start_fill_idx:, :codebook_size]
                     codebook_preds = torch.argmax(relevant_logits, -1)
                 else:
@@ -1376,6 +1401,63 @@ class BarkModel(BarkPreTrainedModel):
 
         self.config = config
 
+    @property
+    def device(self) -> torch.device:
+        """
+        `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
+        device).
+        """
+        # for bark_model, device must be verified on its sub-models
+        # if has _hf_hook, has been offloaded so the device has to be found in the hook
+        if not hasattr(self.semantic, "_hf_hook"):
+            return get_parameter_device(self)
+        for module in self.semantic.modules():
+            if (
+                hasattr(module, "_hf_hook")
+                and hasattr(module._hf_hook, "execution_device")
+                and module._hf_hook.execution_device is not None
+            ):
+                return torch.device(module._hf_hook.execution_device)
+
+    def enable_cpu_offload(self, gpu_id: Optional[int] = 0):
+        r"""
+        Offloads all sub-models to CPU using accelerate, reducing memory usage with a low impact on performance. This
+        method moves one whole sub-model at a time to the GPU when it is used, and the sub-model remains in GPU until
+        the next sub-model runs.
+
+        Args:
+            gpu_id (`int`, *optional*, defaults to 0):
+                GPU id on which the sub-models will be loaded and offloaded.
+        """
+        if is_accelerate_available():
+            from accelerate import cpu_offload_with_hook
+        else:
+            raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
+
+        device = torch.device(f"cuda:{gpu_id}")
+
+        if self.device.type != "cpu":
+            self.to("cpu")
+            torch.cuda.empty_cache()  # otherwise we don't see the memory savings (but they probably exist)
+
+        # this layer is used outside the first foward pass of semantic so need to be loaded before semantic
+        self.semantic.input_embeds_layer, _ = cpu_offload_with_hook(self.semantic.input_embeds_layer, device)
+
+        hook = None
+        for cpu_offloaded_model in [
+            self.semantic,
+            self.coarse_acoustics,
+            self.fine_acoustics,
+        ]:
+            _, hook = cpu_offload_with_hook(cpu_offloaded_model, device, prev_module_hook=hook)
+
+        self.fine_acoustics_hook = hook
+
+        _, hook = cpu_offload_with_hook(self.codec_model, device, prev_module_hook=hook)
+
+        # We'll offload the last model manually.
+        self.codec_model_hook = hook
+
     def codec_decode(self, fine_output):
         """Turn quantized audio codes into audio array using encodec."""
 
@@ -1402,13 +1484,13 @@ class BarkModel(BarkPreTrainedModel):
                 longest generation among the batch.
             history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt. Note that for now, this model takes only one speaker prompt per batch.
-        kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments are of two types:
+            kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments are of two types:
 
-            - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model.
-            - With a *semantic_*, *coarse_*, *fine_* prefix, they will be input for the `generate` method of the
-              semantic, coarse and fine respectively. It has the priority over the keywords without a prefix.
+                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model.
+                - With a *semantic_*, *coarse_*, *fine_* prefix, they will be input for the `generate` method of the
+                semantic, coarse and fine respectively. It has the priority over the keywords without a prefix.
 
-            This means you can, for example, specify a generation strategy for all sub-models except one.
+                This means you can, for example, specify a generation strategy for all sub-models except one.
         Returns:
             torch.LongTensor: Output generated audio.
 
@@ -1417,8 +1499,8 @@ class BarkModel(BarkPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, BarkModel
 
-        >>> processor = AutoProcessor.from_pretrained("ylacombe/bark-small")
-        >>> model = BarkModel.from_pretrained("ylacombe/bark-small")
+        >>> processor = AutoProcessor.from_pretrained("suno/bark-small")
+        >>> model = BarkModel.from_pretrained("suno/bark-small")
 
         >>> # To add a voice preset, you can pass `voice_preset` to `BarkProcessor.__call__(...)`
         >>> voice_preset = "v2/en_speaker_6"
@@ -1490,14 +1572,18 @@ class BarkModel(BarkPreTrainedModel):
             **kwargs_fine,
         )
 
+        if getattr(self, "fine_acoustics_hook", None) is not None:
+            # Manually offload fine_acoustics to CPU
+            # and load codec_model to GPU
+            # since bark doesn't use codec_model forward pass
+            self.fine_acoustics_hook.offload()
+            self.codec_model = self.codec_model.to(self.device)
+
         # 4. Decode the output and generate audio array
         audio = self.codec_decode(output)
 
-        return audio
+        if getattr(self, "codec_model_hook", None) is not None:
+            # Offload codec_model to CPU
+            self.codec_model_hook.offload()
 
-    def can_generate(self) -> bool:
-        """
-        Returns True. Despite not having a `self.generate` method, this model can `generate` and thus needs a
-        BarkGenerationConfig.
-        """
-        return True
+        return audio
