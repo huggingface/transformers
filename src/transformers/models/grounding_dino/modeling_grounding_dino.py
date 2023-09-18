@@ -2504,7 +2504,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             vision_encoder_hidden_states=encoder_outputs[0],
             vision_encoder_attention_mask=mask_flatten,
             text_encoder_hidden_states=encoder_outputs[1],
-            text_encoder_attention_mask=text_token_mask,
+            text_encoder_attention_mask=~text_token_mask,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
