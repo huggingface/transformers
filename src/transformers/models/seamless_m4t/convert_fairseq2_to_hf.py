@@ -23,8 +23,13 @@ import torch
 from accelerate.utils.modeling import find_tied_parameters
 from seamless_communication.models.inference.translator import Translator
 
-from transformers import SeamlessM4TConfig, SeamlessM4TFeatureExtractor, SeamlessM4TModel, SeamlessM4TProcessor, SeamlessM4TTokenizer
-from transformers.trainer_utils import set_seed
+from transformers import (
+    SeamlessM4TConfig,
+    SeamlessM4TFeatureExtractor,
+    SeamlessM4TModel,
+    SeamlessM4TProcessor,
+    SeamlessM4TTokenizer,
+)
 from transformers.utils import logging
 
 
@@ -45,6 +50,7 @@ MEDIUM_SUPPORTED_LANGUAGES = ["ace","ace_Latn","acm","acq","aeb","afr","ajp","ak
 # fmt: off
 LARGE_SUPPORTED_LANGUAGES = ["afr","amh","arb","ary","arz","asm","azj","bel","ben","bos","bul","cat","ceb","ces","ckb","cmn","cmn_Hant","cym","dan","deu","ell","eng","est","eus","fin","fra","fuv","gaz","gle","glg","guj","heb","hin","hrv","hun","hye","ibo","ind","isl","ita","jav","jpn","kan","kat","kaz","khk","khm","kir","kor","lao","lit","lug","luo","lvs","mai","mal","mar","mkd","mlt","mni","mya","nld","nno","nob","npi","nya","ory","pan","pbt","pes","pol","por","ron","rus","sat","slk","slv","sna","snd","som","spa","srp","swe","swh","tam","tel","tgk","tgl","tha","tur","ukr","urd","uzn","vie","yor","yue","zlm","zul",]
 # fmt: on
+
 
 def assert_param_count(model_1, model_2):
     count_1 = sum(p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0])
@@ -378,7 +384,6 @@ def load_model(save_dir, model_type, repo_id):
     count_1 = param_count(hf_model.text_decoder)
     count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
 
-
     assert count_1 == count_2, f"Text decoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # 5. take care of final proj
@@ -415,7 +420,6 @@ def load_model(save_dir, model_type, repo_id):
     hf_model = SeamlessM4TModel.from_pretrained(save_dir)
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
@@ -426,21 +430,20 @@ if __name__ == "__main__":
         type=str,
         help="Model type.",
     )
- 
+
     parser.add_argument(
         "--save_dir",
         default="/home/ubuntu/weights",
         type=str,
         help="Path to the output PyTorch model.",
-    )   
-    
+    )
+
     parser.add_argument(
         "--repo_id",
         default="ylacombe/hf-seamless-m4t-medium",
         type=str,
         help="Repo ID.",
-    )   
-    
+    )
 
     args = parser.parse_args()
 

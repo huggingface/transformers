@@ -92,9 +92,7 @@ class SeamlessM4TProcessor(ProcessorMixin):
             return encoding
 
         else:
-            encoding = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, **kwargs
-            )
+            encoding = self.feature_extractor(audios, sampling_rate=sampling_rate, **kwargs)
             return encoding
 
     def batch_decode(self, *args, **kwargs):

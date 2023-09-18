@@ -40,14 +40,15 @@ class SeamlessM4TConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 256102):
             Vocabulary size of the SeamlessM4T model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`~SeamlessM4TModel`], [`~SeamlessM4TForTextToSpeech`] or [`~SeamlessM4TForTextToText`].
+            the `inputs_ids` passed when calling [`~SeamlessM4TModel`], [`~SeamlessM4TForTextToSpeech`] or
+            [`~SeamlessM4TForTextToText`].
         unit_vocab_size (`int`, *optional*, defaults to 10082):
             Unit vocabulary size of the SeamlessM4T model. Defines the number of different unit tokens that can be
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4TModel`],
             [`~SeamlessM4TForSpeechToSpeech`] or [`~SeamlessM4TForTextToSpeech`].
-            
-        > Parameters shared across sub-models  
-            
+
+        > Parameters shared across sub-models
+
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the "intermediate" layers in the architecture.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -62,11 +63,11 @@ class SeamlessM4TConfig(PretrainedConfig):
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         encoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the encoders. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            The LayerDrop probability for the encoders. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the decoders. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            The LayerDrop probability for the decoders. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the decoder and feed-forward layers. If string,
             `"gelu"`, `"relu"`, `"selu"`, `"swish"` and `"gelu_new"` are supported.
@@ -75,12 +76,12 @@ class SeamlessM4TConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all attention layers.
         activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all activation layers in the model.        
+            The dropout probability for all activation layers in the model.
         scale_embedding (`bool`, *optional*, defaults to `True`):
             Scale embeddings by diving by sqrt(d_model).
-          
+
         > Text encoder and text decoder specific parameters
-        
+
         encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer text encoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 8192):
@@ -104,9 +105,9 @@ class SeamlessM4TConfig(PretrainedConfig):
             The id of the _beginning-of-stream_ text token. Only applied to the text-decoder model.
         eos_token_id (`int`, *optional*, defaults to 3):
             The id of the _end-of-stream_ text token. Only applied to the text-decoder model.
-            
+
         > Speech encoder specific parameters
-            
+
         speech_encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer speech encoder.
         speech_encoder_attention_heads (`int`, *optional*, defaults to 16):
@@ -151,10 +152,10 @@ class SeamlessM4TConfig(PretrainedConfig):
             the speech encoder.
         conv_depthwise_kernel_size (`int`, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
-            
-            
+
+
         > Text-To-Unit (t2u) model specific parameters
-        
+
         t2u_bos_token_id (`int`, *optional*, defaults to 0):
             The id of the _beginning-of-stream_ unit token. Only applied to the text-to-unit seq2seq model.
         t2u_pad_token_id (`int`, *optional*, defaults to 1):
@@ -186,9 +187,9 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
-            
+
         > Hifi-Gan Vocoder specific parameters
-            
+
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):
