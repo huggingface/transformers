@@ -4000,7 +4000,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         self.current_modality = current_modality
         if current_modality == "speech":
-            self.main_input_name = current_modality
+            self.main_input_name = "input_features"
 
         # these models already call post_init in their initialization
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
