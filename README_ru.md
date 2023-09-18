@@ -186,7 +186,7 @@ Hugging Face Hub. Мы хотим, чтобы Transformers позволил ра
     <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample_post_processed.png" width="400"></a>
 </h3>
 
-Подробнее о задачах, поддерживаемых API `pipeline`, можно узнать в [этом учебном пособии](https://huggingface.co/docs/transformers/task_sum
+Подробнее о задачах, поддерживаемых API `pipeline`, можно узнать в [этом учебном пособии](https://huggingface.co/docs/transformers/task_sum)
 
 В дополнение к `pipeline`, для загрузки и использования любой из предварительно обученных моделей в заданной задаче достаточно трех строк кода. Вот версия для PyTorch:
 ```python
