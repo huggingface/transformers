@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 BERT model."""
+""" Keras 3.0 BERT model."""
 
 
 from __future__ import annotations
@@ -28,16 +28,16 @@ import keras_core as keras
 from keras_core import ops as ops
 
 from ...activations_tf import get_tf_activation
-from ...modeling_tf_outputs import (
-    TFBaseModelOutputWithPastAndCrossAttentions,
-    TFBaseModelOutputWithPoolingAndCrossAttentions,
-    TFCausalLMOutputWithCrossAttentions,
-    TFMaskedLMOutput,
-    TFMultipleChoiceModelOutput,
-    TFNextSentencePredictorOutput,
-    TFQuestionAnsweringModelOutput,
-    TFSequenceClassifierOutput,
-    TFTokenClassifierOutput,
+from ...modeling_keras_outputs import (
+    KerasBaseModelOutputWithPastAndCrossAttentions,
+    KerasBaseModelOutputWithPoolingAndCrossAttentions,
+    KerasCausalLMOutputWithCrossAttentions,
+    KerasMaskedLMOutput,
+    KerasMultipleChoiceModelOutput,
+    KerasNextSentencePredictorOutput,
+    KerasQuestionAnsweringModelOutput,
+    KerasSequenceClassifierOutput,
+    KerasTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
