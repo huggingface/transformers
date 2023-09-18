@@ -734,7 +734,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
 
 
 @require_torch
-class SeamlessM4TMGenerationTest(unittest.TestCase):
+class SeamlessM4TGenerationTest(unittest.TestCase):
     # test that non-standard generation works
     # test generation of: SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, SeamlessM4TForSpeechToText, SeamlessM4TForTextToSpeech
 
