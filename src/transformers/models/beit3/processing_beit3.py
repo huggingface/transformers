@@ -23,13 +23,13 @@ from ...tokenization_utils_base import BatchEncoding
 
 class Beit3Processor(ProcessorMixin):
     r"""
-    Constructs a Beit3 processor which wraps [`Beit3ImageProcessor`] and
+    Constructs a Beit3 processor which wraps [`BeitImageProcessor`] and
     [`XLMRobertaTokenizer`]/[`XLMRobertaTokenizerFast`] into a single processor that interits both the image processor
     and tokenizer functionalities. See the [`~Beit3Processor.__call__`] and [`~Beit3Processor.decode`] for more
     information.
 
     Args:
-        image_processor ([`Beit3ImageProcessor`]):
+        image_processor ([`BeitImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`XLMRobertaTokenizer`, `XLMRobertaTokenizerFast`]):
             The tokenizer is a required input.
@@ -51,7 +51,7 @@ class Beit3Processor(ProcessorMixin):
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to XLMRobertaTokenizerFast's [`~XLMRobertaTokenizerFast.__call__`] if `text` is not `None`
         to encode: the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        Beit3ImageProcessor's [`~Beit3ImageProcessor's.__call__`] if `images` is not `None`. Please refer to the
+        BeitImageProcessor's [`~BeitImageProcessor's.__call__`] if `images` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
 
         Args:

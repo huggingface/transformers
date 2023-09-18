@@ -40,7 +40,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("align", "EfficientNetImageProcessor"),
         ("beit", "BeitImageProcessor"),
-        ("beit3", "Beit3ImageProcessor"),
+        ("beit3", "BeitImageProcessor"),
         ("bit", "BitImageProcessor"),
         ("blip", "BlipImageProcessor"),
         ("blip-2", "BlipImageProcessor"),

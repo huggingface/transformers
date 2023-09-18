@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import XLMRobertaTokenizer, XLMRobertaTokenizerFast
+from transformers import BeitImageProcessor, XLMRobertaTokenizer, XLMRobertaTokenizerFast
 from transformers.testing_utils import get_tests_dir, require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 
@@ -29,7 +29,7 @@ from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Beit3ImageProcessor, Beit3Processor
+    from transformers import Beit3Processor
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
@@ -59,7 +59,7 @@ class Beit3ProcessorTest(unittest.TestCase):
         return XLMRobertaTokenizerFast(SAMPLE_VOCAB, keep_accents=True, **kwargs)
 
     def get_image_processor(self, **kwargs):
-        return Beit3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+        return BeitImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -96,8 +96,8 @@ class Beit3ProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor_slow.image_processor, Beit3ImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, Beit3ImageProcessor)
+        self.assertIsInstance(processor_slow.image_processor, BeitImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, BeitImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()

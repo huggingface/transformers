@@ -22,14 +22,6 @@ _import_structure = {
     "processing_beit3": ["Beit3Processor"],
 }
 
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_beit3"] = ["Beit3ImageProcessor"]
-
 
 try:
     if not is_torch_available():
@@ -51,14 +43,6 @@ else:
 if TYPE_CHECKING:
     from .configuration_beit3 import BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP, Beit3Config
     from .processing_beit3 import Beit3Processor
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .image_processing_beit3 import Beit3ImageProcessor
 
     try:
         if not is_torch_available():

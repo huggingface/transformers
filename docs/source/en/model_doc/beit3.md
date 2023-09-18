@@ -47,11 +47,6 @@ The original code can be found [here](https://github.com/microsoft/unilm/tree/ma
 
 [[autodoc]] Beit3Processor
 
-## Beit3ImageProcessor
-
-[[autodoc]] Beit3ImageProcessor
-    - preprocess
-
 ## Beit3Model
 
 [[autodoc]] Beit3Model
