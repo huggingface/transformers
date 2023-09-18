@@ -92,6 +92,8 @@
     sections:
     - local: tasks/idefics
       title: Image tasks with IDEFICS
+    - local: tasks/prompting
+      title: LLM prompting guide
     title: Prompting
   title: Task Guides
 - sections:
