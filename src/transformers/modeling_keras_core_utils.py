@@ -1718,7 +1718,6 @@ class KerasPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # index of the files.
         is_sharded = False
         # Load model
-        breakpoint()
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             is_local = os.path.isdir(pretrained_model_name_or_path)
@@ -1945,7 +1944,6 @@ class KerasPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     _prefix=load_weight_prefix,
                     ignore_mismatched_sizes=ignore_mismatched_sizes,
                 )
-        breakpoint()
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
@@ -2193,38 +2191,11 @@ class KerasPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         cls._auto_class = auto_class
 
 
-def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
-    """
-    Detect missing and unexpected layers and load the TF weights from the shard file accordingly to their names and
-    shapes.
-
-    Args:
-        model (`tf.keras.models.Model`):
-            The model to load the weights into.
-        resolved_archive_file (`str`):
-            The location of the H5 file.
-        ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`):
-            Whether or not to ignore weights with shapes that don't match between the checkpoint of the model.
-
-    Returns:
-        Three lists, one for the missing layers, another one for the unexpected layers, and a last one for the
-        mismatched layers.
-    """
-    if resolved_archive_file.endswith(".safetensors"):
-        load_function = load_tf_weights_from_safetensors
-    else:
-        raise ValueError("Only safetensors checkpoints are supported for Keras Core right now!")
-
-    return load_function(
-        model, resolved_archive_file, ignore_mismatched_sizes=ignore_mismatched_sizes, _prefix=_prefix
-    )
-
 def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     # Read the safetensors file
     with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
         mismatched_layers = []
         weight_names = [format_weight_name(w.path, _prefix=_prefix) for w in model.weights]
-        breakpoint()
         loaded_weight_names = list(safetensors_archive.keys())
         # Find the missing layers from the high level list of layers
         missing_layers = list(set(weight_names) - set(loaded_weight_names))
@@ -2269,7 +2240,6 @@ def load_pytorch_state_dict_in_keras_core_model(
 
     if tf_inputs is None:
         tf_inputs = tf_model.dummy_inputs
-
     if _prefix is None:
         _prefix = ""
     if tf_inputs:
@@ -2318,7 +2288,7 @@ def load_pytorch_state_dict_in_keras_core_model(
     mismatched_keys = []
     is_safetensor_archive = hasattr(pt_state_dict, "get_tensor")
     for symbolic_weight in symbolic_weights:
-        sw_name = symbolic_weight.name
+        sw_name = symbolic_weight.path
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
             sw_name,
             start_prefix_to_remove=start_prefix_to_remove,

@@ -24,7 +24,8 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
-import tensorflow as tf
+import keras_core as keras
+from keras_core import ops as ops
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
@@ -62,7 +63,6 @@ from ...utils import (
 )
 from .configuration_bert import BertConfig
 from ...modeling_keras_core_utils import KerasPreTrainedModel
-import keras_core as keras
 
 
 logger = logging.get_logger(__name__)
@@ -121,27 +121,27 @@ class TFBertPreTrainingLoss:
     computation.
     """
 
-    def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+    def hf_compute_loss(self, labels: keras.KerasTensor, logits: keras.KerasTensor) -> keras.KerasTensor:
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=keras.losses.Reduction.NONE
         )
 
         # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
-        unmasked_lm_losses = loss_fn(y_true=tf.nn.relu(labels["labels"]), y_pred=logits[0])
+        unmasked_lm_losses = loss_fn(y_true=keras.ops.relu(labels["labels"]), y_pred=logits[0])
         # make sure only labels that are not equal to -100
         # are taken into account for the loss computation
-        lm_loss_mask = tf.cast(labels["labels"] != -100, dtype=unmasked_lm_losses.dtype)
+        lm_loss_mask = keras.ops.cast(labels["labels"] != -100, dtype=unmasked_lm_losses.dtype)
         masked_lm_losses = unmasked_lm_losses * lm_loss_mask
-        reduced_masked_lm_loss = tf.reduce_sum(masked_lm_losses) / tf.reduce_sum(lm_loss_mask)
+        reduced_masked_lm_loss = ops.sum(masked_lm_losses) / ops.sum(lm_loss_mask)
 
         # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
-        unmasked_ns_loss = loss_fn(y_true=tf.nn.relu(labels["next_sentence_label"]), y_pred=logits[1])
-        ns_loss_mask = tf.cast(labels["next_sentence_label"] != -100, dtype=unmasked_ns_loss.dtype)
+        unmasked_ns_loss = loss_fn(y_true=ops.relu(labels["next_sentence_label"]), y_pred=logits[1])
+        ns_loss_mask = ops.cast(labels["next_sentence_label"] != -100, dtype=unmasked_ns_loss.dtype)
         masked_ns_loss = unmasked_ns_loss * ns_loss_mask
 
-        reduced_masked_ns_loss = tf.reduce_sum(masked_ns_loss) / tf.reduce_sum(ns_loss_mask)
+        reduced_masked_ns_loss = ops.sum(masked_ns_loss) / ops.sum(ns_loss_mask)
 
-        return tf.reshape(reduced_masked_lm_loss + reduced_masked_ns_loss, (1,))
+        return ops.reshape(reduced_masked_lm_loss + reduced_masked_ns_loss, (1,))
 
 
 class TFBertEmbeddings(keras.Layer):
@@ -156,65 +156,59 @@ class TFBertEmbeddings(keras.Layer):
         self.initializer_range = config.initializer_range
         self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
-
-    def build(self, input_shape: tf.TensorShape):
-        with tf.name_scope("word_embeddings"):
-            self.weight = self.add_weight(
-                name="weight",
-                shape=[self.config.vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
-
-        with tf.name_scope("token_type_embeddings"):
-            self.token_type_embeddings = self.add_weight(
-                name="embeddings",
-                shape=[self.config.type_vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
-
-        with tf.name_scope("position_embeddings"):
-            self.position_embeddings = self.add_weight(
-                name="embeddings",
-                shape=[self.max_position_embeddings, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
-
-        super().build(input_shape)
+        self.word_embeddings = keras.layers.Embedding(
+            config.vocab_size,
+            config.hidden_size,
+            embeddings_initializer=get_initializer(self.initializer_range),
+            name="word_embeddings",
+        )
+        self.position_embeddings = keras.layers.Embedding(
+            self.max_position_embeddings,
+            config.hidden_size,
+            embeddings_initializer=get_initializer(self.initializer_range),
+            name="position_embeddings",
+        )
+        self.token_type_embeddings = keras.layers.Embedding(
+            config.type_vocab_size,
+            config.hidden_size,
+            embeddings_initializer=get_initializer(self.initializer_range),
+            name="token_type_embeddings",
+        )
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: keras.KerasTensor = None,
+        position_ids: keras.KerasTensor = None,
+        token_type_ids: keras.KerasTensor = None,
+        inputs_embeds: keras.KerasTensor = None,
         past_key_values_length=0,
         training: bool = False,
-    ) -> tf.Tensor:
+    ) -> keras.KerasTensor:
         """
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (`tf.Tensor`): output embedding tensor.
+            final_embeddings (`keras.KerasTensor`): output embedding tensor.
         """
         if input_ids is None and inputs_embeds is None:
             raise ValueError("Need to provide either `input_ids` or `input_embeds`.")
 
         if input_ids is not None:
             check_embeddings_within_bounds(input_ids, self.config.vocab_size)
-            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+            inputs_embeds = self.word_embeddings(input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
 
         if token_type_ids is None:
-            token_type_ids = tf.fill(dims=input_shape, value=0)
+            token_type_ids = ops.full(input_shape, fill_value=0)
 
         if position_ids is None:
-            position_ids = tf.expand_dims(
-                tf.range(start=past_key_values_length, limit=input_shape[1] + past_key_values_length), axis=0
+            position_ids = ops.expand_dims(
+                ops.range(start=past_key_values_length, limit=input_shape[1] + past_key_values_length), axis=0
             )
 
-        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
+        position_embeds = self.position_embeddings(position_ids)
+        token_type_embeds = self.token_type_embeddings(token_type_ids)
         final_embeddings = inputs_embeds + position_embeds + token_type_embeds
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -250,24 +244,24 @@ class TFBertSelfAttention(keras.Layer):
 
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
+    def transpose_for_scores(self, tensor: keras.KerasTensor, batch_size: int) -> keras.KerasTensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
-        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
+        tensor = ops.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
         # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
-        return tf.transpose(tensor, perm=[0, 2, 1, 3])
+        return ops.transpose(tensor, perm=[0, 2, 1, 3])
 
     def call(
         self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        head_mask: tf.Tensor,
-        encoder_hidden_states: tf.Tensor,
-        encoder_attention_mask: tf.Tensor,
-        past_key_value: Tuple[tf.Tensor],
+        hidden_states: keras.KerasTensor,
+        attention_mask: keras.KerasTensor,
+        head_mask: keras.KerasTensor,
+        encoder_hidden_states: keras.KerasTensor,
+        encoder_attention_mask: keras.KerasTensor,
+        past_key_value: Tuple[keras.KerasTensor],
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[keras.KerasTensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
 
@@ -288,8 +282,8 @@ class TFBertSelfAttention(keras.Layer):
         elif past_key_value is not None:
             key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
             value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
-            key_layer = tf.concat([past_key_value[0], key_layer], axis=2)
-            value_layer = tf.concat([past_key_value[1], value_layer], axis=2)
+            key_layer = ops.concat([past_key_value[0], key_layer], axis=2)
+            value_layer = ops.concat([past_key_value[1], value_layer], axis=2)
         else:
             key_layer = self.transpose_for_scores(self.key(inputs=hidden_states), batch_size)
             value_layer = self.transpose_for_scores(self.value(inputs=hidden_states), batch_size)
@@ -297,10 +291,10 @@ class TFBertSelfAttention(keras.Layer):
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
 
         if self.is_decoder:
-            # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
+            # if cross_attention save Tuple(keras.KerasTensor, keras.KerasTensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(tf.Tensor, tf.Tensor) of
+            # if uni-directional self-attention (decoder) save Tuple(keras.KerasTensor, keras.KerasTensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
@@ -308,16 +302,16 @@ class TFBertSelfAttention(keras.Layer):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
-        attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
-        dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
-        attention_scores = tf.divide(attention_scores, dk)
+        attention_scores = query_layer @ key_layer.T
+        dk = ops.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
+        attention_scores = attention_scores / dk
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
-            attention_scores = tf.add(attention_scores, attention_mask)
+            attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = stable_softmax(logits=attention_scores, axis=-1)
+        attention_probs = ops.softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -325,13 +319,13 @@ class TFBertSelfAttention(keras.Layer):
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = tf.multiply(attention_probs, head_mask)
+            attention_probs = attention_probs * head_mask
 
-        attention_output = tf.matmul(attention_probs, value_layer)
-        attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
+        attention_output = attention_probs @ value_layer
+        attention_output = ops.transpose(attention_output, perm=[0, 2, 1, 3])
 
         # (batch_size, seq_len_q, all_head_size)
-        attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
+        attention_output = ops.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
         if self.is_decoder:
@@ -349,7 +343,7 @@ class TFBertSelfOutput(keras.Layer):
         self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(self, hidden_states: keras.KerasTensor, input_tensor: keras.KerasTensor, training: bool = False) -> keras.KerasTensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -369,15 +363,15 @@ class TFBertAttention(keras.Layer):
 
     def call(
         self,
-        input_tensor: tf.Tensor,
-        attention_mask: tf.Tensor,
-        head_mask: tf.Tensor,
-        encoder_hidden_states: tf.Tensor,
-        encoder_attention_mask: tf.Tensor,
-        past_key_value: Tuple[tf.Tensor],
+        input_tensor: keras.KerasTensor,
+        attention_mask: keras.KerasTensor,
+        head_mask: keras.KerasTensor,
+        encoder_hidden_states: keras.KerasTensor,
+        encoder_attention_mask: keras.KerasTensor,
+        past_key_value: Tuple[keras.KerasTensor],
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[keras.KerasTensor]:
         self_outputs = self.self_attention(
             hidden_states=input_tensor,
             attention_mask=attention_mask,
@@ -410,7 +404,7 @@ class TFBertIntermediate(keras.Layer):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+    def call(self, hidden_states: keras.KerasTensor) -> keras.KerasTensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -427,7 +421,7 @@ class TFBertOutput(keras.Layer):
         self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(self, hidden_states: keras.KerasTensor, input_tensor: keras.KerasTensor, training: bool = False) -> keras.KerasTensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -451,15 +445,15 @@ class TFBertLayer(keras.Layer):
 
     def call(
         self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        head_mask: tf.Tensor,
-        encoder_hidden_states: tf.Tensor | None,
-        encoder_attention_mask: tf.Tensor | None,
-        past_key_value: Tuple[tf.Tensor] | None,
+        hidden_states: keras.KerasTensor,
+        attention_mask: keras.KerasTensor,
+        head_mask: keras.KerasTensor,
+        encoder_hidden_states: keras.KerasTensor | None,
+        encoder_attention_mask: keras.KerasTensor | None,
+        past_key_value: Tuple[keras.KerasTensor] | None,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> Tuple[keras.KerasTensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -529,18 +523,18 @@ class TFBertEncoder(keras.Layer):
 
     def call(
         self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        head_mask: tf.Tensor,
-        encoder_hidden_states: tf.Tensor | None,
-        encoder_attention_mask: tf.Tensor | None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] | None,
+        hidden_states: keras.KerasTensor,
+        attention_mask: keras.KerasTensor,
+        head_mask: keras.KerasTensor,
+        encoder_hidden_states: keras.KerasTensor | None,
+        encoder_attention_mask: keras.KerasTensor | None,
+        past_key_values: Tuple[Tuple[keras.KerasTensor]] | None,
         use_cache: Optional[bool],
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[keras.KerasTensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -601,7 +595,7 @@ class TFBertPooler(keras.Layer):
             name="dense",
         )
 
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+    def call(self, hidden_states: keras.KerasTensor) -> keras.KerasTensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -627,7 +621,7 @@ class TFBertPredictionHeadTransform(keras.Layer):
 
         self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+    def call(self, hidden_states: keras.KerasTensor) -> keras.KerasTensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(inputs=hidden_states)
@@ -648,7 +642,7 @@ class TFBertLMPredictionHead(keras.Layer):
         # an output-only bias for each token.
         self.input_embeddings = input_embeddings
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: keras.KerasTensorShape):
         self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
         super().build(input_shape)
@@ -656,24 +650,24 @@ class TFBertLMPredictionHead(keras.Layer):
     def get_output_embeddings(self) -> keras.Layer:
         return self.input_embeddings
 
-    def set_output_embeddings(self, value: tf.Variable):
+    def set_output_embeddings(self, value):
         self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
-    def get_bias(self) -> Dict[str, tf.Variable]:
+    def get_bias(self) -> Dict[str]:
         return {"bias": self.bias}
 
-    def set_bias(self, value: tf.Variable):
+    def set_bias(self, value):
         self.bias = value["bias"]
         self.config.vocab_size = shape_list(value["bias"])[0]
 
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+    def call(self, hidden_states: keras.KerasTensor) -> keras.KerasTensor:
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
-        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
+        hidden_states = ops.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = hidden_states @ self.input_embeddings.weight.T
+        hidden_states = ops.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
+        hidden_states = hidden_states + self.bias
 
         return hidden_states
 
@@ -684,7 +678,7 @@ class TFBertMLMHead(keras.Layer):
 
         self.predictions = TFBertLMPredictionHead(config, input_embeddings, name="predictions")
 
-    def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
+    def call(self, sequence_output: keras.KerasTensor) -> keras.KerasTensor:
         prediction_scores = self.predictions(hidden_states=sequence_output)
 
         return prediction_scores
@@ -700,7 +694,7 @@ class TFBertNSPHead(keras.Layer):
             name="seq_relationship",
         )
 
-    def call(self, pooled_output: tf.Tensor) -> tf.Tensor:
+    def call(self, pooled_output: keras.KerasTensor) -> keras.KerasTensor:
         seq_relationship_score = self.seq_relationship(inputs=pooled_output)
 
         return seq_relationship_score
@@ -723,7 +717,7 @@ class TFBertMainLayer(keras.Layer):
     def get_input_embeddings(self) -> keras.Layer:
         return self.embeddings
 
-    def set_input_embeddings(self, value: tf.Variable):
+    def set_input_embeddings(self, value):
         self.embeddings.weight = value
         self.embeddings.vocab_size = shape_list(value)[0]
 
@@ -738,20 +732,20 @@ class TFBertMainLayer(keras.Layer):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
-        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
+        encoder_hidden_states: np.ndarray | keras.KerasTensor | None = None,
+        encoder_attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, keras.KerasTensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[keras.KerasTensor]]:
         if not self.config.is_decoder:
             use_cache = False
 
@@ -773,10 +767,10 @@ class TFBertMainLayer(keras.Layer):
             past_key_values_length = shape_list(past_key_values[0][0])[-2]
 
         if attention_mask is None:
-            attention_mask = tf.fill(dims=(batch_size, seq_length + past_key_values_length), value=1)
+            attention_mask = ops.full((batch_size, seq_length + past_key_values_length), fill_value=1)
 
         if token_type_ids is None:
-            token_type_ids = tf.fill(dims=input_shape, value=0)
+            token_type_ids = ops.full(dims=input_shape, value=0)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -800,7 +794,7 @@ class TFBertMainLayer(keras.Layer):
         # - if the model is a decoder, apply a causal mask in addition to the padding mask
         # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
         if self.is_decoder:
-            seq_ids = tf.range(mask_seq_length)
+            seq_ids = ops.range(mask_seq_length)
             causal_mask = tf.less_equal(
                 tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)),
                 seq_ids[None, :, None],
@@ -909,29 +903,29 @@ class TFBertForPreTrainingOutput(ModelOutput):
     Output type of [`TFBertForPreTraining`].
 
     Args:
-        prediction_logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        prediction_logits (`keras.KerasTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (`tf.Tensor` of shape `(batch_size, 2)`):
+        seq_relationship_logits (`keras.KerasTensor` of shape `(batch_size, 2)`):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
             before SoftMax).
-        hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
+        hidden_states (`tuple(keras.KerasTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `keras.KerasTensor` (one for the output of the embeddings + one for the output of each layer) of shape
             `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `tf.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(keras.KerasTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `keras.KerasTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    loss: tf.Tensor | None = None
-    prediction_logits: tf.Tensor = None
-    seq_relationship_logits: tf.Tensor = None
-    hidden_states: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
-    attentions: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
+    loss: keras.KerasTensor | None = None
+    prediction_logits: keras.KerasTensor = None
+    seq_relationship_logits: keras.KerasTensor = None
+    hidden_states: Optional[Union[Tuple[keras.KerasTensor], keras.KerasTensor]] = None
+    attentions: Optional[Union[Tuple[keras.KerasTensor], keras.KerasTensor]] = None
 
 
 BERT_START_DOCSTRING = r"""
@@ -940,7 +934,7 @@ BERT_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -978,21 +972,21 @@ BERT_START_DOCSTRING = r"""
 
 BERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
+        input_ids (`np.ndarray`, `keras.KerasTensor`, `List[keras.KerasTensor]` ``Dict[str, keras.KerasTensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+        attention_mask (`np.ndarray` or `keras.KerasTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+        token_type_ids (`np.ndarray` or `keras.KerasTensor` of shape `({0})`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
 
@@ -1000,18 +994,18 @@ BERT_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
+        position_ids (`np.ndarray` or `keras.KerasTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`np.ndarray` or `keras.KerasTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`np.ndarray` or `tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
+        inputs_embeds (`np.ndarray` or `keras.KerasTensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -1052,32 +1046,32 @@ class KerasBertModel(KerasBertPreTrainedModel):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
-        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
+        encoder_hidden_states: np.ndarray | keras.KerasTensor | None = None,
+        encoder_attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, keras.KerasTensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[keras.KerasTensor]]:
         r"""
-        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states  (`keras.KerasTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_attention_mask (`keras.KerasTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`Tuple[Tuple[keras.KerasTensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1140,24 +1134,24 @@ class KerasBertForPreTraining(KerasBertPreTrainedModel, TFBertPreTrainingLoss):
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
-        next_sentence_label: np.ndarray | tf.Tensor | None = None,
+        labels: np.ndarray | keras.KerasTensor | None = None,
+        next_sentence_label: np.ndarray | keras.KerasTensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFBertForPreTrainingOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBertForPreTrainingOutput, Tuple[keras.KerasTensor]]:
         r"""
-        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`keras.KerasTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        next_sentence_label (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+        next_sentence_label (`keras.KerasTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
             (see `input_ids` docstring) Indices should be in `[0, 1]`:
 
@@ -1258,19 +1252,19 @@ class KerasBertForMaskedLM(KerasBertPreTrainedModel, TFMaskedLanguageModelingLos
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
+        labels: np.ndarray | keras.KerasTensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFMaskedLMOutput, Tuple[keras.KerasTensor]]:
         r"""
-        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`keras.KerasTensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
@@ -1349,34 +1343,34 @@ class KerasBertLMHeadModel(KerasBertPreTrainedModel, TFCausalLanguageModelingLos
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
-        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
+        encoder_hidden_states: np.ndarray | keras.KerasTensor | None = None,
+        encoder_attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, keras.KerasTensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
+        labels: np.ndarray | keras.KerasTensor | None = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
+    ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[keras.KerasTensor]]:
         r"""
-        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states  (`keras.KerasTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_attention_mask (`keras.KerasTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`Tuple[Tuple[keras.KerasTensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1384,7 +1378,7 @@ class KerasBertLMHeadModel(KerasBertPreTrainedModel, TFCausalLanguageModelingLos
         use_cache (`bool`, *optional*, defaults to `True`):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`). Set to `False` during training, `True` during generation
-        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`keras.KerasTensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
             config.vocab_size - 1]`.
         """
@@ -1448,17 +1442,17 @@ class KerasBertForNextSentencePrediction(KerasBertPreTrainedModel, TFNextSentenc
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        next_sentence_label: np.ndarray | tf.Tensor | None = None,
+        next_sentence_label: np.ndarray | keras.KerasTensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFNextSentencePredictorOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFNextSentencePredictorOutput, Tuple[keras.KerasTensor]]:
         r"""
         Return:
 
@@ -1550,19 +1544,19 @@ class KerasBertForSequenceClassification(KerasBertPreTrainedModel, TFSequenceCla
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
+        labels: np.ndarray | keras.KerasTensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSequenceClassifierOutput, Tuple[keras.KerasTensor]]:
         r"""
-        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+        labels (`keras.KerasTensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
@@ -1627,19 +1621,19 @@ class KerasBertForMultipleChoice(KerasBertPreTrainedModel, TFMultipleChoiceLoss)
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
+        labels: np.ndarray | keras.KerasTensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFMultipleChoiceModelOutput, Tuple[keras.KerasTensor]]:
         r"""
-        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+        labels (`keras.KerasTensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
             where `num_choices` is the size of the second dimension of the input tensors. (See `input_ids` above)
         """
@@ -1741,19 +1735,19 @@ class KerasBertForTokenClassification(KerasBertPreTrainedModel, TFTokenClassific
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
+        labels: np.ndarray | keras.KerasTensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFTokenClassifierOutput, Tuple[keras.KerasTensor]]:
         r"""
-        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`keras.KerasTensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         outputs = self.bert(
@@ -1828,24 +1822,24 @@ class KerasBertForQuestionAnswering(KerasBertPreTrainedModel, TFQuestionAnswerin
     def call(
         self,
         input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        attention_mask: np.ndarray | keras.KerasTensor | None = None,
+        token_type_ids: np.ndarray | keras.KerasTensor | None = None,
+        position_ids: np.ndarray | keras.KerasTensor | None = None,
+        head_mask: np.ndarray | keras.KerasTensor | None = None,
+        inputs_embeds: np.ndarray | keras.KerasTensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        start_positions: np.ndarray | tf.Tensor | None = None,
-        end_positions: np.ndarray | tf.Tensor | None = None,
+        start_positions: np.ndarray | keras.KerasTensor | None = None,
+        end_positions: np.ndarray | keras.KerasTensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[keras.KerasTensor]]:
         r"""
-        start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+        start_positions (`keras.KerasTensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
-        end_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+        end_positions (`keras.KerasTensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
