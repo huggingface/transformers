@@ -48,15 +48,6 @@ BEIT3_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
-# input_ids = None,
-# pixel_values = None,
-# text_padding_position = None,
-# attention_mask = None,
-# vision_masked_position = None,
-# incremental_state = None,
-# positions = None,
-# return_dict = None,
-# output_hidden_states = True,
 
 
 BEIT3_MODEL = r"""
@@ -403,10 +394,7 @@ class Beit3PositionalEmbedding(nn.Embedding):
 
 
 class Beit3MultiheadAttention(nn.Module):
-    def __init__(
-        self,
-        config,
-    ):
+    def __init__(self, config):
         super().__init__()
         self.embed_dim = config.embed_dim
         self.num_heads = config.num_attention_heads
