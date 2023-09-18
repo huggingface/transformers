@@ -150,7 +150,8 @@ class GroundingDINOConfig(PretrainedConfig):
             Whether to share the bbox embedding between the two-stage bbox generator and the region proposal generation.
         two_stage_class_embed_share (`bool`, *optional*, defaults to `False`):
             Whether to share the class embedding between the two-stage bbox generator and the region proposal generation.
-
+        positional_embedding_temperature (`float`, *optional*, defaults to 20):
+            The temperature for Sine Positional Embedding that is used together with vision backbone.
     Examples:
 
     ```python
@@ -227,6 +228,7 @@ class GroundingDINOConfig(PretrainedConfig):
         decoder_bbox_embed_share = True,
         two_stage_bbox_embed_share = False,
         two_stage_class_embed_share = False,
+        positional_embedding_temperature = 20,
         **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
@@ -302,6 +304,7 @@ class GroundingDINOConfig(PretrainedConfig):
         if two_stage_bbox_embed_share and not decoder_bbox_embed_share:
             raise ValueError("If two_stage_bbox_embed_share is True, decoder_bbox_embed_share must be True.")
         self.two_stage_class_embed_share = two_stage_class_embed_share
+        self.positional_embedding_temperature = positional_embedding_temperature
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
