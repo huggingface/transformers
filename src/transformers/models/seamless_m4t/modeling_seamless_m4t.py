@@ -2765,7 +2765,7 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
 
         return input_lengths
 
-    def forward(self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor) -> Tuple[torch.Tensor]
+    def forward(self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor) -> Tuple[torch.Tensor]:
         """
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
