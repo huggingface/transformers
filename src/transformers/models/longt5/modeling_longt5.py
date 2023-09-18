@@ -247,11 +247,11 @@ class LongT5LayerNorm(nn.Module):
 
 
 try:
-    from apex.normalization import FusedRMSNorm
+    from apex.normalization import MixedFusedRMSNorm
 
-    LongT5LayerNorm = FusedRMSNorm  # noqa
+    LongT5LayerNorm = MixedFusedRMSNorm  # noqa
 
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of LongT5LayerNorm")
+    logger.info("Discovered apex.normalization.MixedFusedRMSNorm - will use it instead of LongT5LayerNorm")
 except ImportError:
     # using the normal LongT5LayerNorm
     pass

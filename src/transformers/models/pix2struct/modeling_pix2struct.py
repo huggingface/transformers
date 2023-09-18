@@ -99,11 +99,11 @@ class Pix2StructLayerNorm(nn.Module):
 
 
 try:
-    from apex.normalization import FusedRMSNorm
+    from apex.normalization import MixedFusedRMSNorm
 
-    Pix2StructLayerNorm = FusedRMSNorm  # noqa
+    Pix2StructLayerNorm = MixedFusedRMSNorm  # noqa
 
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pix2StructLayerNorm")
+    logger.info("Discovered apex.normalization.MixedFusedRMSNorm - will use it instead of Pix2StructLayerNorm")
 except ImportError:
     # using the normal Pix2StructLayerNorm
     pass

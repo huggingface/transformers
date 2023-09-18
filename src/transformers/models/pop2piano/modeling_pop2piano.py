@@ -49,11 +49,11 @@ logger = logging.get_logger(__name__)
 _load_pop2piano_layer_norm = True
 
 try:
-    from apex.normalization import FusedRMSNorm
+    from apex.normalization import MixedFusedRMSNorm
 
     _load_pop2piano_layer_norm = False
 
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pop2PianoLayerNorm")
+    logger.info("Discovered apex.normalization.MixedFusedRMSNorm - will use it instead of Pop2PianoLayerNorm")
 except ImportError:
     # using the normal Pop2PianoLayerNorm
     pass
@@ -172,7 +172,7 @@ class Pop2PianoLayerNorm(nn.Module):
 
 
 if not _load_pop2piano_layer_norm:
-    Pop2PianoLayerNorm = FusedRMSNorm  # noqa
+    Pop2PianoLayerNorm = MixedFusedRMSNorm  # noqa
 
 ALL_LAYERNORM_LAYERS.append(Pop2PianoLayerNorm)
 
