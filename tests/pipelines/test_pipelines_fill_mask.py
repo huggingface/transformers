@@ -147,7 +147,6 @@ class FillMaskPipelineTests(unittest.TestCase):
                 ],
             ],
         )
-        
 
     @require_torch_gpu
     def test_fp16_casting(self):
