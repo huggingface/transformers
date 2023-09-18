@@ -594,7 +594,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[in
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrSinePositionEmbedding with DeformableDetr->GroundingDINO
 class GroundingDINOSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -619,8 +618,8 @@ class GroundingDINOSinePositionEmbedding(nn.Module):
         x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
             eps = 1e-6
-            y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed  / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = x_embed  / (x_embed[:, :, -1:] + eps) * self.scale
 
         dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
@@ -662,7 +661,7 @@ def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
         # TODO find a better way of exposing other arguments
-        position_embedding = GroundingDINOSinePositionEmbedding(n_steps, normalize=True)
+        position_embedding = GroundingDINOSinePositionEmbedding(n_steps, config.positional_embedding_temperature, normalize=True)
     elif config.position_embedding_type == "learned":
         position_embedding = GroundingDINOLearnedPositionEmbedding(n_steps)
     else:
