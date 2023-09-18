@@ -166,15 +166,6 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         do_clean_text=False,
         **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            pad_token=pad_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            do_clean_text=do_clean_text,
-            **kwargs,
-        )
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -189,6 +180,16 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         self.vocab, self.raw_vocab, self.ids_to_tokens, self.emoji = load_vocab_and_emoji(vocab_file, emoji_file)
         self.subword_tokenizer = SubWordJapaneseTokenizer(
             vocab=self.vocab, ids_to_tokens=self.ids_to_tokens, emoji=self.emoji
+        )
+
+        super().__init__(
+            unk_token=unk_token,
+            pad_token=pad_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            do_clean_text=do_clean_text,
+            **kwargs,
         )
 
     @property
