@@ -44,14 +44,17 @@ class Kosmos2TextConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 65037):
             Vocabulary size of the Kosmos2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Kosmos2Model`].
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         embed_dim (`int`, *optional*, defaults to 2048):
             Dimensionality of the layers and the pooler layer.
         layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
         ffn_dim (`int`, *optional*, defaults to 8192):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer encoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -61,14 +64,13 @@ class Kosmos2TextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
         layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_embedding (`bool`, *optional*, defaults to `True`):
             Scale embeddings by diving by sqrt(embed_dim).
         use_cache (`bool`, *optional*, defaults to `True`):
