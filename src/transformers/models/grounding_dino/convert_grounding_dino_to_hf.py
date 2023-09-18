@@ -84,7 +84,7 @@ def create_rename_keys(state_dict, config):
                                 f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.layernorm_before.bias"))
             
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.norm2.weight", 
-                                f"encoder.layers.{layer}.blocks.{block}.layernorm_after.weight"))
+                                f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.layernorm_after.weight"))
             rename_keys.append((f"backbone.0.layers.{layer}.blocks.{block}.norm2.bias", 
                                 f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.layernorm_after.bias"))
             # attention
@@ -429,6 +429,8 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
         text_self_attention_masks=text_inputs["attention_mask"],
         position_ids=text_inputs["position_ids"],
     )
+
+    print("Finished")
 
     # if pytorch_dump_folder_path is not None:
     #     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
