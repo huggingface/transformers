@@ -344,7 +344,7 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. XLM-RoBERTa does
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. KOSMOS-2 does
         not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
