@@ -1586,15 +1586,11 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         return last_hidden_states
 
 
+@add_start_docstrings( 
+     "Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers. Each layer is a [`SeamlessM4TConformerEncoderLayer`].", 
+     SEAMLESS_M4T_START_DOCSTRING, 
+ ) 
 class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
-    """
-    Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers. Each layer
-    is a [`SeamlessM4TConformerEncoderLayer`].
-
-    Args:
-        config: (`SeamlessM4TConfig`)
-    """
-
     main_input_name = "input_features"
 
     def __init__(self, config: SeamlessM4TConfig):
@@ -1660,18 +1656,16 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
 
 
 # inspired from MBart and NllbMoe
-class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
+@add_start_docstrings( 
+     "Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a [`SeamlessM4TEncoderLayer`].", 
+     SEAMLESS_M4T_START_DOCSTRING, 
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`SeamlessM4TEncoderLayer`].
-
-    Args:
-        config: (`SeamlessM4TConfig`)
         embed_tokens (`nn.Embedding`, *optional*): output embedding
         is_t2u_encoder (`bool`, *optional*, defaults to `False`):
             indicates if it belongs to the text-to-units model, in which case it won't have input embeddings
     """
-
+ )
+class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
     def __init__(
         self,
         config: SeamlessM4TConfig,
@@ -1868,17 +1862,15 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
-
-class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
+@add_start_docstrings( 
+     "Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`].", 
+     SEAMLESS_M4T_START_DOCSTRING, 
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`]
-
-    Args:
-        config: (`SeamlessM4TConfig`)
         embed_tokens (`nn.Embedding`, *optional*): output embedding
         is_t2u_decoder (`bool`, *optional*, defaults to `False`): indicates if it belongs to the text-to-units model
     """
-
+ )
+class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
     def __init__(
         self,
         config: SeamlessM4TConfig,
@@ -2178,17 +2170,14 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
-
-class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
+@add_start_docstrings( 
+     "Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4TEncoder`] without embeddings and the decoder is a [`SeamlessM4TDecoder`].", 
+     SEAMLESS_M4T_START_DOCSTRING, 
     """
-    Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4TEncoder`] without embeddings and the
-    decoder is a [`SeamlessM4TDecoder`].
-
-    Args:
-        config: (`SeamlessM4TConfig`)
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
     """
-
+ )
+class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
     def __init__(
         self,
         config: SeamlessM4TConfig,
@@ -2290,16 +2279,14 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         )
 
 
-class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
+@add_start_docstrings( 
+     "Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4TTextToUnit`].", 
+     SEAMLESS_M4T_START_DOCSTRING, 
     """
-    Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a
-    [`SeamlessM4TTextToUnit`].
-
-    Args:
-        config: (`SeamlessM4TConfig`)
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
     """
-
+ )
+class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         "vocoder",
         "speech_encoder",
