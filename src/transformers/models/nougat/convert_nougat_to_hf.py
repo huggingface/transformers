@@ -193,8 +193,6 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     # NOTE original model does not use tied weights for embeddings of decoder
     original_embeddings = original_model.decoder.model.model.decoder.embed_tokens
     embeddings = model.decoder.model.decoder.embed_tokens
-    # explicitly set embeddings of decoder
-    # model.decoder.model.decoder.set_input_embeddings(original_embeddings)
     assert torch.allclose(original_embeddings.weight, embeddings.weight, atol=1e-3)
 
     # verify decoder hidden states
@@ -230,7 +228,7 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     generated = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)[0]
     assert (
         generated
-        == "# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher"
+        == "# Nougat: Neural Optical Understanding for Academic Documents\n\nLukas Blecher\n\nCorrespondence to: lble"
     )
     print("Looks ok!")
 
@@ -252,6 +250,7 @@ if __name__ == "__main__":
         default="nougat",
         required=False,
         type=str,
+        choices=["0.1.0-base", "0.1.0-small"],
         help="Name of the original model you'd like to convert.",
     )
     parser.add_argument(
