@@ -113,7 +113,7 @@ def find_next_punctuation(text: str, start_idx=0):
     return None
 
 
-def truncate_repetitions(s: str, min_len=30):
+def truncate_repetitions(text: str, min_len: int = 30) -> str:
     """
     Attempt to truncate repeating segments in the input string.
 
@@ -121,62 +121,64 @@ def truncate_repetitions(s: str, min_len=30):
     only once. To be considered for removal, repetitions need to be continuous.
 
     Args:
-        s (str): The input raw prediction to be truncated.
-        min_len (int): The minimum length of the repeating segment.
+        text (`str`):
+            The input raw prediction to be truncated.
+        min_len (int):
+            The minimum length of the repeating segment.
 
     Returns:
-        str: The input string with repeated segments truncated.
+        `str`: The input string with repeated segments truncated.
     """
-    s_lower = s.lower()
-    s_len = len(s_lower)
+    text_lower = text.lower()
+    text_length = len(text_lower)
 
-    if s_len < 2 * min_len:
-        return s
+    if text_length < 2 * min_len:
+        return text
 
     # try to find a length at which the tail is repeating
-    max_rep_len = None
-    for rep_len in range(min_len, int(s_len / 2)):
+    max_repetition_length = None
+    for repetition_length in range(min_len, int(text_length / 2)):
         # check if there is a repetition at the end
         same = True
-        for i in range(0, rep_len):
-            if s_lower[s_len - rep_len - i - 1] != s_lower[s_len - i - 1]:
+        for i in range(0, repetition_length):
+            if text_lower[text_length - repetition_length - i - 1] != text_lower[text_length - i - 1]:
                 same = False
                 break
 
         if same:
-            max_rep_len = rep_len
+            max_repetition_length = repetition_length
 
-    if max_rep_len is None:
-        return s
+    if max_repetition_length is None:
+        return text
 
-    lcs = s_lower[-max_rep_len:]
+    lcs = text_lower[-max_repetition_length:]
 
     # remove all but the last repetition
-    st = s
-    st_lower = s_lower
-    while st_lower.endswith(lcs):
-        st = st[:-max_rep_len]
-        st_lower = st_lower[:-max_rep_len]
+    substituted_text = text
+    substituted_text_lower = text_lower
+    while substituted_text_lower.endswith(lcs):
+        substituted_text = substituted_text[:-max_repetition_length]
+        substituted_text_lower = substituted_text_lower[:-max_repetition_length]
 
     # this is the tail with the repetitions
-    repeating_tail = s_lower[len(st_lower) :]
+    repeating_tail = text_lower[len(substituted_text_lower) :]
 
     # add until next punctuation and make sure last sentence is not repeating
-    st_lower_out = st_lower
+    substituted_text_lower_out = substituted_text_lower
     while True:
-        sentence_end = find_next_punctuation(s_lower, len(st_lower_out))
-        sentence_start = find_next_punctuation(s_lower[::-1], len(st_lower_out))
+        sentence_end = find_next_punctuation(text_lower, len(substituted_text_lower_out))
+        sentence_start = find_next_punctuation(text_lower[::-1], len(substituted_text_lower_out))
         if sentence_end and sentence_start:
-            sentence = s_lower[sentence_start:sentence_end]
-            st_lower_out = s_lower[: sentence_end + 1]
+            sentence = text_lower[sentence_start:sentence_end]
+            substituted_text_lower_out = text_lower[: sentence_end + 1]
             if sentence in repeating_tail:
                 break
         else:
             break
 
-    s_out = s[: len(st_lower_out)]
+    text_out = text[: len(substituted_text_lower_out)]
 
-    return s_out
+    return text_out
 
 
 def remove_numbers(lines):
@@ -213,7 +215,7 @@ def get_slices(lines, clean_lines):
     Returns:
         `List[tuple]`: A list of tuples representing the start and end indices of text slices.
     """
-    inds = np.zeros(len(lines))
+    indices = np.zeros(len(lines))
     for i in range(len(lines) - 1):
         j = i + 1
         while not clean_lines[j] and j < len(lines) - 1:
@@ -226,8 +228,8 @@ def get_slices(lines, clean_lines):
             and not clean_lines[i].startswith("[MISSING_PAGE")
             and (clean_lines[i] == clean_lines[j] or ratio(clean_lines[i], clean_lines[j]) > 0.9)
         ):
-            inds[i:j] = 1
-    ids = np.where(inds)[0]
+            indices[i:j] = 1
+    ids = np.where(indices)[0]
     slices = []
     if len(ids) == 0:
         return slices
@@ -327,10 +329,11 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         This function identifies and removes references that are marked as missing or hallucinated from the input text.
 
         Args:
-            text (str): The input text containing references.
+            text (`str`):
+                The input text containing references.
 
         Returns:
-            str: The text with hallucinated references removed.
+            `str`: The text with hallucinated references removed.
         """
         lines = text.split("\n")
         if len(lines) == 0:
