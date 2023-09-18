@@ -468,6 +468,7 @@ exotic_models_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager natten",
         "pip install -U --upgrade-strategy eager python-Levenshtein",
         "pip install -U --upgrade-strategy eager opencv-python",
+        "pip install -U --upgrade-strategy eager nltk",
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
