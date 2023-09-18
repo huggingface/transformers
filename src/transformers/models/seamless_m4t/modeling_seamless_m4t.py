@@ -3539,7 +3539,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         # replace eos per pad
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
         # offset of control symbols
-        unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.control_symbol_vocoder_offset)
+        unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.vocoder_offset)
         
         # TODO: warnings for vocoder tgt lang id
 
@@ -3914,7 +3914,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         # replace eos per pad
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
         # offset of control symbols
-        unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.control_symbol_vocoder_offset)
+        unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.vocoder_offset)
 
         # TODO: warnings for vocoder tgt lang id
 
@@ -4381,7 +4381,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # replace eos per pad
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
         # offset of control symbols
-        unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.control_symbol_vocoder_offset)
+        unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.vocoder_offset)
 
         # TODO: warnings for vocoder tgt lang id
 

@@ -40,13 +40,11 @@ class SeamlessM4TConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 256102):
             Vocabulary size of the SeamlessM4T model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`~SeamlessM4TModel`], [`~SeamlessM4TForSpeechToSpeech`],
-            [`~SeamlessM4TForSpeechToText`], [`~SeamlessM4TForTextToSpeech`] or [`~SeamlessM4TForTextToText`].
+            the `inputs_ids` passed when calling [`~SeamlessM4TModel`], [`~SeamlessM4TForTextToSpeech`] or [`~SeamlessM4TForTextToText`].
         unit_vocab_size (`int`, *optional*, defaults to 10082):
             Unit vocabulary size of the SeamlessM4T model. Defines the number of different unit tokens that can be
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4TModel`],
-            [`~SeamlessM4TForSpeechToSpeech`], [`~SeamlessM4TForSpeechToText`], [`~SeamlessM4TForTextToSpeech`] or
-            [`~SeamlessM4TForTextToText`].
+            [`~SeamlessM4TForSpeechToSpeech`] or [`~SeamlessM4TForTextToSpeech`].
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the "intermediate" layers in the architecture.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -72,10 +70,10 @@ class SeamlessM4TConfig(PretrainedConfig):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer text decoder.
         decoder_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer text decoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.05):
             The LayerDrop probability for the standard encoders. See the [LayerDrop paper](see
             https://arxiv.org/abs/1909.11556) for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.05):
             The LayerDrop probability for the standard decoders. See the [LayerDrop paper](see
             https://arxiv.org/abs/1909.11556) for more details.
         activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
@@ -214,7 +212,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             Kernel size of the duration predictor. Applies to the vocoder only.
         var_pred_dropout (`float`, *optional*, defaults to 0.5):
             The dropout probabilitiy of the duration predictor. Applies to the vocoder only.
-        control_symbol_vocoder_offset (`int`, *optional*, defaults to 4):
+        vocoder_offset (`int`, *optional*, defaults to 4):
             Offset the unit token ids by this number to account for symbol tokens. Applies to the vocoder only.
         Example:
 
@@ -314,7 +312,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         vocoder_num_spkrs=200,
         variance_predictor_kernel_size=3,
         var_pred_dropout=0.5,
-        control_symbol_vocoder_offset=4,
+        vocoder_offset=4,
         **kwargs,
     ):
         # overall_config
@@ -397,7 +395,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
         self.t2u_offset_tgt_lang = t2u_offset_tgt_lang
-        self.control_symbol_vocoder_offset = control_symbol_vocoder_offset
+        self.vocoder_offset = vocoder_offset
 
         # for proper config init
         self.num_attention_heads = decoder_attention_heads

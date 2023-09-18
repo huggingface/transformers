@@ -96,7 +96,7 @@ class SeamlessM4TModelTester:
         t2u_num_langs=0,
         t2u_max_new_tokens=25,
         t2u_offset_tgt_lang=0,
-        control_symbol_vocoder_offset=0,
+        vocoder_offset=0,
     ):
         self.parent = parent
         self.input_modality = input_modality
@@ -145,7 +145,7 @@ class SeamlessM4TModelTester:
         self.t2u_num_langs = t2u_num_langs
         self.t2u_max_new_tokens = t2u_max_new_tokens
         self.t2u_offset_tgt_lang = t2u_offset_tgt_lang
-        self.control_symbol_vocoder_offset = control_symbol_vocoder_offset
+        self.vocoder_offset = vocoder_offset
 
     def prepare_config_and_inputs(self):
         if self.input_modality == "text":
@@ -204,7 +204,7 @@ class SeamlessM4TModelTester:
             t2u_num_langs=self.t2u_num_langs,
             t2u_max_new_tokens=self.t2u_max_new_tokens,
             t2u_offset_tgt_lang=self.t2u_offset_tgt_lang,
-            control_symbol_vocoder_offset=self.control_symbol_vocoder_offset,
+            vocoder_offset=self.vocoder_offset,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
