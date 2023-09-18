@@ -59,8 +59,6 @@ class ImageToImagePipelineTests(unittest.TestCase):
         upscaler = pipeline("image-to-image", model=model_id)
         upscaled_list = upscaler(self.examples)
 
-        target_size = (1296, 976)
-
         self.assertEqual(len(upscaled_list), len(self.examples))
         for output in upscaled_list:
             self.assertIsInstance(output, Image.Image)
@@ -78,8 +76,6 @@ class ImageToImagePipelineTests(unittest.TestCase):
 
         upscaler = ImageToImagePipeline(model=model, image_processor=image_processor)
         upscaled_list = upscaler(self.examples)
-
-        target_size = (1296, 976)
 
         self.assertEqual(len(upscaled_list), len(self.examples))
         for output in upscaled_list:
