@@ -437,6 +437,7 @@ src/transformers/models/bloom/modeling_bloom.py
 src/transformers/models/bloom/modeling_flax_bloom.py
 src/transformers/models/bridgetower/configuration_bridgetower.py
 src/transformers/models/bridgetower/modeling_bridgetower.py
+src/transformers/models/bros/convert_bros_to_pytorch.py
 src/transformers/models/byt5/convert_byt5_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/camembert/modeling_camembert.py
 src/transformers/models/camembert/modeling_tf_camembert.py
