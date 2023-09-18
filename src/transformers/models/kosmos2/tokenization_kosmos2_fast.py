@@ -94,7 +94,7 @@ class Kosmos2TokenizerFast(PreTrainedTokenizerFast):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
-        num_patch_index_tokens (`int`, *optional*, defaults to `1024`):
+        num_patch_index_tokens (`int`, *optional*, defaults to 1024):
             The number of tokens used to specify the patch indices of bounding boxes in an image. These tokens have the
             format `<patch_index_xxxx>` where `xxxx` is an integer.
     """
