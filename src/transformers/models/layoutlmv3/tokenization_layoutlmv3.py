@@ -303,24 +303,6 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        super().__init__(
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            cls_token_box=cls_token_box,
-            sep_token_box=sep_token_box,
-            pad_token_box=pad_token_box,
-            pad_token_label=pad_token_label,
-            only_label_first_subword=only_label_first_subword,
-            **kwargs,
-        )
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -344,6 +326,24 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
 
+        super().__init__(
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            cls_token_box=cls_token_box,
+            sep_token_box=sep_token_box,
+            pad_token_box=pad_token_box,
+            pad_token_label=pad_token_label,
+            only_label_first_subword=only_label_first_subword,
+            **kwargs,
+        )
+
     @property
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.vocab_size
     def vocab_size(self):
@@ -351,7 +351,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_vocab
     def get_vocab(self):
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = dict(self.encoder).copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.bpe
     def bpe(self, token):
@@ -539,7 +541,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         if (
             (is_split_into_words or add_prefix_space)
             and (len(text) > 0 and not text[0].isspace())
-            and sum([text.startswith(no_split_token) for no_split_token in self.unique_no_split_tokens]) == 0
+            and sum([text.startswith(no_split_token) for no_split_token in self.added_tokens_encoder]) == 0
         ):
             text = " " + text
         return (text, kwargs)
