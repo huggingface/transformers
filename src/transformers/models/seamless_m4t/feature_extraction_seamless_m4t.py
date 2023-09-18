@@ -40,7 +40,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
     This class extracts mel-filter bank features from raw speech using TorchAudio
 
     Args:
-        feature_size (`int`, defaults to 80): TODO: is it used ?
+        feature_size (`int`, defaults to 80):
             The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
@@ -51,10 +51,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         stride (`int`, defaults to 2):
             Stride used to reshape audios from shape (batch_size,num_frames,num_mel_bins) to
             (batch_size,num_frames//stride,num_mel_bins*stride).
-        src_lang (`str`, *optional*, defaults to `"eng"`):
-            The language to use as source language for translation.
-        tgt_lang (`str`, *optional*, defaults to `"fra"`):
-            The language to use as target language for translation.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -65,17 +61,12 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate=16000,
         num_mel_bins=80,
         padding_value=0.0,
-        stride=2,  # TODO: add to docstrings
-        src_lang="eng",
-        tgt_lang="fra",
+        stride=2,
         **kwargs,
     ):
         self.num_mel_bins = num_mel_bins
         self.return_attention_mask = True
         self.stride = stride
-
-        self.src_lang = src_lang
-        self.tgt_lang = tgt_lang
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
@@ -126,7 +117,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         do_normalize_per_mel_bins: Optional[bool] = True,
-        tgt_lang: Optional[str] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -184,15 +174,10 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
                 `sampling_rate` at the forward call to prevent silent errors.
             do_normalize_per_mel_bins (`bool`, *optional*, defaults to `True`):
                 Whether or not to zero-mean unit-variance normalize the input per mel-channel.
-            tgt_lang (`str`, *optional*):
-                The language to use as target language for translation. If not specified, the last `tgt_lang` specified
-                (either during initialization or when calling the feature extractor) will be used.
             kwargs (*optional*):
                 Remaining dictionary of keyword arguments that will be passed to the tokenizer or the feature
                 extractor.
         """
-        self.tgt_lang = self.tgt_lang if tgt_lang is None else tgt_lang
-
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
