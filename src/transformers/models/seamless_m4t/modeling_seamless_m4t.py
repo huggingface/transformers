@@ -680,6 +680,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
 
         return hidden_states
 
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention._apply_relative_embeddings
     def _apply_relative_embeddings(self, query, key, relative_position_embeddings):
         # 1. project positional embeddings
         # => (batch, head, 2*time1-1, d_k)
@@ -930,8 +931,7 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
 
         # Feed-forward
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn = SeamlessM4TConformerFeedForward(config, act_fn="relu")
-        self.ffn_dropout = nn.Dropout(dropout)
+        self.ffn = SeamlessM4TConformerFeedForward(config, act_fn="relu", dropout=dropout)
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         pad = self.kernel_size // 2
@@ -988,8 +988,7 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.ffn_layer_norm(hidden_states)
-        hidden_states = self.ffn(hidden_states)
-        hidden_states = self.ffn_dropout(hidden_states) + residual
+        hidden_states = self.ffn(hidden_states) + residual
 
         return hidden_states
 
