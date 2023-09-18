@@ -2193,6 +2193,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             for idx, token in init_kwargs["added_tokens_decoder"].items():
                 if isinstance(token, dict):
                     token = AddedToken(**token)
+
                 if isinstance(token, AddedToken):
                     added_tokens_decoder[int(idx)] = token
                 else:
