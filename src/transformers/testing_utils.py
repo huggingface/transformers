@@ -72,6 +72,7 @@ from .utils import (
     is_levenshtein_available,
     is_librosa_available,
     is_natten_available,
+    is_nltk_available,
     is_onnx_available,
     is_optimum_available,
     is_pandas_available,
@@ -330,6 +331,16 @@ def require_levenshtein(test_case):
 
     """
     return unittest.skipUnless(is_levenshtein_available(), "test requires Levenshtein")(test_case)
+
+
+def require_nltk(test_case):
+    """
+    Decorator marking a test that requires NLTK.
+
+    These tests are skipped when NLTK isn't installed.
+
+    """
+    return unittest.skipUnless(is_nltk_available(), "test requires NLTK")(test_case)
 
 
 def require_accelerate(test_case):

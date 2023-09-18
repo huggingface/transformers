@@ -25,6 +25,7 @@ from transformers import DonutProcessor, NougatProcessor, TrOCRProcessor
 from transformers.testing_utils import (
     require_cv2,
     require_levenshtein,
+    require_nltk,
     require_sentencepiece,
     require_torch,
     require_vision,
@@ -1004,9 +1005,10 @@ class DonutModelIntegrationTest(unittest.TestCase):
 
 
 @require_cv2
-@require_vision
-@require_torch
 @require_levenshtein
+@require_nltk
+@require_torch
+@require_vision
 @slow
 class NougatModelIntegrationTest(unittest.TestCase):
     @cached_property
