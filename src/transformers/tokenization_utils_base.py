@@ -2201,6 +2201,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
                     )
         else:
+            logger.warning_once(
+                "Loading the tokenizer from the `special_tokens_map.json` and the `added_tokens.json` will be removed in `transformers 5`, "
+                " it is kept for forward compatibility, but it is recommended to update your `tokenizer_config.json` by uploading it again."
+                " You will see the new `added_tokens_decoder` attribute that will store the relevant information."
+            )
+
             # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
@@ -2451,12 +2457,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             file_names=file_names,
             legacy_format=legacy_format,
             filename_prefix=filename_prefix,
-        )
-        added_files = special_tokens_map_file
-        if self.get_added_vocab():
-            added_files = save_files[-1] + " and " + added_files
-        logger.warning_once(
-            f"Saving {added_files} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file"
         )
 
         if push_to_hub:
