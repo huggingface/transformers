@@ -96,7 +96,7 @@ SEAMLESS_M4T_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-M4T_INPUTS_DOCSTRING_FIRST_PART = r"""
+SEAMLESS_M4T_INPUTS_DOCSTRING_FIRST_PART = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -110,7 +110,7 @@ M4T_INPUTS_DOCSTRING_FIRST_PART = r"""
             [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
     """
 
-M4T_INPUTS_DOCSTRING_TEXT_PART = r"""
+SEAMLESS_M4T_INPUTS_DOCSTRING_TEXT_PART = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -121,14 +121,14 @@ M4T_INPUTS_DOCSTRING_TEXT_PART = r"""
             [What are input IDs?](../glossary#input-ids)
         """
 
-M4T_INPUTS_DOCSTRING_SPEECH_PART = r"""
+SEAMLESS_M4T_INPUTS_DOCSTRING_SPEECH_PART = r"""
     Args:
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
             Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
             [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
         """
 
-M4T_INPUTS_DOCSTRING_LAST_PART = r"""
+SEAMLESS_M4T_INPUTS_DOCSTRING_LAST_PART = r"""
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -220,11 +220,13 @@ M4T_INPUTS_DOCSTRING_LAST_PART = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-M4T_MODEL_INPUTS_DOCSTRING = M4T_INPUTS_DOCSTRING_FIRST_PART + M4T_INPUTS_DOCSTRING_LAST_PART
+M4T_MODEL_INPUTS_DOCSTRING = SEAMLESS_M4T_INPUTS_DOCSTRING_FIRST_PART + SEAMLESS_M4T_INPUTS_DOCSTRING_LAST_PART
 
-M4T_TEXT_INPUTS_DOCSTRING = M4T_INPUTS_DOCSTRING_TEXT_PART + M4T_INPUTS_DOCSTRING_LAST_PART
+M4T_TEXT_INPUTS_DOCSTRING = SEAMLESS_M4T_INPUTS_DOCSTRING_TEXT_PART + SEAMLESS_M4T_INPUTS_DOCSTRING_LAST_PART
 
-M4T_SPEECH_INPUTS_DOCSTRING = M4T_INPUTS_DOCSTRING_SPEECH_PART + M4T_INPUTS_DOCSTRING_LAST_PART
+M4T_SPEECH_INPUTS_DOCSTRING = SEAMLESS_M4T_INPUTS_DOCSTRING_SPEECH_PART + SEAMLESS_M4T_INPUTS_DOCSTRING_LAST_PART
+
+
 ############ UTILS ################
 
 
