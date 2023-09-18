@@ -348,18 +348,18 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             _ = processor.preprocess_text(images=None, texts=texts[2], bboxes=[[(79, 1016), (135, 1008)], [None]])
 
         # test batch
-        o = processor.preprocess_text(
+        outputs = processor.preprocess_text(
             images=None,
             texts=batch_text,
             bboxes=batch_bboxes,
         )
-        assert o == [expected_texts[0], expected_texts[1], expected_texts[2], expected_texts[5]]
-        o = processor(
+        assert outputs == [expected_texts[0], expected_texts[1], expected_texts[2], expected_texts[5]]
+        outputs = processor(
             images=None,
             text=batch_text,
             bboxes=batch_bboxes,
         )
-        assert o.input_ids == [
+        assert outputs.input_ids == [
             expected_input_ids[0],
             expected_input_ids[1],
             expected_input_ids[2],
@@ -367,25 +367,25 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         ]
 
         # test batch with padding (without `return_tensors`)
-        o = processor(
+        outputs = processor(
             images=None,
             text=batch_text,
             bboxes=batch_bboxes,
             padding=True,
         )
         # padding on the right
-        assert o.input_ids[0] == expected_input_ids[0] + [1] * (
+        assert outputs.input_ids[0] == expected_input_ids[0] + [1] * (
             len(expected_input_ids[5]) - len(expected_input_ids[0])
         )
-        assert o.attention_mask[0] == [1] * len(expected_input_ids[0]) + [0] * (
+        assert outputs.attention_mask[0] == [1] * len(expected_input_ids[0]) + [0] * (
             len(expected_input_ids[5]) - len(expected_input_ids[0])
         )
         # no padding for the longest sequence
-        assert o.input_ids[-1] == expected_input_ids[5]
-        assert o.attention_mask[-1] == [1] * len(expected_input_ids[5])
+        assert outputs.input_ids[-1] == expected_input_ids[5]
+        assert outputs.attention_mask[-1] == [1] * len(expected_input_ids[5])
 
         # test batch with padding (with `return_tensors`)
-        o = processor(
+        outputs = processor(
             images=None,
             text=batch_text,
             bboxes=batch_bboxes,
@@ -393,65 +393,65 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             padding=True,
         )
         # padding on the right
-        assert o.input_ids.numpy().tolist()[0] == expected_input_ids[0] + [1] * (
+        assert outputs.input_ids.numpy().tolist()[0] == expected_input_ids[0] + [1] * (
             len(expected_input_ids[5]) - len(expected_input_ids[0])
         )
-        assert o.attention_mask.numpy().tolist()[0] == [1] * len(expected_input_ids[0]) + [0] * (
+        assert outputs.attention_mask.numpy().tolist()[0] == [1] * len(expected_input_ids[0]) + [0] * (
             len(expected_input_ids[5]) - len(expected_input_ids[0])
         )
         # no padding for the longest sequence
-        assert o.input_ids.numpy().tolist()[-1] == expected_input_ids[5]
-        assert o.attention_mask.numpy().tolist()[-1] == [1] * len(expected_input_ids[5])
+        assert outputs.input_ids.numpy().tolist()[-1] == expected_input_ids[5]
+        assert outputs.attention_mask.numpy().tolist()[-1] == [1] * len(expected_input_ids[5])
 
         # test with image
         num_image_tokens = 64
         # (`image` type is not checked in `preprocess_text`. It works as long as it is not `None`.)
-        o = processor.preprocess_text(images=image, texts=texts[0], bboxes=None, num_image_tokens=num_image_tokens)
-        assert o == "".join(["<image>"] + ["<image>"] * num_image_tokens + ["</image>"] + [expected_texts[0]])
+        outputs = processor.preprocess_text(images=image, texts=texts[0], bboxes=None, num_image_tokens=num_image_tokens)
+        assert outputs == "".join(["<image>"] + ["<image>"] * num_image_tokens + ["</image>"] + [expected_texts[0]])
 
-        o = processor(images=image, text=texts[0], bboxes=None)
-        assert o.pixel_values[0].shape == (3, 224, 224)
-        assert o.input_ids == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:]
-        assert o.image_features_mask == [0] * 2 + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[0]) - 1)
-        assert np.allclose(o.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
-        assert np.allclose(o.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9)
+        outputs = processor(images=image, text=texts[0], bboxes=None)
+        assert outputs.pixel_values[0].shape == (3, 224, 224)
+        assert outputs.input_ids == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:]
+        assert outputs.image_features_mask == [0] * 2 + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[0]) - 1)
+        assert np.allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
+        assert np.allclose(outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9)
 
         # test with image in batch (right padding)
-        o = processor(
+        outputs = processor(
             images=batch_image,
             text=batch_text,
             bboxes=batch_bboxes,
             return_tensors="pt",
             padding=True,
         )
-        assert o.pixel_values.shape == (4, 3, 224, 224)
+        assert outputs.pixel_values.shape == (4, 3, 224, 224)
         assert np.allclose(
-            o.pixel_values[:, :3, :3, :3].numpy(), [EXPECTED_PIXEL_VALUES_1] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, :3, :3].numpy(), [EXPECTED_PIXEL_VALUES_1] * len(batch_image), atol=1e-9
         )
         assert np.allclose(
-            o.pixel_values[:, :3, -3:, -3:].numpy(), [EXPECTED_PIXEL_VALUES_2] * len(batch_image), atol=1e-9
+            outputs.pixel_values[:, :3, -3:, -3:].numpy(), [EXPECTED_PIXEL_VALUES_2] * len(batch_image), atol=1e-9
         )
         # padding on the right: the `[1:]` below is because the part for `BOS` is already added in the beginning of each (dynamically computed) expected value  # noqa
-        assert o.input_ids.numpy().tolist()[0] == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [
+        assert outputs.input_ids.numpy().tolist()[0] == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [
             64004
         ] + expected_input_ids[0][1:] + [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0]))
-        assert o.attention_mask.numpy().tolist()[0] == [1, 1] + [1] * num_image_tokens + [1] + [1] * len(
+        assert outputs.attention_mask.numpy().tolist()[0] == [1, 1] + [1] * num_image_tokens + [1] + [1] * len(
             expected_input_ids[0][1:]
         ) + [0] * (len(expected_input_ids[5]) - len(expected_input_ids[0]))
         assert (
-            o.input_ids.numpy().tolist()[-1]
+            outputs.input_ids.numpy().tolist()[-1]
             == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[5][1:]
         )
-        assert o.attention_mask.numpy().tolist()[-1] == [1] * (2 + num_image_tokens + len(expected_input_ids[5]))
+        assert outputs.attention_mask.numpy().tolist()[-1] == [1] * (2 + num_image_tokens + len(expected_input_ids[5]))
 
-        assert o.image_features_mask.numpy().tolist() == [
+        assert outputs.image_features_mask.numpy().tolist() == [
             [0, 0] + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[5]) - 1)
         ] * len(batch_image)
 
         processor = Kosmos2Processor.from_pretrained("ydshieh/temp-testing-kosmos-2", padding_side="left")
 
         # test with image in batch (left padding)
-        o = processor(
+        outputs = processor(
             images=batch_image,
             text=batch_text,
             bboxes=batch_bboxes,
@@ -460,26 +460,26 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         )
         # padding on the left: the `[1:]` below is because the part for `BOS` is already added in the beginning of each (dynamically computed) expected value  # noqa
         assert (
-            o.input_ids.numpy().tolist()[0]
+            outputs.input_ids.numpy().tolist()[0]
             == [1] * (len(expected_input_ids[5]) - len(expected_input_ids[0]))
             + [0, 64003]
             + list(range(4, 4 + num_image_tokens))
             + [64004]
             + expected_input_ids[0][1:]
         )
-        assert o.attention_mask.numpy().tolist()[0] == [0] * (
+        assert outputs.attention_mask.numpy().tolist()[0] == [0] * (
             len(expected_input_ids[5]) - len(expected_input_ids[0])
         ) + [1, 1] + [1] * num_image_tokens + [1] + [1] * len(expected_input_ids[0][1:])
-        assert o.image_features_mask.numpy().tolist()[0] == [0] * (
+        assert outputs.image_features_mask.numpy().tolist()[0] == [0] * (
             len(expected_input_ids[5]) - len(expected_input_ids[0])
         ) + [0, 0] + [1] * num_image_tokens + [0] + [0] * len(expected_input_ids[0][1:])
 
         # no padding for the longest sequence
         assert (
-            o.input_ids.numpy().tolist()[-1]
+            outputs.input_ids.numpy().tolist()[-1]
             == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[5][1:]
         )
-        assert o.attention_mask.numpy().tolist()[-1] == [1] * (2 + num_image_tokens + len(expected_input_ids[5]))
-        assert o.image_features_mask.numpy().tolist()[-1] == [0, 0] + [1] * num_image_tokens + [0] + [0] * (
+        assert outputs.attention_mask.numpy().tolist()[-1] == [1] * (2 + num_image_tokens + len(expected_input_ids[5]))
+        assert outputs.image_features_mask.numpy().tolist()[-1] == [0, 0] + [1] * num_image_tokens + [0] + [0] * (
             len(expected_input_ids[5]) - 1
         )
