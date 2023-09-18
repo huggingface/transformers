@@ -21,19 +21,12 @@ from pathlib import Path
 
 import torch
 from accelerate.utils.modeling import find_tied_parameters
-from huggingface_hub import HfApi
 from seamless_communication.models.inference.translator import Translator
 
-from transformers.models.seamless_m4t.configuration_seamless_m4t import SeamlessM4TConfig
-from transformers.models.seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
-from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
-from transformers.models.seamless_m4t.processing_seamless_m4t import SeamlessM4TProcessor
-from transformers.models.seamless_m4t.tokenization_seamless_m4t import SeamlessM4TTokenizer
+from transformers import SeamlessM4TConfig, SeamlessM4TFeatureExtractor, SeamlessM4TModel, SeamlessM4TProcessor, SeamlessM4TTokenizer
 from transformers.trainer_utils import set_seed
 from transformers.utils import logging
 
-
-api = HfApi()
 
 # fmt: off
 UNIT_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cmn__", "__cym__", "__dan__", "__deu__", "__eng__", "__est__", "__fin__", "__fra__", "__hin__", "__ind__", "__ita__", "__jpn__", "__kan__", "__kor__", "__mlt__", "__nld__", "__pes__", "__pol__", "__por__", "__ron__", "__rus__", "__slk__", "__spa__", "__swe__", "__swh__", "__tam__", "__tel__", "__tgl__", "__tha__", "__tur__", "__ukr__", "__urd__", "__uzn__", "__vie__", ]
@@ -43,6 +36,15 @@ UNIT_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cmn__
 VOCODER_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cmn__", "__cym__", "__dan__", "__deu__", "__eng__", "__est__", "__fin__", "__fra__", "__hin__", "__ind__", "__ita__", "__jpn__", "__kor__", "__mlt__", "__nld__", "__pes__", "__pol__", "__por__", "__ron__", "__rus__", "__slk__", "__spa__", "__swe__", "__swh__", "__tel__", "__tgl__", "__tha__", "__tur__", "__ukr__", "__urd__", "__uzn__", "__vie__",]
 # fmt: on
 
+
+# fmt: off
+MEDIUM_SUPPORTED_LANGUAGES = ["ace","ace_Latn","acm","acq","aeb","afr","ajp","aka","amh","apc","arb","ars","ary","arz","asm","ast","awa","ayr","azb","azj","bak","bam","ban","bel","bem","ben","bho","bjn","bjn_Latn","bod","bos","bug","bul","cat","ceb","ces","cjk","ckb","crh","cym","dan","deu","dik","dyu","dzo","ell","eng","epo","est","eus","ewe","fao","pes","fij","fin","fon","fra","fur","fuv","gla","gle","glg","grn","guj","hat","hau","heb","hin","hne","hrv","hun","hye","ibo","ilo","ind","isl","ita","jav","jpn","kab","kac","kam","kan","kas","kas_Deva","kat","knc","knc_Latn","kaz","kbp","kea","khm","kik","kin","kir","kmb","kon","kor","kmr","lao","lvs","lij","lim","lin","lit","lmo","ltg","ltz","lua","lug","luo","lus","mag","mai","mal","mar","min","mkd","plt","mlt","mni","khk","mos","mri","zsm","mya","nld","nno","nob","npi","nso","nus","nya","oci","gaz","ory","pag","pan","pap","pol","por","prs","pbt","quy","ron","run","rus","sag","san","sat","scn","shn","sin","slk","slv","smo","sna","snd","som","sot","spa","als","srd","srp","ssw","sun","swe","swh","szl","tam","tat","tel","tgk","tgl","tha","tir","taq","taq_Tfng","tpi","tsn","tso","tuk","tum","tur","twi","tzm","uig","ukr","umb","urd","uzn","vec","vie","war","wol","xho","ydd","yor","yue","cmn","cmn_Hant","zul",]
+# fmt: on
+
+
+# fmt: off
+LARGE_SUPPORTED_LANGUAGES = ["afr","amh","arb","ary","arz","asm","azj","bel","ben","bos","bul","cat","ceb","ces","ckb","cmn","cmn_Hant","cym","dan","deu","ell","eng","est","eus","fin","fra","fuv","gaz","gle","glg","guj","heb","hin","hrv","hun","hye","ibo","ind","isl","ita","jav","jpn","kan","kat","kaz","khk","khm","kir","kor","lao","lit","lug","luo","lvs","mai","mal","mar","mkd","mlt","mni","mya","nld","nno","nob","npi","nya","ory","pan","pbt","pes","pol","por","ron","rus","sat","slk","slv","sna","snd","som","spa","srp","swe","swh","tam","tel","tgk","tgl","tha","tur","ukr","urd","uzn","vie","yor","yue","zlm","zul",]
+# fmt: on
 
 def assert_param_count(model_1, model_2):
     count_1 = sum(p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0])
@@ -87,7 +89,6 @@ wav2vec_convert_list = [
     ("speech_encoder.adaptor_layers", "adapter.layers"),
     ("inner_proj", "intermediate_dense"),
     ("self_attn.output_proj", "self_attn.linear_out"),
-    # ("self_attn.output_dense", "self_attn.linear_out"),
     ("output_proj", "output_dense"),
     ("self_attn.k_proj", "self_attn.linear_k"),
     ("self_attn.v_proj", "self_attn.linear_v"),
@@ -103,8 +104,6 @@ wav2vec_convert_list = [
     ("speech_encoder.proj1", "intermediate_ffn.intermediate_dense"),
     ("speech_encoder.proj2", "intermediate_ffn.output_dense"),
     ("speech_encoder.layer_norm", "inner_layer_norm"),
-    # "layer_norm", "encoder.layers.*.final_layer_norm",
-    # "inner.layer_norm", "encoder.layer_norm",
 ]
 
 t2u_convert_list = [
@@ -142,9 +141,6 @@ default_cache_dir = os.path.join(os.path.expanduser("~"), ".cache")
 CACHE_DIR = os.path.join(os.getenv("XDG_CACHE_HOME", default_cache_dir), "huggingface", "hub")
 
 
-SAVE_DIR = "/home/ubuntu/weights"
-
-
 def _load_original_model(device, name="seamlessM4T_medium"):
     unity_hub = Translator(name, "vocoder_36langs", device, torch.float32)
 
@@ -153,20 +149,13 @@ def _load_original_model(device, name="seamlessM4T_medium"):
 
 def _load_langs(model_type="medium"):
     if model_type == "medium":
-        # fmt: off
-        langs = ["ace","ace_Latn","acm","acq","aeb","afr","ajp","aka","amh","apc","arb","ars","ary","arz","asm","ast","awa","ayr","azb","azj","bak","bam","ban","bel","bem","ben","bho","bjn","bjn_Latn","bod","bos","bug","bul","cat","ceb","ces","cjk","ckb","crh","cym","dan","deu","dik","dyu","dzo","ell","eng","epo","est","eus","ewe","fao","pes","fij","fin","fon","fra","fur","fuv","gla","gle","glg","grn","guj","hat","hau","heb","hin","hne","hrv","hun","hye","ibo","ilo","ind","isl","ita","jav","jpn","kab","kac","kam","kan","kas","kas_Deva","kat","knc","knc_Latn","kaz","kbp","kea","khm","kik","kin","kir","kmb","kon","kor","kmr","lao","lvs","lij","lim","lin","lit","lmo","ltg","ltz","lua","lug","luo","lus","mag","mai","mal","mar","min","mkd","plt","mlt","mni","khk","mos","mri","zsm","mya","nld","nno","nob","npi","nso","nus","nya","oci","gaz","ory","pag","pan","pap","pol","por","prs","pbt","quy","ron","run","rus","sag","san","sat","scn","shn","sin","slk","slv","smo","sna","snd","som","sot","spa","als","srd","srp","ssw","sun","swe","swh","szl","tam","tat","tel","tgk","tgl","tha","tir","taq","taq_Tfng","tpi","tsn","tso","tuk","tum","tur","twi","tzm","uig","ukr","umb","urd","uzn","vec","vie","war","wol","xho","ydd","yor","yue","cmn","cmn_Hant","zul",]
-        # fmt: on
-        return langs
+        return MEDIUM_SUPPORTED_LANGUAGES
     else:
-        # fmt: off
-        langs = ["afr","amh","arb","ary","arz","asm","azj","bel","ben","bos","bul","cat","ceb","ces","ckb","cmn","cmn_Hant","cym","dan","deu","ell","eng","est","eus","fin","fra","fuv","gaz","gle","glg","guj","heb","hin","hrv","hun","hye","ibo","ind","isl","ita","jav","jpn","kan","kat","kaz","khk","khm","kir","kor","lao","lit","lug","luo","lvs","mai","mal","mar","mkd","mlt","mni","mya","nld","nno","nob","npi","nya","ory","pan","pbt","pes","pol","por","ron","rus","sat","slk","slv","sna","snd","som","spa","srp","swe","swh","tam","tel","tgk","tgl","tha","tur","ukr","urd","uzn","vie","yor","yue","zlm","zul",]
-        # fmt: on
-        return langs
+        return LARGE_SUPPORTED_LANGUAGES
 
 
 def _load_hf_config(model_type="medium"):
     if model_type == "medium":
-        # (model_dim=1024, w2v2_encoder_config=Wav2Vec2EncoderConfig(feature_dim=160, use_fbank=True, first_pass_dropout_p=0.0, layer_norm_features=False, feature_extractor_layer_descs=[], feature_extractor_bias=False, feature_extractor_layer_norm_convs=False, feature_grad_scale=0,pos_encoder_type='relative', pos_encoder_depth=0, pos_conv_kernel_size=0, num_pos_conv_groups=0, use_conformer=True, ffn_inner_dim=4096, dropout_p=0.0, attn_dropout_p=0.0, layer_drop_p=0.0, norm_order=<TransformerNormOrder.POST: 0>, depthwise_conv_kernel_size=31), nllb_config=NllbConfig(model_dim=1024, max_seq_len=1024,, pad_idx=0,dropout_p=0.1), t2u_config=UnitYT2UConfig(model_dim=1024, unit_max_seq_len=2048, unit_pad_idx=1, num_encoder_layers=4, num_decoder_layers=4, num_encoder_attn_heads=16, num_decoder_attn_heads=16, ffn_inner_dim=8192, dropout_p=0.1), use_text_encoder=True, use_conformer_adaptor=False, num_adaptor_layers=1, adaptor_kernel_size=8, adaptor_stride=8, adaptor_layer_norm=True, adaptor_dropout_p=0.1)
         kwargs = {
             "vocab_size": 256206,
             "unit_vocab_size": 10082,
@@ -247,7 +236,7 @@ def _convert_model(
     return hf_model
 
 
-def load_model(pytorch_dump_folder_path, model_type, repo_id="ylacombe/hf-seamless-m4t-medium"):
+def load_model(save_dir, model_type, repo_id):
     """
     Meta SeamlessM4T is made of 8 main components:
     - speech_encoder (#1) and speech_encoder_frontend (#2)
@@ -270,7 +259,7 @@ def load_model(pytorch_dump_folder_path, model_type, repo_id="ylacombe/hf-seamle
     langs = _load_langs(model_type)
     vocab_file = os.path.join(os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model")
 
-    save_dir = os.path.join(SAVE_DIR, name)
+    save_dir = os.path.join(save_dir, name)
     Path(save_dir).mkdir(exist_ok=True)
 
     tokenizer = SeamlessM4TTokenizer(vocab_file, language_code=langs)
@@ -278,7 +267,6 @@ def load_model(pytorch_dump_folder_path, model_type, repo_id="ylacombe/hf-seamle
     sanity_check_lang_id = tokenizer.lang_code_to_id["__fra__"]
 
     tokenizer.save_pretrained(save_dir)
-    # tokenizer.push_to_hub(repo_id=repo_id, create_pr = True)
     tokenizer = SeamlessM4TTokenizer.from_pretrained(save_dir)
 
     if sanity_check_lang_id != tokenizer.lang_code_to_id["__fra__"]:
@@ -296,7 +284,6 @@ def load_model(pytorch_dump_folder_path, model_type, repo_id="ylacombe/hf-seamle
     fe = SeamlessM4TFeatureExtractor(language_code=langs)
 
     fe.save_pretrained(save_dir)
-    # fe.push_to_hub(repo_id=repo_id, create_pr=True)
     fe = SeamlessM4TFeatureExtractor.from_pretrained(save_dir)
 
     processor = SeamlessM4TProcessor(feature_extractor=fe, tokenizer=tokenizer)
@@ -391,9 +378,6 @@ def load_model(pytorch_dump_folder_path, model_type, repo_id="ylacombe/hf-seamle
     count_1 = param_count(hf_model.text_decoder)
     count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
 
-    # with tempfile.TemporaryDirectory() as tmpdirname:
-    #    hf_model.save_pretrained(tmpdirname)
-    #    hf_model = SeamlessM4TModel.from_pretrained(tmpdirname)
 
     assert count_1 == count_2, f"Text decoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
@@ -430,47 +414,6 @@ def load_model(pytorch_dump_folder_path, model_type, repo_id="ylacombe/hf-seamle
     hf_model.push_to_hub(repo_id=repo_id, create_pr=True, max_shard_size="20GB")
     hf_model = SeamlessM4TModel.from_pretrained(save_dir)
 
-    input_test_text = "This is something to be translated in French"
-    # dummy_speech_encoder_inputs = torch.load("/home/ubuntu/input_speech_encoder.pt")
-    # attention_mask = torch.ones(input_test_text.shape[:2]).bool()
-    # attention_mask[:, -1] = False
-    # del attention_mask
-
-    inputs = tokenizer([input_test_text], return_tensors="pt")
-
-    # inputs["attention_mask"][:, -1] = 0
-    set_seed(10)
-
-    with torch.inference_mode():
-        output_new_model = hf_model.generate(**inputs)
-
-    output_text_new_model = tokenizer.decode(output_new_model[0])
-
-    del hf_model
-
-    original_model = _load_original_model(device)
-
-    output_text_original_model, output_waveform_original_model, sr = original_model.predict(
-        input_test_text, "T2ST", src_lang="eng", tgt_lang="fra"
-    )
-
-    output_old_model = output_waveform_original_model
-
-    if output_text_original_model.__str__() != output_text_new_model:
-        raise ValueError(
-            f"Not the same text output: {output_text_original_model.__str__()} VS {output_text_new_model}"
-        )
-
-    torch.testing.assert_close(output_new_model, output_old_model)
-
-    # output difference should come from the difference of self-attention implementation design
-    if output_new_model.shape != output_old_model.shape:
-        raise ValueError("initial and new outputs don't have the same shape")
-    if (output_new_model - output_old_model).abs().max().item() > 1e-3:
-        raise ValueError("initial and new outputs are not equal")
-
-    # Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    # new_model.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -478,19 +421,27 @@ if __name__ == "__main__":
     # Required parameters
 
     parser.add_argument(
-        "--pytorch_dump_folder_path",
-        default="/home/yoach/m4t_weights",
-        type=str,
-        help="Path to the output PyTorch model.",
-    )
-
-    parser.add_argument(
         "--model_type",
         default="medium",
         type=str,
-        help="Path to the output PyTorch model.",
+        help="Model type.",
     )
+ 
+    parser.add_argument(
+        "--save_dir",
+        default="/home/ubuntu/weights",
+        type=str,
+        help="Path to the output PyTorch model.",
+    )   
+    
+    parser.add_argument(
+        "--repo_id",
+        default="ylacombe/hf-seamless-m4t-medium",
+        type=str,
+        help="Repo ID.",
+    )   
+    
 
     args = parser.parse_args()
 
-    load_model(args.pytorch_dump_folder_path, args.model_type)
+    load_model(args.save_dir, args.model_type, args.repo_id)
