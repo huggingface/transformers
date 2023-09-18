@@ -977,9 +977,9 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
                     self.assertEqual(output_1[key].item(), output_2[key].item())
                 else:
                     self.assertListAlmostEqual(output_1[key].squeeze().tolist(), output_2[key].squeeze().tolist())
-
+                    
     @slow
-    def test_whole_model(self):
+    def test_to_eng_text(self):
         model = SeamlessM4TModel.from_pretrained(self.repo_id).to(torch_device)
 
         # test text - tgt lang: eng
@@ -1011,13 +1011,12 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         # FOR NOW, only first units correspondance
         self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])        
 
-        # self.assertTrue(expected_wav_mean == output.waveform.mean().item())
-        # self.assertTrue(expected_wav_std == output.waveform.std().item())
-
-        ########################
-
+    @slow
+    def test_to_swh_text(self):
+        model = SeamlessM4TModel.from_pretrained(self.repo_id).to(torch_device)
+        
         # test text - tgt lang: swh
 
         # fmt: off
@@ -1047,11 +1046,10 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
-        # self.assertTrue(expected_wav_mean == output.waveform.mean().item())
-        # self.assertTrue(expected_wav_std == output.waveform.std().item())
-
-        ########################
-
+    @slow
+    def test_to_rus_speech(self):
+        model = SeamlessM4TModel.from_pretrained(self.repo_id).to(torch_device)
+        
         # test audio - tgt lang: rus
 
         # fmt: off
@@ -1083,12 +1081,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
 
         self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
-
-        # self.assertTrue(expected_wav_mean == output.waveform.mean().item())
-        # self.assertTrue(expected_wav_std == output.waveform.std().item())
-
-        ########################
-
+        
     @slow
     def test_text_to_text_model(self):
         kwargs1 = {"tgt_lang": "eng", "return_intermediate_token_ids": True, "generate_speech": False}
