@@ -1,2 +1,3 @@
 docs/source/en/generation_strategies.md
+docs/source/en/model_doc/ctrl.md
 docs/source/en/task_summary.md
