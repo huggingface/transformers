@@ -406,13 +406,20 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         # test with image
         num_image_tokens = 64
         # (`image` type is not checked in `preprocess_text`. It works as long as it is not `None`.)
-        outputs = processor.preprocess_text(images=image, texts=texts[0], bboxes=None, num_image_tokens=num_image_tokens)
+        outputs = processor.preprocess_text(
+            images=image, texts=texts[0], bboxes=None, num_image_tokens=num_image_tokens
+        )
         assert outputs == "".join(["<image>"] + ["<image>"] * num_image_tokens + ["</image>"] + [expected_texts[0]])
 
         outputs = processor(images=image, text=texts[0], bboxes=None)
         assert outputs.pixel_values[0].shape == (3, 224, 224)
-        assert outputs.input_ids == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:]
-        assert outputs.image_features_mask == [0] * 2 + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[0]) - 1)
+        assert (
+            outputs.input_ids
+            == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:]
+        )
+        assert outputs.image_features_mask == [0] * 2 + [1] * num_image_tokens + [0] + [0] * (
+            len(expected_input_ids[0]) - 1
+        )
         assert np.allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
         assert np.allclose(outputs.pixel_values[0][:3, -3:, -3:], EXPECTED_PIXEL_VALUES_2, atol=1e-9)
 
