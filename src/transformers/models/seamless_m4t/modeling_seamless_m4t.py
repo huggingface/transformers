@@ -3014,13 +3014,12 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
             batch_size = len(input_ids) if input_ids is not None else len(kwargs.get("inputs_embeds"))
 
             if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
+                # also accept __xxx__
+                tgt_lang = tgt_lang.replace("__", "")
                 if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
                     raise ValueError(
                         f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
                     )
-                # also accept __xxx__
-                tgt_lang = tgt_lang.replace("__", "")
-                
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
                 text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
@@ -3298,13 +3297,12 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
             batch_size = len(input_features) if input_features is not None else len(kwargs.get("inputs_embeds"))
 
             if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
+                # also accept __xxx__
+                tgt_lang = tgt_lang.replace("__", "")
                 if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
                     raise ValueError(
                         f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
                     )
-                # also accept __xxx__
-                tgt_lang = tgt_lang.replace("__", "")
-                
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
                 text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
@@ -3574,6 +3572,23 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         """
         batch_size = len(input_ids) if input_ids is not None else len(kwargs.get("inputs_embeds"))
 
+        if tgt_lang is None:
+            raise ValueError("You must specify a `tgt_lang` to generate translated speech.")
+        else:
+            # also accept __xxx__
+            tgt_lang = tgt_lang.replace("__", "")
+            for key in ["text_decoder_lang_to_code_id", "t2u_lang_code_to_id", "vocoder_lang_code_to_id"]:
+                lang_code_to_id = getattr(self.generation_config,key, None)
+                if lang_code_to_id is None:
+                    raise ValueError(
+                f"This model generation config doesn't have a `{key}` key which maps the target language to the right token id. Make sure to load the right generation config."
+                )
+                elif tgt_lang not in lang_code_to_id:
+                    raise ValueError(
+                    f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(lang_code_to_id.keys())}
+                    Note that SeamlessM4T supports more languages for text translation than for speech synthesis."""
+                )
+
         # attribute kwargs to models
         kwargs_text = {}
         kwargs_speech = {}
@@ -3597,28 +3612,11 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
 
                     
         text_decoder_input_ids = kwargs_text.get("decoder_input_ids")
+
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
-        if tgt_lang is not None:
-            if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
-                if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
-                    raise ValueError(
-                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
-                    )
-                # also accept __xxx__
-                tgt_lang = tgt_lang.replace("__", "")
-                
-                # tgt_lang gets priority over decoder input ids
-                text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
-            else:
-               raise ValueError(
-                    f"This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
-                ) 
-        else:
-            # only a warning, otherwise errors appear in the tests
-            logger.warning(
-                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
-            )
+        text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
+        text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+
         kwargs_text["decoder_input_ids"] = text_decoder_input_ids
 
         # first generation
@@ -3660,25 +3658,13 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
 
         # Compute decoder_input_ids if necessary
         t2u_decoder_input_ids = kwargs_speech.get("decoder_input_ids")
-        if tgt_lang is not None:
-            if hasattr(self.generation_config, "t2u_lang_code_to_id"):
-                t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
-                if t2u_tgt_lang_id is None:
-                    raise ValueError(
-                        f"""`tgt_lang={tgt_lang}` is not supported for speech generation.
-                        Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())} to
-                        generate speech.
-                        Note that SeamlessM4T supports more languages for text translation than for speech synthesis.
-                        """)
-                # + 5 for EOS/PAD/BOS/UNK token + mask token
-                t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
-                t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
-                    self.device
-                )
-            else:               
-                raise ValueError(
-                    f"This model generation config doesn't have a `t2u_lang_code_to_id` key which maps the target language to the right token id. Make sure to load the right generation config."
-                ) 
+        t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
+        
+        # + 5 for EOS/PAD/BOS/UNK token + mask token
+        t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
+        t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
+            self.device
+        )
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
@@ -3692,8 +3678,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         # offset of control symbols
         unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.vocoder_offset)
         
-        # TODO: warnings for vocoder tgt lang id
-
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
         vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids)).to(self.device)
 
@@ -3956,6 +3940,23 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
               sequence_length)`and and `waveform_lengths` which gives the length of each sample.
         """
         batch_size = len(input_features) if input_features is not None else len(kwargs.get("inputs_embeds"))
+    
+        if tgt_lang is None:
+            raise ValueError("You must specify a `tgt_lang` to generate translated speech.")
+        else:
+            # also accept __xxx__
+            tgt_lang = tgt_lang.replace("__", "")
+            for key in ["text_decoder_lang_to_code_id", "t2u_lang_code_to_id", "vocoder_lang_code_to_id"]:
+                lang_code_to_id = getattr(self.generation_config,key, None)
+                if lang_code_to_id is None:
+                    raise ValueError(
+                f"This model generation config doesn't have a `{key}` key which maps the target language to the right token id. Make sure to load the right generation config."
+                )
+                elif tgt_lang not in lang_code_to_id:
+                    raise ValueError(
+                    f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(lang_code_to_id.keys())}
+                    Note that SeamlessM4T supports more languages for text translation than for speech synthesis."""
+                )
 
         # attribute kwargs to models
         kwargs_text = {}
@@ -3981,27 +3982,9 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                     
         text_decoder_input_ids = kwargs_text.get("decoder_input_ids")
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
-        if tgt_lang is not None:
-            if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
-                if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
-                    raise ValueError(
-                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
-                    )
-                # also accept __xxx__
-                tgt_lang = tgt_lang.replace("__", "")
-                
-                # tgt_lang gets priority over decoder input ids
-                text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
-            else:
-               raise ValueError(
-                    f"This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
-                ) 
-        else:
-            # only a warning, otherwise errors appear in the tests
-            logger.warning(
-                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
-            )
+        text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
+        text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+
         kwargs_text["decoder_input_ids"] = text_decoder_input_ids
 
         # first generation
@@ -4051,25 +4034,14 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
 
         # Compute decoder_input_ids if necessary
         t2u_decoder_input_ids = kwargs_speech.get("decoder_input_ids")
-        if tgt_lang is not None:
-            if hasattr(self.generation_config, "t2u_lang_code_to_id"):
-                t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
-                if t2u_tgt_lang_id is None:
-                    raise ValueError(
-                        f"""`tgt_lang={tgt_lang}` is not supported for speech generation.
-                        Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())} to
-                        generate speech.
-                        Note that SeamlessM4T supports more languages for text translation than for speech synthesis.
-                        """)
-                # + 5 for EOS/PAD/BOS/UNK token + mask token
-                t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
-                t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
-                    self.device
-                )
-            else:               
-                raise ValueError(
-                    f"This model generation config doesn't have a `t2u_lang_code_to_id` key which maps the target language to the right token id. Make sure to load the right generation config."
-                ) 
+        t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
+        
+        # + 5 for EOS/PAD/BOS/UNK token + mask token
+        t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
+        t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
+            self.device
+        )
+        
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
@@ -4082,8 +4054,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
         # offset of control symbols
         unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.vocoder_offset)
-
-        # TODO: warnings for vocoder tgt lang id
 
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
         vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids)).to(self.device)
@@ -4417,6 +4387,24 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             raise ValueError(
                 "`input_ids`,`input_features` and `inputs_embeds` are all empty. Make sure at least one of them is not."
             )
+            
+        if generate_speech and tgt_lang is None:
+            raise ValueError("You must specify a `tgt_lang` to generate translated speech.")
+        
+        if tgt_lang is not None:
+            # also accept __xxx__
+            tgt_lang = tgt_lang.replace("__", "")
+            for key in ["text_decoder_lang_to_code_id", "t2u_lang_code_to_id", "vocoder_lang_code_to_id"]:
+                lang_code_to_id = getattr(self.generation_config,key, None)
+                if lang_code_to_id is None:
+                    raise ValueError(
+                f"This model generation config doesn't have a `{key}` key which maps the target language to the right token id. Make sure to load the right generation config."
+                )
+                elif tgt_lang not in lang_code_to_id:
+                    raise ValueError(
+                    f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(lang_code_to_id.keys())}
+                    Note that SeamlessM4T supports more languages for text translation than for speech synthesis."""
+                )
 
         batch_size = (
             len(input_features)
@@ -4445,30 +4433,14 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
 
-                    
+        
         text_decoder_input_ids = kwargs_text.get("decoder_input_ids")
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
         if tgt_lang is not None:
-            if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
-                if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
-                    raise ValueError(
-                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
-                    )
-                # also accept __xxx__
-                tgt_lang = tgt_lang.replace("__", "")
-                
-                # tgt_lang gets priority over decoder input ids
-                text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
-                text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
-            else:
-               raise ValueError(
-                    f"This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
-                ) 
-        else:
-            # only a warning, otherwise errors appear in the tests
-            logger.warning(
-                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
-            )
+            # tgt_lang gets priority over decoder input ids
+            text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
+            text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
+            
         kwargs_text["decoder_input_ids"] = text_decoder_input_ids
 
 
@@ -4538,25 +4510,15 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         # Compute decoder_input_ids if necessary
         t2u_decoder_input_ids = kwargs_speech.get("decoder_input_ids")
-        if tgt_lang is not None:
-            if hasattr(self.generation_config, "t2u_lang_code_to_id"):
-                t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
-                if t2u_tgt_lang_id is None:
-                    raise ValueError(
-                        f"""`tgt_lang={tgt_lang}` is not supported for speech generation.
-                        Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())} to
-                        generate speech, or set `generate_speech=False` to only generate translated text.
-                        Note that SeamlessM4T supports more languages for text translation than for speech synthesis.
-                        """)
-                # + 5 for EOS/PAD/BOS/UNK token + mask token
-                t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
-                t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
-                    self.device
-                )
-            else:               
-                raise ValueError(
-                    f"This model generation config doesn't have a `t2u_lang_code_to_id` key which maps the target language to the right token id. Make sure to load the right generation config."
-                ) 
+        t2u_tgt_lang_id = self.generation_config.t2u_lang_code_to_id.get(tgt_lang)
+        
+        # + 5 for EOS/PAD/BOS/UNK token + mask token
+        t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.t2u_num_langs + self.config.t2u_offset_tgt_lang
+        t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
+            self.device
+        )
+
+
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
 
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
@@ -4569,8 +4531,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
         # offset of control symbols
         unit_ids = torch.where(unit_ids == self.config.t2u_pad_token_id, unit_ids, unit_ids - self.config.vocoder_offset)
-
-        # TODO: warnings for vocoder tgt lang id
 
         vocoder_tgt_lang_id = self.generation_config.vocoder_lang_code_to_id.get(tgt_lang)
         vocoder_tgt_lang_id = torch.tensor([[vocoder_tgt_lang_id]] * len(unit_ids)).to(self.device)
