@@ -85,9 +85,6 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
-        
-
-
     @require_torch
     def test_small_model_pt(self):
         unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", top_k=2, framework="pt")
