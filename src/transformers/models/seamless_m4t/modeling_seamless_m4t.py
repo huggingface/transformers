@@ -2722,11 +2722,10 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
 
                 Indices can be obtained using [`SeamlessM4TTextToUnitForConditionalGeneration`]. [What are input
                 IDs?](../glossary#input-ids)
-            tgt_lang (`str`, *optional*):
-                The language id to use as target language for translation.
             spkr_id (`int`, *optional*):
                 The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
-
+            tgt_lang (`str`, *optional*):
+                The language id to use as target language for translation.
         """
         hidden_states = self.unit_embedding(input_ids).transpose(1, 2)
         spkr = self.speaker_embedding(spkr_id).transpose(1, 2)
@@ -3487,9 +3486,8 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
         if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(
-                batch_size, -1
-            ).argmax(-1)
+            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores
+            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.view(batch_size, -1).argmax(-1)
             idx_most_probable_sequences_per_batch = (
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
             )
@@ -3863,9 +3861,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
         if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(
-                batch_size, -1
-            ).argmax(-1)
+            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores
+            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.view(batch_size, -1).argmax(-1)
             idx_most_probable_sequences_per_batch = (
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
             )
@@ -4331,9 +4328,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
         if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(
-                batch_size, -1
-            ).argmax(-1)
+            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores
+            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.view(batch_size, -1).argmax(-1)
             idx_most_probable_sequences_per_batch = (
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
             )
