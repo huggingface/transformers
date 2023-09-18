@@ -1005,10 +1005,10 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         # FOR NOW, only first units correspondance
         self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50:60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
-        # self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
-        # self.assertTrue(expected_wav_std == output.waveforms.std().item())
+        # self.assertTrue(expected_wav_mean == output.waveform.mean().item())
+        # self.assertTrue(expected_wav_std == output.waveform.std().item())
 
         ########################
 
@@ -1040,10 +1040,10 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50:60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
-        # self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
-        # self.assertTrue(expected_wav_std == output.waveforms.std().item())
+        # self.assertTrue(expected_wav_mean == output.waveform.mean().item())
+        # self.assertTrue(expected_wav_std == output.waveform.std().item())
 
         ########################
 
@@ -1078,10 +1078,10 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
 
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50:60])
+        self.assertListAlmostEqual(expected_wav_slice, output.waveform.squeeze().tolist()[50:60])
 
-        # self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
-        # self.assertTrue(expected_wav_std == output.waveforms.std().item())
+        # self.assertTrue(expected_wav_mean == output.waveform.mean().item())
+        # self.assertTrue(expected_wav_std == output.waveform.std().item())
 
         ########################
 
