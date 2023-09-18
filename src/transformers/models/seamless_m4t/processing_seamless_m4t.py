@@ -40,7 +40,7 @@ class SeamlessM4TProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, audios=None, return_tensors=None, src_lang=None, tgt_lang=None, **kwargs):
+    def __call__(self, text=None, audios=None, src_lang=None, tgt_lang=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
         and `kwargs` arguments to SeamlessM4TTokenizerFast's [`~SeamlessM4TTokenizerFast.__call__`] if `text` is not
@@ -57,13 +57,6 @@ class SeamlessM4TProcessor(ProcessorMixin):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
             src_lang (`str`, *optional*):
                 The language code of the input texts/audios. If not specified, the last `src_lang` specified will be
                 used.
@@ -94,17 +87,13 @@ class SeamlessM4TProcessor(ProcessorMixin):
                 self.tokenizer.tgt_lang = tgt_lang
             if src_lang is not None:
                 self.tokenizer.src_lang = src_lang
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            encoding = self.tokenizer(text, **kwargs)
 
             return encoding
 
         else:
-            if tgt_lang is not None:
-                self.feature_extractor.tgt_lang = tgt_lang
-            if src_lang is not None:
-                self.feature_extractor.src_lang = src_lang
             encoding = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_tensors=return_tensors, **kwargs
+                audios, sampling_rate=sampling_rate, **kwargs
             )
             return encoding
 
