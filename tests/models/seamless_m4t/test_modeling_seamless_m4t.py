@@ -808,9 +808,8 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
         return config, input_speech, input_text
 
     def factory_generation_speech_test(self, model, inputs):
-        with torch.inference_mode():
-            set_seed(0)
-            output = model.generate(**inputs)
+        set_seed(0)
+        output = model.generate(**inputs)
         return output
 
     def test_speech_generation(self):
@@ -967,11 +966,10 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         model1 = class1.from_pretrained(self.repo_id).to(torch_device)
         model2 = class2.from_pretrained(self.repo_id).to(torch_device)
 
-        with torch.inference_mode():
-            set_seed(0)
-            output_1 = model1.generate(**inputs, **class1_kwargs)
-            set_seed(0)
-            output_2 = model2.generate(**inputs, **class2_kwargs)
+        set_seed(0)
+        output_1 = model1.generate(**inputs, **class1_kwargs)
+        set_seed(0)
+        output_2 = model2.generate(**inputs, **class2_kwargs)
 
         for key in output_1:
             if isinstance(output_1[key], torch.Tensor):
@@ -1006,9 +1004,8 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        with torch.inference_mode():
-            set_seed(0)
-            output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
+        set_seed(0)
+        output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         # FOR NOW, only first units correspondance
@@ -1042,9 +1039,8 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
             ]
         # fmt: on
 
-        with torch.inference_mode():
-            set_seed(0)
-            output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
+        set_seed(0)
+        output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
@@ -1078,11 +1074,10 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
             ]
         # fmt: on
 
-        with torch.inference_mode():
-            set_seed(0)
-            output = model.generate(
-                **self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True
-            )
+        set_seed(0)
+        output = model.generate(
+            **self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True
+        )
 
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens[:10], output.unit_sequences.squeeze().tolist()[:10])
