@@ -14,11 +14,11 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The SeamlessM4T model was proposed in [SeamlessM4T — Massively Multilingual & Multimodal Machine Translation](https://dl.fbaipublicfiles.com/seamless/seamless_m4t_paper.pdf) by the Seamless Communication team.
+The SeamlessM4T model was proposed in [SeamlessM4T — Massively Multilingual & Multimodal Machine Translation](https://dl.fbaipublicfiles.com/seamless/seamless_m4t_paper.pdf) by the Seamless Communication team from Meta AI.
 
 SeamlessM4T is a collection of models designed to provide high quality translation, allowing people from different linguistic communities to communicate effortlessly through speech and text.
 
-SeamlessM4T enables multiple tasks without relying on multiple separate models:
+SeamlessM4T enables multiple tasks without relying on separate models:
 
 - Speech-to-speech translation (S2ST)
 - Speech-to-text translation (S2TT)

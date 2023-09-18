@@ -51,7 +51,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             Dimensionality of the "intermediate" layers in the architecture.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
@@ -166,7 +166,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             Number of langs supported by the text-to-unit component.
         t2u_offset_tgt_lang (`int`, *optional*, defaults to 10005):
             Used to offset the target language id before passing it to the text decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
+        t2u_max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
         pad_token_id (`int`, *optional*, defaults to 0):
@@ -369,7 +369,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_decoder_start_token_id = t2u_decoder_start_token_id
         self.t2u_max_new_tokens = t2u_max_new_tokens
         self.t2u_num_langs = t2u_num_langs
-        # self.type_vocab_size = type_vocab_size
         self.t2u_encoder_layers = t2u_encoder_layers
         self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
         self.t2u_encoder_attention_heads = t2u_encoder_attention_heads

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ class SeamlessM4TModelTester:
         self,
         parent,
         input_modality="speech",
-        batch_size=8,
+        batch_size=2,
         seq_length=4,
         is_training=True,
         use_input_mask=True,

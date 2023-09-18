@@ -296,17 +296,17 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-def _compute_new_attention_mask(hidden_states: Tensor, seq_lens: Optional[Tensor] = None):
+def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: Optional[torch.Tensor] = None):
     """
     Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
     stops at the corresponding element in `seq_lens`.
 
     Args:
-        hidden_states (`torch.FloatTensor`):
-            The sequences to mask of shape `(batch, seq_len, *)` where `*` is any number of sequence-specific
+        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`): 
+            The sequences to mask, where `*` is any number of sequence-specific
             dimensions including none.
-        seq_lens (`torch.Tensor`):
-            A tensor of shape `(batch,)` where each element represents the length of the sequence at the same index in
+        seq_lens (`torch.Tensor` of shape `(batch)`:
+            Each element represents the length of the sequence at the same index in
             `hidden_states`
 
     Returns:
@@ -2765,7 +2765,7 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
 
         return input_lengths
 
-    def forward(self, input_ids: Tensor, spkr_id: Tensor, lang_id: Tensor) -> Tensor:  # type: ignore
+    def forward(self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor) -> Tuple[torch.Tensor]
         """
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
