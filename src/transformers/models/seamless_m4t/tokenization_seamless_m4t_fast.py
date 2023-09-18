@@ -134,7 +134,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file=None,
-        language_code: Optional[List] = None,  # TODO: add to docstrings
+        language_code: Optional[List] = None,
         tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",

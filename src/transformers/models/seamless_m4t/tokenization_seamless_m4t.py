@@ -53,9 +53,6 @@ LARGE_SEAMLESS_M4T_LANGUAGE_CODES = ["afr","amh","arb","ary","arz","asm","azj","
 # fmt: on
 
 
-# TODO: add language code to docstrings
-
-
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
     Construct an SeamlessM4T tokenizer.

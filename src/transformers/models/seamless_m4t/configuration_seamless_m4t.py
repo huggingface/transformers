@@ -45,6 +45,9 @@ class SeamlessM4TConfig(PretrainedConfig):
             Unit vocabulary size of the SeamlessM4T model. Defines the number of different unit tokens that can be
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4TModel`],
             [`~SeamlessM4TForSpeechToSpeech`] or [`~SeamlessM4TForTextToSpeech`].
+            
+        > Parameters shared across sub-models  
+            
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the "intermediate" layers in the architecture.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -58,6 +61,26 @@ class SeamlessM4TConfig(PretrainedConfig):
             this to something large just in case (e.g., 512 or 1024 or 2048).
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.05):
+            The LayerDrop probability for the encoders. See the [LayerDrop paper](see
+            https://arxiv.org/abs/1909.11556) for more details.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.05):
+            The LayerDrop probability for the decoders. See the [LayerDrop paper](see
+            https://arxiv.org/abs/1909.11556) for more details.
+        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
+            The non-linear activation function (function or string) in the decoder and feed-forward layers. If string,
+            `"gelu"`, `"relu"`, `"selu"`, `"swish"` and `"gelu_new"` are supported.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, decoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all attention layers.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all activation layers in the model.        
+        scale_embedding (`bool`, *optional*, defaults to `True`):
+            Scale embeddings by diving by sqrt(d_model).
+          
+        > Text encoder and text decoder specific parameters
+        
         encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer text encoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 8192):
@@ -70,28 +93,20 @@ class SeamlessM4TConfig(PretrainedConfig):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer text decoder.
         decoder_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer text decoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the standard encoders. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.05):
-            The LayerDrop probability for the standard decoders. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
-        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the decoder and feed-forward layers. If string,
-            `"gelu"`, `"relu"`, `"selu"`, `"swish"` and `"gelu_new"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, decoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all attention layers.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all activation layers in the model.
         decoder_start_token_id (`int`, *optional*, defaults to 3):
             If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token. Only
             applied in the text decoder.
-        scale_embedding (`bool`, *optional*, defaults to `True`):
-            Scale embeddings by diving by sqrt(d_model).
         max_new_tokens (`int`, *optional*, defaults to 256):
             The maximum numbers of text tokens to generate, ignoring the number of tokens in the prompt.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The id of the _padding_ text token. Only applied to the text-decoder model.
+        bos_token_id (`int`, *optional*, defaults to 2):
+            The id of the _beginning-of-stream_ text token. Only applied to the text-decoder model.
+        eos_token_id (`int`, *optional*, defaults to 3):
+            The id of the _end-of-stream_ text token. Only applied to the text-decoder model.
+            
+        > Speech encoder specific parameters
+            
         speech_encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer speech encoder.
         speech_encoder_attention_heads (`int`, *optional*, defaults to 16):
@@ -136,6 +151,10 @@ class SeamlessM4TConfig(PretrainedConfig):
             the speech encoder.
         conv_depthwise_kernel_size (`int`, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
+            
+            
+        > Text-To-Unit (t2u) model specific parameters
+        
         t2u_bos_token_id (`int`, *optional*, defaults to 0):
             The id of the _beginning-of-stream_ unit token. Only applied to the text-to-unit seq2seq model.
         t2u_pad_token_id (`int`, *optional*, defaults to 1):
@@ -167,12 +186,9 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The id of the _padding_ text token. Only applied to the text-decoder model.
-        bos_token_id (`int`, *optional*, defaults to 2):
-            The id of the _beginning-of-stream_ text token. Only applied to the text-decoder model.
-        eos_token_id (`int`, *optional*, defaults to 3):
-            The id of the _end-of-stream_ text token. Only applied to the text-decoder model.
+            
+        > Hifi-Gan Vocoder specific parameters
+            
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):
@@ -234,30 +250,32 @@ class SeamlessM4TConfig(PretrainedConfig):
         self,
         vocab_size=256102,
         unit_vocab_size=10082,
-        # overall_config
+        # shared config
         hidden_size=1024,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         use_cache=True,
         max_position_embeddings=1024,
         is_encoder_decoder=True,
-        # left to add
-        # text|unit encoder|decoder
-        encoder_layers=24,
-        encoder_ffn_dim=8192,
-        encoder_attention_heads=16,
-        decoder_layers=24,
-        decoder_ffn_dim=8192,
-        decoder_attention_heads=16,
         encoder_layerdrop=0.05,
         decoder_layerdrop=0.05,
         activation_function="relu",
         dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.0,
-        decoder_start_token_id=3,
         scale_embedding=True,
+        # text encoder|decoder
+        encoder_layers=24,
+        encoder_ffn_dim=8192,
+        encoder_attention_heads=16,
+        decoder_layers=24,
+        decoder_ffn_dim=8192,
+        decoder_attention_heads=16,
+        decoder_start_token_id=3,
         max_new_tokens=256,
+        pad_token_id=0,
+        bos_token_id=2,
+        eos_token_id=3,
         # speech_encoder
         speech_encoder_layers=24,
         speech_encoder_attention_heads=16,
@@ -292,9 +310,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_num_langs=38,
         t2u_offset_tgt_lang=10005,
         t2u_max_position_embeddings=2048,
-        pad_token_id=0,
-        bos_token_id=2,
-        eos_token_id=3,
         # hifi-gan vocoder config
         sampling_rate=16000,
         upsample_initial_channel=512,
@@ -319,12 +334,21 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.unit_vocab_size = unit_vocab_size
         self.hidden_size = hidden_size
-        self.speech_encoder_intermediate_size = speech_encoder_intermediate_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.max_position_embeddings = max_position_embeddings
         self.use_cache = use_cache
         self.max_new_tokens = max_new_tokens
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
+        self.activation_function = activation_function
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.scale_embedding = scale_embedding
+        # for proper config init
+        self.num_attention_heads = decoder_attention_heads
+        self.num_hidden_layers = decoder_layers
 
         # text|unit encoder|decoder
         self.encoder_layers = encoder_layers
@@ -333,13 +357,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.decoder_layers = decoder_layers
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_attention_heads = decoder_attention_heads
-        self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
-        self.activation_function = activation_function
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.scale_embedding = scale_embedding
 
         # speech_encoder
         self.speech_encoder_layers = speech_encoder_layers
@@ -347,6 +364,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.speech_encoder_dropout = speech_encoder_dropout
         self.speech_encoder_attention_heads = speech_encoder_attention_heads
         self.speech_encoder_layerdrop = speech_encoder_layerdrop
+        self.speech_encoder_intermediate_size = speech_encoder_intermediate_size
         self.feature_projection_input_dim = feature_projection_input_dim
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
@@ -396,10 +414,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.var_pred_dropout = var_pred_dropout
         self.t2u_offset_tgt_lang = t2u_offset_tgt_lang
         self.vocoder_offset = vocoder_offset
-
-        # for proper config init
-        self.num_attention_heads = decoder_attention_heads
-        self.num_hidden_layers = decoder_layers
 
         super().__init__(
             pad_token_id=pad_token_id,
