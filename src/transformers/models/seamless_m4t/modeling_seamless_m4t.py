@@ -3516,6 +3516,18 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         """
+        Generates translated audio waveforms.
+
+        <Tip>
+        This method successively calls the `.generate` function of two different sub-models. 
+        You can specify keyword arguments at two different levels: general arguments that will be passed to both models, or prefixed arguments that will be passed to one of them.
+
+        For example, calling `.generate(input_ids, num_beams=4, speech_do_sample=True)` will successively perform beam-search decoding on the text model, and multinomial beam-search sampling on the speech model.
+        
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
+        </Tip>
+        
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary.
@@ -3525,15 +3537,12 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
 
                 [What are input IDs?](../glossary#input-ids)
             return_intermediate_token_ids (`bool`, *optional*):
-                If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
-                want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter
-                will be ignored.
-
+                If `True`, also returns the intermediate generated text and unit tokens. Set to `True` if you also
+                want to get translated text alongside the audio.
             tgt_lang (`str`, *optional*):
                 The language to use as target language for translation.
             spkr_id (`int`, *optional*):
                 The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
-
             kwargs (*optional*):
                 Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
                 arguments are of two types:
@@ -3884,16 +3893,25 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         """
+        Generates translated audio waveforms.
+
+        <Tip>
+        This method successively calls the `.generate` function of two different sub-models. 
+        You can specify keyword arguments at two different levels: general arguments that will be passed to both models, or prefixed arguments that will be passed to one of them.
+
+        For example, calling `.generate(input_features, num_beams=4, speech_do_sample=True)` will successively perform beam-search decoding on the text model, and multinomial beam-search sampling on the speech model.
+        
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
+        </Tip>
+        
         Args:
             input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
                 Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
                 [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
-
             return_intermediate_token_ids (`bool`, *optional*):
-                If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
-                want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter
-                will be ignored.
-
+                If `True`, also returns the intermediate generated text and unit tokens. Set to `True` if you also
+                want to get translated text alongside the audio.
             tgt_lang (`str`, *optional*):
                 The language to use as target language for translation.
             spkr_id (`int`, *optional*):
@@ -4315,6 +4333,19 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         """
+        Generates translated token ids and/or translated audio waveforms.
+
+        <Tip>
+        This method successively calls the `.generate` function of two different sub-models. 
+        You can specify keyword arguments at two different levels: general arguments that will be passed to both models, or prefixed arguments that will be passed to one of them.
+
+        For example, calling `.generate(input_ids=input_ids, num_beams=4, speech_do_sample=True)` will successively perform beam-search decoding on the text model, and multinomial beam-search sampling on the speech model.
+        
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
+        </Tip>
+        
+        
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary.
@@ -4326,12 +4357,10 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
                 Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
                 [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
-
             return_intermediate_token_ids (`bool`, *optional*):
-                If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
+                If `True`, also returns the intermediate generated text and unit tokens. Set to `True` if you also
                 want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter
                 will be ignored.
-
             tgt_lang (`str`, *optional*):
                 The language to use as target language for translation.
             spkr_id (`int`, *optional*):
