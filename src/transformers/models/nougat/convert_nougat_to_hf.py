@@ -137,9 +137,9 @@ def convert_state_dict(orig_state_dict, model):
     return orig_state_dict
 
 
-def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_nougat_checkpoint(model_tag, pytorch_dump_folder_path=None, push_to_hub=False):
     # load original model
-    checkpoint_path = get_checkpoint()
+    checkpoint_path = get_checkpoint(None, model_tag)
     original_model = NougatModel.from_pretrained(checkpoint_path)
     original_model.eval()
 
@@ -226,10 +226,17 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         do_sample=False,
     )
     generated = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)[0]
-    assert (
-        generated
-        == "# Nougat: Neural Optical Understanding for Academic Documents\n\nLukas Blecher\n\nCorrespondence to: lble"
-    )
+
+    if model_tag == "0.1.0-base":
+        expected_generation = "# Nougat: Neural Optical Understanding for Academic Documents\n\nLukas Blecher\n\nCorrespondence to: lblec"
+    elif model_tag == "0.1.0-small":
+        expected_generation = (
+            "# Nougat: Neural Optical Understanding for Academic Documents\n\nLukas Blecher\n\nCorrespondence to: lble"
+        )
+    else:
+        raise ValueError(f"Unexpected model tag: {model_tag}")
+
+    assert generated == expected_generation
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
@@ -238,20 +245,23 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub("nielsr/" + model_name.split("/")[-1], commit_message="Update model")
-        processor.push_to_hub("nielsr/" + model_name.split("/")[-1], commit_message="Update model")
+        tag_to_name = {"0.1.0-base": "nougat-base", "0.1.0-small": "nougat-small"}
+        model_name = tag_to_name[model_tag]
+
+        model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--model_name",
-        default="nougat",
+        "--model_tag",
+        default="0.1.0-base",
         required=False,
         type=str,
         choices=["0.1.0-base", "0.1.0-small"],
-        help="Name of the original model you'd like to convert.",
+        help="Tag of the original model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -267,4 +277,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_nougat_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_nougat_checkpoint(args.model_tag, args.pytorch_dump_folder_path, args.push_to_hub)
