@@ -61,7 +61,23 @@ class FillMaskPipeline(Pipeline):
     masks. The returned values are raw model output, and correspond to disjoint probabilities where one might expect
     joint probabilities (See [discussion](https://github.com/huggingface/transformers/pull/10222)).
 
-    </Tip>"""
+    </Tip>
+    
+    <Tip>
+
+    This pipeline now supports tokenizer_kwargs. For example try:
+
+    >>> from transformers import pipeline
+
+    >>> fill_masker = pipeline(model="bert-base-uncased")
+    >>> tokenizer_kwargs = {'truncation': True}
+    >>> fill_masker("This is a simple [MASK]. " + "...with a large amount of repeated text appended. " * 100, tokenizer_kwargs=tokenizer_kwargs)
+
+
+    </Tip>
+
+
+    """
 
     def get_masked_index(self, input_ids: GenericTensor) -> np.ndarray:
         if self.framework == "tf":
