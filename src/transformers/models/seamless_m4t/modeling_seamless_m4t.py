@@ -302,12 +302,10 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: Optional[
     stops at the corresponding element in `seq_lens`.
 
     Args:
-        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`): 
-            The sequences to mask, where `*` is any number of sequence-specific
-            dimensions including none.
+        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
+            The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
         seq_lens (`torch.Tensor` of shape `(batch)`:
-            Each element represents the length of the sequence at the same index in
-            `hidden_states`
+            Each element represents the length of the sequence at the same index in `hidden_states`
 
     Returns:
         `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
@@ -526,7 +524,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
         if (config.conv_depthwise_kernel_size - 1) % 2 == 1:
             raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
         self.layer_norm = nn.LayerNorm(config.hidden_size)
-        self.pointwise_conv1 = torch.nn.Conv1d(
+        self.pointwise_conv1 = nn.Conv1d(
             config.hidden_size,
             2 * config.hidden_size,
             kernel_size=1,
@@ -534,8 +532,8 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
             padding=0,
             bias=False,
         )
-        self.glu = torch.nn.GLU(dim=1)
-        self.depthwise_conv = torch.nn.Conv1d(
+        self.glu = nn.GLU(dim=1)
+        self.depthwise_conv = nn.Conv1d(
             config.hidden_size,
             config.hidden_size,
             config.conv_depthwise_kernel_size,
@@ -544,9 +542,9 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
             groups=config.hidden_size,
             bias=False,
         )
-        self.batch_norm = torch.nn.BatchNorm1d(config.hidden_size)
+        self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         self.activation = ACT2FN[config.speech_encoder_hidden_act]
-        self.pointwise_conv2 = torch.nn.Conv1d(
+        self.pointwise_conv2 = nn.Conv1d(
             config.hidden_size,
             config.hidden_size,
             kernel_size=1,
@@ -554,7 +552,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
             padding=0,
             bias=False,
         )
-        self.dropout = torch.nn.Dropout(config.speech_encoder_dropout)
+        self.dropout = nn.Dropout(config.speech_encoder_dropout)
 
     def forward(self, hidden_states, attention_mask=None):
         hidden_states = self.layer_norm(hidden_states)
@@ -741,7 +739,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
 class SeamlessM4TConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
 
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->SeamlessM4T, attention_dropout->speech_encoder_dropout
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->SeamlessM4T, attention_dropout->speech_encoder_dropout, torch.nn->nn
     def __init__(self, config):
         super().__init__()
         embed_dim = config.hidden_size
@@ -753,7 +751,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
-        self.self_attn_dropout = torch.nn.Dropout(dropout)
+        self.self_attn_dropout = nn.Dropout(dropout)
         self.self_attn = SeamlessM4TConformerSelfAttention(config)
 
         # Conformer Convolution
@@ -933,7 +931,7 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
             stride=self.stride,
             padding=self.stride // 2,
         )
-        self.activation = torch.nn.GLU(dim=1)
+        self.activation = nn.GLU(dim=1)
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
@@ -945,12 +943,12 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
             padding=self.stride // 2,
         )
         self.self_attn = SeamlessM4TConformerSelfAttention(config, use_position_embeddings=False)
-        self.self_attn_dropout = torch.nn.Dropout(dropout)
+        self.self_attn_dropout = nn.Dropout(dropout)
 
         # Feed-forward
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
         self.ffn = SeamlessM4TConformerFeedForward(config, use_relu=True)
-        self.ffn_dropout = torch.nn.Dropout(dropout)
+        self.ffn_dropout = nn.Dropout(dropout)
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         if attention_mask is None:
@@ -2765,7 +2763,9 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
 
         return input_lengths
 
-    def forward(self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(
+        self, input_ids: torch.LongTensor, spkr_id: torch.Tensor, lang_id: torch.Tensor
+    ) -> Tuple[torch.Tensor]:
         """
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
