@@ -1034,7 +1034,7 @@ def _get_shape(t):
     FSMT_START_DOCSTRING,
 )
 class FSMTModel(PretrainedFSMTModel):
-    _tied_weights_keys = ["decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
@@ -1175,7 +1175,7 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel):
     base_model_prefix = "model"
-    _tied_weights_keys = ["model.decoder.embed_tokens.weight"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "decoder.output_projection.weight"]
 
     def __init__(self, config: FSMTConfig):
         super().__init__(config)
