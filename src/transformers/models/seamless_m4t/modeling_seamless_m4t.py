@@ -79,6 +79,7 @@ class SeamlessM4TGenerationOutput(ModelOutput):
             dimension (unit_sequence_length) is either equal to `t2u_max_length` or shorter if all batches finished
             early due to the `t2u_eos_token_id`.
     """
+
     waveform: Optional[torch.FloatTensor] = None
     waveform_lengths: Optional[torch.IntTensor] = None
     sequences: Optional[Tuple[torch.FloatTensor]] = None
@@ -483,7 +484,7 @@ class SeamlessM4TConformerFeedForward(nn.Module):
         super().__init__()
         dropout = dropout if dropout is not None else config.speech_encoder_dropout
         act_fn = act_fn if act_fn is not None else config.speech_encoder_hidden_act
-        
+
         self.intermediate_dropout = nn.Dropout(dropout)
         self.intermediate_dense = nn.Linear(config.hidden_size, config.speech_encoder_intermediate_size)
         self.intermediate_act_fn = ACT2FN[act_fn] if isinstance(act_fn, str) else act_fn
@@ -1586,10 +1587,10 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         return last_hidden_states
 
 
-@add_start_docstrings( 
-     "Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers. Each layer is a [`SeamlessM4TConformerEncoderLayer`].", 
-     SEAMLESS_M4T_START_DOCSTRING, 
- ) 
+@add_start_docstrings(
+    "Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers. Each layer is a [`SeamlessM4TConformerEncoderLayer`].",
+    SEAMLESS_M4T_START_DOCSTRING,
+)
 class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
     main_input_name = "input_features"
 
@@ -1656,15 +1657,15 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
 
 
 # inspired from MBart and NllbMoe
-@add_start_docstrings( 
-     "Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a [`SeamlessM4TEncoderLayer`].", 
-     SEAMLESS_M4T_START_DOCSTRING, 
+@add_start_docstrings(
+    "Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a [`SeamlessM4TEncoderLayer`].",
+    SEAMLESS_M4T_START_DOCSTRING,
     """
-        embed_tokens (`nn.Embedding`, *optional*): output embedding
-        is_t2u_encoder (`bool`, *optional*, defaults to `False`):
+        embed_tokens (`nn.Embedding`, *optional*): output embedding is_t2u_encoder (`bool`, *optional*, defaults to
+        `False`):
             indicates if it belongs to the text-to-units model, in which case it won't have input embeddings
-    """
- )
+    """,
+)
 class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
     def __init__(
         self,
@@ -1862,14 +1863,15 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
-@add_start_docstrings( 
-     "Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`].", 
-     SEAMLESS_M4T_START_DOCSTRING, 
+
+@add_start_docstrings(
+    "Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`].",
+    SEAMLESS_M4T_START_DOCSTRING,
     """
-        embed_tokens (`nn.Embedding`, *optional*): output embedding
-        is_t2u_decoder (`bool`, *optional*, defaults to `False`): indicates if it belongs to the text-to-units model
-    """
- )
+        embed_tokens (`nn.Embedding`, *optional*): output embedding is_t2u_decoder (`bool`, *optional*, defaults to
+        `False`): indicates if it belongs to the text-to-units model
+    """,
+)
 class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
     def __init__(
         self,
@@ -2170,13 +2172,14 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
-@add_start_docstrings( 
-     "Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4TEncoder`] without embeddings and the decoder is a [`SeamlessM4TDecoder`].", 
-     SEAMLESS_M4T_START_DOCSTRING, 
+
+@add_start_docstrings(
+    "Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4TEncoder`] without embeddings and the decoder is a [`SeamlessM4TDecoder`].",
+    SEAMLESS_M4T_START_DOCSTRING,
     """
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
-    """
- )
+    """,
+)
 class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
     def __init__(
         self,
@@ -2273,13 +2276,13 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         )
 
 
-@add_start_docstrings( 
-     "Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4TTextToUnit`].", 
-     SEAMLESS_M4T_START_DOCSTRING, 
+@add_start_docstrings(
+    "Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4TTextToUnit`].",
+    SEAMLESS_M4T_START_DOCSTRING,
     """
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
-    """
- )
+    """,
+)
 class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         "vocoder",
@@ -3486,8 +3489,8 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
         if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores
-            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.view(batch_size, -1).argmax(-1)
+            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(batch_size, -1)
+            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.argmax(-1)
             idx_most_probable_sequences_per_batch = (
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
             )
@@ -3861,8 +3864,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
         if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores
-            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.view(batch_size, -1).argmax(-1)
+            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(batch_size, -1)
+            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.argmax(-1)
             idx_most_probable_sequences_per_batch = (
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
             )
@@ -4328,8 +4331,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
         if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores
-            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.view(batch_size, -1).argmax(-1)
+            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(batch_size, -1)
+            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch.argmax(-1)
             idx_most_probable_sequences_per_batch = (
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size).to(self.device) * num_return_sequences
             )
