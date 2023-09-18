@@ -118,11 +118,13 @@ def create_sinusoidal_positions(num_pos, dim):
 
     return jnp.array(out)
 
+
 # Copied from transformers.models.gptj.modeling_flax_gptj.rotate_every_two
 def rotate_every_two(tensor):
     rotate_half_tensor = jnp.stack((-tensor[:, :, :, 1::2], tensor[:, :, :, ::2]), axis=-1)
     rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
     return rotate_half_tensor
+
 
 # Copied from transformers.models.gptj.modeling_flax_gptj.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor, sincos):
@@ -130,7 +132,6 @@ def apply_rotary_pos_emb(tensor, sincos):
     sin_pos = sin_pos[:, :, None, :].repeat(2, 3)
     cos_pos = cos_pos[:, :, None, :].repeat(2, 3)
     return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
-
 
 
 class FlaxGPTNeoXAttention(nn.Module):
@@ -190,10 +191,10 @@ class FlaxGPTNeoXAttention(nn.Module):
             )
             attention_mask = combine_masks(pad_mask, attention_mask)
         return key, value, attention_mask
-    
+
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
-    
+
     def __call__(
         self,
         hidden_states,
@@ -351,6 +352,7 @@ class FlaxGPTNeoXBlock(nn.Module):
 
         return (hidden_states,) + attn_outputs[1:]
 
+
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo -> GPTNeoX
 class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
     """
@@ -373,7 +375,7 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
-    
+
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
@@ -483,7 +485,8 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
-# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoXBlockCollection with GPTNeo -> GPTNeoX
+
+# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoBlockCollection with GPTNeo -> GPTNeoX
 class FlaxGPTNeoXBlockCollection(nn.Module):
     config: GPTNeoXConfig
     dtype: jnp.dtype = jnp.float32
@@ -572,7 +575,7 @@ class FlaxGPTNeoXModule(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         hidden_states = outputs[0]
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -662,7 +665,7 @@ class FlaxGPTNeoXForCausalLMModule(nn.Module):
 )
 class FlaxGPTNeoXForCausalLM(FlaxGPTNeoXPreTrainedModel):
     module_class = FlaxGPTNeoXForCausalLMModule
-    
+
     def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
