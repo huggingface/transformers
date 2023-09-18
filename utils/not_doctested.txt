@@ -431,7 +431,6 @@ src/transformers/models/blip/modeling_blip_text.py
 src/transformers/models/blip/modeling_tf_blip_text.py
 src/transformers/models/blip_2/configuration_blip_2.py
 src/transformers/models/blip_2/convert_blip_2_original_to_pytorch.py
-src/transformers/models/blip_2/modeling_blip_2.py
 src/transformers/models/bloom/convert_bloom_original_checkpoint_to_pytorch.py
 src/transformers/models/bloom/modeling_bloom.py
 src/transformers/models/bloom/modeling_flax_bloom.py
