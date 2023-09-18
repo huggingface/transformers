@@ -115,6 +115,11 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 
 class MarkdownCompatibleTest(unittest.TestCase):
+    def test_equation_tag(self):
+        input_text = "[Equation 3] (1.618z) \\[Extra Text\\]"
+        excepted_output = "[Equation 3] (1.618z) \\[Extra Text\\]"
+        self.assertEqual(markdown_compatible(input_text), excepted_output)
+
     def test_bold_formatting(self):
         input_text = r"This is \bm{bold} text."
         expected_output = r"This is \mathbf{bold} text."
