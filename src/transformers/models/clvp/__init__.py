@@ -23,10 +23,9 @@ from ...utils import (
 _import_structure = {
     "configuration_clvp": [
         "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "CLVPAutoRegressiveConfig",
-        "CLVPConfig",
-        "CLVPSpeechConfig",
-        "CLVPTextConfig",
+        "ClvpEncoderConfig",
+        "ClvpDecoderConfig",
+        "ClvpConfig",
     ],
     "feature_extraction_clvp": ["CLVPFeatureExtractor"],
     "processing_clvp": ["CLVPProcessor"],
@@ -42,20 +41,21 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_clvp"] = [
         "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "CLVPModel",
-        "CLVPPreTrainedModel",
-        "CLVPTransformerWithProjection",
-        "CLVPAutoRegressiveLMHeadModel",
+        "ClvpModelForConditionalGeneration",
+        "ClvpForCausalLM",
+        "ClvpModel",
+        "ClvpPreTrainedModel",
+        "ClvpEncoder",
+        "ClvpDecoder",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_clvp import (
         CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CLVPAutoRegressiveConfig,
-        CLVPConfig,
-        CLVPSpeechConfig,
-        CLVPTextConfig,
+        ClvpEncoderConfig,
+        ClvpDecoderConfig,
+        ClvpConfig,
     )
     from .feature_extraction_clvp import CLVPFeatureExtractor
     from .processing_clvp import CLVPProcessor
@@ -69,10 +69,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_clvp import (
             CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CLVPAutoRegressiveLMHeadModel,
-            CLVPModel,
-            CLVPPreTrainedModel,
-            CLVPTransformerWithProjection,
+            ClvpModelForConditionalGeneration,
+            ClvpForCausalLM,
+            ClvpModel,
+            ClvpPreTrainedModel,
+            ClvpEncoder,
+            ClvpDecoder,
         )
 
 else:

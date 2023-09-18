@@ -36,6 +36,7 @@ if is_torch_available():
 global_rng = random.Random()
 
 
+# Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -87,6 +88,7 @@ class CLVPFeatureExtractionTester(unittest.TestCase):
             "return_attention_mask": self.return_attention_mask,
         }
 
+    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTester.prepare_inputs_for_common
     def prepare_inputs_for_common(self, equal_length=False, numpify=False):
         def _flatten(list_of_lists):
             return list(itertools.chain(*list_of_lists))
@@ -117,6 +119,7 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         gc.collect()
         torch.cuda.empty_cache()
 
+    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.CLVPFeatureExtractionTest.test_feat_extract_from_and_save_pretrained
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
@@ -132,6 +135,7 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
+    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.CLVPFeatureExtractionTest.test_feat_extract_to_json_file
     def test_feat_extract_to_json_file(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
@@ -190,7 +194,10 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.CLVPFeatureExtractionTest.test_double_precision_pad
     def test_double_precision_pad(self):
+        import torch
+
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         np_speech_inputs = np.random.rand(100, 32).astype(np.float64)
         py_speech_inputs = np_speech_inputs.tolist()
@@ -200,6 +207,10 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
+
+    # def test_padding_and_truncation(self):
+
+
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
