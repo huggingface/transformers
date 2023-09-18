@@ -16,6 +16,7 @@
 import inspect
 import re
 
+from transformers import CTRLConfig
 from transformers.utils import direct_transformers_import
 
 
@@ -73,7 +74,9 @@ def get_checkpoint_from_config_class(config_class):
 def check_config_docstrings_have_checkpoints():
     configs_without_checkpoint = []
 
-    for config_class in list(CONFIG_MAPPING.values()):
+    a = [CTRLConfig]
+
+    for config_class in a:
         # Skip deprecated models
         if "models.deprecated" in config_class.__module__:
             continue

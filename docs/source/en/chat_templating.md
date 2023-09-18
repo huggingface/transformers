@@ -190,7 +190,7 @@ once you set the correct chat template, your model will automatically become com
 
 Before the introduction of chat templates, chat handling was hardcoded at the model class level. For backwards 
 compatibility, we have retained this class-specific handling as default templates, also set at the class level. If a
-model does not have a chat template set, but there is a default template for its model class, the `ConversationPipeline`
+model does not have a chat template set, but there is a default template for its model class, the `ConversationalPipeline`
 class and methods like `apply_chat_template` will use the class template instead. You can find out what the default
 template for your tokenizer is by checking the `tokenizer.default_chat_template` attribute.
 
@@ -248,7 +248,7 @@ with an empty chat template, or one that's still using the default class templat
 the model repository so that this attribute can be set properly!
 
 Once the attribute is set, that's it, you're done! `tokenizer.apply_chat_template` will now work correctly for that
-model, which means it is also automatically supported in places like `ConversationPipeline`!
+model, which means it is also automatically supported in places like `ConversationalPipeline`!
 
 By ensuring that models have this attribute, we can make sure that the whole community gets to use the full power of
 open-source models. Formatting mismatches have been haunting the field and silently harming performance for too long - 
