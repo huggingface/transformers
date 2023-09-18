@@ -20,6 +20,7 @@ import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from packaging import version
 
 from transformers import (
     TvltConfig,
@@ -29,7 +30,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property
+from transformers.utils import cached_property, is_torch_rocm_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -572,6 +573,9 @@ class TvltModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_for_base_model(self):
+        if is_torch_rocm_available() and version.parse(torch.__version__) <= version.parse("2.0.99"):
+            self.skipTest("Failing on RoCm devices with torch<2.1 due to a bug in nn.Conv2d")
+
         model = TvltModel.from_pretrained("ZinengTang/tvlt-base").to(torch_device)
 
         image_processor, audio_feature_extractor = self.default_processors
