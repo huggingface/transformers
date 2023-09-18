@@ -718,6 +718,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
             config = self.config.text_config if hasattr(self.config, "text_config") else self.config
+            factor = config.initializer_factor
             module.projection.weight.data.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
         elif isinstance(module, ClvpConditioningEncoder):
             module.mel_conv.weight.data.normal_(mean=0.0, std=factor)
@@ -871,6 +872,7 @@ class ClvpEncoder(ClvpPreTrainedModel):
         super().__init__(config)
 
         self.config = config
+        self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.rotary_pos_emb = ClvpRotaryPositionalEmbedding(config) if config.use_rotary_embedding else None
         self.layers = nn.ModuleList([ClvpEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
@@ -881,11 +883,20 @@ class ClvpEncoder(ClvpPreTrainedModel):
 
         self.gradient_checkpointing = False
 
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.token_embedding
+
+    def set_input_embeddings(self, value):
+        self.token_embedding = value
+
     def forward(
         self,
-        inputs_embeds,
+        input_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        causal_attention_mask: Optional[torch.LongTensor] = None,
+        use_causal_attention_mask: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -922,6 +933,28 @@ class ClvpEncoder(ClvpPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+            inputs_embeds = self.token_embedding(input_ids)
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        causal_attention_mask = (
+            _make_causal_mask(input_shape, inputs_embeds.dtype, device=inputs_embeds.device)
+            if use_causal_attention_mask
+            else None
+        )
+        # expand attention_mask
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -973,7 +1006,6 @@ class ClvpEncoder(ClvpPreTrainedModel):
 
         # apply the projection layer
         embeds = self.projection(pooled_output)
-
 
         if not return_dict:
             outputs = (embeds, last_hidden_state, pooled_output, encoder_states, all_attentions)
