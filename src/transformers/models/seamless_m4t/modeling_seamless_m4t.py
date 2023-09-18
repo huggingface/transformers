@@ -4236,7 +4236,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
             self.set_modality("speech")
 
-            # TODO: not head mask warnings
             encoder_outputs = self.speech_encoder(
                 input_features=input_features,
                 attention_mask=attention_mask,
