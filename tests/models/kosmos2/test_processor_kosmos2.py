@@ -109,11 +109,11 @@ class Kosmos2ProcessorTest(unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
+        input_image_processor= image_processor(image_input, return_tensors="np")
         input_processor = processor(images=image_input, return_tensors="np")
 
         for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+            self.assertAlmostEqual(input_image_processor[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
