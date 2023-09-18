@@ -2198,12 +2198,6 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def set_decoder(self, decoder):
-        self.decoder = decoder
-
-    def get_decoder(self):
-        return self.decoder
-
     # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100Model.forward
     def forward(
         self,
