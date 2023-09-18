@@ -766,6 +766,8 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
             "input_ids": inputs,
             "attention_mask": input_mask,
             "tgt_lang": "eng",
+            "num_beams":2,
+            "do_sample": True,
         }
 
         return config, input_dict
@@ -777,6 +779,8 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
             "input_features": inputs,
             "attention_mask": input_mask,
             "tgt_lang": "fra",
+            "num_beams":2,
+            "do_sample": True,
         }
 
         return config, input_dict
@@ -788,6 +792,8 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
             "input_features": inputs,
             "attention_mask": input_mask,
             "tgt_lang": "fra",
+            "num_beams":2,
+            "do_sample": True,
         }
 
         config, inputs, decoder_input_ids, input_mask, lm_labels = self.text_model_tester.prepare_config_and_inputs()
@@ -796,11 +802,14 @@ class SeamlessM4TGenerationTest(unittest.TestCase):
             "input_ids": inputs,
             "attention_mask": input_mask,
             "tgt_lang": "eng",
+            "num_beams":2,
+            "do_sample": True,
         }
         return config, input_speech, input_text
 
     def factory_generation_speech_test(self, model, inputs):
         with torch.inference_mode():
+            set_seed(0)
             output = model.generate(**inputs)
         return output
 
