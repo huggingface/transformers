@@ -36,7 +36,7 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 Tips:
 
 - The quickest way to get started with Nougat is by checking the [tutorial
-  notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Donut), which show how to use the model
+  notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Nougat), which show how to use the model
   at inference time as well as fine-tuning on custom data.
 - Nougat is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
 
@@ -86,6 +86,8 @@ into a single instance to both extract the input features and decode the predict
 >>> print(repr(sequence))
 '\n\n# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher@'
 ```
+
+See the [model hub](https://huggingface.co/models?filter=nougat) to look for Nougat checkpoints.
 
 ## NougatImageProcessor
 
