@@ -560,7 +560,6 @@ def extract_entities_with_patch_indices(text):
     return entities_with_patch_indices
 
 
-# TODO: Be careful
 def remove_special_fields(text):
     return re.sub("<.*?>", "", text)
 
