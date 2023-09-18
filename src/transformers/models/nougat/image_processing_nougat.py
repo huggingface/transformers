@@ -241,6 +241,7 @@ class NougatImageProcessor(BaseImageProcessor):
 
         return image
 
+    # Copied from transformers.models.donut.image_processing_donut.DonutImageProcessor.align_long_axis
     def align_long_axis(
         self,
         image: np.ndarray,
@@ -312,6 +313,7 @@ class NougatImageProcessor(BaseImageProcessor):
         padding = ((pad_top, pad_bottom), (pad_left, pad_right))
         return pad(image, padding, data_format=data_format, input_data_format=input_data_format)
 
+    # Copied from transformers.models.donut.image_processing_donut.DonutImageProcessor.thumbnail
     def thumbnail(
         self,
         image: np.ndarray,
@@ -362,6 +364,7 @@ class NougatImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    # Copied from transformers.models.donut.image_processing_donut.DonutImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
