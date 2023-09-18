@@ -90,10 +90,10 @@ class FillMaskPipeline(Pipeline):
             for input_ids in model_inputs["input_ids"]:
                 self._ensure_exactly_one_mask_token(input_ids)
 
-    def preprocess(self, inputs, return_tensors=None, **preprocess_parameters) -> Dict[str, GenericTensor]:
+    def preprocess(self, inputs, return_tensors=None, tokenizer_kwargs=None, **preprocess_parameters) -> Dict[str, GenericTensor]:
         if return_tensors is None:
             return_tensors = self.framework
-        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors)
+        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
         self.ensure_exactly_one_mask_token(model_inputs)
         return model_inputs
 
