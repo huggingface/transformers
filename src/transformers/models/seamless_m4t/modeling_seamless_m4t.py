@@ -501,7 +501,6 @@ class SeamlessM4TConformerFeedForward(nn.Module):
         return hidden_states
 
 
-# Not exactly the same as transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerConvolutionModule but nearly
 class SeamlessM4TConformerConvolutionModule(nn.Module):
     """Convolution block used in the conformer block"""
 
@@ -568,7 +567,6 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
         return hidden_states
 
 
-# not exactly the same as Wav2Vec2ConformerSelfAttention
 class SeamlessM4TConformerSelfAttention(nn.Module):
     """Construct a SeamlessM4TConformerSelfAttention object.
     Can be enhanced with rotary or relative position embeddings.
@@ -791,7 +789,6 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
         return hidden_states, attn_weigts
 
 
-# not exactly the same as Wav2Vec2ConformerEncoderLayer
 class SeamlessM4TConformerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1590,7 +1587,6 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         return last_hidden_states
 
 
-# not exactly the same as Wav2Vec2ConformerModel
 class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
     """
     Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers. Each layer
@@ -2594,7 +2590,6 @@ class SeamlessM4TVariancePredictor(nn.Module):
 
 
 class SeamlessM4THifiGan(nn.Module):
-    # Almost the same as SpeechT5HifiGan.__init__
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__()
         model_in_dim = config.unit_embed_dim + config.lang_embed_dim + config.spkr_embed_dim
