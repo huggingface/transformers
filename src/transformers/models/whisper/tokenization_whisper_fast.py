@@ -19,7 +19,7 @@ from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import numpy as np
-from tokenizers import pre_tokenizers, processors
+from tokenizers import AddedToken, pre_tokenizers, processors
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -148,6 +148,22 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         predict_timestamps=False,
         **kwargs,
     ):
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+
         super().__init__(
             vocab_file,
             merges_file,
@@ -444,11 +460,10 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     @property
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.prefix_tokens
     def prefix_tokens(self) -> List[int]:
-        all_special_ids = self.all_special_ids
-        bos_token_id = all_special_ids[-106]
-        translate_token_id = all_special_ids[-6]
-        transcribe_token_id = all_special_ids[-5]
-        notimestamps_token_id = all_special_ids[-1]
+        bos_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
+        translate_token_id = self.convert_tokens_to_ids("<|translate|>")
+        transcribe_token_id = self.convert_tokens_to_ids("<|transcribe|>")
+        notimestamps_token_id = self.convert_tokens_to_ids("<|notimestamps|>")
         langs = tuple(LANGUAGES.keys())
 
         if self.language is not None:
