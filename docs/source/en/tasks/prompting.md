@@ -77,7 +77,10 @@ Run inference with decoder-only models with the `text-generation` pipeline:
 >>> prompt = "Hello, I'm a language model"
 
 >>> generator(prompt, max_length = 30)
+```
 
+Output:
+```text
 [{'generated_text': "Hello, I'm a language model programmer.\n\nYou know what? I've got to explain my language concepts to a lot of people. What"}]
 ```
 
@@ -90,7 +93,10 @@ To run inference with an encoder-decoder, use the `text2text-generation` pipelin
 >>> prompt = "Translate from English to French: I'm very happy to see you"
 
 >>> text2text_generator(prompt)
+```
 
+Output:
+```text
 [{'generated_text': 'Je suis très heureuse de vous voir'}]
 ```
 
@@ -169,7 +175,10 @@ also adding the beginning of the response - `"Sentiment: "`:
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
+```
 
+Output:
+```text
 Result: Classify the text into neutral, negative or positive. 
 Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 Sentiment:
@@ -209,7 +218,10 @@ so that output doesn't contain the prompt:
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
+```
 
+Output:
+```text
 - State Warriors
 - San Francisco
 - National Basketball Association
@@ -243,7 +255,10 @@ you can write a basic prompt to instruct a model to translate a piece of text fr
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
+```
 
+Output:
+```text
 A volte, ho creduto a sei impossibili cose prima di colazione.
 ```
 
@@ -277,7 +292,10 @@ also be a suitable location for instructions. Typically, it's better to place th
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
+```
 
+Output:
+```text
 Permaculture is an ecosystem design mimicking natural, diverse functionalities and resilience, aiming to meet basic needs and prepare for climate change in communities.
 ```
 
@@ -305,6 +323,10 @@ Answer:
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
+```
+
+Output:
+```text
 Result: A blender or a food processor.
 ```
 
@@ -330,7 +352,10 @@ Let's try if we can make a model reason about a simple arithmetics task with a b
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
+```
 
+Output:
+```text
 Result: There are 20 students in the class.
 ```
 
@@ -351,7 +376,10 @@ Correct! Let's increase the complexity a little and see if we can still get away
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
+```
 
+Output:
+```text
 Result: 
 We now have 13 muffins.
 ```
@@ -408,6 +436,10 @@ Here's an example:
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
+```
+
+Output:
+```text
 Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
 Date: 04/12/1961
 
@@ -450,7 +482,10 @@ Take a deep breath and work on this problem step-by-step."""
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
+```
 
+Output:
+```text
 Result: 
 1. We have 15 muffins.
 2. We ate 2, so we have 13 muffins left.
