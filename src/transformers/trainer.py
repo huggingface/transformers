@@ -414,18 +414,11 @@ class Trainer:
                 " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
                 " for more details"
             )
-        elif _is_quantized_and_base_model:
-            if getattr(model, "_is_quantized_training_enabled", False):
-                logger.info(
-                    "The model is quantized. To train this model you need to add additional modules"
-                    " inside the model such as adapters using `peft` library and freeze the model weights. Please"
-                    " check the examples in https://github.com/huggingface/peft for more details."
-                )
-            else:
-                raise ValueError(
-                    "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
-                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
-                )
+        elif _is_quantized_and_base_model and getattr(model, "_is_quantized_training_enabled", False):
+            raise ValueError(
+                "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
+                " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+            )
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
