@@ -2841,7 +2841,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
-    def test_flash_attn_2_generate(self):
+    def test_flash_attn_2_generate_left_padding(self):
         import torch
 
         for model_class in self.all_generative_model_classes:
