@@ -195,14 +195,13 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self._tgt_lang = f"__{tgt_lang}__" if "__" not in tgt_lang else tgt_lang
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
 
-
         _additional_special_tokens = language_code
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
             _additional_special_tokens.extend(
                 [t for t in additional_special_tokens if t not in _additional_special_tokens]
             )
-            
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -220,7 +219,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.init_kwargs["language_code"] = original_language_code
         self.set_src_lang_special_tokens(self._src_lang)
         self.set_tgt_lang_special_tokens(self._tgt_lang)
-        
+
     @classmethod
     def _from_pretrained(
         cls,
