@@ -519,6 +519,18 @@ def patch_index_to_coordinate(ul_idx: int, lr_idx: int, num_patches_per_side: in
 # copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L4-L33
 # (with format modifications)
 def extract_entities_with_patch_indices(text):
+    """Extract entities contained in `text`. The bounding bboxes is given in the form of patch indices.
+
+    This functioin is only intended to be used within `clean_text_and_extract_entities_with_bboxes` where further
+    processing happens, including converting to normalized coordinates and whitespace character cleaning up.
+
+    Examples:
+
+    ```python
+    >>> text = "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>."
+    >>> entities = extract_entities_with_patch_indices(text)
+    [(' a snowman', (31, 41), [(44, 863)]), (' a fire', (130, 137), [(5, 911)])]
+    ```"""
     # The regular expression pattern for matching the required formats
     pattern = r"(?:(<phrase>([^<]+)</phrase>))?<object>((?:<patch_index_\d+><patch_index_\d+></delimiter_of_multi_objects/>)*<patch_index_\d+><patch_index_\d+>)</object>"
 
@@ -578,6 +590,18 @@ def adjust_entity_positions(entity, text):
 # copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L77-L87
 # (with format modifications)
 def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
+    """Remove the tag tokens from `text`, extract entities in it with some cleaning up of white characters.
+
+    Examples:
+
+    ```python
+    >>> text = "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>."
+    >>> clean_text, entities = clean_text_and_extract_entities_with_bboxes(text)
+    >>> clean_text
+    An image of a snowman warming himself by a fire.
+    >>> entities
+    [('a snowman', (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]), ('a fire', (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)])]
+    ```"""
     processed_text = remove_special_fields(text)
 
     entities_with_patch_indices = extract_entities_with_patch_indices(text)
