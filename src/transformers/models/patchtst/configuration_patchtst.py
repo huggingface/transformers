@@ -14,7 +14,7 @@
 # limitations under the License.
 """PatchTST model configuration"""
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -88,8 +88,9 @@ class PatchTSTConfig(PretrainedConfig):
             Sharing the projection layer across different channels in the forecast head.
         seed_number (`int`, *optional*, defaults to None):
             Use seed number for random masking.
-        revin (`bool`, *optional*, defaults to True):
-            Apply reverse instance normalization on each input batch.
+        scaling (`string` or `bool`, *optional* defaults to `"mean"`):
+            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
+            scaler is set to "mean".
         mask_input (`bool`, *optional*, defaults to False):
             Apply masking during the pretraining.
         mask_type (`str`, *optional*, defaults to `"random"`):
@@ -168,7 +169,7 @@ class PatchTSTConfig(PretrainedConfig):
         init_std: float = 0.02,
         shared_projection: bool = True,
         seed_number: int = None,
-        revin: Optional[bool] = True,
+        scaling: Optional[Union[str, bool]] = "mean",
         # mask pretraining
         mask_input: Optional[bool] = None,
         mask_type: str = "random",
@@ -211,7 +212,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.learn_pe = learn_pe
         self.use_cls_token = use_cls_token
         self.init_std = init_std
-        self.revin = revin
+        self.scaling = scaling
 
         # PatchTST
         self.patch_length = patch_length
