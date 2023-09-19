@@ -283,6 +283,13 @@ else:
                     None,
                 ),
             ),
+            (
+                "persimmon",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("phobert", ("PhobertTokenizer", None)),
             ("pix2struct", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
@@ -776,7 +783,7 @@ class AutoTokenizer:
                 The configuration corresponding to the model to register.
             slow_tokenizer_class ([`PretrainedTokenizer`], *optional*):
                 The slow tokenizer to register.
-            slow_tokenizer_class ([`PretrainedTokenizerFast`], *optional*):
+            fast_tokenizer_class ([`PretrainedTokenizerFast`], *optional*):
                 The fast tokenizer to register.
         """
         if slow_tokenizer_class is None and fast_tokenizer_class is None:

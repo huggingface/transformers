@@ -98,6 +98,8 @@
     title: Use model-specific APIs
   - local: custom_models
     title: Share a custom model
+  - local: chat_templating
+    title: Templates for chat models
   - local: sagemaker
     title: Run training on Amazon SageMaker
   - local: serialization
@@ -313,6 +315,8 @@
         title: ErnieM
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/falcon
+        title: Falcon
       - local: model_doc/flan-t5
         title: FLAN-T5
       - local: model_doc/flan-ul2
@@ -405,6 +409,8 @@
         title: Pegasus
       - local: model_doc/pegasus_x
         title: PEGASUS-X
+      - local: model_doc/persimmon
+        title: Persimmon
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart

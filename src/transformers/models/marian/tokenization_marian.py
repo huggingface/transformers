@@ -55,6 +55,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"Helsinki-NLP/opus-mt-en-de": 512}
 PRETRAINED_INIT_CONFIGURATION = {}
 
+SPIECE_UNDERLINE = "▁"
+
 # Example URL https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json
 
 
@@ -278,6 +280,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             else:
                 current_sub_tokens.append(token)
         out_string += sp_model.decode_pieces(current_sub_tokens)
+        out_string = out_string.replace(SPIECE_UNDERLINE, " ")
         return out_string.strip()
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
