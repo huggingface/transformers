@@ -83,6 +83,20 @@ class Kosmos2Processor(ProcessorMixin):
         [`Kosmos2TokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
+
+        The rest of this documentation shows the arguments specific to `Kosmos2Processor`.
+
+        Args:
+            bboxes (`Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]]`, *optional*):
+                The bounding bboxes associated to `texts`.
+            num_image_tokens (`int`, defaults to 64):
+                The number of (consecutive) places that are used to mark the placeholders to store image information.
+                This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
+            first_image_token_id (`int`, *optional*):
+                The token id that will be used for the first place of the subsequence that is reserved to store image
+                information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
+            add_eos_token (`bool`, defaults to `True`):
+                If to include `EOS` token id in the encoding when `add_special_tokens=True`.
         """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
