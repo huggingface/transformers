@@ -83,7 +83,7 @@ Below is the expected speedup you can get for a simple forward pass on `meta-lla
 
 TODO: @younesbelkada add more figures and cases where FA fails.
 
-Note that Flash Attention makes the attention computation more memory efficient, meaning you can train with much larger sequenc lengths without facing CUDA OOM issues. 
+Note that Flash Attention makes the attention computation more memory efficient, meaning you can train with much larger sequence lengths without facing CUDA OOM issues. 
 
 ### Advanced usage
 
