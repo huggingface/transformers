@@ -352,7 +352,7 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, use_cache=True)
         batch_size = input_ids.shape[0]
         rw_cache = result.past_key_values
-        standard_cache = model._convert_cache_to_standard_format(rw_cache, batch_size)
+        standard_cache = model._convert_to_standard_cache(rw_cache, batch_size)
         rw_cache_back = model._convert_to_rw_cache(standard_cache)
         for layer in range(len(rw_cache)):
             for tensor_idx in range(2):

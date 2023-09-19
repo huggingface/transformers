@@ -4655,6 +4655,18 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
                 )
             )
         past_key_values = tuple(new_past)
+    # falcon has a KV cache layout of [num_kv_heads, kv_length, head_dim]
+    elif "falcon" in model.__class__.__name__.lower() or (
+        model.config.architectures[0].lower() is not None and "falcon" in model.config.architectures[0].lower()
+    ):
+        for idx in range(len(past_key_values)):
+            new_past.append(
+                (
+                    past_key_values[idx][0][:, :maximum_length, :],
+                    past_key_values[idx][1][:, :maximum_length, :],
+                )
+            )
+        past_key_values = tuple(new_past)
     # gptbigcode is too
     elif "gptbigcode" in model.__class__.__name__.lower() or (
         model.config.architectures is not None and "gptbigcode" in model.config.architectures[0].lower()
