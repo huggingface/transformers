@@ -154,21 +154,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            tokenizer_file=tokenizer_file,
-            src_lang=src_lang,
-            tgt_lang=tgt_lang,
-            additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
-
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -186,7 +171,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         self.sp_model_size = len(self.sp_model)
 
-        self.init_kwargs["language_code"] = language_code
+        original_language_code = language_code
         language_code = language_code if language_code is not None else LARGE_SEAMLESS_M4T_LANGUAGE_CODES
         language_code = [f"__{code}__" for code in language_code if "__" not in code]
 
@@ -206,19 +191,36 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         language_code.extend(["<MINED_DATA>", "<MMT_BT_DATA>", "<SMT_BT_DATA>"])
 
-        self._additional_special_tokens = language_code
-        if additional_special_tokens is not None:
-            # Only add those special tokens if they are not already there.
-            self._additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in self._additional_special_tokens]
-            )
-
         self._src_lang = f"__{src_lang}__" if "__" not in src_lang else src_lang
         self._tgt_lang = f"__{tgt_lang}__" if "__" not in tgt_lang else tgt_lang
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+
+
+        _additional_special_tokens = language_code
+        if additional_special_tokens is not None:
+            # Only add those special tokens if they are not already there.
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in _additional_special_tokens]
+            )
+            
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=_additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
+        self.init_kwargs["language_code"] = original_language_code
         self.set_src_lang_special_tokens(self._src_lang)
         self.set_tgt_lang_special_tokens(self._tgt_lang)
-
+        
     @classmethod
     def _from_pretrained(
         cls,
