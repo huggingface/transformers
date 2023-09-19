@@ -78,3 +78,11 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] GitForCausalLM
     - forward
+
+## GitTokenizer
+
+[[autodoc]] GitTokenizer
+
+## GitTokenizerFast
+
+[[autodoc]] GitTokenizerFast
