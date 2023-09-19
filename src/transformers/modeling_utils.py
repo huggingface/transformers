@@ -1530,7 +1530,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             if new_num_tokens is None:
                 new_num_tokens = old_embeddings.weight.shape[0]
-            new_num_tokens = ((new_num_tokens // pad_to_multiple_of) + 1) * pad_to_multiple_of
+            new_num_tokens = ((new_num_tokens + pad_to_multiple_of - 1) // pad_to_multiple_of) * pad_to_multiple_of
         else:
             logger.warning(
                 "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
