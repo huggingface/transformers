@@ -112,29 +112,26 @@ def normalize_list_like_lines(generation):
         and the actual list item content. The normalization adjusts the bullet point style
         and nesting levels based on the captured patterns.
     """
-    pattern = r"""
-            ^                          # Start of line
-            (?P<list_start>-|\*)?       # List start, either '-' or '*'
-            (?!-|\*) ?                  # Negative lookahead, shouldn't be followed by another '-' or '*'
-            (?P<numbering>(?:\d|[ixv])+ )?  # Optional numbering, can be Roman numerals or decimals
-            .+?                         # Content of the line
-            (?P<next_list_start>-|\*)   # Next list start
-            (?P<next_numbering>(?:\d|[ixv])+\.?(?:\d|[ixv])? )?  # Optional next numbering
-            .*                          # Anything else
-            $                           # End of line
-            """
-    for match in reversed(list(re.finditer(pattern, generation, flags=re.I | re.M | re.X))):
+
+    # This matches lines starting with - or *, not followed by - or * (lists)
+    # that are then numbered by digits \d or roman numerals (one or more)
+    # and then, optional additional numbering of this line is captured
+    # this is then fed to re.finditer.
+    pattern = r"(?:^)(-|\*)?(?!-|\*) ?((?:\d|[ixv])+ )?.+? (-|\*) (((?:\d|[ixv])+)\.(\d|[ixv]) )?.*(?:$)"
+    
+    for match in reversed(list(re.finditer(pattern, generation, flags=re.I | re.M))):
         start, stop = match.span()
-        delim = match.group('next_list_start') + " "
+        delim = match.group(3) + " "
         splits = match.group(0).split(delim)
         replacement = ""
-        if match.group('list_start') is not None:
+        
+        if match.group(1) is not None:
             splits = splits[1:]
-            delim1 = match.group('list_start') + " "
+            delim1 = match.group(1) + " "
         else:
             delim1 = ""
-            continue
-
+            continue  # Skip false positives
+        
         pre, post = generation[:start], generation[stop:]
         
         for i, item in enumerate(splits):
@@ -142,18 +139,24 @@ def normalize_list_like_lines(generation):
             potential_numeral, _, rest = item.strip().partition(" ")
             if not rest:
                 continue
+            # Infer current nesting level based on detected numbering
             if re.match(r"^[\dixv]+((?:\.[\dixv])?)+$", potential_numeral, flags=re.I | re.M):
                 level = potential_numeral.count(".")
+            
             replacement += (
                 ("\n" if i > 0 else "")
                 + ("\t" * level)
                 + (delim if i > 0 or start == 0 else delim1)
                 + item.strip()
             )
+        
         if post == "":
             post = "\n"
+        
         generation = pre + replacement + post
+    
     return generation
+
 
 def find_next_punctuation(text: str, start_idx=0):
     """
