@@ -39,7 +39,7 @@ FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class FastSpeech2ConformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to
-    instantiate an FastSpeech2Conformer model according to the specified arguments, defining the model architecture.
+    instantiate a FastSpeech2Conformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     FastSpeech2Conformer
     [connor-henderson/fastspeech2_conformer](https://huggingface.co/connor-henderson/fastspeech2_conformer)
@@ -417,7 +417,7 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
 class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerWithHifiGan`]. It is used to
-    instantiate a FastSpeech2Conformer model and hifi-gan vocoder according to the specified sub-models configurations,
+    instantiate a `FastSpeech2ConformerWithHifiGanModel` model according to the specified sub-models configurations,
     defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
@@ -441,15 +441,14 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     ```python
     >>> from transformers import (
     ...     FastSpeech2ConformerConfig,
-    ...     FastSpeech2ConformerHiFiGanConfig,
+    ...     FastSpeech2ConformerHifiGanConfig,
     ...     FastSpeech2ConformerWithHifiGanConfig,
-    ...     FastSpeech2ConformerModel,
-    ...     FastSpeech2ConformerHifiGan,
+    ...     FastSpeech2ConformerWithHifiGan,
     ... )
 
     >>> # Initializing FastSpeech2ConformerWithHifiGan sub-modules configurations.
     >>> model_config = FastSpeech2ConformerConfig()
-    >>> vocoder_config = FastSpeech2ConformerWithHifiGanConfig()
+    >>> vocoder_config = FastSpeech2ConformerHifiGanConfig()
 
     >>> # Initializing a FastSpeech2ConformerWithHifiGan module style configuration
     >>> configuration = FastSpeech2ConformerWithHifiGanConfig.from_sub_model_configs(model_config, vocoder_config)
@@ -492,10 +491,11 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
         **kwargs,
     ):
         r"""
-        Instantiate a [`BarkConfig`] (or a derived class) from bark sub-models configuration.
+        Instantiate a [`FastSpeech2ConformerWithHifiGanConfig`] (or a derived class) from bark sub-models
+        configuration.
 
         Returns:
-            [`BarkConfig`]: An instance of a configuration object
+            [`FastSpeech2ConformerWithHifiGanConfig`]: An instance of a configuration object
         """
         return cls(
             model_config=model_config.to_dict(),

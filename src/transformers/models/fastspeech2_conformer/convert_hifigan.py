@@ -26,8 +26,6 @@ from transformers import FastSpeech2ConformerHifiGan, FastSpeech2ConformerHifiGa
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.FastSpeech2Conformer")
 
-match_config = FastSpeech2ConformerHifiGan.from_pretrained("connor-henderson/fastspeech2_conformer_hifigan").config
-
 
 def load_weights(checkpoint, hf_model, config):
     vocoder_key_prefix = "tts.generator.vocoder."
@@ -61,7 +59,7 @@ def load_weights(checkpoint, hf_model, config):
     hf_model.remove_weight_norm()
 
 
-def remap_yaml_config(yaml_config_path):
+def remap_hifigan_yaml_config(yaml_config_path):
     with Path(yaml_config_path).open("r", encoding="utf-8") as f:
         args = yaml.safe_load(f)
         args = argparse.Namespace(**args)
@@ -99,7 +97,7 @@ def convert_hifigan_checkpoint(
     repo_id=None,
 ):
     if yaml_config_path is not None:
-        config_kwargs = remap_yaml_config(yaml_config_path)
+        config_kwargs = remap_hifigan_yaml_config(yaml_config_path)
         config = FastSpeech2ConformerHifiGanConfig(**config_kwargs)
     else:
         config = FastSpeech2ConformerHifiGanConfig()

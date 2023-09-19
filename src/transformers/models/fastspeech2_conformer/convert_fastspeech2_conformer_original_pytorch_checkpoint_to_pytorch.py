@@ -85,7 +85,7 @@ CONFIG_MAPPING = {
 }
 
 
-def process_yaml_config(yaml_config_path):
+def remap_model_yaml_config(yaml_config_path):
     with Path(yaml_config_path).open("r", encoding="utf-8") as f:
         args = yaml.safe_load(f)
         args = argparse.Namespace(**args)
@@ -158,7 +158,7 @@ def convert_FastSpeech2ConformerModel_checkpoint(
     pytorch_dump_folder_path,
     repo_id=None,
 ):
-    model_params, tokenizer_name, vocab = process_yaml_config(yaml_config_path)
+    model_params, tokenizer_name, vocab = remap_model_yaml_config(yaml_config_path)
     config = FastSpeech2ConformerConfig(**model_params)
 
     # Prepare the model

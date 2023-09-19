@@ -107,8 +107,7 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         "Returns vocab as a dict"
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    def _tokenize(self, text):
-        """Returns a tokenized string."""
+    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         # expand symbols
         text = regex.sub(";", ",", text)
         text = regex.sub(":", ",", text)
@@ -123,6 +122,10 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
         text = text.upper()
 
+        return text, kwargs
+
+    def _tokenize(self, text):
+        """Returns a tokenized string."""
         # phonemize
         tokens = self.g2p(text)
 
@@ -180,7 +183,7 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state["g2p_en"] = None
+        state["g2p"] = None
         return state
 
     def __setstate__(self, d):
@@ -188,10 +191,10 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
         try:
             import g2p_en
+
+            self.g2p = g2p_en.G2p()
         except ImportError:
             raise ImportError(
                 "You need to install g2p-en to use FastSpeech2ConformerTokenizer. "
                 "See https://pypi.org/project/g2p-en/ for installation."
             )
-
-        self.g2p = g2p_en.G2p()
