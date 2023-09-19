@@ -521,27 +521,12 @@ class LlamaFlashAttention2(nn.Module):
 
         # contains at least one padding token
         if padding_mask is not None:
-            indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, padding_mask, q_len, kv_seq_len, bsz
+            )
 
-            key_states = index_first_axis(rearrange(key_states, "b s ... -> (b s) ..."), indices_k)
-            value_states = index_first_axis(rearrange(value_states, "b s ... -> (b s) ..."), indices_k)
-
-            if q_len == kv_seq_len:
-                query_states = index_first_axis(rearrange(query_states, "b s ... -> (b s) ..."), indices_k)
-                cu_seqlens_q = cu_seqlens_k
-                max_seqlen_in_batch_q = max_seqlen_in_batch_k
-                indices_q = indices_k
-            elif q_len == 1:
-                max_seqlen_in_batch_q = 1
-                cu_seqlens_q = torch.arange(
-                    bsz + 1, dtype=torch.int32, device=query_states.device
-                )  # There is a memcpy here, that is very bad.
-                indices_q = cu_seqlens_q[:-1]
-                query_states = query_states.squeeze(1)
-            else:
-                # The -q_len: slice assumes left padding.
-                padding_mask = padding_mask[:, -q_len:]
-                query_states, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_states, padding_mask)
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
 
             attn_output_unpad = flash_attn_varlen_func(
                 query_states,
@@ -567,6 +552,36 @@ class LlamaFlashAttention2(nn.Module):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
+    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length, kv_seq_length, batch_size):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+        key_layer = index_first_axis(rearrange(key_layer, "b s ... -> (b s) ..."), indices_k)
+        value_layer = index_first_axis(rearrange(value_layer, "b s ... -> (b s) ..."), indices_k)
+        if query_length == kv_seq_length:
+            query_layer = index_first_axis(rearrange(query_layer, "b s ... -> (b s) ..."), indices_k)
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_in_batch_q = max_seqlen_in_batch_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query_layer.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query_layer = query_layer.squeeze(1)
+        else:
+            # The -q_len: slice assumes left padding.
+            padding_mask = padding_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
+
+        return (
+            query_layer,
+            key_layer,
+            value_layer,
+            indices_q,
+            (cu_seqlens_q, cu_seqlens_k),
+            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+        )
 
 
 class LlamaDecoderLayer(nn.Module):
