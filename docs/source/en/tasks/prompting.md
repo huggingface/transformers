@@ -148,8 +148,10 @@ Now that we have the model loaded via the pipeline, let's explore how you can us
 
 #### Text classification
 
-One of the most common forms of text classification is sentiment analysis, which assigns a label like positive, negative, 
-or neutral to a sequence of text. Let's write a prompt that instructs the model to classify a given text (a movie review):
+One of the most common forms of text classification is sentiment analysis, which assigns a label like "positive", "negative", 
+or "neutral" to a sequence of text. Let's write a prompt that instructs the model to classify a given text (a movie review). 
+We'll start by giving the instruction, and then specifying the text to classify. Note that instead of leaving it at that, we're 
+also adding the beginning of the response - `"Sentiment: "`:
 
 ```python
 >>> prompt = """Classify the text into neutral, negative or positive. 
@@ -159,7 +161,7 @@ or neutral to a sequence of text. Let's write a prompt that instructs the model 
 
 >>> sequences = pipeline(
 ...     prompt,
-...     max_length=20,
+...     max_length=100,
 ...     do_sample=True,
 ...     top_k=10,
 ...     num_return_sequences=1,
@@ -175,15 +177,20 @@ Sentiment:
 Positive
 ```
 
+As a result, the output contains a classification label from the list we have provided in the instructions, and it is a correct one!
+
 <Tip>
 
-You may notice that in addition to the prompt, we pass a number of text generation parameters. `max_length` controls the 
-length of the generated output. To learn about the rest, please refer to the [Text generation strategies](../generation_strategies) guide.
+You may notice that in addition to the prompt, we pass a number of text generation parameters. We cover these parameters 
+in other docs, such as the [Text generation strategies](../generation_strategies) guide. For the purposes of this guide, 
+you only need to know that  `max_length` controls the length of the total output (including the initial prompt). 
 </Tip>
 
 #### Named Entity Recognition
 
 Named Entity Recognition (NER) is a task of finding named entities in a piece of text, such as a person, location, or organization.
+Let's modify the instructions in the prompt to make the LLM perform this task. Here, let's also set `return_full_text = False` 
+so that output doesn't contain the prompt:
 
 ```python
 >>> prompt = """Return a list of named entities in the text.
@@ -197,24 +204,27 @@ Named Entity Recognition (NER) is a task of finding named entities in a piece of
 ...     do_sample=True,
 ...     top_k=10,
 ...     num_return_sequences=1,
+...     return_full_text = False,    
 ...     eos_token_id=tokenizer.eos_token_id,
 ... )
 
 >>> for seq in sequences:
-...     print(f"Result: {seq['generated_text']}")
+...     print(f"{seq['generated_text']}")
 
-Result: Return a list of named entities in the text.
-Text: The Golden State Warriors are an American professional basketball team based in San Francisco.
-Named entities:
-- The Golden State Warriors
+- State Warriors
 - San Francisco
-- NBA
+- National Basketball Association
 ```
 
-As you can see, the model correctly identified two named entities, however, it has also added a new entity that is not in the text. 
+As you can see, the model correctly identified two named entities from the given text, however, it has also added a new 
+entity that is not present in the text but is contextually very close in meaning. 
 Further in the guide we'll talk about techniques you can use to improve your prompts.
 
 #### Translation
+
+Another task LLMs can perform is translation. You can choose to use encoder-decoder models for this task, however, here,
+for the simplicity of the examples, we'll keep using Falcon-7b-instruct, which does a decent job. Once again, here's how 
+you can write a basic prompt to instruct a model to translate a piece of text from English to Italian: 
 
 ```python
 >>> prompt = """Translate the English text to Italian.
@@ -228,20 +238,25 @@ Further in the guide we'll talk about techniques you can use to improve your pro
 ...     do_sample=True,
 ...     top_k=10,
 ...     num_return_sequences=1,
+...     return_full_text = False,    
 ...     eos_token_id=tokenizer.eos_token_id,
 ... )
 
 >>> for seq in sequences:
-...     print(f"Result: {seq['generated_text']}")
+...     print(f"{seq['generated_text']}")
 
-Result: Translate the English text to Italian.
-Text: Sometimes, I've believed as many as six impossible things before breakfast.
-Translation:
 A volte, ho creduto a sei impossibili cose prima di colazione.
 ```
 
+[//]: # (Perhaps we could add a note here about languages used in prompts themselves, e.g. prompting in Italian. What changes? 
+Anecdotal accounts mention that for common western languages, the "accuracy" of the results is more or less the same, but 
+there may be difference in latency due to the number of tokens varying between the languages. More tokens => increased 
+computation => longer latency. Has this been researched though?)
 
 #### Text summarization
+
+Similar to the translation, text summarization is another generative task where the output **heavily** relies on the input, 
+and encoder-decoder models can be a better choice. However, decoder-style models can be used for this task as well. 
 
 ```python
 >>> prompt = """Permaculture is a design process mimicking the diversity, functionality and resilience of natural ecosystems. The principles and practices are drawn from traditional ecological knowledge of indigenous cultures combined with modern scientific understanding and technological innovations. Permaculture design provides a framework helping individuals and communities develop innovative, creative and effective strategies for meeting basic needs while preparing for and mitigating the projected impacts of climate change.
@@ -255,20 +270,18 @@ A volte, ho creduto a sei impossibili cose prima di colazione.
 ...     do_sample=True,
 ...     top_k=10,
 ...     num_return_sequences=1,
+...     return_full_text = False,      
 ...     eos_token_id=tokenizer.eos_token_id,
 ... )
 
 >>> for seq in sequences:
-...     print(f"Result: {seq['generated_text']}")
-Result: Permaculture is a design process mimicking the diversity, functionality and resilience of natural ecosystems. The principles and practices are drawn from traditional ecological knowledge of indigenous cultures combined with modern scientific understanding and technological innovations. Permaculture design provides a framework helping individuals and communities develop innovative, creative and effective strategies for meeting basic needs while preparing for and mitigating the projected impacts of climate change.
-Write a summary of the above text.
-Summary:
+...     print(f"{seq['generated_text']}")
+
 Permaculture is an ecosystem design mimicking natural, diverse functionalities and resilience, aiming to meet basic needs and prepare for climate change in communities.
 ```
 
-(???) #### Information extraction
-
 #### Question answering
+
 
 (???) #### Conversation
 
@@ -277,24 +290,21 @@ Permaculture is an ecosystem design mimicking natural, diverse functionalities a
 (???) #### Reasoning
 
 
-
-
-### Prompting language
-
-Mention English language vs non-english
-
-(check whether the model is suitable for the alternative language.)
-(performance may be similar but the same prompt in another language may result in more tokens, which can affect latency.)
-(More tokens processed translate to increased computation, which, in simplified terms, results in longer latency.)
-Anecdotal: procedural prompts work better in ENglish (possibly due to LLMs trained on code where English is the most common language)
-
-
 ## Best practices of LLM prompting
 
-Start with a simple prompt and iterate from there. 
-Instructions are commonly placed at the beginning of the prompt. Use clear separator to indicate where the instructions are. 
-The more descriptive and detailed the prompt is, the better the results. 
-Dos are better than don’ts (tell the model what to do, don’t tell what NOT to do. It can do that anyways)
+In this section of the guide we have compiled a list of best practices that tend to improve the prompt results:
+
+* When choosing the model to work with, the latest and most capable models are likely to perform better. 
+* Start with a simple and short prompt, and iterate from there.
+* Put the instructions at the beginning of the prompt, or at the very end. When working with large context, models apply various optimizations to prevent Attention complexity from scaling quadratically. This may make a model more attentive to the beginning or end of a prompt than the middle.
+* Clearly separate instructions from the text they apply to - more on this in the next section. 
+* Be specific and descriptive about the task and the desired outcome - its format, length, style, language, etc.
+* Avoid ambiguous descriptions and instructions.
+* Favor instructions that say "what to do" instead of those that say "what not to do".
+* "Lead" the output in the right direction by writing the first word (or even begin the first sentence for the model).
+* Use advanced techniques like [Few-shot prompting](#few-shot-prompting) and [Chain-of-thought](#chain-of-thought)
+* Test your prompts with different models to assess their robustness. 
+* Version and track the performance of your prompts. 
 
 ## Prompt formatting and structure
 
@@ -304,12 +314,54 @@ Dos are better than don’ts (tell the model what to do, don’t tell what NOT t
 
 ### Few-shot prompting
 
-Limitations of few-shot prompting - doesn’t work well on complex reasoning tasks
-Few-shot learning significantly uses up the token budget of your prompts, which can be expensive - especially if it doesn't let you go down a level or two in intelligence and per-token cost.
-Additionally, models can learn things you didn't teach. For example, providing two positive examples and one negative example can teach a model that the third message is always wrong - which actually happened to us a few times!
+The basic prompts in the sections above are the examples of "zero-shot" prompts, meaning, the model has been given 
+instructions and context, but no examples with solutions. LLMs that have been fine-tuned on instruction datasets, generally 
+perform well on such "zero-shot" tasks. However, you may find that your task has more complexity or nuance, and, perhaps, 
+you have some requirements for the output that the model doesn't catch on just from the instructions. In this case, you can 
+try the technique called few-shot prompting. 
 
+In few-shot prompting, we provide examples in the prompt giving the model more context to improve the performance. 
+The examples condition the model to generate the output following the patterns in the examples.
+
+Here's an example: 
+
+```python
+>>> prompt = """Text: The first human went into space and orbited the Earth on April 12, 1961.
+    Date: 04/12/1961
+
+    Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
+    Date:"""
+
+>>> sequences = pipeline(
+...     prompt,
+...     max_length=80,
+...     do_sample=True,
+...     top_k=10,
+...     num_return_sequences=1,
+...     eos_token_id=tokenizer.eos_token_id,
+... )
+
+>>> for seq in sequences:
+...     print(f"Result: {seq['generated_text']}")
+Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
+Date: 04/12/1961
+
+Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
+Date: 09/28/1960
+```
+
+In the above code snippet we used a single example to demonstrate the desired output to the model, so this can be called a 
+"one-shot" prompting. However, depending on the task complexity you may need to use more than one example. 
+
+Limitations of the few-shot prompting technique: 
+- While LLMs can pick up on the patterns in the examples, these technique doesn't work well on complex reasoning tasks
+- Few-shot prompting requires creating lengthy prompts. Prompts with large number of tokens can increase computation and latency. There's also a limit to the length of the prompts.  
+- Sometimes when given a number of examples, models can learn patterns that you didn't intend them to learn, e.g. that the third movie review is always negative.
 
 ### Chain-of-thought
+
+
+### Self-consistency
 
 
 ## Prompting vs fine-tuning
