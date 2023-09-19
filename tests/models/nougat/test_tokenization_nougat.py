@@ -135,6 +135,7 @@ class MarkdownCompatibleTest(unittest.TestCase):
         expected_output = "```\npython\nprint('Hello, world!')\n```"
         self.assertEqual(markdown_compatible(input_text), expected_output)
 
+
 class TestNormalizeListLikeLines(unittest.TestCase):
     def test_two_level_lines(self):
         input_str = "* Item 1 * Item 2"
@@ -145,11 +146,12 @@ class TestNormalizeListLikeLines(unittest.TestCase):
         input_str = "- I. Item 1 - II. Item 2 - III. Item 3"
         expected_output = "- I. Item 1\n- II. Item 2\n- III. Item 3\n"
         self.assertEqual(normalize_list_like_lines(input_str), expected_output)
-    
+
     def test_nested_lines(self):
         input_str = "- I. Item 1 - I.1 Sub-item 1 - I.1.1 Sub-sub-item 1 - II. Item 2"
         expected_output = "- I. Item 1\n\t- I.1 Sub-item 1\n\t\t- I.1.1 Sub-sub-item 1\n- II. Item 2\n"
         self.assertEqual(normalize_list_like_lines(input_str), expected_output)
+
 
 @require_tokenizers
 class NougatPostProcessingTest(unittest.TestCase):
