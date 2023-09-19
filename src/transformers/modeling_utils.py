@@ -1517,7 +1517,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
                 returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
             pad_to_multiple_of (`int`, *optional*):
-                If set will pad the embedding matrix to a multiple of the provided value.
+                If set will pad the embedding matrix to a multiple of the provided value.If `new_num_tokens` is set to
+                `None` will just pad the embedding to a multiple of `pad_to_multiple_of`.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
@@ -1528,12 +1529,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
         model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        if new_num_tokens is None:
+        if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
         # Update base model and current model config
-        self.config.vocab_size = new_num_tokens
-        self.vocab_size = new_num_tokens
+        self.config.vocab_size = model_embeds.weight.shape[0]
+        self.vocab_size = model_embeds.weight.shape[0]
 
         # Tie weights again if needed
         self.tie_weights()
@@ -1589,7 +1590,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 vectors from the end. If not provided or `None`, just returns a pointer to the input tokens
                 `torch.nn.Embedding` module of the model without doing anything.
             pad_to_multiple_of (`int`, *optional*):
-                If set will pad the embedding matrix to a multiple of the provided value.
+                If set will pad the embedding matrix to a multiple of the provided value. If `new_num_tokens` is set to
+                `None` will just pad the embedding to a multiple of `pad_to_multiple_of`.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
@@ -1831,6 +1833,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
         self.apply(partial(self._set_gradient_checkpointing, value=True))
 
+        if getattr(self, "_hf_peft_config_loaded", False):
+            # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
+            # we do it also on PEFT: https://github.com/huggingface/peft/blob/85013987aa82aa1af3da1236b6902556ce3e483e/src/peft/peft_model.py#L334
+            # When training with PEFT, only LoRA layers will have requires grad set to True, but the output of frozen layers need to propagate
+            # the gradients to make sure the gradient flows.
+            self.enable_input_require_grads()
+
     def gradient_checkpointing_disable(self):
         """
         Deactivates gradient checkpointing for the current model.
@@ -1840,6 +1849,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if self.supports_gradient_checkpointing:
             self.apply(partial(self._set_gradient_checkpointing, value=False))
+
+        if getattr(self, "_hf_peft_config_loaded", False):
+            self.disable_input_require_grads()
 
     @property
     def is_gradient_checkpointing(self) -> bool:

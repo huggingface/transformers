@@ -1425,12 +1425,13 @@ class TrainingArguments:
             and is_torch_available()
             and (self.device.type != "cuda")
             and (self.device.type != "npu")
+            and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) != "GPU")
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices."
+                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices or certain XPU devices (with IPEX)."
             )
 
         if (
@@ -1803,6 +1804,7 @@ class TrainingArguments:
             torch.cuda.set_device(device)
         elif is_torch_xpu_available() and "ACCELERATE_USE_XPU" not in os.environ:
             os.environ["ACCELERATE_USE_XPU"] = "true"
+            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             device = torch.device("xpu:0")
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
