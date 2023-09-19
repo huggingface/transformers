@@ -885,6 +885,15 @@ def require_cython(test_case):
     return unittest.skipUnless(is_cython_available(), "test requires cython")(test_case)
 
 
+@contextlib.contextmanager
+def require_torch_determinism(*args, **kwargs):
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    try:
+        yield
+    finally:
+        torch.use_deterministic_algorithms(False)
+
+
 def get_gpu_count():
     """
     Return the number of available gpus (regardless of whether torch, tf or jax is used)

@@ -66,6 +66,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_safetensors,
     require_torch,
+    require_torch_determinism,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -222,9 +223,9 @@ class ModelTesterMixin:
 
         return inputs_dict
 
+    @require_torch_determinism
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        torch.use_deterministic_algorithms(True, warn_only=True)
 
         def check_save_load(out1, out2):
             # make sure we don't have nans
@@ -262,8 +263,6 @@ class ModelTesterMixin:
                     check_save_load(tensor1, tensor2)
             else:
                 check_save_load(first, second)
-
-        torch.use_deterministic_algorithms(False)
 
     def test_from_pretrained_no_checkpoint(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -457,9 +456,9 @@ class ModelTesterMixin:
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    @require_torch_determinism()
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        torch.use_deterministic_algorithms(True, warn_only=True)
 
         def check_determinism(first, second):
             out_1 = first.cpu().numpy()
@@ -482,8 +481,6 @@ class ModelTesterMixin:
                     check_determinism(tensor1, tensor2)
             else:
                 check_determinism(first, second)
-
-        torch.use_deterministic_algorithms(False)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1731,9 +1728,9 @@ class ModelTesterMixin:
                     " `persistent=False`",
                 )
 
+    @require_torch_determinism
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        torch.use_deterministic_algorithms(True, warn_only=True)
 
         def set_nan_tensor_to_zero(t):
             t[t != t] = 0
@@ -1805,8 +1802,6 @@ class ModelTesterMixin:
                 check_equivalence(
                     model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
                 )
-
-        torch.use_deterministic_algorithms(False)
 
     # Don't copy this method to model specific test file!
     # TODO: remove this method once the issues are all fixed!
