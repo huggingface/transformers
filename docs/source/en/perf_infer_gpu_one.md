@@ -81,9 +81,20 @@ Below is the expected speedup you can get for a simple forward pass on `meta-lla
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-7b-inference-large-seqlen.png">
 </div>
 
-TODO: @younesbelkada add more figures and cases where FA fails.
+For sequences with padd tokens (training with padd tokens or generating with padd tokens), we need to unpad / pad the input sequences to compute correctly the attention scores. For relatively small sequence length, on pure forward pass, this creates an overhead leading to a small speedup (below we used a padding rate of 0.3). 
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-2-small-seqlen-padding.png">
+</div>
+
+But for large sequence length you can benefit from interesting speedup for pure inference (also training)
 
 Note that Flash Attention makes the attention computation more memory efficient, meaning you can train with much larger sequence lengths without facing CUDA OOM issues. 
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-2-large-seqlen-padding.png">
+</div>
+
 
 ### Advanced usage
 
