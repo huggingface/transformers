@@ -64,6 +64,24 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 78)
 
+    @unittest.skip(
+        "FastSpeech2Conformer tokenizer does not support adding tokens as they can't be added to the g2p_en backend"
+    )
+    def test_added_token_are_matched_longest_first(self):
+        pass
+
+    @unittest.skip(
+        "FastSpeech2Conformer tokenizer does not support adding tokens as they can't be added to the g2p_en backend"
+    )
+    def test_added_tokens_do_lower_case(self):
+        pass
+
+    @unittest.skip(
+        "FastSpeech2Conformer tokenizer does not support adding tokens as they can't be added to the g2p_en backend"
+    )
+    def test_tokenize_special_tokens(self):
+        pass
+
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
 

@@ -17,11 +17,6 @@
 import argparse
 
 import torch
-from convert_fastspeech2_conformer_original_pytorch_checkpoint_to_pytorch import (
-    convert_espnet_state_dict_to_hf,
-    remap_model_yaml_config,
-)
-from convert_hifigan import load_weights, remap_hifigan_yaml_config
 
 from transformers import (
     FastSpeech2ConformerConfig,
@@ -32,6 +27,12 @@ from transformers import (
     FastSpeech2ConformerWithHifiGanConfig,
     logging,
 )
+
+from .convert_fastspeech2_conformer_original_pytorch_checkpoint_to_pytorch import (
+    convert_espnet_state_dict_to_hf,
+    remap_model_yaml_config,
+)
+from .convert_hifigan import load_weights, remap_hifigan_yaml_config
 
 
 logging.set_verbosity_info()

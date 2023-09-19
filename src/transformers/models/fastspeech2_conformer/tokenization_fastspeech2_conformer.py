@@ -20,7 +20,7 @@ from typing import Optional, Tuple
 import regex
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -75,6 +75,7 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         should_strip_spaces=False,
         **kwargs,
     ):
+        requires_backends(self, "g2p_en")
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -83,14 +84,8 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
             should_strip_spaces=should_strip_spaces,
             **kwargs,
         )
+        import g2p_en
 
-        try:
-            import g2p_en
-        except ImportError:
-            raise ImportError(
-                "You need to install g2p-en to use FastSpeech2ConformerTokenizer. "
-                "See https://pypi.org/project/g2p-en/ for installation."
-            )
         self.g2p = g2p_en.G2p()
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
