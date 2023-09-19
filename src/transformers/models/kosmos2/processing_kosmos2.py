@@ -448,13 +448,16 @@ def coordinate_to_patch_index(bbox: Tuple[float, float, float, float], num_patch
     Args:
         bbox (`Tuple[float, float, float, float]`):
             The 4 coordinates of the bounding box, with the format being (x1, y1, x2, y2) specifying the upper-left and
-            lower-right corners of the box. It should have x2 > x1 and y1 > y2.
+            lower-right corners of the box. It should have x2 > x1 and y2 > y1.
         num_patches_per_side (`int`): the number of patches along each side.
 
     Returns:
-        `Tuple[int, int]`: A pair of patch indices.
+        `Tuple[int, int]`: A pair of patch indices representing the upper-left patch and lower-right patch.
     """
     (x1, y1, x2, y2) = bbox
+
+    if not (x2 > x1 and y2 > y1):
+        raise ValueError("The coordinates in `bbox` should be `(x1, y1, x2, y2)` with `x2 > x1` and `y2 > y1`.")
 
     ul_x = math.floor(x1 * num_patches_per_side)
     ul_y = math.floor(y1 * num_patches_per_side)
