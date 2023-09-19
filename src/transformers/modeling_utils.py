@@ -2379,6 +2379,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
+        adapter_revision = kwargs.pop("adapter_revision", "main")
+
         _adapter_model_path = kwargs.pop("_adapter_model_path", None)
         adapter_name = kwargs.pop("adapter_name", "default")
 
@@ -2440,7 +2442,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     proxies=proxies,
                     local_files_only=local_files_only,
                     token=token,
-                    revision=revision,
+                    revision=adapter_revision,
                     subfolder=subfolder,
                     _commit_hash=commit_hash,
                 )
@@ -3290,7 +3292,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
-                revision=revision,
+                revision=adapter_revision,
                 token=token,
             )
 
