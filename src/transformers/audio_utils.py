@@ -124,7 +124,7 @@ def mel_filter_bank(
     sampling_rate: int,
     norm: Optional[str] = None,
     mel_scale: str = "htk",
-    use_torchaudio_version: bool = False,
+    triangularize_in_mel_space: bool = False,
 ) -> np.ndarray:
     """
     Creates a frequency bin conversion matrix used to obtain a mel spectrogram. This is called a *mel filter bank*, and
@@ -161,9 +161,10 @@ def mel_filter_bank(
             If `"slaney"`, divide the triangular mel weights by the width of the mel band (area normalization).
         mel_scale (`str`, *optional*, defaults to `"htk"`):
             The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
-        use_torchaudio_version (`bool`, *optional*, defaults to `False`):
-            If set, uses the torchaudio way of computing the mel filters. Results in small numerical differences with
-            the default version.
+        triangularize_in_mel_space (`bool`, *optional*, defaults to `False`):
+            If this option is enabled, the triangular filter is applied in mel space rather than frequency space. This
+            uses the torchaudio method of calculating mel filters and results in small numerical differences from the
+            default version.
 
     Returns:
         `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix. This is a
@@ -178,7 +179,7 @@ def mel_filter_bank(
     mel_freqs = np.linspace(mel_min, mel_max, num_mel_filters + 2)
     filter_freqs = mel_to_hertz(mel_freqs, mel_scale=mel_scale)
 
-    if use_torchaudio_version:
+    if triangularize_in_mel_space:
         fft_bin_width = sampling_rate / (num_frequency_bins * 2)
         mel = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
         mel_filters = _create_triangular_filter_bank(mel, mel_freqs)

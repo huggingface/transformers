@@ -105,7 +105,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             sampling_rate=16000,
             norm="slaney",
             mel_scale="slaney",
-            use_torchaudio_version=True,
+            triangularize_in_mel_space=True,
         )
         self.assertEqual(mel_filters.shape, (513, 13))
 
@@ -182,7 +182,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             sampling_rate=4000,
             norm=None,
             mel_scale="kaldi",
-            use_torchaudio_version=True,
+            triangularize_in_mel_space=True,
         )
         # fmt: off
         expected = np.array(
@@ -332,7 +332,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             sampling_rate=16000,
             norm=None,
             mel_scale="kaldi",
-            use_torchaudio_version=True,
+            triangularize_in_mel_space=True,
         )
 
         mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
