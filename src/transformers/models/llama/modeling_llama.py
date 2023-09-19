@@ -41,7 +41,6 @@ from .configuration_llama import LlamaConfig
 
 
 if is_flash_attn_available():
-    from einops import rearrange
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
@@ -522,7 +521,7 @@ class LlamaFlashAttention2(nn.Module):
         # contains at least one padding token
         if padding_mask is not None:
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, padding_mask, q_len, kv_seq_len, bsz
+                query_states, key_states, value_states, padding_mask, q_len
             )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
@@ -553,12 +552,16 @@ class LlamaFlashAttention2(nn.Module):
 
         return attn_output, attn_weights, past_key_value
 
-    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length, kv_seq_length, batch_size):
+    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
-        key_layer = index_first_axis(rearrange(key_layer, "b s ... -> (b s) ..."), indices_k)
-        value_layer = index_first_axis(rearrange(value_layer, "b s ... -> (b s) ..."), indices_k)
-        if query_length == kv_seq_length:
-            query_layer = index_first_axis(rearrange(query_layer, "b s ... -> (b s) ..."), indices_k)
+        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
+
+        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        if query_length == kv_seq_len:
+            query_layer = index_first_axis(
+                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+            )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
             indices_q = indices_k
