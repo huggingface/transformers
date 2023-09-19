@@ -1452,8 +1452,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return model_embeds
 
         # Update base model and current model config
-        self.config.vocab_size = model_embeds.weight.shape[0]
-        self.vocab_size = model_embeds.weight.shape[0]
+        self.config.vocab_size = model_embeds.weight.shape[0] or new_num_tokens
+        self.vocab_size = self.config.vocab_size
 
         # Tie weights again if needed
         self.tie_weights()
