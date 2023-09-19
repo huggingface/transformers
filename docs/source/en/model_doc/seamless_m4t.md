@@ -59,7 +59,7 @@ You can easily generate translated speech with [`SeamlessM4TModel.generate`]. He
 You can also translate directly from a speech waveform. Here is an example from Arabic to English:
 
 ```python
-from datasets import load_dataset
+>>> from datasets import load_dataset
 
 >>> dataset = load_dataset("arabic_speech_corpus", split="test[0:1]")
 
