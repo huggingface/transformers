@@ -55,6 +55,10 @@ RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://hu
 # Add einops for additional model testing
 RUN python3 -m pip install --no-cache-dir einops
 
+RUN python3 -m pip uninstall -y ninja && python3 -m pip install ninja
+
+RUN python3 -m pip install flash-attn --no-build-isolation
+
 # For bettertransformer + gptq 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
