@@ -18,9 +18,12 @@
 import inspect
 import unittest
 
+from packaging import version
+
 from transformers import is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_rocm_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -190,6 +193,10 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_attention_outputs(self):
+        if is_torch_rocm_available() and version.parse(torch.__version__) <= version.parse("2.0.99"):
+            self.skipTest(
+                "Skipped as non-contiguous nn.Conv2d in GLPN on RoCm systems is bugged for torch<2.0.1: https://huggingface.slack.com/archives/C05G9EZ9XAN/p1695114097209659"
+            )
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 

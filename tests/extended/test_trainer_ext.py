@@ -41,6 +41,7 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
+from transformers.utils import is_torch_rocm_available
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
@@ -138,6 +139,10 @@ class TestTrainerExt(TestCasePlus):
     @require_apex
     @require_torch_gpu
     def test_run_seq2seq_apex(self):
+        if is_torch_rocm_available():
+            self.skipTest(
+                "Skipped as apex.amp is deprecated and bugged on RoCm systems: https://github.com/ROCmSoftwarePlatform/apex/issues/118"
+            )
         # XXX: apex breaks the trainer if it's run twice e.g. run_seq2seq.main() from the same
         # program and it breaks other tests that run from the same pytest worker, therefore until this is
         # sorted out it must be run only in an external program, that is distributed=True in this
