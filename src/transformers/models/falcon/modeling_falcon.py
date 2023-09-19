@@ -726,7 +726,7 @@ class FalconPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
     @staticmethod
-    def _convert_cache_to_standard_format(
+    def _convert_to_standard_cache(
         past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
         """
@@ -1130,7 +1130,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
 
         Output shares the same memory storage as `past`.
         """
-        standardized_past = self._convert_cache_to_standard_format(past, batch_size=len(beam_idx))
+        standardized_past = self._convert_to_standard_cache(past, batch_size=len(beam_idx))
 
         # Get a copy of `beam_idx` on all the devices where we need those indices.
         device_to_beam_idx = {

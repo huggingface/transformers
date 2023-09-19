@@ -351,15 +351,14 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.eval()
         result = model(input_ids, use_cache=True)
         batch_size = input_ids.shape[0]
-        rw_cache = model._convert_to_rw_cache(result.past_key_values)
+        rw_cache = result.past_key_values
         standard_cache = model._convert_cache_to_standard_format(rw_cache, batch_size)
+        rw_cache_back = model._convert_to_rw_cache(standard_cache)
         for layer in range(len(rw_cache)):
             for tensor_idx in range(2):
                 self.assertTrue(rw_cache[layer][tensor_idx].ndim == 3)
-                self.assertTrue(result.past_key_values[layer][tensor_idx].ndim == 4)
-                self.assertTrue(
-                    torch.all(result.past_key_values[layer][tensor_idx] == standard_cache[layer][tensor_idx])
-                )
+                self.assertTrue(standard_cache[layer][tensor_idx].ndim == 4)
+                self.assertTrue(torch.all(rw_cache[layer][tensor_idx] == rw_cache_back[layer][tensor_idx]))
 
     def test_falcon_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -415,10 +414,10 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     num_attention_heads = 1
                 self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
                 self.assertEqual(
-                    past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    past_kv[i][0].shape, (batch_size * num_attention_heads, seq_length, per_head_embed_dim)
                 )
                 self.assertEqual(
-                    past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    past_kv[i][1].shape, (batch_size * num_attention_heads, seq_length, per_head_embed_dim)
                 )
 
     @parameterized.expand([("linear",), ("dynamic",)])
