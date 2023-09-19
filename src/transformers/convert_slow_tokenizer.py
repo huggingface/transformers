@@ -785,7 +785,8 @@ class SeamlessM4TConverter(SpmConverter):
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         vocab += [
-            (tok, 0.0) for tok in self.original_tokenizer._additional_special_tokens if not isinstance(tok, AddedToken)
+            # list of AddedToken, so need to get the content
+            (tok.content, 0.0) for tok in self.original_tokenizer._additional_special_tokens 
         ]
         return vocab
 
