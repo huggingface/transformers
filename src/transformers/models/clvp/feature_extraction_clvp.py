@@ -44,6 +44,9 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             The feature dimension of the extracted features.
         sampling_rate (`int`, *optional*, defaults to 22050):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+        default_audio_length (`int`, *optional*, defaults to 6):
+            The default length of raw audio in seconds. If `max_length` is not set during `__call__` then it will
+            automatically be set to default_audio_length * `self.sampling_rate`.
         hop_length (`int`, *optional*, defaults to 256):
             Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, *optional*, defaults to 30):
@@ -64,6 +67,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
         self,
         feature_size=80,
         sampling_rate=22050,
+        default_audio_length=6,
         hop_length=256,
         chunk_length=30,
         n_fft=1024,
@@ -85,6 +89,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
+        self.default_audio_length = default_audio_length
         self.mel_norms = mel_norms
         self.mel_filters = mel_filter_bank(
             num_frequency_bins=1 + (n_fft // 2),
@@ -166,8 +171,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             padding_value (`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
             max_length (`int`, *optional*):
-                The maximum input length of the inputs. Note that if nothing is passed it will automatically be set to
-                6 * `self.sampling_rate`.
+                The maximum input length of the inputs.
         """
 
         if sampling_rate is not None:
@@ -203,7 +207,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 
-        max_length = 6 * self.sampling_rate if max_length is None else max_length
+        max_length = self.default_audio_length * self.sampling_rate if max_length is None else max_length
 
         padded_inputs = self.pad(
             batched_speech,

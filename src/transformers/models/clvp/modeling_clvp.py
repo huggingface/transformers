@@ -356,17 +356,6 @@ class ClvpSelfAttention(nn.Module):
                 attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
                 attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-            # if there is no causal mask given but the config has `max_position_embeddings`, then use the constructed
-            # mask. This portion mimics the `GPT2Attention`.
-            elif causal_attention_mask is None and hasattr(self.config, "max_position_embeddings"):
-                query_length, key_length = query_states.size(-2), key_states.size(-2)
-                causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-                mask_value = torch.finfo(attn_weights.dtype).min
-                mask_value = torch.full([], mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-                attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-                attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
-                attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
         if attention_mask is not None:
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
@@ -546,12 +535,12 @@ class ClvpDecoderLayer(nn.Module):
 
         self.mlp = ClvpDecoderMLP(inner_dim, config)
 
-    # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block.forward with layer_past->past_key_value
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
+        causal_attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
@@ -564,6 +553,7 @@ class ClvpDecoderLayer(nn.Module):
             hidden_states,
             past_key_value=past_key_value,
             attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -629,6 +619,7 @@ class ClvpConditioningEncoder(nn.Module):
 
         self.text_start_token_id = text_config.bos_token_id
         self.text_end_token_id = text_config.eos_token_id
+        self.text_pad_token_id = text_config.pad_token_id
 
         self.text_token_embedding = nn.Embedding(text_config.vocab_size, config.decoder_config.n_embd)
         self.text_position_embedding = nn.Embedding(
@@ -643,7 +634,12 @@ class ClvpConditioningEncoder(nn.Module):
             [ClvpSelfAttention(config.decoder_config, apply_hidden_states_norm=True) for _ in range(6)]
         )
 
-    def forward(self, mel_spec: torch.FloatTensor, text_tokens: torch.LongTensor):
+    def forward(self,
+                mel_spec: torch.FloatTensor,
+                input_ids: Optional[torch.LongTensor] = None,
+                inputs_embeds: Optional[torch.FloatTensor] = None,
+                attention_mask: Optional[torch.LongTensor] = None,
+                ):
         # process each log-mel spectrogram into a single vector
         mel_spec = self.mel_conv(mel_spec)
 
@@ -652,19 +648,38 @@ class ClvpConditioningEncoder(nn.Module):
             mel_spec = mel_attn_block(mel_spec, use_causal_attention_mask=False)[0] + mel_spec
         mel_spec = torch.permute(mel_spec, (0, 2, 1))
         mel_spec = mel_spec[:, :, 0]
-
-        # process text-tokens
-        # we add bos and eos token ids in the modeling file instead of the tokenizer file(same as the original repo)
-        text_tokens = torch.nn.functional.pad(text_tokens, (1, 0), value=self.text_start_token_id)
-        text_tokens = torch.nn.functional.pad(text_tokens, (0, 1), value=self.text_end_token_id)
-
-        token_embeds = self.text_token_embedding(text_tokens)
-        position_ids = torch.arange(0, text_tokens.shape[1], dtype=torch.int64, device=text_tokens.device)
-        position_embeds = self.text_position_embedding(position_ids)
-
-        text_embeds = token_embeds + position_embeds
-
         mel_spec = mel_spec.unsqueeze(1)
+
+        # process text
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            # we add bos and eos input_ids in the modeling file instead of the tokenizer file(same as the original repo)
+            input_ids = torch.nn.functional.pad(input_ids, (1, 0), value=self.text_start_token_id)
+            input_ids = torch.nn.functional.pad(input_ids, (0, 1), value=self.text_end_token_id)
+            batch_size, seq_length = input_ids.size()
+            inputs_embeds = self.text_token_embedding(input_ids)
+            # check if we need to update attention mask, if yes then pad it too
+            if attention_mask is not None and attention_mask.shape[1]!=seq_length:
+                attention_mask = torch.nn.functional.pad(attention_mask, (1, 0), value=1)
+                attention_mask = torch.nn.functional.pad(attention_mask, (0, 1), value=1)
+
+        elif inputs_embeds is not None:
+            batch_size, seq_length = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        # construct attention mask if not given
+        if attention_mask is None:
+            attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=inputs_embeds.device)
+
+        position_ids = torch.cumsum(attention_mask, dim=1).type_as(attention_mask)
+        # since position_ids start from 0 for conditional encoder, we must subtract 1.
+        # We must clip the values to 0 for left padding
+        position_ids = (position_ids - 1).clip(min=0)
+        position_embeds = self.text_position_embedding(position_ids)
+        text_embeds = inputs_embeds + position_embeds
+
         # repeat if there is either (1 text vs N audios) or (N texts vs 1 audio)
         if text_embeds.shape[0] == 1 and mel_spec.shape[0] != 1:
             text_embeds = text_embeds.repeat(mel_spec.shape[0], 1, 1)
@@ -1107,12 +1122,12 @@ class ClvpDecoder(ClvpPreTrainedModel):
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
         if past_key_values is None:
-            past_length = 0
+            past_key_values_length = 0
             past_key_values = tuple([None] * len(self.layers))
         else:
-            past_length = past_key_values[0][0].size(-2)
+            past_key_values_length = past_key_values[0][0].size(-2)
         if position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(past_key_values_length, input_shape[-1] + past_key_values_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
         # GPT2Attention mask.
@@ -1167,6 +1182,9 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
         output_shape = (-1,) + input_shape[1:] + (hidden_states.size(-1),)
 
+        # create the causal attention mask here.
+        causal_attention_mask = _make_causal_mask(input_shape, inputs_embeds.dtype, inputs_embeds.device, past_key_values_length)
+
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -1196,6 +1214,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
                     hidden_states,
                     None,
                     attention_mask,
+                    causal_attention_mask,
                     head_mask[i],
                     encoder_hidden_states,
                     encoder_attention_mask,
@@ -1205,6 +1224,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
                     hidden_states,
                     past_key_value=past_key_value,
                     attention_mask=attention_mask,
+                    causal_attention_mask=causal_attention_mask,
                     head_mask=head_mask[i],
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
@@ -1532,9 +1552,27 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_conditioning_encoder_input_embeddings(self):
+        return self.conditioning_encoder.text_token_embedding
+
+    def set_conditioning_encoder_input_embeddings(self, new_embeddings):
+        self.conditioning_encoder.text_token_embedding = new_embeddings
+
+    def get_text_encoder_input_embeddings(self):
+        return self.text_encoder_model.token_embedding
+
+    def set_text_encoder_input_embeddings(self, new_embeddings):
+        self.text_encoder_model.token_embedding = new_embeddings
+
+    def get_speech_encoder_input_embeddings(self):
+        return self.speech_encoder_model.token_embedding
+
+    def set_speech_encoder_input_embeddings(self, new_embeddings):
+        self.speech_encoder_model.token_embedding = new_embeddings
+
     # taken from the original repo,
     # link : https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/api.py#L117
-    def fix_decoder_speech_output(self, autoreg_output: torch.LongTensor) -> torch.LongTensor:
+    def fix_speech_decoder_output(self, autoreg_output: torch.LongTensor) -> torch.LongTensor:
         """
         This method modifies the output of the decoder model, such as replacing the `eos_token_id` and changing
         the last few tokens of each sequence.
@@ -1543,6 +1581,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             autoreg_output (`torch.LongTensor`):
                 This refers to the output of the decoder model.
         """
+        decoder_fixing_codes = self.config.decoder_config.decoder_fixing_codes
         autoreg_output = autoreg_output[:, 1:]
 
         stop_token_indices = torch.where(autoreg_output == self.speech_decoder_model.config.eos_token_id, 1, 0)
@@ -1555,17 +1594,18 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 continue
 
             stm = each_seq_stop_token_indice.argmax()
-            autoreg_output[i, stm:] = 83
+            autoreg_output[i, stm:] = decoder_fixing_codes[0]
             if stm - 3 < autoreg_output.shape[1]:
-                autoreg_output[i, -3] = 45
-                autoreg_output[i, -2] = 45
-                autoreg_output[i, -1] = 248
+                autoreg_output[i, -3] = decoder_fixing_codes[1]
+                autoreg_output[i, -2] = decoder_fixing_codes[2]
+                autoreg_output[i, -1] = decoder_fixing_codes[3]
 
         return autoreg_output
 
     def get_text_features(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
     ) -> torch.FloatTensor:
@@ -1614,6 +1654,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         return self.text_encoder_model(
             input_ids=input_ids,
+            inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
         )[0]
@@ -1623,6 +1664,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         speech_ids: Optional[torch.LongTensor] = None,
         input_ids: Optional[torch.LongTensor] = None,
         input_features: Optional[torch.FloatTensor] = None,
+        conditioning_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
         generation_config: Optional[GenerationConfig] = None,
@@ -1706,14 +1748,18 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 generation_config = self.generation_config
             generation_config.update(**kwargs)
 
-            conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
+            conditioning_embeds = self.conditioning_encoder(mel_spec=input_features,
+                                                            input_ids=input_ids,
+                                                            inputs_embeds=conditioning_encoder_inputs_embeds,
+                                                            attention_mask=attention_mask,
+                                                            )
 
             speech_ids = self.speech_decoder_model.generate(
                 conditioning_embeds=conditioning_embeds,
                 generation_config=generation_config,
             )
 
-            speech_ids = self.fix_decoder_speech_output(speech_ids[0])
+            speech_ids = self.fix_speech_decoder_output(speech_ids[0])
 
         return self.speech_encoder_model(
             input_ids=speech_ids,
@@ -1727,6 +1773,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         input_features: torch.FloatTensor = None,
+        conditioning_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
         return_loss: Optional[bool] = None,
@@ -1771,7 +1819,11 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
+        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features,
+                                                        input_ids=input_ids,
+                                                        inputs_embeds=conditioning_encoder_inputs_embeds,
+                                                        attention_mask=attention_mask,
+                                                        )
 
         speech_candidates = self.speech_decoder_model(
             inputs_embeds=conditioning_embeds,
@@ -1786,7 +1838,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         # we must convert it to tokens, to make it compaitable with speech_transformer
         if speech_candidates.ndim == 3:
             speech_candidates = speech_candidates.argmax(2)
-        speech_candidates = self.fix_decoder_speech_output(speech_candidates)
+        speech_candidates = self.fix_speech_decoder_output(speech_candidates)
 
         speech_outputs = self.speech_encoder_model(
             input_ids=speech_candidates,
@@ -1799,6 +1851,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         text_outputs = self.text_encoder_model(
             input_ids=input_ids,
+            inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
@@ -1855,7 +1908,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             generation_config = self.generation_config
         generation_config.update(**kwargs)
 
-        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
+        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, input_ids=input_ids)
 
         speech_candidates = self.speech_decoder_model.generate(
             conditioning_embeds=conditioning_embeds,
@@ -1863,7 +1916,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         )
         if isinstance(speech_candidates, ModelOutput):
             speech_candidates = speech_candidates.sequences
-        speech_candidates = self.fix_decoder_speech_output(speech_candidates)
+        speech_candidates = self.fix_speech_decoder_output(speech_candidates)
 
         speech_outputs = self.speech_encoder_model(
             input_ids=speech_candidates,

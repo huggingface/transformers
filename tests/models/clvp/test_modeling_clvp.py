@@ -16,12 +16,14 @@
 
 
 import gc
+import copy
 import tempfile
 import unittest
 
 import datasets
 import numpy as np
 
+from transformers import AdaptiveEmbedding
 from transformers import ClvpEncoderConfig, ClvpDecoderConfig, ClvpConfig
 from transformers.testing_utils import (
     require_torch,
@@ -433,19 +435,42 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="ClvpModelForConditionalGeneration does not take inputs_embeds as inputs")
-    def test_inputs_embeds(self):
-        pass
-
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(
-        reason="ClvpModelForConditionalGeneration does not have input/output embeddings, since it has two types(text and speech) of them"
-    )
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = ClvpModelForConditionalGeneration(config)
+        model.to(torch_device)
+        model.eval()
+
+        inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, ClvpModelForConditionalGeneration))
+
+        input_ids = inputs["input_ids"]
+        del inputs["input_ids"]
+
+        conditioning_encoder_wte = model.get_conditioning_encoder_input_embeddings()
+        text_encoder_wte = model.get_text_encoder_input_embeddings()
+
+        inputs["conditioning_encoder_inputs_embeds"] = conditioning_encoder_wte(input_ids)
+        inputs["text_encoder_inputs_embeds"] = text_encoder_wte(input_ids)
+
+        with torch.no_grad():
+            model(**inputs)[0]
+
     def test_model_common_attributes(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        model = ClvpModelForConditionalGeneration(config)
+        self.assertIsInstance(model.get_conditioning_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
+        self.assertIsInstance(model.get_text_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
+        self.assertIsInstance(model.get_speech_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
+
+        model.set_conditioning_encoder_input_embeddings(torch.nn.Embedding(10, 10))
+        model.set_text_encoder_input_embeddings(torch.nn.Embedding(10, 10))
+        model.set_speech_encoder_input_embeddings(torch.nn.Embedding(10, 10))
 
     # override as the `logit_scale` parameter initilization is different for Clvp
     def test_initialization(self):
@@ -524,7 +549,7 @@ class ClvpIntegrationTest(unittest.TestCase):
     def test_conditional_encoder(self):
         with torch.no_grad():
             conditioning_encoder_outputs = self.model.conditioning_encoder(
-                mel_spec=self.input_features, text_tokens=self.text_tokens
+                mel_spec=self.input_features, input_ids=self.text_tokens
             ).to("cpu")
 
         self.assertEqual(
@@ -538,14 +563,14 @@ class ClvpIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(conditioning_encoder_outputs[0, :3, :3], EXPECTED_OUTPUTS, atol=1e-4))
 
-    def test_autoregressive_model_generate(self):
+    def test_decoder_model_generate(self):
         autoregressive_model_output = self.model.speech_decoder_model.generate(input_ids=self.text_tokens).cpu()
 
         EXPECTED_OUTPUTS = torch.tensor([[147, 2, 54, 2, 43, 2, 169, 122, 29, 64, 2, 136, 37, 33, 9, 8193]])
 
         self.assertTrue(torch.allclose(autoregressive_model_output, EXPECTED_OUTPUTS))
 
-    def test_speech_and_text_projection_models(self):
+    def test_text_and_speech_encoder_models(self):
         # check for text embeds
         text_embeds = self.model.text_encoder_model(input_ids=self.text_tokens, return_dict=True)[0].cpu()
 

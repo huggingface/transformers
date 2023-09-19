@@ -112,7 +112,7 @@ class ClvpEncoderConfig(PretrainedConfig):
         use_attention_bias=False,
         summary_type="mean",
         initializer_factor=1.0,
-        pad_token_id=1,
+        pad_token_id=0,
         bos_token_id=255,
         eos_token_id=0,
         **kwargs,
@@ -221,6 +221,8 @@ class  ClvpDecoderConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        decoder_fixing_codes (`list`, *optional*, defaults to `[83, 45, 45, 248]`):
+            These values are used in the method `fix_speech_decoder_output` to fix decoder generated outputs.
     """
 
     model_type = "clvp_decoder"
@@ -258,6 +260,7 @@ class  ClvpDecoderConfig(PretrainedConfig):
         feature_size=80,
         use_attention_bias=True,
         initializer_factor=1.0,
+        decoder_fixing_codes = [83, 45, 45, 248],
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -282,6 +285,7 @@ class  ClvpDecoderConfig(PretrainedConfig):
         self.feature_size = feature_size
         self.use_attention_bias = use_attention_bias
         self.initializer_factor = initializer_factor
+        self.decoder_fixing_codes = decoder_fixing_codes
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
