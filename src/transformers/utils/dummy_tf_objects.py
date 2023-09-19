@@ -974,6 +974,13 @@ class TFDebertaV2ForMaskedLM(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFDebertaV2ForMultipleChoice(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFDebertaV2ForQuestionAnswering(metaclass=DummyObject):
     _backends = ["tf"]
 

@@ -25,6 +25,8 @@
     title: 만든 모델 공유하기
   - local: transformers_agents
     title: 에이전트
+  - local: llm_tutorial
+    title: 대규모 언어 모델로 생성하기
   title: 튜토리얼
 - sections:
   - sections:
@@ -147,8 +149,8 @@
       title: TensorFlow 모델을 위한 XLA 통합
   title: (번역중) 성능 및 확장성
 - sections:
-    - local: in_translation
-      title: (번역중) How to contribute to transformers?
+    - local: contributing
+      title: 🤗 Transformers에 기여하는 방법
     - local: add_new_model
       title: 🤗 Transformers에 새로운 모델을 추가하는 방법 
     - local: add_tensorflow_model
@@ -335,8 +337,10 @@
         title: (번역중) Jukebox
       - local: in_translation
         title: (번역중) LED
-      - local: in_translation
-        title: (번역중) LLaMA
+      - local: model_doc/llama
+        title: LLaMA
+      - local: model_doc/llama2
+        title: LLaMA2
       - local: in_translation
         title: (번역중) Longformer
       - local: in_translation
@@ -563,8 +567,8 @@
         title: (번역중) Wav2Vec2Phoneme
       - local: in_translation
         title: (번역중) WavLM
-      - local: in_translation
-        title: (번역중) Whisper
+      - local: model_doc/whisper
+        title: Whisper
       - local: in_translation
         title: (번역중) XLS-R
       - local: in_translation

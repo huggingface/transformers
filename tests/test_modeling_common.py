@@ -728,6 +728,13 @@ class ModelTesterMixin:
                     traced_model = torch.jit.trace(
                         model, (input_ids, bbox, image), check_trace=False
                     )  # when traced model is checked, an error is produced due to name mangling
+                elif "bbox" in inputs:  # Bros requires additional inputs (bbox)
+                    input_ids = inputs["input_ids"]
+                    bbox = inputs["bbox"]
+                    model(input_ids, bbox)
+                    traced_model = torch.jit.trace(
+                        model, (input_ids, bbox), check_trace=False
+                    )  # when traced model is checked, an error is produced due to name mangling
                 else:
                     main_input = inputs[main_input_name]
                     model(main_input)
@@ -1423,6 +1430,9 @@ class ModelTesterMixin:
 
             model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            self.assertTrue(model_embed.weight.shape[0], model.config.vocab_size)
+            self.assertTrue(model.config.vocab_size, model.vocab_size)
 
             model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
             self.assertTrue(model_embed.weight.shape[0] // 64, 0)
@@ -2481,34 +2491,6 @@ class ModelTesterMixin:
                 elif isinstance(value, (Tuple, List)):
                     for value_, parallel_value_ in zip(value, parallel_value):
                         self.assertTrue(torch.allclose(value_, parallel_value_.to("cpu"), atol=1e-7))
-
-    @require_torch_multi_gpu
-    def test_model_parallel_beam_search(self):
-        if not self.test_model_parallel:
-            return
-
-        all_generative_and_parallelizable_model_classes = tuple(
-            set(self.all_generative_model_classes).intersection(self.all_parallelizable_model_classes)
-        )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in all_generative_and_parallelizable_model_classes:
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-
-            def cast_to_device(dictionary, device):
-                output = {}
-                for k, v in dictionary.items():
-                    if isinstance(v, torch.Tensor):
-                        output[k] = v.to(device)
-                    else:
-                        output[k] = v
-
-                return output
-
-            model.parallelize()
-            model.generate(**cast_to_device(inputs_dict, "cuda:0"), num_beams=2)
 
     def check_device_map_is_respected(self, model, device_map):
         for param_name, param in model.named_parameters():

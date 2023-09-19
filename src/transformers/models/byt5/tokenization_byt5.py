@@ -16,7 +16,7 @@
 
 
 import warnings
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -72,7 +72,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
             additional_special_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
-        elif extra_ids > 0 and additional_special_tokens is not None:
+        elif extra_ids > 0 and additional_special_tokens is not None and len(additional_special_tokens) > 0:
             # Check that we have the right number of extra_id special tokens
             extra_tokens = len(set(filter(lambda x: bool("extra_id" in str(x)), additional_special_tokens)))
             if extra_tokens != extra_ids:
@@ -82,38 +82,31 @@ class ByT5Tokenizer(PreTrainedTokenizer):
                     " extra_ids tokens"
                 )
 
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-
+        pad_token = AddedToken(pad_token, lstrip=True, rstrip=True) if isinstance(pad_token, str) else pad_token
+        # we force left and right stripping for backward compatibility. The byt5tests depend on this.
+        eos_token = AddedToken(eos_token, lstrip=True, rstrip=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, lstrip=True, rstrip=True) if isinstance(unk_token, str) else unk_token
+        # unk token needs to be in the vocab with correct index
+        self._added_tokens_decoder = {0: pad_token, 1: eos_token, 2: unk_token}
+        self.offset = len(self._added_tokens_decoder)
+        self._utf_vocab_size = 2**8  # utf is 8 bits
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            extra_ids=extra_ids,
-            additional_special_tokens=additional_special_tokens,
+            extra_ids=0,
+            additional_special_tokens=additional_special_tokens,  # TODO extra ids are not used :sweatywmile:
             **kwargs,
         )
 
-        self._extra_ids = extra_ids
-
-        self._utf_vocab_size = 2**8  # utf is 8 bits
-
-        # define special tokens dict
-        self.special_tokens_encoder: Dict[int, str] = {
-            self.pad_token: 0,
-            self.eos_token: 1,
-            self.unk_token: 2,
-        }
-        self._num_special_tokens = len(self.special_tokens_encoder)
-        n = len(additional_special_tokens)
-        for i, token in enumerate(additional_special_tokens):
-            self.special_tokens_encoder[token] = self.vocab_size + i - n
-        self.special_tokens_decoder: Dict[str, int] = {v: k for k, v in self.special_tokens_encoder.items()}
-
     @property
     def vocab_size(self):
-        return self._utf_vocab_size + self._num_special_tokens + self._extra_ids
+        return self._utf_vocab_size
+
+    def get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -209,34 +202,25 @@ class ByT5Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token in self.special_tokens_encoder:
-            token_id = self.special_tokens_encoder[token]
-        elif token in self.added_tokens_encoder:
-            token_id = self.added_tokens_encoder[token]
-        elif len(token) != 1:
-            token_id = self.unk_token_id
+
+        if len(token) != 1:
+            token_id = None
         else:
-            token_id = ord(token) + self._num_special_tokens
+            token_id = ord(token) + self.offset
+
         return token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.special_tokens_decoder:
-            token = self.special_tokens_decoder[index]
-        else:
-            token = chr(index - self._num_special_tokens)
+        token = chr(index - self.offset)
         return token
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
         for token in tokens:
-            if token in self.special_tokens_decoder:
-                tok_string = self.special_tokens_decoder[token].encode("utf-8")
-            elif token in self.added_tokens_decoder:
-                tok_string = self.special_tokens_decoder[token].encode("utf-8")
-            elif token in self.special_tokens_encoder:
-                tok_string = token.encode("utf-8")
+            if token in self.added_tokens_decoder:
+                tok_string = self.added_tokens_decoder[token].encode("utf-8")
             elif token in self.added_tokens_encoder:
                 tok_string = token.encode("utf-8")
             else:

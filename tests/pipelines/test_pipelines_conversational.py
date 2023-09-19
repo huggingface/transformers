@@ -78,17 +78,23 @@ class ConversationalPipelineTests(unittest.TestCase):
     def run_pipeline_test(self, conversation_agent, _):
         # Simple
         outputs = conversation_agent(Conversation("Hi there!"))
-        self.assertEqual(outputs, Conversation(past_user_inputs=["Hi there!"], generated_responses=[ANY(str)]))
+        self.assertEqual(
+            outputs,
+            Conversation([{"role": "user", "content": "Hi there!"}, {"role": "assistant", "content": ANY(str)}]),
+        )
 
         # Single list
         outputs = conversation_agent([Conversation("Hi there!")])
-        self.assertEqual(outputs, Conversation(past_user_inputs=["Hi there!"], generated_responses=[ANY(str)]))
+        self.assertEqual(
+            outputs,
+            Conversation([{"role": "user", "content": "Hi there!"}, {"role": "assistant", "content": ANY(str)}]),
+        )
 
         # Batch
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
-        self.assertEqual(len(conversation_1.past_user_inputs), 0)
-        self.assertEqual(len(conversation_2.past_user_inputs), 0)
+        self.assertEqual(len(conversation_1), 1)
+        self.assertEqual(len(conversation_2), 1)
 
         outputs = conversation_agent([conversation_1, conversation_2])
         self.assertEqual(outputs, [conversation_1, conversation_2])
@@ -96,32 +102,35 @@ class ConversationalPipelineTests(unittest.TestCase):
             outputs,
             [
                 Conversation(
-                    past_user_inputs=["Going to the movies tonight - any suggestions?"],
-                    generated_responses=[ANY(str)],
+                    [
+                        {"role": "user", "content": "Going to the movies tonight - any suggestions?"},
+                        {"role": "assistant", "content": ANY(str)},
+                    ],
                 ),
-                Conversation(past_user_inputs=["What's the last book you have read?"], generated_responses=[ANY(str)]),
+                Conversation(
+                    [
+                        {"role": "user", "content": "What's the last book you have read?"},
+                        {"role": "assistant", "content": ANY(str)},
+                    ]
+                ),
             ],
         )
 
         # One conversation with history
-        conversation_2.add_user_input("Why do you recommend it?")
+        conversation_2.add_message({"role": "user", "content": "Why do you recommend it?"})
         outputs = conversation_agent(conversation_2)
         self.assertEqual(outputs, conversation_2)
         self.assertEqual(
             outputs,
             Conversation(
-                past_user_inputs=["What's the last book you have read?", "Why do you recommend it?"],
-                generated_responses=[ANY(str), ANY(str)],
+                [
+                    {"role": "user", "content": "What's the last book you have read?"},
+                    {"role": "assistant", "content": ANY(str)},
+                    {"role": "user", "content": "Why do you recommend it?"},
+                    {"role": "assistant", "content": ANY(str)},
+                ]
             ),
         )
-        with self.assertRaises(ValueError):
-            conversation_agent("Hi there!")
-        with self.assertRaises(ValueError):
-            conversation_agent(Conversation())
-        # Conversation have been consumed and are not valid anymore
-        # Inactive conversations passed to the pipeline raise a ValueError
-        with self.assertRaises(ValueError):
-            conversation_agent(conversation_2)
 
     @require_torch
     @slow
@@ -131,8 +140,8 @@ class ConversationalPipelineTests(unittest.TestCase):
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
         # Then
-        self.assertEqual(len(conversation_1.past_user_inputs), 0)
-        self.assertEqual(len(conversation_2.past_user_inputs), 0)
+        self.assertEqual(len(conversation_1.past_user_inputs), 1)
+        self.assertEqual(len(conversation_2.past_user_inputs), 1)
         # When
         result = conversation_agent([conversation_1, conversation_2], do_sample=False, max_length=1000)
         # Then
@@ -162,7 +171,7 @@ class ConversationalPipelineTests(unittest.TestCase):
         conversation_agent = pipeline(task="conversational", min_length_for_response=24, device=DEFAULT_DEVICE_NUM)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         # Then
-        self.assertEqual(len(conversation_1.past_user_inputs), 0)
+        self.assertEqual(len(conversation_1.past_user_inputs), 1)
         # When
         result = conversation_agent(conversation_1, do_sample=False, max_length=36)
         # Then
@@ -370,8 +379,8 @@ These are just a few of the many attractions that Paris has to offer. With so mu
         conversation_1 = Conversation("My name is Sarah and I live in London")
         conversation_2 = Conversation("Going to the movies tonight, What movie would you recommend? ")
         # Then
-        self.assertEqual(len(conversation_1.past_user_inputs), 0)
-        self.assertEqual(len(conversation_2.past_user_inputs), 0)
+        self.assertEqual(len(conversation_1.past_user_inputs), 1)
+        self.assertEqual(len(conversation_2.past_user_inputs), 1)
         # When
         result = conversation_agent([conversation_1, conversation_2], do_sample=False, max_length=1000)
         # Then

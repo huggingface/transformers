@@ -396,7 +396,7 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
         pixel_values: tf.Tensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training=False,
+        training: bool = False,
     ) -> Union[TFBaseModelOutputWithPoolingAndNoAttention, Tuple[tf.Tensor]]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -447,11 +447,11 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
     )
     def call(
         self,
-        pixel_values: tf.Tensor = None,
-        labels: tf.Tensor = None,
-        output_hidden_states: bool = None,
-        return_dict: bool = None,
-        training=False,
+        pixel_values: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):

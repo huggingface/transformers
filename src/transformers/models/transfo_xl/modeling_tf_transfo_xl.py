@@ -870,11 +870,11 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         mems: List[tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ):
+    ) -> TFTransfoXLModelOutput | Tuple[tf.Tensor]:
         outputs = self.transformer(
             input_ids=input_ids,
             mems=mems,
@@ -938,12 +938,12 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         mems: List[tf.Tensor] | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ):
+    ) -> TFTransfoXLLMHeadModelOutput | Tuple[tf.Tensor]:
         if input_ids is not None:
             bsz, tgt_len = shape_list(input_ids)[:2]
         else:
