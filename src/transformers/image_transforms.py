@@ -458,11 +458,17 @@ def center_crop(
     crop_height, crop_width = size
     crop_height, crop_width = int(crop_height), int(crop_width)
 
-    # In case size is odd, (image_shape[0] + size[0]) // 2 won't give the proper result.
-    top = (orig_height - crop_height) // 2
+    # In case height is odd
+    diff_height = orig_height - crop_height
+    if diff_height % 2 == 1:
+        diff_height += 1
+    top = diff_height // 2
     bottom = top + crop_height
-    # In case size is odd, (image_shape[1] + size[1]) // 2 won't give the proper result.
-    left = (orig_width - crop_width) // 2
+    # In case width is odd
+    diff_width = orig_width - crop_width
+    if diff_width % 2 == 1:
+        diff_width += 1
+    left = diff_width // 2
     right = left + crop_width
 
     # Check if cropped area is within image boundaries

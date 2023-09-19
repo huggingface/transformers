@@ -18,9 +18,18 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers.testing_utils import require_flax, require_tf, require_torch, require_vision
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
+from transformers.testing_utils import require_flax, require_tf, require_torch, require_torchvision, require_vision
+from transformers.utils.import_utils import (
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 
+
+if is_torchvision_available():
+    import torchvision.transforms as transforms
 
 if is_torch_available():
     import torch
@@ -312,6 +321,46 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertTrue(
             np.allclose(normalize(image, mean=mean, std=std, input_data_format="channels_last"), expected_image)
         )
+
+    @parameterized.expand(
+        [
+            ((3, 224, 224), (120, 60)),
+            ((3, 223, 223), (120, 60)),
+            ((3, 224, 224), (121, 61)),
+            ((3, 223, 223), (121, 61)),
+        ]
+    )
+    @require_torchvision
+    def test_center_crop_with_torchvision(self, image_size, expected_size):
+        # Define input image size
+        image_channels = image_size[0]
+        # Define expected output size
+        expected_height = expected_size[0]
+        expected_width = expected_size[1]
+        expected_channels = image_channels
+
+        # Defining input image
+        image = np.random.randint(0, 256, image_size, np.uint8)
+        pil_image = PIL.Image.fromarray(np.transpose(image, (1, 2, 0)))
+
+        # Test that exception is raised if inputs are incorrect
+        with self.assertRaises(ValueError):
+            center_crop(image, 10)
+
+        # Use torchvision CenterCrop transformation as reference
+        transf_center_crop = transforms.CenterCrop(expected_size)
+
+        # Apply torchvision CenterCrop transformation
+        expected_output = transf_center_crop(pil_image)
+        expected_output_np = np.array(expected_output)
+
+        # Apply center_crop tranformation
+        cropped_image = center_crop(image, expected_size, data_format="channels_last")
+
+        # Test that output is correct and matches torchvision
+        self.assertIsInstance(cropped_image, np.ndarray)
+        self.assertEqual(cropped_image.shape, (expected_height, expected_width, expected_channels))
+        self.assertTrue(np.allclose(cropped_image, expected_output_np))
 
     def test_center_crop(self):
         image = np.random.randint(0, 256, (3, 224, 224))
