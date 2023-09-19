@@ -37,7 +37,6 @@ You'll learn:
 
 - [Basics of prompting](#basic-prompts)
 - [Best practices of LLM prompting](#best-practices-of-llm-prompting)
-- [Prompt formatting and structure](#prompt-formatting-and-structure)
 - [Advanced prompting techniques: few-shot prompting and chain-of-thought](#advanced-prompting-techniques)
 - [When to fine-tune instead of prompting](#prompting-vs-fine-tuning)
 
@@ -217,8 +216,8 @@ so that output doesn't contain the prompt:
 ```
 
 As you can see, the model correctly identified two named entities from the given text, however, it has also added a new 
-entity that is not present in the text but is contextually very close in meaning. 
-Further in the guide we'll talk about techniques you can use to improve your prompts.
+entity that is not present in the text but is contextually very close in meaning. Further in the guide we'll talk about 
+techniques you can use to improve your prompts.
 
 #### Translation
 
@@ -256,7 +255,9 @@ computation => longer latency. Has this been researched though?)
 #### Text summarization
 
 Similar to the translation, text summarization is another generative task where the output **heavily** relies on the input, 
-and encoder-decoder models can be a better choice. However, decoder-style models can be used for this task as well. 
+and encoder-decoder models can be a better choice. However, decoder-style models can be used for this task as well.
+Previously, we have placed the instructions at the very beginning of the prompt. However, the very end of the prompt can 
+also be a suitable location for instructions. Typically, it's better to place the instruction on one of the extreme ends.  
 
 ```python
 >>> prompt = """Permaculture is a design process mimicking the diversity, functionality and resilience of natural ecosystems. The principles and practices are drawn from traditional ecological knowledge of indigenous cultures combined with modern scientific understanding and technological innovations. Permaculture design provides a framework helping individuals and communities develop innovative, creative and effective strategies for meeting basic needs while preparing for and mitigating the projected impacts of climate change.
@@ -282,13 +283,81 @@ Permaculture is an ecosystem design mimicking natural, diverse functionalities a
 
 #### Question answering
 
+For question answering task we can structure the prompt into the following logical components: instructions, context, question, and 
+the leading word or phrase (`"Answer:"`) to nudge the model to start generating the answer:
 
-(???) #### Conversation
+```python
+>>> prompt = """Answer the question using the context below.
+Context: Gazpacho is a cold soup and drink made of raw, blended vegetables. Most gazpacho includes stale bread, tomato, cucumbers, onion, bell peppers, garlic, olive oil, wine vinegar, water, and salt. Northern recipes often include cumin and/or pimentón (smoked sweet paprika). Traditionally, gazpacho was made by pounding the vegetables in a mortar with a pestle; this more laborious method is still sometimes used as it helps keep the gazpacho cool and avoids the foam and silky consistency of smoothie versions made in blenders or food processors.
+Question: What modern tool is used to make gazpacho?
+Answer:
+"""
 
-(???) #### Code generation
+>>> sequences = pipeline(
+...     prompt,
+...     max_length=200,
+...     do_sample=True,
+...     top_k=10,
+...     num_return_sequences=1,
+...     return_full_text = False,
+...     eos_token_id=tokenizer.eos_token_id,
+... )
 
-(???) #### Reasoning
+>>> for seq in sequences:
+...     print(f"Result: {seq['generated_text']}")
+Result: A blender or a food processor.
+```
 
+#### Reasoning
+
+Reasoning is one of the most difficult tasks for LLMs, and achieving good results often requires applying advanced prompting techniques, like 
+[Chain-of-though](#chain-of-thought).
+
+Let's try if we can make a model reason about a simple arithmetics task with a basic prompt: 
+
+```python
+>>> prompt = """There are 5 groups of students in the class. Each group has 4 students. How many students are there in the class?"""
+
+>>> sequences = pipeline(
+...     prompt,
+...     max_length=100,
+...     do_sample=True,
+...     top_k=10,
+...     num_return_sequences=1,
+...     return_full_text = False,
+...     eos_token_id=tokenizer.eos_token_id,
+... )
+
+>>> for seq in sequences:
+...     print(f"Result: {seq['generated_text']}")
+
+Result: There are 20 students in the class.
+```
+
+Correct! Let's increase the complexity a little and see if we can still get away with a basic prompt:
+
+```python
+>>> prompt = """I baked 15 muffins. I ate 2 muffins and gave 5 muffins to a neighbor. My partner then bought 6 more muffins and ate 2. How many muffins do we now have?"""
+
+>>> sequences = pipeline(
+...     prompt,
+...     max_length=100,
+...     do_sample=True,
+...     top_k=10,
+...     num_return_sequences=1,
+...     return_full_text = False,
+...     eos_token_id=tokenizer.eos_token_id,
+... )
+
+>>> for seq in sequences:
+...     print(f"Result: {seq['generated_text']}")
+
+Result: 
+We now have 13 muffins.
+```
+
+This is a wrong answer. Looks like at this point basic prompts are not enough and for more complex reasoning tasks we'll need to apply some 
+advanced techniques that are covered later in this guide.
 
 ## Best practices of LLM prompting
 
@@ -305,10 +374,6 @@ In this section of the guide we have compiled a list of best practices that tend
 * Use advanced techniques like [Few-shot prompting](#few-shot-prompting) and [Chain-of-thought](#chain-of-thought)
 * Test your prompts with different models to assess their robustness. 
 * Version and track the performance of your prompts. 
-
-## Prompt formatting and structure
-
-(add a note on system prompts and chat templates)
 
 ## Advanced prompting techniques
 
@@ -360,9 +425,56 @@ Limitations of the few-shot prompting technique:
 
 ### Chain-of-thought
 
+Chain-of-thought (CoT) prompting is a technique that nudges a model to produce intermediate reasoning steps thus improving 
+the results on complex reasoning tasks. 
 
-### Self-consistency
+There are two ways of steering a model to producing the reasoning steps:
+- few-shot prompting by illustrating examples with detailed answers to questions, showing the model how to work through a problem.
+- by instructing the model to reason by adding phrases like "Let's think step by step" or "Take a deep breath and work through the problem step by step."
 
+Let's apply CoT technique to the muffins example from the [reasoning section](#reasoning):
+
+```python
+>>> prompt = """I baked 15 muffins. I ate 2 muffins and gave 5 muffins to a neighbor. My partner then bought 6 more muffins and ate 2. How many muffins do we now have?
+Take a deep breath and work on this problem step-by-step."""
+
+>>> sequences = pipeline(
+...     prompt,
+...     max_length=200,
+...     do_sample=True,
+...     top_k=10,
+...     num_return_sequences=1,
+...     return_full_text = False,
+...     eos_token_id=tokenizer.eos_token_id,
+... )
+
+>>> for seq in sequences:
+...     print(f"Result: {seq['generated_text']}")
+
+Result: 
+1. We have 15 muffins.
+2. We ate 2, so we have 13 muffins left.
+3. We gave away 5, so we have 8 muffins left.
+4. We bought 6 more, so we have 14 muffins left.
+5. We have 2 muffins left.
+6. We ate 2, so we have 0 muffins left.
+7. We have 0 muffins left.
+```
+
+The answer is still wrong, however, the reasoning was correct up until step 4. In this particular case, we are using 
+the smallest version of the Falcon model, and its capabilities are limited. Because reasoning is a very difficult task for LLMs, 
+it's best to use a larger model for it. For instance, when trying the same prompt with a much more powerful `tiiuae/falcon-180B-chat`, 
+we get the following output: 
+
+```text
+Let's go through this step-by-step:
+1. You start with 15 muffins.
+2. You eat 2 muffins, leaving you with 13 muffins.
+3. You give 5 muffins to your neighbor, leaving you with 8 muffins.
+4. Your partner buys 6 more muffins, bringing the total number of muffins to 14.
+5. Your partner eats 2 muffins, leaving you with 12 muffins.
+Therefore, you now have 12 muffins.
+```
 
 ## Prompting vs fine-tuning
 
