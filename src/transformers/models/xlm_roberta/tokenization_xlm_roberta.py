@@ -152,18 +152,6 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
-
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -182,6 +170,18 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
 
         self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -288,6 +288,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         return vocab
 
     def _tokenize(self, text: str) -> List[str]:
+        # TODO check if the t5/llama PR also applies here
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
