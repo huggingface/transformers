@@ -402,8 +402,19 @@ class Trainer:
                     " to `True` to avoid any unexpected behavior such as device placement mismatching."
                 )
 
+        _is_peft_model = is_peft_available() and isinstance(model, PeftModel)
+        _is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
+            model, "_hf_peft_config_loaded", False
+        )
+
         # At this stage the model is already loaded
-        if getattr(model, "is_quantized", False) and not getattr(model, "_hf_peft_config_loaded", False):
+        if _is_quantized_and_base_model and not _is_peft_model:
+            raise ValueError(
+                "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
+                " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
+                " for more details"
+            )
+        elif _is_quantized_and_base_model:
             if getattr(model, "_is_quantized_training_enabled", False):
                 logger.info(
                     "The model is quantized. To train this model you need to add additional modules"
