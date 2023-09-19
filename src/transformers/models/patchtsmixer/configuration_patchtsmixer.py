@@ -22,7 +22,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ibm/patchtsmixer-base": "https://huggingface.co/ibm/patchtsmixer-base/resolve/main/config.json",
+    "ibm/patchtsmixer-etth1-pretrain": "https://huggingface.co/ibm/patchtsmixer-etth1-pretrain/resolve/main/config.json",
 }
 
 
@@ -40,7 +40,7 @@ class PatchTSMixerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`PatchTSMixerModel`]. It is used to instantiate
     an PatchTSMixer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the PatchTSMixer
-    [ibm/patchtsmixer-etth1](https://huggingface.co/ibm/patchtsmixer-etth1) architecture.
+    [ibm/patchtsmixer-etth1-pretrain](https://huggingface.co/ibm/patchtsmixer-etth1-pretrain) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

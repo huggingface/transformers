@@ -38,14 +38,15 @@ from .layers import (
     set_seed,
 )
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSMixerConfig"
 
 
 PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibm/patchtsmixer-base",
-    # See all PatchTST models at https://huggingface.co/models?filter=patchtst
+    "ibm/patchtsmixer-etth1-pretrain",
+    # See all PatchTST models at https://huggingface.co/models?filter=patchtsmixer
 ]
 
 
