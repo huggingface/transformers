@@ -1031,7 +1031,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-            # the cache may be in the stardard format (e.g. in contrastive search), convert to falcon's format if needed
+            # the cache may be in the standard format (e.g. in contrastive search), convert to falcon's format if needed
             if len(past_key_values[0][0].shape) == 4:
                 past_key_values = self._convert_to_rw_cache(past_key_values)
 
