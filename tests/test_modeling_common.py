@@ -2778,12 +2778,11 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=True
-                ).to(torch_device)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=False).to(
-                    torch_device
-                )
+                model_fa = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=True)
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=False)
+                model.to(torch_device)
 
                 dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
                 dummy_attention_mask = torch.LongTensor([[0, 1, 1, 1, 1]]).to(torch_device)
@@ -2793,12 +2792,11 @@ class ModelTesterMixin:
 
                 self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
 
-                logits_fa = model_fa(
-                    dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True
-                ).hidden_states[-1]
-                logits = model(
-                    dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True
-                ).hidden_states[-1]
+                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                logits_fa = output_fa.hidden_states[-1]
+
+                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                logits = output.hidden_states[-1]
 
                 self.assertTrue(torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2))
 
@@ -2818,12 +2816,11 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=True
-                ).to(torch_device)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=False).to(
-                    torch_device
-                )
+                model_fa = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=True)
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=False)
+                model.to(torch_device)
 
                 dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
                 dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1, 0]]).to(torch_device)
@@ -2833,12 +2830,11 @@ class ModelTesterMixin:
 
                 self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
 
-                logits_fa = model_fa(
-                    dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True
-                ).hidden_states[-1]
-                logits = model(
-                    dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True
-                ).hidden_states[-1]
+                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                logits_fa = output_fa.hidden_states[-1]
+
+                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                logits = output.hidden_states[-1]
 
                 self.assertTrue(torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2))
 
