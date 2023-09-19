@@ -1550,7 +1550,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
 
-        if old_num_tokens == new_num_tokens:
+        if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
             return old_embeddings
 
         if not isinstance(old_embeddings, nn.Embedding):
@@ -1630,7 +1630,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
             )
 
-        if old_num_tokens == new_num_tokens:
+        if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
             return old_lm_head
 
         if not isinstance(old_lm_head, nn.Linear):
@@ -1666,11 +1666,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 self._copy_lm_head_original_to_resized(
-                    self, new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
+                    new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
                 )
         else:
             self._copy_lm_head_original_to_resized(
-                self, new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
+                new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
 
         return new_lm_head
