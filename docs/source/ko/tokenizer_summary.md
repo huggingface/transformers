@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 각 모델 페이지에 연결된 토크나이저의 문서를 보면 사전 훈련 모델에서 어떤 토크나이저를 사용했는지 알 수 있습니다.
 예를 들어, [`BertTokenizer`]를 보면 이 모델이 [WordPiece](#wordpiece)를 사용하는 것을 알 수 있습니다.
 
-## Introduction[[introduction]]
+## 개요[[introduction]]
 
 텍스트를 작은 묶음(chunk)으로 쪼개는 것은 보기보다 어려운 작업이며, 여러 가지 방법이 있습니다.
 예를 들어, `"Don't you love 🤗 Transformers? We sure do."` 라는 문장을 살펴보도록 하겠습니다.
@@ -124,7 +124,7 @@ rendered properly in your Markdown viewer.
 
 <a id='byte-pair-encoding'></a>
 
-### 바이트 페어 인코딩(Byte-Pair Encoding, BPE)[[bytepair-encoding-bpe]]
+### 바이트 페어 인코딩 (Byte-Pair Encoding, BPE)[[bytepair-encoding-bpe]]
 
 바이트 페어 인코딩(BPE)은 [Neural Machine Translation of Rare Words with Subword Units (Sennrich et
 al., 2015)](https://arxiv.org/abs/1508.07909) 에서 소개되었습니다.
@@ -179,7 +179,7 @@ BPE는 다음으로 가장 많이 등장하는 기호 쌍을 식별합니다.
 이전에 언급했듯이 어휘 크기(즉 기본 어휘 크기 + 병합 횟수)는 선택해야하는 하이퍼파라미터입니다.
 예를 들어 [GPT](model_doc/gpt)의 기본 어휘 크기는 478, 40,000번의 병합 이후에 훈련을 종료하기 때문에 어휘 크기가 40,478입니다.
 
-#### 바이트 수준 (Byte-level) BPE[[bytelevel-bpe]]
+#### 바이트 수준 BPE (Byte-level BPE)[[bytelevel-bpe]]
 
 가능한 모든 기본 문자를 포함하는 기본 어휘의 크기는 굉장히 커질 수 있습니다. (예: 모든 유니코드 문자를 기본 문자로 간주하는 경우)
 더 나은 기본 어휘를 갖도록 [GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)는 기본 어휘로 바이트(bytes)를 사용합니다.
@@ -238,7 +238,7 @@ $$\mathcal{L} = -\sum_{i=1}^{N} \log \left ( \sum_{x \in S(x_{i})} p(x) \right )
 
 <a id='sentencepiece'></a>
 
-### 센텐스피스(SentencePiece)[[sentencepiece]]
+### 센텐스피스 (SentencePiece)[[sentencepiece]]
 
 지금까지 다룬 토큰화 알고리즘은 동일한 문제를 가집니다: 입력 텍스트는 공백을 사용하여 단어를 구분한다고 가정합니다.
 하지만, 모든 언어에서 단어를 구분하기 위해 공백을 사용하지 않습니다.
