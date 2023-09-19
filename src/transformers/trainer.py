@@ -414,7 +414,7 @@ class Trainer:
                 " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
                 " for more details"
             )
-        elif _is_quantized_and_base_model and getattr(model, "_is_quantized_training_enabled", False):
+        elif _is_quantized_and_base_model and not getattr(model, "_is_quantized_training_enabled", False):
             raise ValueError(
                 "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
                 " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
