@@ -16,14 +16,17 @@ import shutil
 import tempfile
 import unittest
 
+from transformers import is_speech_available
 from transformers.models.seamless_m4t import (
-    SeamlessM4TFeatureExtractor,
-    SeamlessM4TProcessor,
     SeamlessM4TTokenizer,
     SeamlessM4TTokenizerFast,
 )
 
 from .test_feature_extraction_seamless_m4t import floats_list
+
+
+if is_speech_available():
+    from transformers import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor
 
 
 class SeamlessM4TProcessorTest(unittest.TestCase):

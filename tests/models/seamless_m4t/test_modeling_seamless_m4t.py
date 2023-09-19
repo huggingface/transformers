@@ -20,7 +20,7 @@ import inspect
 import tempfile
 import unittest
 
-from transformers import SeamlessM4TConfig, SeamlessM4TProcessor, is_torch_available
+from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
@@ -49,6 +49,9 @@ if is_torch_available():
     from transformers.models.seamless_m4t.modeling_seamless_m4t import (
         SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+
+if is_speech_available():
+    from transformers import SeamlessM4TProcessor
 
 
 class SeamlessM4TModelTester:

@@ -13,13 +13,17 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_speech_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
     "configuration_seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig"],
-    "feature_extraction_seamless_m4t": ["SeamlessM4TFeatureExtractor"],
-    "processing_seamless_m4t": ["SeamlessM4TProcessor"],
     "tokenization_seamless_m4t": ["SeamlessM4TTokenizer"],
 }
 
@@ -51,11 +55,18 @@ else:
         "SeamlessM4TTextToUnitModel",
     ]
 
+try:
+    if not is_speech_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_seamless_m4t"] = ["SeamlessM4TFeatureExtractor"]
+    _import_structure["processing_seamless_m4t"] = ["SeamlessM4TProcessor"]
+
 
 if TYPE_CHECKING:
     from .configuration_seamless_m4t import SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP, SeamlessM4TConfig
-    from .feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
-    from .processing_seamless_m4t import SeamlessM4TProcessor
     from .tokenization_seamless_m4t import SeamlessM4TTokenizer
 
     try:
@@ -86,6 +97,14 @@ if TYPE_CHECKING:
             SeamlessM4TTextToUnitModel,
         )
 
+    try:
+        if not is_speech_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
+        from .processing_seamless_m4t import SeamlessM4TProcessor
 
 else:
     import sys
