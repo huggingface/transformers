@@ -39,7 +39,13 @@ from transformers.utils import is_accelerate_available, is_torch_bf16_gpu_availa
 
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
+dtypes = ["fp16"]
+if is_torch_bf16_gpu_available():
+    dtypes += ["bf16"]
+sharding_strategies = ["full_shard", "shard_grad_op"]
+state_dict_types = ["FULL_STATE_DICT", "SHARDED_STATE_DICT"]
 set_seed(42)
+params = list(itertools.product(sharding_strategies, dtypes))
 
 
 def get_master_port(real_launcher=False):
@@ -100,27 +106,11 @@ def get_launcher(distributed=False, use_accelerate=False):
     return f"torchrun --nnodes 1 --nproc-per-node {num_gpus} --master-port {master_port}".split()
 
 
-dtypes = ["fp16"]
-if is_torch_bf16_gpu_available():
-    dtypes += ["bf16"]
-FULL_SHARD = "full_shard"
-SHARD_GRAD_OP = "shard_grad_op"
-sharding_strategies = [FULL_SHARD, SHARD_GRAD_OP]
-
-FULL_STATE_DICT = "FULL_STATE_DICT"
-SHARDED_STATE_DICT = "SHARDED_STATE_DICT"
-STATE_DICT_TYPE = [FULL_STATE_DICT, SHARDED_STATE_DICT]
-
-
 def _parameterized_custom_name_func(func, param_num, param):
     # customize the test name generator function as we want both params to appear in the sub-test
     # name, as by default it shows only the first param
     param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
     return f"{func.__name__}_{param_based_name}"
-
-
-params = list(itertools.product(sharding_strategies, dtypes))
-params_with_state_dict_type = list(itertools.product(dtypes, STATE_DICT_TYPE))
 
 
 @require_accelerate
@@ -151,7 +141,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     def tearDown(self):
         super().tearDown()
 
-    @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     def test_fsdp_config(self, sharding_strategy, dtype):
         output_dir = self.get_auto_remove_tmp_dir()
         kwargs = {
@@ -172,7 +162,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
                 self.assertEqual(v, self.fsdp_config[k])
             self.assertEqual(os.environ.get("ACCELERATE_USE_FSDP", "false"), "true")
 
-    @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
     @require_torch_multi_gpu
     @slow
     def test_basic_run(self, sharding_strategy, dtype):
@@ -196,7 +186,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
 
-    @parameterized.expand(STATE_DICT_TYPE, name_func=parameterized_custom_name_func)
+    @parameterized.expand(state_dict_types, name_func=_parameterized_custom_name_func)
     @require_torch_multi_gpu
     @slow
     def test_training_and_can_resume_normally(self, state_dict_type):
@@ -211,12 +201,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
         # resume from ckpt
         checkpoint = os.path.join(output_dir, "checkpoint-115")
-        resume_args = (
-            args
-            + f"""
-            --resume_from_checkpoint {checkpoint}
-        """.split()
-        )
+        resume_args = args + f"--resume_from_checkpoint {checkpoint}".split()
         logs_resume = self.run_cmd_and_get_logs(
             use_accelerate, sharding_strategy, launcher, script, resume_args, output_dir
         )

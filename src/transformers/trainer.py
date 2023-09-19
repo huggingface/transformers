@@ -2085,6 +2085,9 @@ class Trainer:
             if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
         )
 
+        if is_fsdp_ckpt and not self.is_fsdp_enabled:
+            raise ValueError(f"Checkpoint found at {resume_from_checkpoint} is only supported when using PyTorch FSDP")
+
         if not (
             any(
                 os.path.isfile(f)
