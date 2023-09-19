@@ -52,11 +52,6 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # Add auto-gptq for gtpq quantization testing
 RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
 
-# Add flash attention
-# commands copied from https://github.com/Dao-AILab/flash-attention#installation-and-features
-RUN python3 -m pip uninstall -y ninja && python3 -m pip install ninja
-RUN python3 -m pip install flash-attn --no-build-isolation
-
 # Add einops for additional model testing
 RUN python3 -m pip install --no-cache-dir einops
 
