@@ -14,19 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# patchtsmixer
+# PatchTSMixer
 
 ## Overview
 
-The patchtsmixer model was proposed in [TSMixer: Lightweight MLP-Mixer Model for Multivariate Time Series Forecasting](https://arxiv.org/pdf/2306.09364.pdf) by Vijay Ekambaram, Arindam Jati, Nam Nguyen, Phanwadee Sinthong, Jayant Kalagnanam.
-PatchTSMixer is a lightweight time-series modelling backbone based on the MLP-Mixer architecture. 
-The above paper demonstrates its state-of-the-art performance for time series tasks, with reduced 
-computational and memory demands. PatchTSMixer's distinguishing feature lies in its capacity to effortlessly 
-facilitate lightweight mixing across patches, channels, and hidden features. This unique capability allows 
-for the efficient modeling of dependencies within and across various dimensions. It also supports various
-attention mechanisms starting from simple gated attention to more complex self-attention blocks that can be enabled
-based on the input data requirements. PatchTSMixer backbone can currently be extended for various downstream tasks
-such as forecasting, classification and regression.
+The PatchTSMixer model was proposed in [TSMixer: Lightweight MLP-Mixer Model for Multivariate Time Series Forecasting](https://arxiv.org/pdf/2306.09364.pdf) by Vijay Ekambaram, Arindam Jati, Nam Nguyen, Phanwadee Sinthong, Jayant Kalagnanam.
+
+
+PatchTSMixer is a lightweight time-series modeling approach based on the MLP-Mixer architecture. In this HuggingFace implementation, we provide PatchTSMixer's capabilities to effortlessly facilitate lightweight mixing across patches, channels, and hidden features for effective multivariate time-series modeling. It also supports various attention mechanisms starting from simple gated attention to more complex self-attention blocks that can be customized accordingly. The model can be pretrained and subsequently used for various downstream tasks such as forecasting, classification and regression.
 
 
 The abstract from the paper is the following:
