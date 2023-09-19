@@ -573,6 +573,8 @@
         title: ViTDet
       - local: model_doc/vit_mae
         title: ViTMAE
+      - local: model_doc/vitmatte
+        title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
       - local: model_doc/vivit
