@@ -94,6 +94,66 @@ def markdown_compatible(text: str) -> str:
 
     return text
 
+def normalize_list_like_lines(generation):
+    """
+    Normalize lines in the given text that resemble list items. The function looks for lines
+    that start optionally with '-' or '*', possibly followed by Roman numerals or digits
+    indicating nesting levels. The function reformats such lines to make them more structured.
+
+    Args:
+        generation (str): The input text containing lines that need to be normalized.
+
+    Returns:
+        str: The input text with the list-like lines normalized.
+
+    Note:
+        The function uses regular expressions to identify and reformat the list-like lines.
+        The patterns capture optional bullet points, nesting levels indicated by numerals,
+        and the actual list item content. The normalization adjusts the bullet point style
+        and nesting levels based on the captured patterns.
+    """
+    pattern = r"""
+            ^                          # Start of line
+            (?P<list_start>-|\*)?       # List start, either '-' or '*'
+            (?!-|\*) ?                  # Negative lookahead, shouldn't be followed by another '-' or '*'
+            (?P<numbering>(?:\d|[ixv])+ )?  # Optional numbering, can be Roman numerals or decimals
+            .+?                         # Content of the line
+            (?P<next_list_start>-|\*)   # Next list start
+            (?P<next_numbering>(?:\d|[ixv])+\.?(?:\d|[ixv])? )?  # Optional next numbering
+            .*                          # Anything else
+            $                           # End of line
+            """
+    for match in reversed(list(re.finditer(pattern, generation, flags=re.I | re.M | re.X))):
+        start, stop = match.span()
+        delim = match.group('next_list_start') + " "
+        splits = match.group(0).split(delim)
+        replacement = ""
+        if match.group('list_start') is not None:
+            splits = splits[1:]
+            delim1 = match.group('list_start') + " "
+        else:
+            delim1 = ""
+            continue
+
+        pre, post = generation[:start], generation[stop:]
+        
+        for i, item in enumerate(splits):
+            level = 0
+            potential_numeral, _, rest = item.strip().partition(" ")
+            if not rest:
+                continue
+            if re.match(r"^[\dixv]+((?:\.[\dixv])?)+$", potential_numeral, flags=re.I | re.M):
+                level = potential_numeral.count(".")
+            replacement += (
+                ("\n" if i > 0 else "")
+                + ("\t" * level)
+                + (delim if i > 0 or start == 0 else delim1)
+                + item.strip()
+            )
+        if post == "":
+            post = "\n"
+        generation = pre + replacement + post
+    return generation
 
 def find_next_punctuation(text: str, start_idx=0):
     """
@@ -354,7 +414,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
 
     def post_process_single(self, generation: str, fix_markdown: bool = True) -> str:
         """
-        Postprocess a single generated text.
+        Postprocess a single generated text. Regular expressions are taken from the Nougat article authors.
 
         Args:
             generation (str): The generated text to be postprocessed.
@@ -367,7 +427,10 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
             r"(?:\n|^)#+ \d*\W? ?(.{100,})", r"\n\1", generation
         )  # too long section titles probably are none
         generation = generation.strip()
+        # Remove LaTeX left margin tag
         generation = generation.replace("\n* [leftmargin=*]\n", "\n")
+        # Remove lines with markdown headings starting with #, with numerals,
+        # and possibly roman numerals with trailing spaces and newlines
         generation = re.sub(r"^#+ (?:\.?(?:\d|[ixv])+)*\s*(?:$|\n\s*)", "", generation, flags=re.M)
         # most likely hallucinated titles
         lines = generation.split("\n")
@@ -378,8 +441,11 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         generation = truncate_repetitions(generation)
         # Reference corrections
         generation = self.remove_hallucinated_references(generation)
+        # Remove lines starting with asterisks and numbers like "*[1]" and followed by capital letters and periods (ie too long references)
         generation = re.sub(r"^\* \[\d+\](\s?[A-W]\.+\s?){10,}.*$", "", generation, flags=re.M)
+        # Remove empty brackets after a reference number in brackets. *[12][]ABC will become *[12]ABC
         generation = re.sub(r"^(\* \[\d+\])\[\](.*)$", r"\1\2", generation, flags=re.M)
+        # Remove single characters before or after 2 new lines
         generation = re.sub(r"(^\w\n\n|\n\n\w$)", "", generation)
         # pmc math artifact correction
         generation = re.sub(
@@ -397,44 +463,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         # TODO Come up with footnote formatting inside a table
         generation = re.sub(r"\[FOOTNOTE:.+?\](.*?)\[ENDFOOTNOTE\]", "", generation)
         # itemize post processing
-        for match in reversed(
-            list(
-                re.finditer(
-                    r"(?:^)(-|\*)?(?!-|\*) ?((?:\d|[ixv])+ )?.+? (-|\*) (((?:\d|[ixv])+)\.(\d|[ixv]) )?.*(?:$)",
-                    generation,
-                    flags=re.I | re.M,
-                )
-            )
-        ):
-            start, stop = match.span()
-            delim = match.group(3) + " "
-            splits = match.group(0).split(delim)
-            replacement = ""
-            if match.group(1) is not None:
-                splits = splits[1:]
-                delim1 = match.group(1) + " "
-            else:
-                delim1 = ""
-                # too many false positives
-                continue
-            pre, post = generation[:start], generation[stop:]
-            for i, item in enumerate(splits):
-                level = 0
-                potential_numeral, _, rest = item.strip().partition(" ")
-                if not rest:
-                    continue
-                if re.match(r"^[\dixv]+((?:\.[\dixv])?)+$", potential_numeral, flags=re.I | re.M):
-                    level = potential_numeral.count(".")
-
-                replacement += (
-                    ("\n" if i > 0 else "")
-                    + ("\t" * level)
-                    + (delim if i > 0 or start == 0 else delim1)
-                    + item.strip()
-                )
-            if post == "":
-                post = "\n"
-            generation = pre + replacement + post
+        generation = normalize_list_like_lines(generation)
 
         if generation.endswith((".", "}")):
             generation += "\n\n"
@@ -460,23 +489,32 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
             if l.count("\\begin{tabular}") > 15 or l.count("\\multicolumn") > 60 or l.count("&") > 400:
                 generation = generation.replace(l, "")
         # whitespace corrections
+
         generation = generation.replace("\\begin{table} \\begin{tabular}", "\\begin{table}\n\\begin{tabular}")
         generation = generation.replace("\\end{tabular} \\end{table}", "\\end{tabular}\n\\end{table}")
         generation = generation.replace("\\end{table} Tab", "\\end{table}\nTab")
+
         generation = re.sub(r"(^.+)\\begin{tab", r"\1\n\\begin{tab", generation, flags=re.M)
 
-        generation = generation.replace(r"\begin{tabular}{l l}  & \\ \end{tabular}", "").replace(
-            "\\begin{tabular}{}\n\n\\end{tabular}", ""
-        )
+        # Remove left-aligned empty LaTeX tabular blocks.
+        generation = generation.replace(r"\begin{tabular}{l l}  & \\ \end{tabular}", "")
+        # Remove tabulars with just 2 newline characters.
+        generation = generation.replace("\\begin{tabular}{}\n\n\\end{tabular}", "")
+        # Remove optional, empty square brackets after begin{array}
         generation = generation.replace("\\begin{array}[]{", "\\begin{array}{")
+        # Remove empty or malformed LaTeX tabular blocks with 2 or more columns specified, with spaces and ampersands.
         generation = re.sub(
             r"\\begin{tabular}{([clr ]){2,}}\s*[& ]*\s*(\\\\)? \\end{tabular}",
             "",
             generation,
         )
+        # Remove lines containing "S.A.B." one or more times.
         generation = re.sub(r"(\*\*S\. A\. B\.\*\*\n+){2,}", "", generation)
+        # Remove markdown-style headers that are incomplete or empty on multiple lines.
         generation = re.sub(r"^#+( [\[\d\w])?$", "", generation, flags=re.M)
+        # Remove lines with just one period.
         generation = re.sub(r"^\.\s*$", "", generation, flags=re.M)
+        # Replace instances of three or more newlines with just two newlines.
         generation = re.sub(r"\n{3,}", "\n\n", generation)
         if fix_markdown:
             return markdown_compatible(generation)
