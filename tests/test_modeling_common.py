@@ -2721,6 +2721,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
+    @slow
     def test_flash_attn_2_conversion(self):
         import torch
 
@@ -2823,6 +2824,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
+    @slow
     def test_flash_attn_2_generate_left_padding(self):
         import torch
 
@@ -2859,6 +2861,7 @@ class ModelTesterMixin:
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
+    @slow
     def test_flash_attn_2_generate_padding_right(self):
         import torch
 
