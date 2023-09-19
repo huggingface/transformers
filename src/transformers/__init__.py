@@ -512,7 +512,6 @@ _import_structure = {
         "SeamlessM4TConfig",
         "SeamlessM4TFeatureExtractor",
         "SeamlessM4TProcessor",
-        "SeamlessM4TTokenizer",
     ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
@@ -800,6 +799,7 @@ else:
     _import_structure["models.plbart"].append("PLBartTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
+    _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
@@ -906,6 +906,8 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
+    _import_structure["models.seamless_m4t"].append("SeamlessM4TFeatureExtractor")
+    _import_structure["models.seamless_m4t"].append("SeamlessM4TProcessor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
 # Tensorflow-text-specific objects
@@ -4637,7 +4639,6 @@ if TYPE_CHECKING:
         SeamlessM4TConfig,
         SeamlessM4TFeatureExtractor,
         SeamlessM4TProcessor,
-        SeamlessM4TTokenizer,
     )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
@@ -4904,6 +4905,7 @@ if TYPE_CHECKING:
         from .models.plbart import PLBartTokenizer
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
+        from .models.seamless_m4t import SeamlessM4TTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
@@ -4993,6 +4995,7 @@ if TYPE_CHECKING:
         from .utils.dummy_speech_objects import *
     else:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
+        from .models.seamless_m4t import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:
