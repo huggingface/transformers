@@ -100,13 +100,9 @@ def get_launcher(distributed=False, use_accelerate=False):
     return f"torchrun --nnodes 1 --nproc-per-node {num_gpus} --master-port {master_port}".split()
 
 
-FP16 = "fp16"
-BF16 = "bf16"
+dtypes = ["fp16"]
 if is_torch_bf16_gpu_available():
-    dtypes = [FP16, BF16]
-else:
-    dtypes = [FP16]
-
+    dtypes += ["bf16"]
 FULL_SHARD = "full_shard"
 SHARD_GRAD_OP = "shard_grad_op"
 sharding_strategies = [FULL_SHARD, SHARD_GRAD_OP]
@@ -116,7 +112,7 @@ SHARDED_STATE_DICT = "SHARDED_STATE_DICT"
 STATE_DICT_TYPE = [FULL_STATE_DICT, SHARDED_STATE_DICT]
 
 
-def parameterized_custom_name_func(func, param_num, param):
+def _parameterized_custom_name_func(func, param_num, param):
     # customize the test name generator function as we want both params to appear in the sub-test
     # name, as by default it shows only the first param
     param_based_name = parameterized.to_safe_name("_".join(str(x) for x in param.args))
