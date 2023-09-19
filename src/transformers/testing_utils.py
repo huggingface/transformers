@@ -887,6 +887,11 @@ def require_cython(test_case):
 
 @contextlib.contextmanager
 def require_torch_determinism(*args, **kwargs):
+    if not is_torch_available():
+        raise ValueError("PyTorch is required to use the decorator require_torch_determinism.")
+    else:
+        import torch
+
     torch.use_deterministic_algorithms(True, warn_only=True)
     try:
         yield
