@@ -1349,7 +1349,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         if conditioning_embeds is not None and past_key_values is None:
             # Add the start mel token at the end
             mel_start_token_id = torch.tensor([[self.config.bos_token_id]], device=conditioning_embeds.device)
-            mel_start_token_embedding = self.input_embeds_layer(mel_start_token_id) + self.position_embeds_layer(
+            mel_start_token_embedding = self.model.decoder.input_embeds_layer(mel_start_token_id) + self.model.decoder.position_embeds_layer(
                 torch.tensor([[0]], device=conditioning_embeds.device)
             )
             mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
@@ -1359,7 +1359,8 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
             # out. This decision was made to make sure that `test_generate_from_inputs_embeds_decoder_only` test does not fail.
             position_ids = torch.range(0, conditioning_embeds.shape[1] - 1, device=conditioning_embeds.device)
             position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1).long()
-            conditioning_embeds = conditioning_embeds - self.position_embeds_layer(position_ids)
+
+            conditioning_embeds = conditioning_embeds - self.model.decoder.position_embeds_layer(position_ids)
 
             return {
                 "inputs_embeds": conditioning_embeds,
@@ -1772,7 +1773,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
 
-        speech_candidates = self.speech_autoregressive_model(
+        speech_candidates = self.speech_decoder_model(
             inputs_embeds=conditioning_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1856,17 +1857,17 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
 
-        speech_candidates = self.speech_autoregressive_model.generate(
+        speech_candidates = self.speech_decoder_model.generate(
             conditioning_embeds=conditioning_embeds,
             generation_config=generation_config,
         )
-
-        speech_candidates = self.fix_decoder_speech_output(speech_candidates[0])
+        if isinstance(speech_candidates, ModelOutput):
+            speech_candidates = speech_candidates.sequences
+        speech_candidates = self.fix_decoder_speech_output(speech_candidates)
 
         speech_outputs = self.speech_encoder_model(
             input_ids=speech_candidates,
         )
-
         text_outputs = self.text_encoder_model(
             input_ids=input_ids,
         )
@@ -1905,5 +1906,5 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             speech_model_output=speech_outputs[2],
         )
 
-    def prepare_inputs_for_generation(self, input_ids, inputs_embeds, **kwargs):
-        return {"inputs_embeds": inputs_embeds, "input_ids": input_ids, **kwargs}
+    def prepare_inputs_for_generation(self, input_ids, input_features, **kwargs):
+        return {"input_ids": input_ids, "input_features": input_features, **kwargs}

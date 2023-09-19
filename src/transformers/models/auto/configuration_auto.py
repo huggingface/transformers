@@ -57,7 +57,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
         ("clipseg", "CLIPSegConfig"),
-        ("clvp", "CLVPConfig"),
+        ("clvp", "ClvpConfig"),
         ("code_llama", "LlamaConfig"),
         ("codegen", "CodeGenConfig"),
         ("conditional_detr", "ConditionalDetrConfig"),

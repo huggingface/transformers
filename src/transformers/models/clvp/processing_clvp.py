@@ -14,28 +14,28 @@
 # limitations under the License.
 
 """
-Processor class for CLVP
+Processor class for Clvp
 """
 
 
 from ...processing_utils import ProcessorMixin
 
 
-class CLVPProcessor(ProcessorMixin):
+class ClvpProcessor(ProcessorMixin):
     r"""
-    Constructs a CLVP processor which wraps a CLVP Feature Extractor and a CLVP Tokenizer into a single processor.
+    Constructs a Clvp processor which wraps a Clvp Feature Extractor and a Clvp Tokenizer into a single processor.
 
-    [`CLVPProcessor`] offers all the functionalities of [`CLVPFeatureExtractor`] and [`CLVPTokenizer`]. See the
-    [`~CLVPProcessor.__call__`], [`~CLVPProcessor.decode`] and [`~CLVPProcessor.batch_decode`] for more information.
+    [`ClvpProcessor`] offers all the functionalities of [`ClvpFeatureExtractor`] and [`ClvpTokenizer`]. See the
+    [`~ClvpProcessor.__call__`], [`~ClvpProcessor.decode`] and [`~ClvpProcessor.batch_decode`] for more information.
 
     Args:
-        feature_extractor (`CLVPFeatureExtractor`):
-            An instance of [`CLVPFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`CLVPTokenizer`):
-            An instance of [`CLVPTokenizer`]. The tokenizer is a required input.
+        feature_extractor (`ClvpFeatureExtractor`):
+            An instance of [`ClvpFeatureExtractor`]. The feature extractor is a required input.
+        tokenizer (`ClvpTokenizer`):
+            An instance of [`ClvpTokenizer`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "CLVPFeatureExtractor"
-    tokenizer_class = "CLVPTokenizer"
+    feature_extractor_class = "ClvpFeatureExtractor"
+    tokenizer_class = "ClvpTokenizer"
     model_input_names = ["input_ids", "input_features", "attention_mask"]
 
     def __init__(self, feature_extractor, tokenizer):
@@ -43,8 +43,8 @@ class CLVPProcessor(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        Forwards the `audio` argument to CLVPFeatureExtractor's [`~CLVPFeatureExtractor.__call__`] and the `text`
-        argument to [`~CLVPTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
+        Forwards the `audio` argument to ClvpFeatureExtractor's [`~ClvpFeatureExtractor.__call__`] and the `text`
+        argument to [`~ClvpTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
         information.
         """
 
@@ -72,7 +72,7 @@ class CLVPProcessor(ProcessorMixin):
     # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.batch_decode
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to CLVPTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
+        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
         to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
@@ -80,7 +80,7 @@ class CLVPProcessor(ProcessorMixin):
     # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.decode
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to CLVPTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
+        This method forwards all its arguments to ClvpTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
         docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)

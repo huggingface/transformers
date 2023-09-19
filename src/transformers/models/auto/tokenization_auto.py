@@ -121,7 +121,7 @@ else:
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("clvp", ("CLVPTokenizer", None)),
+            ("clvp", ("ClvpTokenizer", None)),
             (
                 "code_llama",
                 (

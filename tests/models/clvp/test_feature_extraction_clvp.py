@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 from datasets import Audio, load_dataset
 
-from transformers import CLVPFeatureExtractor
+from transformers import ClvpFeatureExtractor
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, slow
 from transformers.utils.import_utils import is_torch_available
 
@@ -52,7 +52,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-class CLVPFeatureExtractionTester(unittest.TestCase):
+class ClvpFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -107,11 +107,11 @@ class CLVPFeatureExtractionTester(unittest.TestCase):
 
 
 @require_torch
-class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = CLVPFeatureExtractor
+class ClvpFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+    feature_extraction_class = ClvpFeatureExtractor
 
     def setUp(self):
-        self.feat_extract_tester = CLVPFeatureExtractionTester(self)
+        self.feat_extract_tester = ClvpFeatureExtractionTester(self)
 
     def tearDown(self):
         super().tearDown()
@@ -119,7 +119,7 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         gc.collect()
         torch.cuda.empty_cache()
 
-    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.CLVPFeatureExtractionTest.test_feat_extract_from_and_save_pretrained
+    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_feat_extract_from_and_save_pretrained
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
@@ -135,7 +135,7 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
-    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.CLVPFeatureExtractionTest.test_feat_extract_to_json_file
+    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_feat_extract_to_json_file
     def test_feat_extract_to_json_file(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
@@ -194,7 +194,7 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
-    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.CLVPFeatureExtractionTest.test_double_precision_pad
+    # Copied from transformers.tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad
     def test_double_precision_pad(self):
         import torch
 
@@ -207,10 +207,6 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
-
-    # def test_padding_and_truncation(self):
-
-
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -235,7 +231,7 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
         input_speech, sr = self._load_datasamples(1)
 
-        feature_extractor = CLVPFeatureExtractor.from_pretrained("susnato/clvp_dev")
+        feature_extractor = ClvpFeatureExtractor.from_pretrained("susnato/clvp_dev")
         input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (1, 80, 517))
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))

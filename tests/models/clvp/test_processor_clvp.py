@@ -20,14 +20,14 @@ import unittest
 
 import numpy as np
 
-from transformers import CLVPFeatureExtractor, CLVPProcessor, CLVPTokenizer
+from transformers import ClvpFeatureExtractor, ClvpProcessor, ClvpTokenizer
 from transformers.testing_utils import require_torch
 
 from .test_feature_extraction_clvp import floats_list
 
 
 @require_torch
-class CLVPProcessorTest(unittest.TestCase):
+class ClvpProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "susnato/clvp_dev"
         self.tmpdirname = tempfile.mkdtemp()
@@ -38,50 +38,50 @@ class CLVPProcessorTest(unittest.TestCase):
         gc.collect()
 
     def get_tokenizer(self, **kwargs):
-        return CLVPTokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return ClvpTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return CLVPFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return ClvpFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor = CLVPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         processor.save_pretrained(self.tmpdirname)
-        processor = CLVPProcessor.from_pretrained(self.tmpdirname)
+        processor = ClvpProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, CLVPTokenizer)
+        self.assertIsInstance(processor.tokenizer, ClvpTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, CLVPFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, ClvpFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CLVPProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = ClvpProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(pad_token="(PAD)")
         feature_extractor_add_kwargs = self.get_feature_extractor(sampling_rate=16000)
 
-        processor = CLVPProcessor.from_pretrained(
+        processor = ClvpProcessor.from_pretrained(
             self.tmpdirname,
             pad_token="(PAD)",
             sampling_rate=16000,
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, CLVPTokenizer)
+        self.assertIsInstance(processor.tokenizer, ClvpTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, CLVPFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, ClvpFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLVPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         raw_speech = floats_list((3, 1000))
 
@@ -95,7 +95,7 @@ class CLVPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLVPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "This is a test string"
 
@@ -110,7 +110,7 @@ class CLVPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLVPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -123,7 +123,7 @@ class CLVPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLVPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClvpProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         self.assertListEqual(
             sorted(processor.model_input_names),

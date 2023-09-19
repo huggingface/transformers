@@ -27,9 +27,9 @@ _import_structure = {
         "ClvpDecoderConfig",
         "ClvpConfig",
     ],
-    "feature_extraction_clvp": ["CLVPFeatureExtractor"],
-    "processing_clvp": ["CLVPProcessor"],
-    "tokenization_clvp": ["CLVPTokenizer"],
+    "feature_extraction_clvp": ["ClvpFeatureExtractor"],
+    "processing_clvp": ["ClvpProcessor"],
+    "tokenization_clvp": ["ClvpTokenizer"],
 }
 
 
@@ -57,9 +57,9 @@ if TYPE_CHECKING:
         ClvpDecoderConfig,
         ClvpConfig,
     )
-    from .feature_extraction_clvp import CLVPFeatureExtractor
-    from .processing_clvp import CLVPProcessor
-    from .tokenization_clvp import CLVPTokenizer
+    from .feature_extraction_clvp import ClvpFeatureExtractor
+    from .processing_clvp import ClvpProcessor
+    from .tokenization_clvp import ClvpTokenizer
 
     try:
         if not is_torch_available():

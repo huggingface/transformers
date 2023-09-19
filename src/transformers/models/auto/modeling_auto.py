@@ -55,7 +55,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("clap", "ClapModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
-        ("clvp", "CLVPModel"),
+        ("clvp", "ClvpModelForConditionalGeneration"),
         ("code_llama", "LlamaModel"),
         ("codegen", "CodeGenModel"),
         ("conditional_detr", "ConditionalDetrModel"),

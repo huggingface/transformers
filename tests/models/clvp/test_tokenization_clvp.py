@@ -18,13 +18,13 @@ import json
 import os
 import unittest
 
-from transformers import CLVPTokenizer
+from transformers import ClvpTokenizer
 
 from ...test_tokenization_common import TokenizerTesterMixin, slow
 
 
-class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = CLVPTokenizer
+class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = ClvpTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"add_prefix_space": True}
     test_seq2seq = False
@@ -71,7 +71,7 @@ class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return CLVPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return ClvpTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -100,7 +100,7 @@ class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(special_token not in decoded)
 
     def test_full_tokenizer(self):
-        tokenizer = CLVPTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
+        tokenizer = ClvpTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
         bpe_tokens = ["l", "o", "w", "er", "[SPACE]", "n", "e", "w", "er"]
         tokens = tokenizer.tokenize(text, add_prefix_space=False)
@@ -142,7 +142,7 @@ class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_pretokenized_inputs(self, *args, **kwargs):
         # It's very difficult to mix/test pretokenization with byte-level
-        # And get both CLVP and Roberta to work at the same time (mostly an issue of adding a space before the string)
+        # And get both Clvp and Roberta to work at the same time (mostly an issue of adding a space before the string)
         pass
 
     def test_padding(self, max_length=15):
@@ -190,7 +190,7 @@ class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
     def test_padding_if_pad_token_set_slow(self):
-        tokenizer = CLVPTokenizer.from_pretrained(self.tmpdirname, pad_token="<pad>")
+        tokenizer = ClvpTokenizer.from_pretrained(self.tmpdirname, pad_token="<pad>")
 
         # Simple input
         s = "This is a simple input"
@@ -242,7 +242,7 @@ class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_add_bos_token_slow(self):
         bos_token = "$$$"
-        tokenizer = CLVPTokenizer.from_pretrained(
+        tokenizer = ClvpTokenizer.from_pretrained(
             self.tmpdirname, bos_token=bos_token, add_bos_token=True, unk_token="<unk>"
         )
 
@@ -295,7 +295,7 @@ class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @slow
     def test_outputs_with_numbers(self):
         text = "hello and this is an example text and I have $1000. my lucky number is 12345."
-        tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
+        tokenizer = ClvpTokenizer.from_pretrained("susnato/clvp_dev")
 
         # fmt: off
         EXPECTED_OUTPUT = [62, 84, 28, 2, 53, 2,147, 2, 54, 2, 43, 2, 169, 122, 29, 64, 2, 136, 37, 33, 2, 53, 2, 22,

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Feature extractor class for CLVP
+Feature extractor class for Clvp
 """
 import copy
 from typing import Any, Dict, List, Optional, Union
@@ -29,9 +29,9 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class CLVPFeatureExtractor(SequenceFeatureExtractor):
+class ClvpFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a CLVP feature extractor.
+    Constructs a Clvp feature extractor.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
@@ -131,7 +131,7 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
         **kwargs,
     ) -> BatchFeature:
         """
-        CLVP Feature Extractor is used to extract various voice specific properties such as the pitch and tone of the
+        Clvp Feature Extractor is used to extract various voice specific properties such as the pitch and tone of the
         voice, speaking speed, and even speaking defects like a lisp or stuttering from a sample voice or `raw_speech`.
 
         First the voice is padded or truncated in a way such that it becomes a six seconds long waveform and then the
