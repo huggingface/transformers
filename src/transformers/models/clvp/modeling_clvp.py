@@ -736,7 +736,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ClvpEncoder):
             module.gradient_checkpointing = value
-        if isinstance(module, ClvpForCausalLM):
+        if isinstance(module, ClvpDecoder):
             module.gradient_checkpointing = value
 
 
@@ -1030,16 +1030,14 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
         self.config = config.decoder_config if hasattr(config, "decoder_config") else config
 
-        self.embed_dim = self.config.n_embd
-
-        self.input_embeds_layer = nn.Embedding(self.config.vocab_size, self.embed_dim)
-        self.position_embeds_layer = nn.Embedding(self.config.max_mel_tokens, self.embed_dim)
+        self.input_embeds_layer = nn.Embedding(self.config.vocab_size, self.config.n_embd)
+        self.position_embeds_layer = nn.Embedding(self.config.max_mel_tokens, self.config.n_embd)
 
         self.drop = nn.Dropout(self.config.embd_pdrop)
         self.layers = nn.ModuleList(
             [ClvpDecoderLayer(self.config, layer_idx=i) for i in range(self.config.n_layer)]
         )
-        self.layer_norm = nn.LayerNorm(self.embed_dim, eps=self.config.layer_norm_epsilon)
+        self.layer_norm = nn.LayerNorm(self.config.n_embd, eps=self.config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
 
@@ -1063,11 +1061,11 @@ class ClvpDecoder(ClvpPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
@@ -1254,15 +1252,16 @@ class ClvpDecoder(ClvpPreTrainedModel):
 class ClvpModel(ClvpPreTrainedModel):
     def __init__(self, config: ClvpDecoderConfig):
         super().__init__(config)
-        self.decoder = ClvpDecoder(config)
+        self.config = config.decoder_config if hasattr(config, "decoder_config") else config
+        self.decoder = ClvpDecoder(self.config)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.decoder.embed_tokens
+        return self.decoder.input_embeds_layer
 
     def set_input_embeddings(self, value):
-        self.decoder.embed_tokens = value
+        self.decoder.input_embeds_layer = value
 
     def get_decoder(self):
         return self.decoder
@@ -1271,11 +1270,11 @@ class ClvpModel(ClvpPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
@@ -1295,6 +1294,8 @@ class ClvpModel(ClvpPreTrainedModel):
         decoder_outputs = self.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
             encoder_attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             head_mask=head_mask,
@@ -1327,22 +1328,19 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         super().__init__(config)
 
         self.config = config.decoder_config if hasattr(config, "decoder_config") else config
-
         self.model = ClvpModel(self.config)
 
         self.final_norm = nn.LayerNorm(self.config.hidden_size)
         self.lm_head = nn.Linear(self.config.n_embd, self.config.vocab_size, bias=True)
 
-        self.gradient_checkpointing = False
-
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.input_embeds_layer
+        return self.model.decoder.input_embeds_layer
 
     def set_input_embeddings(self, new_embeddings):
-        self.model.input_embeds_layer = new_embeddings
+        self.model.decoder.input_embeds_layer = new_embeddings
 
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, conditioning_embeds=None, **kwargs
@@ -1468,17 +1466,16 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
-            output = (lm_logits, presents, all_hidden_states, all_self_attentions, all_cross_attentions)
-            output = ((loss,) + output) if loss is not None else output
-            return tuple(v for v in output if v is not None)
+            output = (lm_logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=lm_logits,
-            past_key_values=presents,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
     @staticmethod

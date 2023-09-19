@@ -296,7 +296,7 @@ class  ClvpDecoderConfig(PretrainedConfig):
 
         # get the speech config dict if we are loading from CLVPConfig
         if config_dict.get("model_type") == "clvp":
-            config_dict = config_dict["autoregressive_config"]
+            config_dict = config_dict["decoder_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
@@ -306,8 +306,8 @@ class  ClvpDecoderConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
-    # This makes sure that the config will be saved as a nested dict of {"autoregressive_config": config}, so that
-    # when loading the `CLVPAutoRegressiveLMHeadModel` from a custom config won't fail.
+    # This makes sure that the config will be saved as a nested dict of {"decoder_config": config}, so that
+    # when loading the `ClvpForCausalLM` from a custom config won't fail.
     def to_json_string(self, use_diff: bool = True) -> str:
         """
         Serializes this instance to a JSON string.
@@ -321,9 +321,9 @@ class  ClvpDecoderConfig(PretrainedConfig):
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
         if use_diff is True:
-            config_dict = {"autoregressive_config": self.to_diff_dict()}
+            config_dict = {"decoder_config": self.to_diff_dict()}
         else:
-            config_dict = {"autoregressive_config": self.to_dict()}
+            config_dict = {"decoder_config": self.to_dict()}
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
 
@@ -371,9 +371,9 @@ class ClvpConfig(PretrainedConfig):
     >>> # Initializing a CLVPText, CLVPSpeech and CLVPAutoRegressiveConfig configuration
     >>> config_text = CLVPTextConfig()
     >>> config_speech = CLVPSpeechConfig()
-    >>> autoregressive_config = CLVPAutoRegressiveConfig()
+    >>> decoder_config = CLVPAutoRegressiveConfig()
 
-    >>> config = CLVPConfig.from_sub_model_configs(config_text, config_speech, autoregressive_config)
+    >>> config = CLVPConfig.from_sub_model_configs(config_text, config_speech, decoder_config)
     ```"""
 
     model_type = "clvp"

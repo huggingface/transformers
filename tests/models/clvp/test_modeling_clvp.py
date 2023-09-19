@@ -191,6 +191,150 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
+class ClvpDecoderTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        seq_length=7,
+        is_training=True,
+        vocab_size=99,
+        max_mel_tokens=256,
+        max_text_tokens=256,
+        use_input_mask=True,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        bos_token_id=97,
+        eos_token_id=98,
+        relative_attention_num_buckets=4,
+        relative_attention_max_distance=16,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.vocab_size = vocab_size
+        self.max_mel_tokens = max_mel_tokens
+        self.max_text_tokens = max_text_tokens
+        self.use_input_mask = use_input_mask
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.num_hidden_layers = num_hidden_layers
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.relative_attention_max_distance = relative_attention_max_distance
+
+    def get_config(self):
+        decoder_config = ClvpDecoderConfig(
+            vocab_size=self.vocab_size,
+            max_mel_tokens=self.max_mel_tokens,
+            max_text_tokens=self.max_text_tokens,
+            n_embd=self.hidden_size,
+            n_layer=self.num_hidden_layers,
+            n_head=self.num_attention_heads,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            relative_attention_max_distance=self.relative_attention_max_distance,
+        )
+
+        return decoder_config
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        if input_mask is not None:
+            batch_size, seq_length = input_mask.shape
+            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
+            for batch_idx, start_index in enumerate(rnd_start_indices):
+                input_mask[batch_idx, :start_index] = 1
+                input_mask[batch_idx, start_index:] = 0
+
+        decoder_config = self.get_config()
+
+        return decoder_config, input_ids, input_mask
+
+    def create_and_check_model(self, config, input_ids, attention_mask):
+        model = ClvpForCausalLM(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids.to(torch_device),
+            "attention_mask": attention_mask.to(torch_device),
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (ClvpModel, ClvpForCausalLM) if is_torch_available() else ()
+    all_generative_model_classes = (ClvpForCausalLM,) if is_torch_available() else ()
+
+    test_pruning = False
+
+    def setUp(self):
+        self.model_tester = ClvpDecoderTester(self)
+
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        if return_labels and model_class==ClvpForCausalLM:
+            inputs_dict["labels"] = torch.zeros(
+                [self.model_tester.batch_size, self.model_tester.seq_length], device=torch_device
+            ).long()
+
+        return inputs_dict
+
+    def test_training(self):
+        # we will only test the ClvpForCausalLM since it outputs loss
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        model = ClvpForCausalLM(config)
+        model.to(torch_device)
+        model.train()
+        inputs = self._prepare_for_class(inputs_dict, ClvpForCausalLM, return_labels=True)
+        loss = model(**inputs).loss
+        loss.backward()
+
+    def test_training_gradient_checkpointing(self):
+        # we will only test the ClvpForCausalLM since it outputs loss
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_cache = False
+        config.return_dict = True
+
+        model = ClvpForCausalLM(config)
+        model.to(torch_device)
+        model.gradient_checkpointing_enable()
+        model.train()
+        inputs = self._prepare_for_class(inputs_dict, ClvpForCausalLM, return_labels=True)
+
+        loss = model(**inputs).loss
+        loss.backward()
+
+
+
+
 
 # class CLVPModelTester:
 #     def __init__(self, parent, is_training=True):
@@ -256,120 +400,6 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
 #         }
 #         return config, inputs_dict
 #
-#
-# class CLVPAutoRegressiveLMHeadModelTester:
-#     def __init__(
-#         self,
-#         parent,
-#         batch_size=2,
-#         seq_length=7,
-#         is_training=True,
-#         vocab_size=99,
-#         max_mel_tokens=256,
-#         max_text_tokens=256,
-#         use_input_mask=True,
-#         hidden_size=32,
-#         num_hidden_layers=2,
-#         num_attention_heads=2,
-#         bos_token_id=97,
-#         eos_token_id=98,
-#         relative_attention_num_buckets=4,
-#         relative_attention_max_distance=16,
-#     ):
-#         self.parent = parent
-#         self.batch_size = batch_size
-#         self.seq_length = seq_length
-#         self.is_training = is_training
-#         self.vocab_size = vocab_size
-#         self.max_mel_tokens = max_mel_tokens
-#         self.max_text_tokens = max_text_tokens
-#         self.use_input_mask = use_input_mask
-#         self.hidden_size = hidden_size
-#         self.num_attention_heads = num_attention_heads
-#         self.num_hidden_layers = num_hidden_layers
-#         self.bos_token_id = bos_token_id
-#         self.eos_token_id = eos_token_id
-#         self.relative_attention_num_buckets = relative_attention_num_buckets
-#         self.relative_attention_max_distance = relative_attention_max_distance
-#
-#     def get_config(self):
-#         autoregressive_config = CLVPAutoRegressiveConfig(
-#             vocab_size=self.vocab_size,
-#             max_mel_tokens=self.max_mel_tokens,
-#             max_text_tokens=self.max_text_tokens,
-#             n_embd=self.hidden_size,
-#             n_layer=self.num_hidden_layers,
-#             n_head=self.num_attention_heads,
-#             bos_token_id=self.bos_token_id,
-#             eos_token_id=self.eos_token_id,
-#             relative_attention_num_buckets=self.relative_attention_num_buckets,
-#             relative_attention_max_distance=self.relative_attention_max_distance,
-#         )
-#
-#         return autoregressive_config
-#
-#     def prepare_config_and_inputs(self):
-#         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-#
-#         input_mask = None
-#         if self.use_input_mask:
-#             input_mask = random_attention_mask([self.batch_size, self.seq_length])
-#
-#         if input_mask is not None:
-#             batch_size, seq_length = input_mask.shape
-#             rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
-#             for batch_idx, start_index in enumerate(rnd_start_indices):
-#                 input_mask[batch_idx, :start_index] = 1
-#                 input_mask[batch_idx, start_index:] = 0
-#
-#         autoregressive_config = self.get_config()
-#
-#         return autoregressive_config, input_ids, input_mask
-#
-#     def create_and_check_model(self, config, input_ids, attention_mask):
-#         model = ClvpForCausalLM(config).to(torch_device).eval()
-#         with torch.no_grad():
-#             result = model(input_ids=input_ids, attention_mask=attention_mask)
-#
-#         self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.vocab_size))
-#
-#     def prepare_config_and_inputs_for_common(self):
-#         config_and_inputs = self.prepare_config_and_inputs()
-#         config, input_ids, attention_mask = config_and_inputs
-#         inputs_dict = {
-#             "input_ids": input_ids.to(torch_device),
-#             "attention_mask": attention_mask.to(torch_device),
-#         }
-#         return config, inputs_dict
-#
-#
-# @require_torch
-# class CLVPAutoRegressiveLMHeadModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-#     all_model_classes = (CLVPAutoRegressiveLMHeadModel,) if is_torch_available() else ()
-#     all_generative_model_classes = (CLVPAutoRegressiveLMHeadModel,) if is_torch_available() else ()
-#
-#     test_pruning = False
-#
-#     def setUp(self):
-#         self.model_tester = CLVPAutoRegressiveLMHeadModelTester(self)
-#
-#     def tearDown(self):
-#         super().tearDown()
-#         # clean-up as much as possible GPU memory occupied by PyTorch
-#         gc.collect()
-#         torch.cuda.empty_cache()
-#
-#     def test_model(self):
-#         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-#         self.model_tester.create_and_check_model(*config_and_inputs)
-#
-#     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-#         if return_labels:
-#             inputs_dict["labels"] = torch.zeros(
-#                 [self.model_tester.batch_size, self.model_tester.seq_length], device=torch_device
-#             ).long()
-#
-#         return inputs_dict
 #
 #
 # @require_torch
