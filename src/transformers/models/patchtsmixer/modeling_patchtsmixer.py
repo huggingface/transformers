@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch PatchTSMixer model."""
 
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
@@ -36,7 +37,6 @@ from .layers import (
     RevIN,
     set_seed,
 )
-
 
 logger = logging.get_logger(__name__)
 
@@ -120,6 +120,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
+@dataclass
 class PatchTSMixerEncoderOutputWithNoAttention(ModelOutput):
     """
     Base class for `PatchTSMixerEncoderOutputWithNoAttention`, with potential hidden states.
@@ -132,7 +133,7 @@ class PatchTSMixerEncoderOutputWithNoAttention(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = (None,)
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
@@ -188,6 +189,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         )
 
 
+@dataclass
 class PatchTSMixerModelOutputWithNoAttention(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states.
@@ -210,11 +212,11 @@ class PatchTSMixerModelOutputWithNoAttention(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = (None,)
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     patched_input: torch.FloatTensor = None
     mask: Optional[torch.FloatTensor] = None
-    revin_mean: Optional[torch.FloatTensor] = (None,)
-    revin_stdev: Optional[torch.FloatTensor] = (None,)
+    revin_mean: Optional[torch.FloatTensor] = None
+    revin_stdev: Optional[torch.FloatTensor] = None
 
 
 @add_start_docstrings(
@@ -288,7 +290,6 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         enc_input = patched_x
 
         if self.masking is not None:
-
             enc_input, mask = self.masking(patched_x)
             # enc_input: [bs x in_channels x num_patch x patch_len]
             # mask: [bs x in_channels x num_patch]
@@ -333,6 +334,7 @@ class PatchTSMixerMaskedPretrainHead(nn.Module):
         return self.head(hidden_state)
 
 
+@dataclass
 class PatchTSMixerForMaskPreTrainingOutputWithNoAttention(ModelOutput):
     """
     Output type of [`PatchTSMixerForMaskPreTrainingOutputWithNoAttention`].
@@ -392,7 +394,6 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
     def forward(
         self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False, return_loss: bool = True
     ) -> PatchTSMixerForMaskPreTrainingOutputWithNoAttention:
-
         r"""
         Args:
         context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, in_channels)`):
@@ -471,6 +472,7 @@ class PatchTSMixerForecastHead(nn.Module):
         return self.head(hidden_state, y=None)
 
 
+@dataclass
 class PatchTSMixerForForecastOutputWithNoAttention(ModelOutput):
     """
     Output type of [`PatchTSMixerForForecastOutput`].
@@ -488,7 +490,7 @@ class PatchTSMixerForForecastOutputWithNoAttention(ModelOutput):
 
     prediction_logits: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = (None,)
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None
 
 
@@ -528,7 +530,6 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
     ) -> PatchTSMixerForForecastOutputWithNoAttention:
-
         r"""
 
         Returns:
@@ -595,6 +596,7 @@ class PatchTSMixerClassificationHead(nn.Module):
         return self.head(hidden_state, y=None)
 
 
+@dataclass
 class PatchTSMixerForClassificationOutputWithNoAttention(ModelOutput):
     """
     Output type of [`PatchTSMixerForClassificationOutput`].
@@ -612,7 +614,7 @@ class PatchTSMixerForClassificationOutputWithNoAttention(ModelOutput):
 
     prediction_logits: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = (None,)
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None
 
 
@@ -660,7 +662,6 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
     ) -> PatchTSMixerForClassificationOutputWithNoAttention:
-
         r"""
 
         Returns:
@@ -726,6 +727,7 @@ class PatchTSMixerRegressionHead(nn.Module):
         return self.head(hidden_state, y=None)
 
 
+@dataclass
 class PatchTSMixerForRegressionOutputWithNoAttention(ModelOutput):
     """
     Output type of [`PatchTSMixerForRegressionOutputWithNoAttention`].
@@ -790,7 +792,6 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
     ) -> PatchTSMixerForRegressionOutputWithNoAttention:
-
         r"""
 
         Returns:

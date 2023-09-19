@@ -690,7 +690,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         #                                 for forecast_channel_indices in [None, [0,2]]:
 
     def forecast_full_module(self, params=None, output_hidden_states=False):
-
         config = PatchTSMixerConfig(**params)
         mdl = PatchTSMixerForForecasting(config)
 

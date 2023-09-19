@@ -42,7 +42,6 @@ class RevIN(nn.Module):
         return x
 
     def _denormalize(self, x):
-
         if self.denorm_channels is None:
             x = x * self.stdev
             x = x + self.mean

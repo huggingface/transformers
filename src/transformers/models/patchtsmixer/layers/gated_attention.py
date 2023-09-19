@@ -10,7 +10,6 @@ class GatedAttention(nn.Module):
     """
 
     def __init__(self, in_size: int, out_size: int):
-
         super().__init__()
         self.attn_layer = nn.Linear(in_size, out_size)
         self.attn_softmax = nn.Softmax(dim=-1)

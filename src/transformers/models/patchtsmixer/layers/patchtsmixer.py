@@ -406,7 +406,6 @@ class PatchTSMixerBackbone(nn.Module):
         mixer_type: str = "base",
         norm_mlp="LayerNorm",
     ):
-
         super().__init__()
         self.mode = mode
 

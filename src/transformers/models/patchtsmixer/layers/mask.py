@@ -45,7 +45,6 @@ class PatchMasking(nn.Module):
         super().__init__()
 
     def forward(self, x: Tensor):
-
         """
         Args:
             x: patched input
