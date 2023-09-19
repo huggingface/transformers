@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""English Normalizer class for CLVP."""
+"""English Normalizer class for Clvp."""
 
 
 import re

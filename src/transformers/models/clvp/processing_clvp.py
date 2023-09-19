@@ -43,9 +43,9 @@ class ClvpProcessor(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        Forwards the `audio` argument to ClvpFeatureExtractor's [`~ClvpFeatureExtractor.__call__`] and the `text`
-        argument to [`~ClvpTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more
-        information.
+        Forwards the `audio` and `sampling_rate` arguments to ClvpFeatureExtractor's [`~ClvpFeatureExtractor.__call__`]
+        and the `text` argument to [`~ClvpTokenizer.__call__`]. Please refer to the doctsring of the above two methods
+        for more information.
         """
 
         raw_speech = kwargs.pop("raw_speech", None)

@@ -12,9 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """
 Feature extractor class for Clvp
 """
+
 import copy
 from typing import Any, Dict, List, Optional, Union
 
@@ -36,7 +38,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
+    This class extracts log-mel-spectrogram features from raw speech using a custom numpy implementation of the `Short Time
     Fourier Transform` which should match pytorch's `torch.stft` equivalent.
 
     Args:
@@ -136,11 +138,11 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
         **kwargs,
     ) -> BatchFeature:
         """
-        Clvp Feature Extractor is used to extract various voice specific properties such as the pitch and tone of the
+        `ClvpFeatureExtractor` is used to extract various voice specific properties such as the pitch and tone of the
         voice, speaking speed, and even speaking defects like a lisp or stuttering from a sample voice or `raw_speech`.
 
-        First the voice is padded or truncated in a way such that it becomes a six seconds long waveform and then the
-        log-mel spectrogram is extracted from it.
+        First the voice is padded or truncated in a way such that it becomes a waveform of `self.default_audio_length`
+        seconds long and then the log-mel spectrogram is extracted from it.
 
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):

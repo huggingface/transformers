@@ -22,25 +22,18 @@ The CLVP (Contrastive Language-Voice Pretrained Transformer) model was proposed 
 
 The abstract from the paper is the following:
 
-*In recent years, the field of image generation has been revolutionized by the appli-
-cation of autoregressive transformers and DDPMs. These approaches model the
-process of image generation as a step-wise probabilistic processes and leverage
-large amounts of compute and data to learn the image distribution.
-This methodology of improving performance need not be confined to images. This
-paper describes a way to apply advances in the image generative domain to speech
-synthesis. The result is TorToise - an expressive, multi-voice text-to-speech sys-
-tem.*
+*In recent years, the field of image generation has been revolutionized by the application of autoregressive transformers and DDPMs. These approaches model the process of image generation as a step-wise probabilistic processes and leverage large amounts of compute and data to learn the image distribution. This methodology of improving performance need not be confined to images. This paper describes a way to apply advances in the image generative domain to speech synthesis. The result is TorToise - an expressive, multi-voice text-to-speech system.*
 
 Tips:
 
 1. CLVP or Contrastive Language-Voice Pretrained Transformer is an integral part of the Tortoise TTS model.
 2. CLVP can be used to compare different generated speech candidates with the provided text, and the best speech tokens are forwarded to the diffusion model.
-3. The use of the [`CLVPModel.generate()`] method is strongly recommended for tortoise usage
+3. The use of the [`ClvpModelForConditionalGeneration.generate()`] method is strongly recommended for tortoise usage.
 
 Brief Explanation:
 
-Firstly, the [`CLVPTokenizer`] tokenizes the `text` and the [`CLVPFeatureExtractor`] extracts the `log-melspectrogram` from the desired `audio`. 
-Next, the text tokens and audio representations are passed to the [`CLVPConditioningEncoder`], which converts them into `conditioning_embeds` that preserve the text information as well as the voice properties. The [`CLVPAutoRegressiveLMHeadModel`] uses these embeds to generate multiple `speech candidates`. 
+Firstly, the [`ClvpTokenizer`] tokenizes the `text` and the [`ClvpFeatureExtractor`] extracts the `log-melspectrogram` from the desired `audio`. 
+Next, the text tokens and audio representations are passed to the [`ClvpConditioningEncoder`], which converts them into `conditioning_embeds` that preserve the text information as well as the voice properties. The [`ClvpForCausalLM`] uses these embeds to generate multiple `speech candidates`. 
 The speech encoder converts each speech candidate into a vector representation, and the text encoder converts the text tokens into the same latent space. 
 At the end, we compare each speech vector with the text vector to see which speech vector is most similar to the text vector. 
 
@@ -50,9 +43,10 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 
 
 Example :
+
 ```python
 >>> import datasets
->>> from transformers import CLVPProcessor, CLVPModel
+>>> from transformers import ClvpProcessor, ClvpModelForConditionalGeneration
 
 >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
 >>> text = "This is an example text."
@@ -62,8 +56,8 @@ Example :
 >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
 >>> # Define processor and model
->>> processor = CLVPProcessor.from_pretrained("susnato/clvp_dev")
->>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+>>> processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
+>>> model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
 
 >>> # Generate processor output and model output 
 >>> processor_output = processor(raw_speech=audio, sampling_rate=sr, text=text, return_tensors="pt")
@@ -71,55 +65,57 @@ Example :
 ```
 
 
-## CLVPConfig
+## ClvpConfig
 
 [[autodoc]] CLVPConfig
     - from_sub_model_configs
 
-## CLVPTextConfig
+## ClvpEncoderConfig
 
-[[autodoc]] CLVPTextConfig
+[[autodoc]] ClvpEncoderConfig
 
-## CLVPSpeechConfig
+## ClvpDecoderConfig
 
-[[autodoc]] CLVPSpeechConfig
+[[autodoc]] ClvpDecoderConfig
 
-## CLVPAutoRegressiveConfig
+## ClvpTokenizer
 
-[[autodoc]] CLVPAutoRegressiveConfig
-
-## CLVPTokenizer
-
-[[autodoc]] CLVPTokenizer
+[[autodoc]] ClvpTokenizer
     - save_vocabulary
 
-## CLVPFeatureExtractor
+## ClvpFeatureExtractor
 
-[[autodoc]] CLVPFeatureExtractor
+[[autodoc]] ClvpFeatureExtractor
     - __call__
 
-## CLVPProcessor
+## ClvpProcessor
 
-[[autodoc]] CLVPProcessor
+[[autodoc]] ClvpProcessor
     - __call__
     - decode
     - batch_decode
 
-## CLVPModel
+## ClvpModelForConditionalGeneration
 
-[[autodoc]] CLVPModel
+[[autodoc]] ClvpModelForConditionalGeneration
     - forward
     - generate
     - get_text_features
     - get_speech_features
 
-## CLVPTransformerWithProjection
+## ClvpForCausalLM
 
-[[autodoc]] CLVPTransformerWithProjection
-    - forward
+[[autodoc]] ClvpForCausalLM
 
-## CLVPAutoRegressiveLMHeadModel
+## ClvpModel
 
-[[autodoc]] CLVPAutoRegressiveLMHeadModel
+[[autodoc]] ClvpModel
 
+## ClvpEncoder
+
+[[autodoc]] ClvpEncoder
+
+## ClvpDecoder
+
+[[autodoc]] ClvpDecoder
 
