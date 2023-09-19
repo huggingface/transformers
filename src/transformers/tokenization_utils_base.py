@@ -78,7 +78,7 @@ if is_tokenizers_available():
     from tokenizers import Encoding as EncodingFast
 else:
 
-    @dataclass(frozen=False, eq=True)
+    @dataclass(repr=True, frozen=False, eq=True)
     class AddedToken:
         """
         AddedToken represents a token to be added to a Tokenizer An AddedToken can have special options defining the
@@ -102,6 +102,9 @@ else:
             return self.__dict__
 
         def __str__(self):
+            return self.content
+
+        def __repr__(self):
             return self.content
 
     @dataclass
