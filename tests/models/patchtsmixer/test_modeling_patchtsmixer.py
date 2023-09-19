@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 IBM and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,10 +15,11 @@
 """ Testing suite for the PyTorch PatchTSMixer model. """
 
 import inspect
-import os
 import random
 import tempfile
 import unittest
+
+from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
 from transformers.models.auto import get_values
@@ -364,14 +365,10 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         super().test_retain_grad_hidden_states_attentions()
 
 
-def prepare_batch(repo_id="ibm/etth1", file="train-batch.pt"):
-    # TODO: upload to the model to user: ibm when approved
-    # file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
-    # batch = torch.load(file, map_location=torch_device)
-
-    # For local files (temporary)
-    batch = torch.load(os.path.join(repo_id, file))
-
+def prepare_batch(repo_id="ibm/patchtsmixer-etth1-test-data", file="pretrain_batch.pt"):
+    # TODO: Make repo public
+    file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
+    batch = torch.load(file, map_location=torch_device)
     return batch
 
 
@@ -379,12 +376,9 @@ def prepare_batch(repo_id="ibm/etth1", file="train-batch.pt"):
 # @slow
 class PatchTSMixerModelIntegrationTests(unittest.TestCase):
     def test_pretrain_head(self):
-        # TODO: upload to the model to user: ibm when approved
-        # model = PatchTSMixerForMaskPretraining.from_pretrained('ajati/patchtsmixer_pretrained_etth1').to(torch_device)
-        model = PatchTSMixerForMaskPretraining.from_pretrained(
-            "/dccstor/dnn_forecasting/FM/HF/dump/etth1/pretrain/patchtsmixer_pretrained_etth1"
-        ).to(torch_device)
-        batch = prepare_batch(repo_id="/dccstor/dnn_forecasting/FM/HF/dump/etth1/pretrain/", file="batch.pt")
+        # TODO: Make repo public
+        model = PatchTSMixerForMaskPretraining.from_pretrained("ibm/patchtsmixer-etth1-pretrain").to(torch_device)
+        batch = prepare_batch()
 
         torch.manual_seed(0)
         with torch.no_grad():
@@ -395,23 +389,16 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size([1024, model.config.in_channels, num_patch, model.config.patch_len])
         self.assertEqual(output.shape, expected_shape)
 
-        # print(output[0, :7, :1, :1])
         expected_slice = torch.tensor(
-            [[[-0.3092]], [[0.6213]], [[-0.2071]], [[-0.2825]], [[-0.4129]], [[2.3598]], [[0.1951]]],
+            [[[-0.3580]], [[2.9853]], [[-0.0456]], [[-1.8141]], [[-0.5844]], [[11.0132]], [[-0.1548]]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
 
     def test_forecasting_head(self):
-        # TODO: upload to the model to user: ibm when approved
-        # model = PatchTSMixerForForecasting.from_pretrained('diepi/test_patchtsmixer_prediction_etth1').to(torch_device)
-        model = PatchTSMixerForForecasting.from_pretrained(
-            "/dccstor/dnn_forecasting/FM/HF/dump/etth1/finetune_forecast/patchtsmixer_finetune_forecast_etth1"
-        ).to(torch_device)
-        # batch = prepare_batch(file="test-batch.pt")
-        batch = prepare_batch(
-            repo_id="/dccstor/dnn_forecasting/FM/HF/dump/etth1/finetune_forecast/", file="batch_forecast.pt"
-        )
+        # TODO: Make repo public
+        model = PatchTSMixerForForecasting.from_pretrained("ibm/patchtsmixer-etth1-forecasting").to(torch_device)
+        batch = prepare_batch(file="forecast_batch.pt")
 
         torch.manual_seed(0)
         with torch.no_grad():
@@ -425,60 +412,10 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.4179, -0.0815, 0.4532, 0.7133, -0.3059, -2.3659, 0.2807]],
+            [[0.5071, -0.0901, 0.5348, 0.6649, -0.2680, -2.0142, 0.2994]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
-
-    def test_prediction_head(self):
-        # TODO: upload to the model to user: ibm when approved
-        # model = PatchTSMixerForForecasting.from_pretrained('diepi/test_patchtsmixer_prediction_etth1').to(torch_device)
-        model = PatchTSMixerForForecasting.from_pretrained(
-            "/dccstor/dnn_forecasting/FM/HF/dump/etth1/finetune_prediction/patchtsmixer_finetune_prediction_etth1"
-        ).to(torch_device)
-        model.config.update({"forecast_channel_indices": [3, 5]})
-
-        # batch = prepare_batch(file="test-batch.pt")
-        batch = prepare_batch(
-            repo_id="/dccstor/dnn_forecasting/FM/HF/dump/etth1/finetune_prediction/", file="batch_prediction.pt"
-        )
-
-        torch.manual_seed(0)
-        with torch.no_grad():
-            output = model(
-                context_values=batch["context_values"].to(torch_device),
-                target_values=batch["target_values"].to(torch_device),
-            ).prediction_logits
-
-        print(output[0, :1, :2])
-        expected_shape = torch.Size([1024, model.config.forecast_len, 2])
-        self.assertEqual(output.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [[0.6744, -2.3873]],
-            device=torch_device,
-        )
-        self.assertTrue(torch.allclose(output[0, :1, :2], expected_slice, atol=TOLERANCE))
-
-    # def test_classification_head(self):
-    #     # mock data, test
-    #     model = PatchTSMixerForClassification.from_pretrained('diepi/test_patchtsmixer_classification_mock').to(torch_device)
-    #     batch = prepare_batch(repo_id="diepi/mock-data", file="test-mock-patchtsmixer.pt")
-    #
-    #     torch.manual_seed(0)
-    #     with torch.no_grad():
-    #         output = model(
-    #             context_values=batch["context_values"].to(torch_device)
-    #         ).prediction_logits
-    #     expected_shape = torch.Size([1, model.config.num_classes])
-    #     self.assertEqual(output.shape, expected_shape)
-    #
-    #     expected_slice = torch.tensor([[-0.2774, -0.1081, 0.6771]],
-    #                                   device=torch_device,
-    #                                   )
-    #     self.assertTrue(torch.allclose(output, expected_slice, atol=TOLERANCE))
-
-    # def test_regression_head(self):
 
 
 class PatchTSMixerFunctionalTests(unittest.TestCase):

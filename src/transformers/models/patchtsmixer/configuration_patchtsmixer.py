@@ -28,6 +28,15 @@ PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PatchTSMixerConfig(PretrainedConfig):
     r"""
+    PatchTSMixer is a lightweight time-series modelling backbone based on the MLP-Mixer architecture. Our [KDD 2023
+    paper](https://arxiv.org/abs/2306.09364) demonstrates its state-of-the-art performance for time series tasks, with
+    reduced computational and memory demands. PatchTSMixer's distinguishing feature lies in its capacity to
+    effortlessly facilitate lightweight mixing across patches, channels, and hidden features. This unique capability
+    allows for the efficient modeling of dependencies within and across various dimensions. It also supports various
+    attention mechanisms starting from simple gated attention to more complex self-attention blocks that can be enabled
+    based on the input data requirements. PatchTSMixer backbone can currently be extended for various downstream tasks
+    such as forecasting, classification and regression.
+
     This is the configuration class to store the configuration of an [`PatchTSMixerModel`]. It is used to instantiate
     an PatchTSMixer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the PatchTSMixer
