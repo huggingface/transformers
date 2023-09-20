@@ -16,14 +16,21 @@
 
 import unittest
 
+import requests
+import numpy as np
+from huggingface_hub import hf_hub_download
+
 from transformers.testing_utils import require_cv2, require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_vision_available, is_torch_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from transformers import NougatImageProcessor
+    from PIL import Image
 
 
 class NougatImageProcessingTester(unittest.TestCase):
@@ -78,6 +85,13 @@ class NougatImageProcessingTester(unittest.TestCase):
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
+    def prepare_dummy_image(self):
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_pdf.png", repo_type="dataset"
+        )
+        image = Image.open(filepath).convert("RGB")
+        return image
+
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
@@ -117,3 +131,45 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+
+    def test_expected_output(self):
+        dummy_image = self.image_processor_tester.prepare_dummy_image()
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        inputs = image_processor(dummy_image, return_tensors="pt")
+        self.assertTrue(torch.allclose(inputs["pixel_values"].mean(), torch.tensor(0.4906), atol=1e-3, rtol=1e-3))
+
+    def test_crop_margin_all_white(self):
+        image = np.uint8(np.ones((100, 100, 3)) * 255)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        cropped_image = image_processor.crop_margin(image)
+        self.assertTrue(np.array_equal(image, cropped_image))
+
+    def test_crop_margin_centered_black_square(self):
+        image = np.ones((100, 100, 3), dtype=np.uint8) * 255
+        image[45:55, 45:55, :] = 0 
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        cropped_image = image_processor.crop_margin(image)
+        expected_cropped = image[45:55, 45:55, :]        
+        self.assertTrue(np.array_equal(expected_cropped, cropped_image))
+
+    def test_align_long_axis_no_rotation(self):
+        image = np.uint8(np.ones((100, 200, 3)) * 255)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        size = {"height": 200, "width": 300}
+        aligned_image = image_processor.align_long_axis(image, size)
+        self.assertEqual(image.shape, aligned_image.shape)
+    
+    def test_align_long_axis_with_rotation(self):
+        image = np.uint8(np.ones((200, 100, 3)) * 255)
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        size = {"height": 300, "width": 200}
+        aligned_image = image_processor.align_long_axis(image, size)
+        self.assertEqual((200, 100, 3), aligned_image.shape)
+        
+    def test_align_long_axis_data_format(self):
+        image = np.uint8(np.ones((100, 200, 3)) * 255)
+        data_format = 'channels_first'
+        size = {"height": 200, "width": 300}
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        aligned_image = image_processor.align_long_axis(image, size, data_format=data_format)
+        self.assertEqual((3, 100, 200), aligned_image.shape)
