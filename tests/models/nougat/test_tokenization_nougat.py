@@ -180,7 +180,7 @@ class NougatPostProcessingTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.correct_tables(input_str), expected_output)
 
     def test_correct_tables_high_count(self):
-        input_str = "\\begin{tabular}" * 7
+        input_str = "\\begin{tabular}" * 20
         expected_output = ""
         self.assertEqual(self.tokenizer.correct_tables(input_str), expected_output)
 
