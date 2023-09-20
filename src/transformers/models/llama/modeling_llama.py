@@ -411,11 +411,11 @@ class LlamaAttention(nn.Module):
 
 class LlamaFlashAttention2(LlamaAttention):
     """
-    Llama flash attention module. This module inherits from `LlamaAttention` as the weights 
-    of the module stays untouched. The only required change would be on the forward pass where it needs
-    to correctly call the public API of flash attention and deal with padding tokens in case the input 
-    contains any of them.
+    Llama flash attention module. This module inherits from `LlamaAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
     """
+
     def forward(
         self,
         hidden_states: torch.Tensor,

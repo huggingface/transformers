@@ -2735,9 +2735,9 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True).to(
-                    torch_device
-                )
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True
+                ).to(torch_device)
 
                 for _, module in model.named_modules():
                     if "FlashAttention" in module.__class__.__name__:
@@ -2761,10 +2761,14 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                )
                 model.to(torch_device)
 
                 dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
@@ -2799,10 +2803,14 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                )
                 model.to(torch_device)
 
                 dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
