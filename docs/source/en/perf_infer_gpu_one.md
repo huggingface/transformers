@@ -25,28 +25,26 @@ Note that this feature is experimental and might considerably change in future v
 
 </Tip>
 
-Flash Attention 2 can considerably speedup the training and inference speed of transformer based models. Flash Attention 2 has been introduced in the [official Flash Attention repository](https://github.com/Dao-AILab/flash-attention) from Tri Dao et al. The scientific paper of Flash attention can be found [here](https://arxiv.org/abs/2205.14135).
+Flash Attention 2 can considerably speed up transformer-based models' training and inference speed. Flash Attention 2 has been introduced in the [official Flash Attention repository](https://github.com/Dao-AILab/flash-attention) by Tri Dao et al. The scientific paper on Flash Attention can be found [here](https://arxiv.org/abs/2205.14135).
 
 Make sure to follow the installation guide on the repository mentioned above to properly install Flash Attention 2. Once that package is installed, you can benefit from this feature.
 
-We natively support Flash Attention 2 for some models, currently supported architectures are:
+We natively support Flash Attention 2 for some models. The currently supported architectures are:
 
 - Llama
 - Falcon
 
-You can request to add Flash Attention 2 support for more models by opening an issue on GitHub!
-
-And they can be used for inference and training, including training with padding tokens - which is currently not supported for `BetterTransformer` API below.
+You can request to add Flash Attention 2 support for more models by opening an issue on GitHub! The supported models can be used for inference and training, including training with padding tokens - *which is currently not supported for `BetterTransformer` API below.*
 
 <Tip>
 
-Flash Attention 2 can only be used for models using fp16 or bf16 dtype, and can be run only on NVIDIA-GPU devices. Make sure to cast your model to the appropriate dtype and load them on a supported device before using that feature.
+Flash Attention 2 can only be used for models in the fp16 or bf16 dtypes and run only on NVIDIA-GPU devices. Make sure to cast your model to the appropriate dtype and load them on a supported device before using that feature.
   
 </Tip>
 
 ### Quick usage
 
-To enable Flash Attention 2 in your model, simply add `use_flash_attn_2` in `from_pretrained` arguments
+To enable Flash Attention 2 in your model, add `use_flash_attn_2` in the `from_pretrained` arguments:
 
 ```python
 import torch
@@ -66,8 +64,11 @@ And use it for generation or fine-tuning.
 
 ### Expected speedups
 
-You can benefit from considerable speedup for fine-tuning and inference, especially for long sequence length. 
-However, note that due to the fact that Flash Attention does not support computing attention scores with padd tokens under the hood, we need to manually pad / unpad the attention scores for batched inference when the sequence contains padd tokens. This leads to an important slowdown for batched `generate` with padd tokens. To overcome this, one should use Flash Attention without padd tokens in the sequence for training (e.g. by packing a dataset, i.e. concatenating sequences until reaching the maximum sequence length)
+You can benefit from considerable speedups for fine-tuning and inference, especially for long sequences. However, since Flash Attention does not support computing attention scores with padding tokens under the hood, we must manually pad / unpad the attention scores for batched inference when the sequence contains padding tokens. This leads to a significant slowdown for batched generations with padding tokens. 
+
+To overcome this, one should use Flash Attention without padding tokens in the sequence for training (e.g., by packing a dataset, i.e., concatenating sequences until reaching the maximum sequence length).
+
+Below is the expected speedup you can get for a simple forward pass on tiiuae/falcon-7b with a sequence length of 4096 and various batch sizes without padding tokens:
 
 Below is the expected speedup you can get for a simple forward pass on `tiiuae/falcon-7b` with a sequence length of 4096 and various batch sizes, without padd tokens:
 
