@@ -2960,21 +2960,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             use_keep_in_fp32_modules = (cls._keep_in_fp32_modules is not None) and (
                 torch_dtype == torch.float16 or load_in_4bit or load_in_8bit
             )
-            if (
-                (cls._keep_in_fp32_modules is not None)
-                and not is_accelerate_available()
-                and torch_dtype == torch.float16
-            ):
-                logger.warning(
-                    "For stability purposes, it is recommended to have accelerate installed when using this model in"
-                    " torch.float16, please install it with `pip install accelerate`"
-                )
 
             if is_sharded:
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = list(state_dict.keys())
             if low_cpu_mem_usage or (use_keep_in_fp32_modules and is_accelerate_available()):
+                # In case some weights need to be kept in float32 and accelerate is not installed,
+                # we later on want to take the path where state_dict is not None, that is the one
+                # that do not require accelerate.
                 state_dict = None
 
         config.name_or_path = pretrained_model_name_or_path
@@ -2995,7 +2989,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Check first if we are `from_pt`
         if use_keep_in_fp32_modules:
-            low_cpu_mem_usage = True
+            if is_accelerate_available():
+                low_cpu_mem_usage = True
             keep_in_fp32_modules = model._keep_in_fp32_modules
         else:
             keep_in_fp32_modules = []
@@ -3470,6 +3465,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if keep_in_fp32_modules is not None:
             for name, param in model.named_parameters():
                 if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                    # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 
         # Make sure we are able to load base models as well as derived models (with heads)
