@@ -1361,7 +1361,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     >>> inputs = processor(ds[3]["audio"]["array"], return_tensors="pt")
     >>> input_features = inputs.input_features
 
-    >>> #Displaying time time stamps
+    >>> #Displaying timestamps
     >>> generated_ids = model.generate(inputs=input_features, return_timestamps=True)
     >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
     >>> print("Transcription:", transcription)
