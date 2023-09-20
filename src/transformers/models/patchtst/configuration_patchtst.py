@@ -44,6 +44,11 @@ class PatchTSTConfig(PretrainedConfig):
             multivariate targets.
         context_length (`int`, defaults to 32):
             The context length for the encoder.
+        distribution_output (`string`, *optional*, defaults to `"student_t"`):
+            The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or "negative_binomial".
+        loss (`string`, *optional*, defaults to `"mse"`):
+            The loss function for the model corresponding to the `distribution_output` head. For parametric
+            distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared error "mse".
         patch_length (`int`, *optional*, defaults to 1):
             Define the patch length of the patchification process. Default to 1.
         stride (`int`, *optional*, defaults to 1):
@@ -144,6 +149,8 @@ class PatchTSTConfig(PretrainedConfig):
         # time series specific configuration
         num_input_channels: int = 1,
         context_length: int = 32,
+        distribution_output: str = "student_t",
+        loss: str = "mse",
         # PatchTST arguments
         patch_length: int = 1,
         stride: int = 1,
@@ -191,6 +198,8 @@ class PatchTSTConfig(PretrainedConfig):
         # time series specific configuration
         self.context_length = context_length
         self.num_input_channels = num_input_channels  # n_vars
+        self.loss = loss
+        self.distribution_output = distribution_output
 
         # Transformer architecture configuration
         self.d_model = d_model

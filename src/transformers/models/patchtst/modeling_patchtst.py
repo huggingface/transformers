@@ -25,6 +25,7 @@ from torch import nn
 
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
+from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import ModelOutput, add_start_docstrings, logging
 from .configuration_patchtst import PatchTSTConfig
 
@@ -831,6 +832,14 @@ class PatchTSTModelOutputWithNoAttention(ModelOutput):
     scale: torch.FloatTensor = None
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
+def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+    return -input.log_prob(target)
+
+
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->PatchTST
 class PatchTSTStdScaler(nn.Module):
     """
@@ -1194,17 +1203,23 @@ class PatchTSTForClassificationOutput(ModelOutput):
 
 
 class PredictionHead(nn.Module):
-    def __init__(self, config: PatchTSTConfig):
+    def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
 
         self.num_output_channels = config.num_output_channels
+        self.dist_output_size = config.num_output_channels * config.d_model // config.encoder_attention_heads
         self.use_cls_token = config.use_cls_token
         self.pooling = config.pooling
 
         head_dim = config.num_input_channels * config.d_model
 
         self.flatten = nn.Flatten(start_dim=1)
-        self.linear = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)
+        if distribution_output is None:
+            self.linear = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)
+            self.args_proj = None
+        else:
+            self.linear = nn.Linearr(head_dim, config.prediction_length * self.dist_output_size)
+            self.args_proj = distribution_output.get_parameter_projection(self.dist_output_size)
         self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
 
     def forward(self, x):
@@ -1226,9 +1241,13 @@ class PredictionHead(nn.Module):
         # flatten the input
         x = self.flatten(x)  # x: bs x (nvars * d_model)
         y = self.linear(self.dropout(x))  # y: bs x (pred_len * num_output_channels)
+        if self.args_proj is None:
+            # reshape the data
+            y = y.reshape(batch_size, -1, self.num_output_channels)  # [bs x pred_len x num_output_channels]
+        else:
+            # reshape and project prarameters of distribution
+            y = self.args_proj(y.reshape(batch_size, -1, self.dist_output_size))
 
-        # reshape the data
-        y = y.reshape(batch_size, -1, self.num_output_channels)  # [bs x pred_len x num_output_channels]
         return y
 
 
@@ -1238,8 +1257,21 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         super().__init__(config)
 
         self.model = PatchTSTModel(config)
-        self.head = PredictionHead(config)
-        self.loss = nn.MSELoss(reduction="mean")
+        if config.loss == "mse":
+            self.loss = nn.MSELoss(reduction="mean")
+            self.distribution_output = None
+        else:
+            self.loss = nll
+            if config.distribution_output == "student_t":
+                self.distribution_output = StudentTOutput(dim=config.num_output_channels)
+            elif config.distribution_output == "normal":
+                self.distribution_output = NormalOutput(dim=config.num_output_channels)
+            elif config.distribution_output == "negative_binomial":
+                self.distribution_output = NegativeBinomialOutput(dim=config.num_output_channels)
+            else:
+                raise ValueError(f"Unknown distribution output {config.distribution_output}")
+
+        self.head = PredictionHead(config, self.distribution_output)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1255,10 +1287,15 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         )
         model_output = self.model(past_values, output_hidden_states=output_hidden_states)
         y_hat = self.head(model_output.last_hidden_state)
-
         loss_val = None
         if future_values is not None:
-            loss_val = self.loss(y_hat, future_values)
+            if self.distribution_output:
+                distribution = self.distribution_output.distribution(
+                    y_hat, loc=model_output.loc, scale=model_output.scale
+                )
+                loss_val = self.loss(distribution, future_values)
+            else:
+                loss_val = self.loss(y_hat * model_output.scale + model_output.loc, future_values)
         return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=model_output.hidden_states)
 
 
