@@ -44,12 +44,12 @@ from .configuration_bros import BrosConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "naver-clova-ocr/bros-base-uncased"
+_CHECKPOINT_FOR_DOC = "jinho8345/bros-base-uncased"
 _CONFIG_FOR_DOC = "BrosConfig"
 
 BROS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "naver-clova-ocr/bros-base-uncased",
-    "naver-clova-ocr/bros-large-uncased",
+    "jinho8345/bros-base-uncased",
+    "jinho8345/bros-large-uncased",
     # See all Bros models at https://huggingface.co/models?filter=bros
 ]
 
@@ -846,9 +846,9 @@ class BrosModel(BrosPreTrainedModel):
         >>> import torch
         >>> from transformers import BrosProcessor, BrosModel
 
-        >>> processor = BrosProcessor.from_pretrained("naver-clova-ocr/bros-base-uncased")
+        >>> processor = BrosProcessor.from_pretrained("jinho8345/bros-base-uncased")
 
-        >>> model = BrosModel.from_pretrained("naver-clova-ocr/bros-base-uncased")
+        >>> model = BrosModel.from_pretrained("jinho8345/bros-base-uncased")
 
         >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
         >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
@@ -1011,9 +1011,9 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         >>> import torch
         >>> from transformers import BrosProcessor, BrosForTokenClassification
 
-        >>> processor = BrosProcessor.from_pretrained("naver-clova-ocr/bros-base-uncased")
+        >>> processor = BrosProcessor.from_pretrained("jinho8345/bros-base-uncased")
 
-        >>> model = BrosForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased")
+        >>> model = BrosForTokenClassification.from_pretrained("jinho8345/bros-base-uncased")
 
         >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
         >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
@@ -1130,9 +1130,9 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         >>> import torch
         >>> from transformers import BrosProcessor, BrosSpadeEEForTokenClassification
 
-        >>> processor = BrosProcessor.from_pretrained("naver-clova-ocr/bros-base-uncased")
+        >>> processor = BrosProcessor.from_pretrained("jinho8345/bros-base-uncased")
 
-        >>> model = BrosSpadeEEForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased")
+        >>> model = BrosSpadeEEForTokenClassification.from_pretrained("jinho8345/bros-base-uncased")
 
         >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
         >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
@@ -1261,9 +1261,9 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         >>> import torch
         >>> from transformers import BrosProcessor, BrosSpadeELForTokenClassification
 
-        >>> processor = BrosProcessor.from_pretrained("naver-clova-ocr/bros-base-uncased")
+        >>> processor = BrosProcessor.from_pretrained("jinho8345/bros-base-uncased")
 
-        >>> model = BrosSpadeELForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased")
+        >>> model = BrosSpadeELForTokenClassification.from_pretrained("jinho8345/bros-base-uncased")
 
         >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
         >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
