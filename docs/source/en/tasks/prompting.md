@@ -74,7 +74,7 @@ Run inference with decoder-only models with the `text-generation` pipeline:
 >>> from transformers import pipeline
 >>> import torch
 
->>> torch.manual_seed(0)
+>>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 
 >>> generator = pipeline('text-generation', model = 'gpt2')
 >>> prompt = "Hello, I'm a language model"
@@ -111,7 +111,7 @@ to solve some common NLP tasks.
 First, let's set up the environment: 
 
 ```bash
-pip install -q transformers einops
+pip install -q transformers einops accelerate
 ```
 
 Next, let's load the model with the appropriate pipeline (`"text-generation"`): 
@@ -120,7 +120,7 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 >>> from transformers import pipeline, AutoTokenizer
 >>> import torch
 
->>> torch.manual_seed(0)
+>>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 >>> model = "tiiuae/falcon-7b-instruct"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(model)
@@ -153,7 +153,7 @@ We'll start by giving the instruction, and then specifying the text to classify.
 also adding the beginning of the response - `"Sentiment: "`:
 
 ```python
->>> torch.manual_seed(0) 
+>>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 >>> prompt = """Classify the text into neutral, negative or positive. 
 Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 Sentiment:
@@ -192,7 +192,7 @@ Let's modify the instructions in the prompt to make the LLM perform this task. H
 so that output doesn't contain the prompt:
 
 ```python
->>> torch.manual_seed(1)
+>>> torch.manual_seed(1) # doctest: +IGNORE_RESULT
 >>> prompt = """Return a list of named entities in the text.
 Text: The Golden State Warriors are an American professional basketball team based in San Francisco.
 Named entities:
@@ -224,7 +224,7 @@ for the simplicity of the examples, we'll keep using Falcon-7b-instruct, which d
 you can write a basic prompt to instruct a model to translate a piece of text from English to Italian: 
 
 ```python
->>> torch.manual_seed(2)
+>>> torch.manual_seed(2) # doctest: +IGNORE_RESULT
 >>> prompt = """Translate the English text to Italian.
 Text: Sometimes, I've believed as many as six impossible things before breakfast.
 Translation:
@@ -258,7 +258,7 @@ Previously, we have placed the instructions at the very beginning of the prompt.
 also be a suitable location for instructions. Typically, it's better to place the instruction on one of the extreme ends.  
 
 ```python
->>> torch.manual_seed(3)
+>>> torch.manual_seed(3) # doctest: +IGNORE_RESULT
 >>> prompt = """Permaculture is a design process mimicking the diversity, functionality and resilience of natural ecosystems. The principles and practices are drawn from traditional ecological knowledge of indigenous cultures combined with modern scientific understanding and technological innovations. Permaculture design provides a framework helping individuals and communities develop innovative, creative and effective strategies for meeting basic needs while preparing for and mitigating the projected impacts of climate change.
 Write a summary of the above text.
 Summary:
@@ -285,7 +285,7 @@ For question answering task we can structure the prompt into the following logic
 the leading word or phrase (`"Answer:"`) to nudge the model to start generating the answer:
 
 ```python
->>> torch.manual_seed(4)
+>>> torch.manual_seed(4) # doctest: +IGNORE_RESULT
 >>> prompt = """Answer the question using the context below.
 Context: Gazpacho is a cold soup and drink made of raw, blended vegetables. Most gazpacho includes stale bread, tomato, cucumbers, onion, bell peppers, garlic, olive oil, wine vinegar, water, and salt. Northern recipes often include cumin and/or pimentón (smoked sweet paprika). Traditionally, gazpacho was made by pounding the vegetables in a mortar with a pestle; this more laborious method is still sometimes used as it helps keep the gazpacho cool and avoids the foam and silky consistency of smoothie versions made in blenders or food processors.
 Question: What modern tool is used to make gazpacho?
@@ -315,7 +315,7 @@ Reasoning is one of the most difficult tasks for LLMs, and achieving good result
 Let's try if we can make a model reason about a simple arithmetics task with a basic prompt: 
 
 ```python
->>> torch.manual_seed(5)
+>>> torch.manual_seed(5) # doctest: +IGNORE_RESULT
 >>> prompt = """There are 5 groups of students in the class. Each group has 4 students. How many students are there in the class?"""
 
 >>> sequences = pipeline(
@@ -337,7 +337,7 @@ There are a total of 5 groups, so there are 5 x 4=20 students in the class."""
 Correct! Let's increase the complexity a little and see if we can still get away with a basic prompt:
 
 ```python
->>> torch.manual_seed(6)
+>>> torch.manual_seed(6) # doctest: +IGNORE_RESULT
 >>> prompt = """I baked 15 muffins. I ate 2 muffins and gave 5 muffins to a neighbor. My partner then bought 6 more muffins and ate 2. How many muffins do we now have?"""
 
 >>> sequences = pipeline(
@@ -392,7 +392,7 @@ The examples condition the model to generate the output following the patterns i
 Here's an example: 
 
 ```python
->>> torch.manual_seed(0)
+>>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 >>> prompt = """Text: The first human went into space and orbited the Earth on April 12, 1961.
 Date: 04/12/1961
 
