@@ -607,7 +607,7 @@ def is_accelerate_available(min_version: str = None):
 
 
 def is_fsdp_available(min_version: str = "1.12.0"):
-    return version.parse(_torch_version) >= version.parse(min_version)
+    return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
 
 
 def is_optimum_available():
