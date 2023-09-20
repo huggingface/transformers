@@ -1,8 +1,11 @@
 import argparse
+import os
 
+import requests
 import torch
+from PIL import Image
 
-from transformers import SuperPointConfig, SuperPointModel
+from transformers import SuperPointConfig, SuperPointModel, SuperPointImageProcessor
 
 
 def get_superglue_config():
@@ -61,6 +64,12 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
+def prepare_img():
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    im = Image.open(requests.get(url, stream=True).raw)
+    return im
+
+
 @torch.no_grad()
 def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_model, push_to_hub):
     """
@@ -71,7 +80,6 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     config = get_superglue_config()
 
     original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
-    print(original_state_dict)
 
     print("Converting model parameters...")
     rename_keys = create_rename_keys(config, original_state_dict)
@@ -83,6 +91,45 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     model.load_state_dict(new_state_dict)
     model.eval()
     print("Successfully loaded weights in the model")
+
+    preprocessor = SuperPointImageProcessor()
+    inputs = preprocessor(images=prepare_img(), return_tensors="pt")
+    outputs = model(**inputs)
+
+    expected_keypoints_shape = (568, 2)
+    expected_scores_shape = (568,)
+    expected_descriptors_shape = (256, 568)
+
+    expected_keypoints_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]])
+    expected_scores_values = torch.tensor([0.0064, 0.0140, 0.0595, 0.0728, 0.5170, 0.0175, 0.1523, 0.2055, 0.0336])
+    expected_descriptors_value = torch.tensor(-0.1096)
+
+    assert outputs.keypoints.shape == expected_keypoints_shape
+    assert outputs.scores.shape == expected_scores_shape
+    assert outputs.descriptors.shape == expected_descriptors_shape
+
+    expected_keypoints = outputs.keypoints[:3]
+    expected_scores = outputs.scores[:9]
+
+    assert torch.allclose(outputs.keypoints[:3], expected_keypoints_values, atol=1e-3)
+    assert torch.allclose(outputs.scores[:9], expected_scores_values, atol=1e-3)
+    assert torch.allclose(outputs.descriptors[0, 0], expected_descriptors_value, atol=1e-3)
+    print("Model outputs match the original results!")
+
+    if save_model:
+        print("Saving model to local...")
+        # Create folder to save model
+        if not os.path.isdir(pytorch_dump_folder_path):
+            os.mkdir(pytorch_dump_folder_path)
+
+        model.save_pretrained(pytorch_dump_folder_path)
+        preprocessor.save_pretrained(pytorch_dump_folder_path)
+
+        model_name = "superpoint"
+        if push_to_hub:
+            print(f"Pushing {model_name} to the hub...")
+        model.push_to_hub(model_name)
+        preprocessor.push_to_hub(model_name)
 
 
 if __name__ == "__main__":
