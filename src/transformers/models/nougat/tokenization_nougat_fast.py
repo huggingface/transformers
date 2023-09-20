@@ -70,8 +70,11 @@ def markdown_compatible(text: str) -> str:
         `str`: The Markdown-compatible text.
     """
     # equation tag
+    # Replace lines that start with a pattern like (decimal) \[some text\] it with \[[some text] \tag{decimal}\].
     text = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M)
+    # Replace lines that start with a pattern like \[some text\] (decimal)  with \[[some text] \tag{decimal}\].
     text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.M)
+    # Replace lines that start with a pattern like \[some text\] (1) \[another text\]  with \[[some text] \tag{1}\] [another text].
     text = re.sub(
         r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\) (\\\[.+?\\\])$",
         r"\[\1 \\tag{\2}\] \3",
@@ -83,7 +86,7 @@ def markdown_compatible(text: str) -> str:
     # bold formatting
     text = text.replace(r"\bm{", r"\mathbf{").replace(r"{\\bm ", r"\mathbf{")
     text = re.sub(r"\\mbox{ ?\\boldmath\$(.*?)\$}", r"\\mathbf{\1}", text)
-    # urls
+    # Reformat urls (http, ftp and https only) to markdown 
     text = re.sub(
         r"((?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-]))",
         r"[\1](\1)",
