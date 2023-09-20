@@ -23,28 +23,28 @@ class EnglishNormalizer:
     def __init__(self):
         # List of (regular expression, replacement) pairs for abbreviations:
         self._abbreviations = [
-                (re.compile("\\b%s\\." % x[0], re.IGNORECASE), x[1])
-                for x in [
-                    ("mrs", "misess"),
-                    ("mr", "mister"),
-                    ("dr", "doctor"),
-                    ("st", "saint"),
-                    ("co", "company"),
-                    ("jr", "junior"),
-                    ("maj", "major"),
-                    ("gen", "general"),
-                    ("drs", "doctors"),
-                    ("rev", "reverend"),
-                    ("lt", "lieutenant"),
-                    ("hon", "honorable"),
-                    ("sgt", "sergeant"),
-                    ("capt", "captain"),
-                    ("esq", "esquire"),
-                    ("ltd", "limited"),
-                    ("col", "colonel"),
-                    ("ft", "fort"),
-                ]
+            (re.compile("\\b%s\\." % x[0], re.IGNORECASE), x[1])
+            for x in [
+                ("mrs", "misess"),
+                ("mr", "mister"),
+                ("dr", "doctor"),
+                ("st", "saint"),
+                ("co", "company"),
+                ("jr", "junior"),
+                ("maj", "major"),
+                ("gen", "general"),
+                ("drs", "doctors"),
+                ("rev", "reverend"),
+                ("lt", "lieutenant"),
+                ("hon", "honorable"),
+                ("sgt", "sergeant"),
+                ("capt", "captain"),
+                ("esq", "esquire"),
+                ("ltd", "limited"),
+                ("col", "colonel"),
+                ("ft", "fort"),
             ]
+        ]
 
         self.ones = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
         self.teens = [
@@ -65,9 +65,9 @@ class EnglishNormalizer:
         """
         Converts numbers(`int`) to words(`str`).
 
-        Please note that it only supports upto - "'nine hundred ninety-nine quadrillion, nine hundred ninety-nine trillion,
-        nine hundred ninety-nine billion, nine hundred ninety-nine million, nine hundred ninety-nine thousand, nine hundred
-        ninety-nine'" or `number_to_words(999_999_999_999_999_999)`.
+        Please note that it only supports upto - "'nine hundred ninety-nine quadrillion, nine hundred ninety-nine
+        trillion, nine hundred ninety-nine billion, nine hundred ninety-nine million, nine hundred ninety-nine
+        thousand, nine hundred ninety-nine'" or `number_to_words(999_999_999_999_999_999)`.
         """
         if num == 0:
             return "zero"
@@ -80,36 +80,42 @@ class EnglishNormalizer:
         elif num < 100:
             return self.tens[num // 10] + ("-" + self.number_to_words(num % 10) if num % 10 != 0 else "")
         elif num < 1000:
-            return self.ones[num // 100] + " hundred" + (" " + self.number_to_words(num % 100) if num % 100 != 0 else "")
+            return (
+                self.ones[num // 100] + " hundred" + (" " + self.number_to_words(num % 100) if num % 100 != 0 else "")
+            )
         elif num < 1_000_000:
             return (
-                    self.number_to_words(num // 1000)
-                    + " thousand"
-                    + (", " + self.number_to_words(num % 1000) if num % 1000 != 0 else "")
+                self.number_to_words(num // 1000)
+                + " thousand"
+                + (", " + self.number_to_words(num % 1000) if num % 1000 != 0 else "")
             )
         elif num < 1_000_000_000:
             return (
-                    self.number_to_words(num // 1_000_000)
-                    + " million"
-                    + (", " + self.number_to_words(num % 1_000_000) if num % 1_000_000 != 0 else "")
+                self.number_to_words(num // 1_000_000)
+                + " million"
+                + (", " + self.number_to_words(num % 1_000_000) if num % 1_000_000 != 0 else "")
             )
         elif num < 1_000_000_000_000:
             return (
-                    self.number_to_words(num // 1_000_000_000)
-                    + " billion"
-                    + (", " + self.number_to_words(num % 1_000_000_000) if num % 1_000_000_000 != 0 else "")
+                self.number_to_words(num // 1_000_000_000)
+                + " billion"
+                + (", " + self.number_to_words(num % 1_000_000_000) if num % 1_000_000_000 != 0 else "")
             )
         elif num < 1_000_000_000_000_000:
             return (
-                    self.number_to_words(num // 1_000_000_000_000)
-                    + " trillion"
-                    + (", " + self.number_to_words(num % 1_000_000_000_000) if num % 1_000_000_000_000 != 0 else "")
+                self.number_to_words(num // 1_000_000_000_000)
+                + " trillion"
+                + (", " + self.number_to_words(num % 1_000_000_000_000) if num % 1_000_000_000_000 != 0 else "")
             )
         elif num < 1_000_000_000_000_000_000:
             return (
-                    self.number_to_words(num // 1_000_000_000_000_000)
-                    + " quadrillion"
-                    + (", " + self.number_to_words(num % 1_000_000_000_000_000) if num % 1_000_000_000_000_000 != 0 else "")
+                self.number_to_words(num // 1_000_000_000_000_000)
+                + " quadrillion"
+                + (
+                    ", " + self.number_to_words(num % 1_000_000_000_000_000)
+                    if num % 1_000_000_000_000_000 != 0
+                    else ""
+                )
             )
         else:
             return "number out of range"
@@ -171,7 +177,8 @@ class EnglishNormalizer:
 
     def _expand_number(self, m: str) -> str:
         """
-        This method acts as a preprocessing step for numbers between 1000 and 3000 (same as the original repository, link :
+        This method acts as a preprocessing step for numbers between 1000 and 3000 (same as the original repository,
+        link :
         https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/utils/tokenizer.py#L86)
         """
         num = int(m.group(0))
@@ -190,8 +197,8 @@ class EnglishNormalizer:
 
     def normalize_numbers(self, text: str) -> str:
         """
-        This method is used to normalize numbers within a text such as converting the numbers to words, removing commas,
-        etc.
+        This method is used to normalize numbers within a text such as converting the numbers to words, removing
+        commas, etc.
         """
         text = re.sub(re.compile(r"([0-9][0-9\,]+[0-9])"), self._remove_commas, text)
         text = re.sub(re.compile(r"£([0-9\,]*[0-9]+)"), r"\1 pounds", text)
@@ -217,7 +224,8 @@ class EnglishNormalizer:
 
     def __call__(self, text):
         """
-        Converts text to ascii, numbers / number-like quantities to their spelt-out counterparts and expands abbreviations
+        Converts text to ascii, numbers / number-like quantities to their spelt-out counterparts and expands
+        abbreviations
         """
 
         text = self.convert_to_ascii(text)

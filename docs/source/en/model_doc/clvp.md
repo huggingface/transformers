@@ -67,7 +67,7 @@ Example :
 
 ## ClvpConfig
 
-[[autodoc]] CLVPConfig
+[[autodoc]] ClvpConfig
     - from_sub_model_configs
 
 ## ClvpEncoderConfig

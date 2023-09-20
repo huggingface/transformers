@@ -17,10 +17,12 @@
 Weights conversion script for Clvp
 """
 
-import os
-import torch
 import argparse
+import os
+
+import torch
 from huggingface_hub import hf_hub_download
+
 from transformers import ClvpConfig, ClvpModelForConditionalGeneration
 
 
@@ -88,8 +90,7 @@ def convert_encoder_weights(original_weights):
             present_index = updated_key.split(".")[4]
             updated_index = update_index(int(present_index))
             updated_key = updated_key.replace(
-                f"transformer.attn_layers.layers.{present_index}",
-                f"transformer.attn_layers.layers.{updated_index}"
+                f"transformer.attn_layers.layers.{present_index}", f"transformer.attn_layers.layers.{updated_index}"
             )
 
         for k, v in CLVP_ENCODERS_MAPPING.items():
@@ -124,8 +125,9 @@ def convert_decoder_weights(original_weights):
             index = updated_key.split(".")[2]
             attr = updated_key.split(".")[-1]
 
-            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.out_proj.{attr}"] = \
-            original_weights[updated_key].squeeze(-1).T
+            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.out_proj.{attr}"] = (
+                original_weights[updated_key].squeeze(-1).T
+            )
             continue
 
         if "attn.bias" in updated_key or "attn.masked_bias" in updated_key or "text_head" in updated_key:
@@ -142,27 +144,37 @@ def convert_decoder_weights(original_weights):
             index = updated_key.split(".")[2]
             sub_dim = dim // 16
 
-            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.q_proj.{attr}"] = \
-                torch.concatenate([*[slice1[i * sub_dim: (i + 1) * sub_dim] for i in range(0, 16, 3)],
-                                   *[slice2[i * sub_dim: (i + 1) * sub_dim] for i in range(2, 16, 3)],
-                                   *[slice3[i * sub_dim: (i + 1) * sub_dim] for i in range(1, 14, 3)],
-                                   ], axis=0)
-            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.k_proj.{attr}"] = \
-                torch.concatenate([*[slice1[i * sub_dim: (i + 1) * sub_dim] for i in range(1, 14, 3)],
-                                   *[slice2[i * sub_dim: (i + 1) * sub_dim] for i in range(0, 16, 3)],
-                                   *[slice3[i * sub_dim: (i + 1) * sub_dim] for i in range(2, 16, 3)],
-                                   ], axis=0)
-            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.v_proj.{attr}"] = \
-                torch.concatenate([*[slice1[i * sub_dim: (i + 1) * sub_dim] for i in range(2, 16, 3)],
-                                   *[slice2[i * sub_dim: (i + 1) * sub_dim] for i in range(1, 14, 3)],
-                                   *[slice3[i * sub_dim: (i + 1) * sub_dim] for i in range(0, 16, 3)],
-                                   ], axis=0)
+            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.q_proj.{attr}"] = torch.concatenate(
+                [
+                    *[slice1[i * sub_dim : (i + 1) * sub_dim] for i in range(0, 16, 3)],
+                    *[slice2[i * sub_dim : (i + 1) * sub_dim] for i in range(2, 16, 3)],
+                    *[slice3[i * sub_dim : (i + 1) * sub_dim] for i in range(1, 14, 3)],
+                ],
+                axis=0,
+            )
+            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.k_proj.{attr}"] = torch.concatenate(
+                [
+                    *[slice1[i * sub_dim : (i + 1) * sub_dim] for i in range(1, 14, 3)],
+                    *[slice2[i * sub_dim : (i + 1) * sub_dim] for i in range(0, 16, 3)],
+                    *[slice3[i * sub_dim : (i + 1) * sub_dim] for i in range(2, 16, 3)],
+                ],
+                axis=0,
+            )
+            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.v_proj.{attr}"] = torch.concatenate(
+                [
+                    *[slice1[i * sub_dim : (i + 1) * sub_dim] for i in range(2, 16, 3)],
+                    *[slice2[i * sub_dim : (i + 1) * sub_dim] for i in range(1, 14, 3)],
+                    *[slice3[i * sub_dim : (i + 1) * sub_dim] for i in range(0, 16, 3)],
+                ],
+                axis=0,
+            )
             continue
         if "proj_out" in updated_key:
             index = updated_key.split(".")[2]
             attr = updated_key.split(".")[-1]
             converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.out_proj.{attr}"] = original_weights[
-                updated_key].squeeze(-1)
+                updated_key
+            ].squeeze(-1)
             continue
 
         for k, v in CLVP_DECODER_MAPPING.items():
@@ -177,18 +189,19 @@ def convert_decoder_weights(original_weights):
 def _download(url: str, root: str):
     repo_id = f"{url.split('/')[3]}/{url.split('/')[4]}"
     filename = f"{url.split('/')[-2]}/{url.split('/')[-1]}"
-    hf_hub_download(repo_id=repo_id,
-                    filename=filename,
-                    force_filename=root,
-                    local_dir_use_symlinks=False,
-                    )
+    hf_hub_download(
+        repo_id=repo_id,
+        filename=filename,
+        force_filename=root,
+        local_dir_use_symlinks=False,
+    )
 
 
 def convert_clvp_weights(checkpoint_path, pytorch_dump_folder_path):
     converted_checkpoint = {}
 
     for each_model_name, each_model_url in _MODELS.items():
-        each_model_path = os.path.join(checkpoint_path, each_model_url.split('/')[-1])
+        each_model_path = os.path.join(checkpoint_path, each_model_url.split("/")[-1])
         if not os.path.exists(each_model_path):
             print(f"\n{each_model_name} was not found! Downloading it to {each_model_path}")
             _download(url=each_model_url, root=each_model_path)
@@ -213,8 +226,15 @@ def convert_clvp_weights(checkpoint_path, pytorch_dump_folder_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
-    parser.add_argument("--checkpoint_path", type=str, help="Path to the folder of downloaded checkpoints. (Please enter full path)")
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model. (Please enter full path)")
+    parser.add_argument(
+        "--checkpoint_path", type=str, help="Path to the folder of downloaded checkpoints. (Please enter full path)"
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model. (Please enter full path)",
+    )
     args = parser.parse_args()
 
     convert_clvp_weights(args.checkpoint_path, args.pytorch_dump_folder_path)

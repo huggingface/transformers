@@ -23,7 +23,6 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-
 from .number_normalizer import EnglishNormalizer
 
 
@@ -300,9 +299,12 @@ class ClvpTokenizer(PreTrainedTokenizer):
         if is_split_into_words or add_prefix_space:
             text = " " + text
 
-        # don't apply preprocessing on unique_no_split_tokens
         text = self.tokens_trie.split(text)
-        text = " ".join([self.normalizer(sub_text) if sub_text not in self.unique_no_split_tokens else sub_text for sub_text in text])
+        unique_no_split_tokens = [token.content for token in self._added_tokens_decoder.values()]
+        # ignore normalizing `unique_no_split_tokens`.
+        text = " ".join(
+            [self.normalizer(sub_text) if sub_text not in unique_no_split_tokens else sub_text for sub_text in text]
+        )
 
         return (text, kwargs)
 
@@ -313,7 +315,10 @@ class ClvpTokenizer(PreTrainedTokenizer):
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
             )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
-            bpe_tokens.extend("[SPACE]" if bpe_token == "\u0120" and "[SPACE]" in self.encoder.keys() else bpe_token for bpe_token in self.bpe(token).split(" "))
+            bpe_tokens.extend(
+                "[SPACE]" if bpe_token == "\u0120" and "[SPACE]" in self.encoder.keys() else bpe_token
+                for bpe_token in self.bpe(token).split(" ")
+            )
 
         return bpe_tokens
 
@@ -327,15 +332,78 @@ class ClvpTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
-        text = text.replace(" ", "")
-        text = text.replace("[SPACE]", " ")
-        text = text.replace("[STOP]", "")
-        text = text.replace(self.unk_token, "")
+        return text
 
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = None,
+        spaces_between_special_tokens: bool = True,
+        **kwargs,
+    ) -> str:
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+
+        if spaces_between_special_tokens:
+            logger.warning_once(
+                "spaces_between_special_tokens is deprecated and will be removed in transformers v5. It was adding spaces between `added_tokens`, not special tokens, "
+                "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
+            )
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+        legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
+            token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
+        }
+        sub_texts = []
+        current_sub_text = []
+        for token in filtered_tokens:
+            if skip_special_tokens and token in self.all_special_ids:
+                continue
+            if token in legacy_added_tokens:
+                if current_sub_text:
+                    string = self.convert_tokens_to_string(current_sub_text)
+                    if len(string) > 0:
+                        sub_texts.append(string)
+                    current_sub_text = []
+                sub_texts.append(token)
+            else:
+                current_sub_text.append(token)
+
+        if current_sub_text:
+            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+
+        if spaces_between_special_tokens:
+            text = " ".join(sub_texts)
+        else:
+            text = "".join(sub_texts)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
+
+        text = self.postprocess(text)
+
+        if clean_up_tokenization_spaces:
+            clean_text = self.clean_up_tokenization(text)
+            return clean_text
+        else:
+            return text
+
+    def postprocess(self, text):
+        text = "".join(text)
+        text = (
+            text.replace("[SPACE]", " ")
+            .replace("[STOP]", "")
+            .replace(self.unk_token, "")
+            .replace("   ", " ")
+            .replace("  ", " ")
+        )
         return text
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary
@@ -367,4 +435,3 @@ class ClvpTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
-

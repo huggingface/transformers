@@ -23,9 +23,9 @@ from ...utils import (
 _import_structure = {
     "configuration_clvp": [
         "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ClvpEncoderConfig",
-        "ClvpDecoderConfig",
         "ClvpConfig",
+        "ClvpDecoderConfig",
+        "ClvpEncoderConfig",
     ],
     "feature_extraction_clvp": ["ClvpFeatureExtractor"],
     "processing_clvp": ["ClvpProcessor"],
@@ -53,9 +53,9 @@ else:
 if TYPE_CHECKING:
     from .configuration_clvp import (
         CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ClvpEncoderConfig,
-        ClvpDecoderConfig,
         ClvpConfig,
+        ClvpDecoderConfig,
+        ClvpEncoderConfig,
     )
     from .feature_extraction_clvp import ClvpFeatureExtractor
     from .processing_clvp import ClvpProcessor
@@ -69,12 +69,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_clvp import (
             CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ClvpModelForConditionalGeneration,
+            ClvpDecoder,
+            ClvpEncoder,
             ClvpForCausalLM,
             ClvpModel,
+            ClvpModelForConditionalGeneration,
             ClvpPreTrainedModel,
-            ClvpEncoder,
-            ClvpDecoder,
         )
 
 else:

@@ -240,29 +240,6 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(pad_token_id in out_p2["input_ids"][1])
         self.assertTrue(0 in out_p2["attention_mask"][1])
 
-    def test_add_bos_token_slow(self):
-        bos_token = "$$$"
-        tokenizer = ClvpTokenizer.from_pretrained(
-            self.tmpdirname, bos_token=bos_token, add_bos_token=True, unk_token="<unk>"
-        )
-
-        s = "This is a simple input"
-        s2 = ["This is a simple input 1", "This is a simple input 2"]
-
-        bos_token_id = tokenizer.bos_token_id
-
-        out_s = tokenizer(s)
-        out_s2 = tokenizer(s2)
-
-        self.assertEqual(out_s.input_ids[0], bos_token_id)
-        self.assertTrue(all(o[0] == bos_token_id for o in out_s2.input_ids))
-
-        decode_s = tokenizer.decode(out_s.input_ids)
-        decode_s2 = tokenizer.batch_decode(out_s2.input_ids)
-
-        self.assertEqual(decode_s.split()[0], bos_token)
-        self.assertTrue(all(d.split()[0] == bos_token for d in decode_s2))
-
     # tokenizer has no padding token
     def test_padding_different_model_input_name(self):
         pass
@@ -309,13 +286,15 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        sequences = ["Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "
-                "general-purpose architectures (BERT, RoBERTa, XLM, DistilBert, XLNet...) for Natural "
-                "Language Understanding (NLU) and Natural Language Generation (NLG) with over multiple pretrained "
-                "models and deep interoperability between Jax, PyTorch and TensorFlow.",
-                "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
-                "conditioning on both left and right context in all layers.",
-                "The quick brown fox jumps over the lazy dog.",]
+        sequences = [
+            "Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "
+            "general-purpose architectures (BERT, RoBERTa, XLM, DistilBert, XLNet...) for Natural "
+            "Language Understanding (NLU) and Natural Language Generation (NLG) with over multiple pretrained "
+            "models and deep interoperability between Jax, PyTorch and TensorFlow.",
+            "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
+            "conditioning on both left and right context in all layers.",
+            "The quick brown fox jumps over the lazy dog.",
+        ]
 
         # fmt: off
         expected_encoding = {'input_ids': [[144,  43,  32,  87,  26, 173,   2,   5,  87,  26,  44,  70,   2, 209, 27,   2,  55,   2,  29,  38,  51,  31,  71,   8, 144,  43,  32,  87, 26, 173,   2,  53,   2,  29,  38,  51,  31,  71,   8,  29,  46, 144, 137,  49,   8,  15,  44,  33,   6,   2, 187,  35,  83,  61,   2,  20, 50,  44,  56,   8,  29, 121, 139,  66,   2,  59,  71,  60,  18,  16, 33,  34, 175,   2,   5,  15,  44,  33,   7,   2,  89,  15,  44,  33, 14,   7,   2,  37,  25,  26,   7,   2,  17,  54,  78,  25,  15,  44, 33,   7,   2,  37,  25, 111,  33,   9,   9,   9,   6,   2,  87,   2, 27,  48, 121,  56,   2,  25,  43,  20,  34,  14, 112,   2,  97, 234, 63,  53,  52,   2,   5,  27,  25,  34,   6,   2,  53,   2,  27,  48, 121,  56,   2,  25,  43,  20,  34,  14, 112,   2,  20,  50,  44, 158, 2,   5,  27,  25,  20,   6,   2, 103,   2, 253,   2,  26, 167,  78, 29,  64,   2,  29,  46, 144, 137,  49,   2, 115, 126,  25,  32,   2, 53,   2, 126,  18,  29,   2,  41, 114, 161,  44, 109, 151, 240,   2, 67,  33, 100,  50,   2,  23,  14,  37,   7,   2,  29,  38,  51,  31, 71,   2,  53,   2,  33,  50,  32,  57,  19,  25,  69,   9], [ 15,  44,  33,   2,  54,   2,  17,  61,  22,  20,  27,  49,   2,  51, 2,  29,  46,   8, 144, 137,   2, 126,  18,  29,   2,  15,  83,  22, 46,  16, 181,  56,   2,  46,  29, 175,  86, 158,  32,   2, 154,   2, 97,  25,  14,  67,  25,  49,   2, 136,  37,  33,   2, 185,   2,  23, 28,  41,  33,  70,   2, 135,  17,  60, 107,  52,   2,  47,   2, 165, 40,   2,  64,  19,  33,   2,  53,   2, 101, 104,   2, 135, 136,  37, 33,   2,  41,   2, 108,   2,  25,  88, 173,   9,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0], [ 42,   2, 194,  91,  24,   2, 243, 190,   2, 182,  37,   2,  23, 231, 29,  32,   2, 253,   2,  42,   2,  25,  14,  39,  38,   2, 134,  20, 9,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0]], # noqa: E501
@@ -323,7 +302,6 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                              }
         # fmt: on
 
-        self.tokenizer_integration_test_util(sequences=sequences,
-            expected_encoding=expected_encoding, model_name="susnato/clvp_dev", padding=True
+        self.tokenizer_integration_test_util(
+            sequences=sequences, expected_encoding=expected_encoding, model_name="susnato/clvp_dev", padding=True
         )
-

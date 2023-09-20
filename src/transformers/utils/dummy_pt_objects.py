@@ -1943,28 +1943,42 @@ class CLIPSegVisionModel(metaclass=DummyObject):
 CLVP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class CLVPAutoRegressiveLMHeadModel(metaclass=DummyObject):
+class ClvpDecoder(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CLVPModel(metaclass=DummyObject):
+class ClvpEncoder(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CLVPPreTrainedModel(metaclass=DummyObject):
+class ClvpForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CLVPTransformerWithProjection(metaclass=DummyObject):
+class ClvpModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ClvpModelForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ClvpPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -38,8 +38,8 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts log-mel-spectrogram features from raw speech using a custom numpy implementation of the `Short Time
-    Fourier Transform` which should match pytorch's `torch.stft` equivalent.
+    This class extracts log-mel-spectrogram features from raw speech using a custom numpy implementation of the `Short
+    Time Fourier Transform` which should match pytorch's `torch.stft` equivalent.
 
     Args:
         feature_size (`int`, *optional*, defaults to 80):

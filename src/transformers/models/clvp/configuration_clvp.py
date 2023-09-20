@@ -37,10 +37,10 @@ CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ClvpEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClvpEncoder`]. It is used to instantiate a Clvp text
-    or Clvp speech encoder according to the specified arguments. Instantiating a configuration with the defaults will
-    yield a similar configuration to that of the encoder of the Clvp [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev)
-    architecture.
+    This is the configuration class to store the configuration of a [`ClvpEncoder`]. It is used to instantiate a Clvp
+    text or Clvp speech encoder according to the specified arguments. Instantiating a configuration with the defaults
+    will yield a similar configuration to that of the encoder of the Clvp
+    [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -134,11 +134,9 @@ class ClvpEncoderConfig(PretrainedConfig):
         self.summary_type = summary_type
 
     @classmethod
-    def from_pretrained(cls,
-                        pretrained_model_name_or_path: Union[str, os.PathLike],
-                        config_type: str = "text_config",
-                        **kwargs
-                        ) -> "PretrainedConfig":
+    def from_pretrained(
+        cls, pretrained_model_name_or_path: Union[str, os.PathLike], config_type: str = "text_config", **kwargs
+    ) -> "PretrainedConfig":
         cls._set_token_in_kwargs(kwargs)
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -146,8 +144,9 @@ class ClvpEncoderConfig(PretrainedConfig):
         # make sure to have the config_type be either "text_config" or "speech_config"
         # this is to make sure that we can load only text or speech configs from the nested ClvpConfig.
         if config_type not in ["text_config", "speech_config"]:
-            raise ValueError(f"We can only load either 'text_config' or 'speech_config' but you are trying to load"
-                             f"{config_type}")
+            raise ValueError(
+                f"We can only load either 'text_config' or 'speech_config' but you are trying to load" f"{config_type}"
+            )
 
         # get the text config dict if we are loading from ClvpConfig
         if config_dict.get("model_type") == "clvp":
@@ -162,12 +161,12 @@ class ClvpEncoderConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class  ClvpDecoderConfig(PretrainedConfig):
+class ClvpDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClvpDecoder`]. It is used to
-    instantiate a Clvp Decoder Model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Decoder
-    part of the Clvp [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
+    This is the configuration class to store the configuration of a [`ClvpDecoder`]. It is used to instantiate a Clvp
+    Decoder Model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Decoder part of the Clvp
+    [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -283,7 +282,7 @@ class  ClvpDecoderConfig(PretrainedConfig):
         feature_size=80,
         use_attention_bias=True,
         initializer_factor=1.0,
-        decoder_fixing_codes = [83, 45, 45, 248],
+        decoder_fixing_codes=[83, 45, 45, 248],
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -356,10 +355,10 @@ class  ClvpDecoderConfig(PretrainedConfig):
 
 class ClvpConfig(PretrainedConfig):
     r"""
-    [`ClvpConfig`] is the configuration class to store the configuration of a [`ClvpModelForConditionalGeneration`].
-    It is used to instantiate a Clvp model according to the specified arguments, defining the text model, speech model
-    and decoder model configs. Instantiating a configuration with the defaults will yield a similar configuration to
-    that of the Clvp [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
+    [`ClvpConfig`] is the configuration class to store the configuration of a [`ClvpModelForConditionalGeneration`]. It
+    is used to instantiate a Clvp model according to the specified arguments, defining the text model, speech model and
+    decoder model configs. Instantiating a configuration with the defaults will yield a similar configuration to that
+    of the Clvp [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -427,9 +426,7 @@ class ClvpConfig(PretrainedConfig):
 
         if decoder_config is None:
             decoder_config = {}
-            logger.info(
-                "`decoder_config` is `None`. initializing the `ClvpDecoderConfig` with default values."
-            )
+            logger.info("`decoder_config` is `None`. initializing the `ClvpDecoderConfig` with default values.")
 
         self.text_config = ClvpEncoderConfig(**text_config)
         self.speech_config = ClvpEncoderConfig(**speech_config)

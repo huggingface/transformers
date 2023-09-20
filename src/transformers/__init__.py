@@ -258,9 +258,9 @@ _import_structure = {
     ],
     "models.clvp": [
         "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ClvpEncoderConfig",
-        "ClvpDecoderConfig",
         "ClvpConfig",
+        "ClvpDecoderConfig",
+        "ClvpEncoderConfig",
         "ClvpFeatureExtractor",
         "ClvpProcessor",
         "ClvpTokenizer",
@@ -1470,12 +1470,12 @@ else:
     _import_structure["models.clvp"].extend(
         [
             "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ClvpModelForConditionalGeneration",
+            "ClvpDecoder",
+            "ClvpEncoder",
             "ClvpForCausalLM",
             "ClvpModel",
+            "ClvpModelForConditionalGeneration",
             "ClvpPreTrainedModel",
-            "ClvpEncoder",
-            "ClvpDecoder",
         ]
     )
     _import_structure["models.codegen"].extend(
@@ -4468,9 +4468,9 @@ if TYPE_CHECKING:
     )
     from .models.clvp import (
         CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ClvpEncoderConfig,
-        ClvpDecoderConfig,
         ClvpConfig,
+        ClvpDecoderConfig,
+        ClvpEncoderConfig,
         ClvpFeatureExtractor,
         ClvpProcessor,
         ClvpTokenizer,
@@ -5547,12 +5547,12 @@ if TYPE_CHECKING:
         )
         from .models.clvp import (
             CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ClvpModelForConditionalGeneration,
+            ClvpDecoder,
+            ClvpEncoder,
             ClvpForCausalLM,
             ClvpModel,
+            ClvpModelForConditionalGeneration,
             ClvpPreTrainedModel,
-            ClvpEncoder,
-            ClvpDecoder,
         )
         from .models.codegen import (
             CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST,

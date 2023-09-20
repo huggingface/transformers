@@ -15,16 +15,15 @@
 """ Testing suite for the PyTorch Clvp model. """
 
 
-import gc
 import copy
+import gc
 import tempfile
 import unittest
 
 import datasets
 import numpy as np
 
-from transformers import AdaptiveEmbedding
-from transformers import ClvpEncoderConfig, ClvpDecoderConfig, ClvpConfig
+from transformers import AdaptiveEmbedding, ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -45,7 +44,7 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import ClvpEncoder, ClvpDecoder, ClvpModel, ClvpForCausalLM, ClvpModelForConditionalGeneration
+    from transformers import ClvpEncoder, ClvpForCausalLM, ClvpModel, ClvpModelForConditionalGeneration
     from transformers.models.clvp.modeling_clvp import CLVP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 from transformers import ClvpFeatureExtractor, ClvpTokenizer
@@ -87,7 +86,6 @@ class ClvpEncoderTester:
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.scope = scope
-        self.num_hidden_states_types = 0
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
 
@@ -304,7 +302,7 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        if return_labels and model_class==ClvpForCausalLM:
+        if return_labels and model_class == ClvpForCausalLM:
             inputs_dict["labels"] = torch.zeros(
                 [self.model_tester.batch_size, self.model_tester.seq_length], device=torch_device
             ).long()
@@ -390,9 +388,7 @@ class ClvpModelForConditionalGenerationTester:
         with torch.no_grad():
             result = model(input_ids=input_ids, input_features=input_features, attention_mask=attention_mask)
 
-        self.parent.assertEqual(
-            result.logits_per_speech.shape, (2, self.clvp_encoder_tester.batch_size)
-        )
+        self.parent.assertEqual(result.logits_per_speech.shape, (2, self.clvp_encoder_tester.batch_size))
         self.parent.assertEqual(result.logits_per_text.shape, (self.clvp_encoder_tester.batch_size, 2))
 
     def prepare_config_and_inputs_for_common(self):
@@ -405,7 +401,6 @@ class ClvpModelForConditionalGenerationTester:
             "return_loss": False,
         }
         return config, inputs_dict
-
 
 
 @require_torch
@@ -431,7 +426,9 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="ClvpModelForConditionalGeneration does not output Hidden_states, since it has two types(text and speech) of them")
+    @unittest.skip(
+        reason="ClvpModelForConditionalGeneration does not output Hidden_states, since it has two types(text and speech) of them"
+    )
     def test_hidden_states_output(self):
         pass
 
@@ -464,7 +461,9 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         model = ClvpModelForConditionalGeneration(config)
-        self.assertIsInstance(model.get_conditioning_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
+        self.assertIsInstance(
+            model.get_conditioning_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding)
+        )
         self.assertIsInstance(model.get_text_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
         self.assertIsInstance(model.get_speech_encoder_input_embeddings(), (torch.nn.Embedding, AdaptiveEmbedding))
 
@@ -520,6 +519,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
 # Since Clvp has a lot of different models connected with each other it's better to test each of them individually along
 # with a test_full_model_integration. If the model breaks in future, it could be of a great help to identify the broken part.
+
 
 @slow
 @require_torch
