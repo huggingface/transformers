@@ -272,7 +272,7 @@ class BrosModelTester:
 
 
 @require_torch
-class BrosModelTest(ModelTesterMixin, unittest.TestCase):
+class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_mismatched_shapes = False
@@ -288,6 +288,11 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = () if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": BrosModel, "token-classification": BrosForTokenClassification}
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = BrosModelTester(self)
