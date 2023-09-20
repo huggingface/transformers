@@ -221,6 +221,7 @@ _import_structure = {
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
     ],
+    "models.bros": ["BROS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BrosConfig", "BrosProcessor"],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -589,6 +590,7 @@ _import_structure = {
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
+    "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
     "models.vits": [
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VitsConfig",
@@ -985,6 +987,7 @@ else:
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
     _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
+    _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
@@ -1354,6 +1357,17 @@ else:
             "BridgeTowerForMaskedLM",
             "BridgeTowerModel",
             "BridgeTowerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bros"].extend(
+        [
+            "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BrosForTokenClassification",
+            "BrosModel",
+            "BrosPreTrainedModel",
+            "BrosProcessor",
+            "BrosSpadeEEForTokenClassification",
+            "BrosSpadeELForTokenClassification",
         ]
     )
     _import_structure["models.camembert"].extend(
@@ -2947,6 +2961,13 @@ else:
             "VitDetPreTrainedModel",
         ]
     )
+    _import_structure["models.vitmatte"].extend(
+        [
+            "VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitMatteForImageMatting",
+            "VitMattePreTrainedModel",
+        ]
+    )
     _import_structure["models.vits"].extend(
         [
             "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4326,6 +4347,7 @@ if TYPE_CHECKING:
         BridgeTowerTextConfig,
         BridgeTowerVisionConfig,
     )
+    from .models.bros import BROS_PRETRAINED_CONFIG_ARCHIVE_MAP, BrosConfig, BrosProcessor
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
@@ -4665,6 +4687,7 @@ if TYPE_CHECKING:
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
+    from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
     from .models.vits import (
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
@@ -5019,6 +5042,7 @@ if TYPE_CHECKING:
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.vit_hybrid import ViTHybridImageProcessor
+        from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
 
@@ -5340,6 +5364,15 @@ if TYPE_CHECKING:
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,
+        )
+        from .models.bros import (
+            BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BrosForTokenClassification,
+            BrosModel,
+            BrosPreTrainedModel,
+            BrosProcessor,
+            BrosSpadeEEForTokenClassification,
+            BrosSpadeELForTokenClassification,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6629,6 +6662,11 @@ if TYPE_CHECKING:
             VitDetBackbone,
             VitDetModel,
             VitDetPreTrainedModel,
+        )
+        from .models.vitmatte import (
+            VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitMatteForImageMatting,
+            VitMattePreTrainedModel,
         )
         from .models.vits import (
             VITS_PRETRAINED_MODEL_ARCHIVE_LIST,

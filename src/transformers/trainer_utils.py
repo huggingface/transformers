@@ -215,7 +215,7 @@ class BestRun(NamedTuple):
     """
 
     run_id: str
-    objective: float
+    objective: Union[float, List[float]]
     hyperparameters: Dict[str, Any]
     run_summary: Optional[Any] = None
 

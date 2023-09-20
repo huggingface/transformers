@@ -951,6 +951,17 @@ class Trainer:
             optimizer = self.optimizer
         self.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
+    def get_decay_parameter_names(self, model) -> List[str]:
+        """
+        Get all parameter names that weight decay will be applied to
+
+        Note that some models implement their own layernorm instead of calling nn.LayerNorm, weight decay could still
+        apply to those modules since this function only filter out instance of nn.LayerNorm
+        """
+        decay_parameters = get_parameter_names(model, ALL_LAYERNORM_LAYERS)
+        decay_parameters = [name for name in decay_parameters if "bias" not in name]
+        return decay_parameters
+
     def create_optimizer(self):
         """
         Setup the optimizer.
@@ -961,8 +972,7 @@ class Trainer:
         opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
         if self.optimizer is None:
-            decay_parameters = get_parameter_names(opt_model, ALL_LAYERNORM_LAYERS)
-            decay_parameters = [name for name in decay_parameters if "bias" not in name]
+            decay_parameters = self.get_decay_parameter_names(opt_model)
             optimizer_grouped_parameters = [
                 {
                     "params": [
@@ -1233,10 +1243,11 @@ class Trainer:
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            trial.report(self.objective, step)
-            if trial.should_prune():
-                self.callback_handler.on_train_end(self.args, self.state, self.control)
-                raise optuna.TrialPruned()
+            if not trial.study._is_multi_objective():
+                trial.report(self.objective, step)
+                if trial.should_prune():
+                    self.callback_handler.on_train_end(self.args, self.state, self.control)
+                    raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
             from ray import tune
 
@@ -1689,9 +1700,6 @@ class Trainer:
 
         model = self._wrap_model(self.model_wrapped)
 
-        if (is_sagemaker_mp_enabled() or self.is_fsdp_enabled) and resume_from_checkpoint is not None:
-            self._load_from_checkpoint(resume_from_checkpoint, model)
-
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
         # Fairscale Sharded DDP, FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
@@ -1717,7 +1725,7 @@ class Trainer:
                 )
 
         if self.is_fsdp_enabled:
-            self.model = model
+            self.model = self.model_wrapped = model
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -1727,16 +1735,20 @@ class Trainer:
         if self.is_deepspeed_enabled:
             self.deepspeed = self.model_wrapped
 
-        # deepspeed ckpt loading
-        if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
-            deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
+        # ckpt loading
+        if resume_from_checkpoint is not None:
+            if self.is_deepspeed_enabled:
+                deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
+            elif is_sagemaker_mp_enabled() or self.is_fsdp_enabled:
+                self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped)
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
         # important: at this point:
         # self.model         is the Transformers Model
-        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
+        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model),
+        # FSDP(Transformers Model), Dynamo Optimized Module(Transformers Model) etc.
 
         # Train!
         logger.info("***** Running training *****")
@@ -2077,17 +2089,28 @@ class Trainer:
         weights_index_file = os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
         safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
+        is_fsdp_ckpt = os.path.isdir(resume_from_checkpoint) and any(
+            WEIGHTS_NAME.split(".")[0] in folder_name
+            for folder_name in os.listdir(resume_from_checkpoint)
+            if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
+        )
 
-        if not any(
-            os.path.isfile(f)
-            for f in [
-                weights_file,
-                safe_weights_file,
-                weights_index_file,
-                safe_weights_index_file,
-                adapter_weights_file,
-                adapter_safe_weights_file,
-            ]
+        if is_fsdp_ckpt and not self.is_fsdp_enabled:
+            raise ValueError(f"Checkpoint found at {resume_from_checkpoint} is only supported when using PyTorch FSDP")
+
+        if not (
+            any(
+                os.path.isfile(f)
+                for f in [
+                    weights_file,
+                    safe_weights_file,
+                    weights_index_file,
+                    safe_weights_index_file,
+                    adapter_weights_file,
+                    adapter_safe_weights_file,
+                ]
+            )
+            or is_fsdp_ckpt
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2103,7 +2126,7 @@ class Trainer:
                     "yield to errors or unwanted behaviors."
                 )
 
-        if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file):
+        if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file) or is_fsdp_ckpt:
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
@@ -2173,6 +2196,10 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if self.is_deepspeed_enabled:
             deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
+        elif self.is_fsdp_enabled:
+            load_result = load_fsdp_model(
+                self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
+            )
         elif (
             os.path.exists(best_model_path)
             or os.path.exists(best_safe_model_path)
@@ -2200,10 +2227,6 @@ class Trainer:
 
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
-            elif self.is_fsdp_enabled:
-                load_result = load_fsdp_model(
-                    self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
-                )
             else:
                 if is_peft_available() and isinstance(model, PeftModel):
                     # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
@@ -2492,6 +2515,14 @@ class Trainer:
             else (
                 os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
                 or os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME_BIN))
+                or (
+                    os.path.isdir(checkpoint)
+                    and any(
+                        OPTIMIZER_NAME_BIN.split(".")[0] in folder_name
+                        for folder_name in os.listdir(checkpoint)
+                        if os.path.isdir(os.path.join(checkpoint, folder_name))
+                    )
+                )
             )
         )
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
@@ -2563,11 +2594,11 @@ class Trainer:
         hp_space: Optional[Callable[["optuna.Trial"], Dict[str, float]]] = None,
         compute_objective: Optional[Callable[[Dict[str, float]], float]] = None,
         n_trials: int = 20,
-        direction: str = "minimize",
+        direction: Union[str, List[str]] = "minimize",
         backend: Optional[Union["str", HPSearchBackend]] = None,
         hp_name: Optional[Callable[["optuna.Trial"], str]] = None,
         **kwargs,
-    ) -> BestRun:
+    ) -> Union[BestRun, List[BestRun]]:
         """
         Launch an hyperparameter search using `optuna` or `Ray Tune` or `SigOpt`. The optimized quantity is determined
         by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
@@ -2592,9 +2623,12 @@ class Trainer:
                 method. Will default to [`~trainer_utils.default_compute_objective`].
             n_trials (`int`, *optional*, defaults to 100):
                 The number of trial runs to test.
-            direction (`str`, *optional*, defaults to `"minimize"`):
-                Whether to optimize greater or lower objects. Can be `"minimize"` or `"maximize"`, you should pick
-                `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or several metrics.
+            direction (`str` or `List[str]`, *optional*, defaults to `"minimize"`):
+                If it's single objective optimization, direction is `str`, can be `"minimize"` or `"maximize"`, you
+                should pick `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or
+                several metrics. If it's multi objectives optimization, direction is `List[str]`, can be List of
+                `"minimize"` and `"maximize"`, you should pick `"minimize"` when optimizing the validation loss,
+                `"maximize"` when optimizing one or several metrics.
             backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
                 The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
                 on which one is installed. If all are installed, will default to optuna.
@@ -2610,8 +2644,9 @@ class Trainer:
                 - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
 
         Returns:
-            [`trainer_utils.BestRun`]: All the information about the best run. Experiment summary can be found in
-            `run_summary` attribute for Ray backend.
+            [`trainer_utils.BestRun` or `List[trainer_utils.BestRun]`]: All the information about the best run or best
+            runs for multi-objective optimization. Experiment summary can be found in `run_summary` attribute for Ray
+            backend.
         """
         if backend is None:
             backend = default_hp_search_backend()
@@ -3249,7 +3284,7 @@ class Trainer:
             if (
                 args.eval_accumulation_steps is not None
                 and (step + 1) % args.eval_accumulation_steps == 0
-                and self.accelerator.sync_gradients
+                and (self.accelerator.sync_gradients or version.parse(accelerate_version) > version.parse("0.20.3"))
             ):
                 if losses_host is not None:
                     losses = nested_numpify(losses_host)

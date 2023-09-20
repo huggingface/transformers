@@ -1297,8 +1297,9 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
 
 class ExponentialDecayLengthPenalty(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] that exponentially increases the score of the eos_token_id after regulation_start has been
-    reached.
+    [`LogitsProcessor`] that exponentially increases the score of the `eos_token_id` after `start_index` has been
+    reached. This allows generating shorter sequences without having a hard cutoff, allowing the `eos_token` to be
+    predicted in a meaningful position.
 
     Args:
         exponential_decay_length_penalty (`tuple(int, float)`):
@@ -1308,6 +1309,51 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         input_ids_seq_length (`int`):
             The length of the input sequence.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+
+    >>> set_seed(1)
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+    >>> text = "Just wanted to let you know, I"
+    >>> inputs = tokenizer(text, return_tensors="pt")
+
+    >>> # Generate sequences without exponential penalty. We want short sentences, so we limit max_length=30
+    >>> # see that the answer tends to end abruptly
+    >>> outputs = model.generate(**inputs, do_sample=True, temperature=0.9, max_length=30, pad_token_id=50256)
+    >>> print(tokenizer.batch_decode(outputs)[0])
+    Just wanted to let you know, I'm not even a lawyer. I'm a man. I have no real knowledge of politics. I'm a
+
+    >>> # Generate sequences with exponential penalty, we add the exponential_decay_length_penalty=(start_index, decay_factor)
+    >>> # We see that instead of cutting at max_tokens, the output comes to an end before (at 25 tokens) and with more meaning
+    >>> # What happens is that starting from `start_index` the EOS token score will be increased by decay_factor exponentially
+    >>> outputs = model.generate(
+    ...     **inputs,
+    ...     do_sample=True,
+    ...     temperature=0.9,
+    ...     max_length=30,
+    ...     pad_token_id=50256,
+    ...     exponential_decay_length_penalty=(15, 1.6),
+    ... )
+    >>> print(tokenizer.batch_decode(outputs)[0])
+    Just wanted to let you know, I've got a very cool t-shirt educating people on how to use the Internet<|endoftext|>
+
+    >>> # Generate sequences with smaller decay_factor, still improving the hard cutoff mid-sentence
+    >>> outputs = model.generate(
+    ...     **inputs,
+    ...     do_sample=True,
+    ...     temperature=0.9,
+    ...     max_length=30,
+    ...     pad_token_id=50256,
+    ...     exponential_decay_length_penalty=(15, 1.05),
+    ... )
+    >>> print(tokenizer.batch_decode(outputs)[0])
+    Just wanted to let you know, I've been working on it for about 6 months and now it's in Alpha.<|endoftext|>
+    ```
     """
 
     def __init__(
@@ -1327,7 +1373,9 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         cur_len = input_ids.shape[-1]
         if cur_len > self.regulation_start:
             for i in self.eos_token_id:
-                scores[:, i] = scores[:, i] * pow(self.regulation_factor, cur_len - self.regulation_start)
+                penalty_idx = cur_len - self.regulation_start
+                # To support negative logits we compute the penalty of the absolute value and add to the original logit
+                scores[:, i] = scores[:, i] + torch.abs(scores[:, i]) * (pow(self.regulation_factor, penalty_idx) - 1)
         return scores
 
 

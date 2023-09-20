@@ -61,9 +61,11 @@ from .utils import (
     is_essentia_available,
     is_faiss_available,
     is_flax_available,
+    is_fsdp_available,
     is_ftfy_available,
     is_ipex_available,
     is_jieba_available,
+    is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
     is_librosa_available,
@@ -315,6 +317,15 @@ def require_accelerate(test_case):
     return unittest.skipUnless(is_accelerate_available(), "test requires accelerate")(test_case)
 
 
+def require_fsdp(test_case, min_version: str = "1.12.0"):
+    """
+    Decorator marking a test that requires fsdp. These tests are skipped when fsdp isn't installed.
+    """
+    return unittest.skipUnless(is_fsdp_available(min_version), f"test requires torch version >= {min_version}")(
+        test_case
+    )
+
+
 def require_safetensors(test_case):
     """
     Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
@@ -334,6 +345,13 @@ def require_jieba(test_case):
     Decorator marking a test that requires jieba. These tests are skipped when jieba isn't installed.
     """
     return unittest.skipUnless(is_jieba_available(), "test requires jieba")(test_case)
+
+
+def require_jinja(test_case):
+    """
+    Decorator marking a test that requires jinja. These tests are skipped when jinja isn't installed.
+    """
+    return unittest.skipUnless(is_jinja_available(), "test requires jinja")(test_case)
 
 
 def require_tf2onnx(test_case):

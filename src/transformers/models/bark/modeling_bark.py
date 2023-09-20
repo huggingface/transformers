@@ -1086,20 +1086,56 @@ class BarkFineModel(BarkPreTrainedModel):
             ]
         )
         self.set_input_embeddings(new_embeddings_list)
-        new_num_tokens = [embed.weight.shape[0] for embed in new_embeddings_list]
+        new_num_tokens = new_embeddings_list[0].weight.shape[0]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head_list = self.get_output_embeddings()
             new_lm_head_list = nn.ModuleList(
-                [
-                    self._get_resized_lm_head(old_lm_head, new_num_token)
-                    for old_lm_head, new_num_token in zip(old_lm_head_list, new_num_tokens)
-                ]
+                [self._get_resized_lm_head(old_lm_head, new_num_tokens) for old_lm_head in old_lm_head_list]
             )
             self.set_output_embeddings(new_lm_head_list)
 
         return self.get_input_embeddings()
+
+    def resize_token_embeddings(
+        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
+    ) -> nn.Embedding:
+        """
+        Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
+
+        Takes care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
+
+        Arguments:
+            new_num_tokens (`int`, *optional*):
+                The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
+                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the embedding matrix to a multiple of the provided value.
+
+                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
+                details about this, or help on choosing the correct value for resizing, refer to this guide:
+                https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+
+        Return:
+            `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
+        """
+        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        if new_num_tokens is None and pad_to_multiple_of is None:
+            return model_embeds
+
+        # Update base model and current model config
+        self.config.output_vocab_size = model_embeds[0].weight.shape[0]
+        self.config.vocab_size = model_embeds[0].weight.shape[0]
+        self.output_vocab_size = model_embeds[0].weight.shape[0]
+        self.vocab_size = model_embeds[0].weight.shape[0]
+
+        # Tie weights again if needed
+        self.tie_weights()
+
+        return model_embeds
 
     def tie_weights(self):
         """

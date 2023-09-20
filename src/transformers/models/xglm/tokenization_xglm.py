@@ -137,17 +137,6 @@ class XGLMTokenizer(PreTrainedTokenizer):
             word for word in madeup_words if word not in kwargs["additional_special_tokens"]
         ]
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
-
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -169,6 +158,17 @@ class XGLMTokenizer(PreTrainedTokenizer):
         self.fairseq_tokens_to_ids.update(madeup_words)
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
 
     def __getstate__(self):
         state = self.__dict__.copy()

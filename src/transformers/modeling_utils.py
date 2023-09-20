@@ -120,11 +120,15 @@ _init_weights = True
 
 
 def is_fsdp_enabled():
-    return torch.distributed.is_initialized() and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+    return (
+        torch.distributed.is_available()
+        and torch.distributed.is_initialized()
+        and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+    )
 
 
 def is_fsdp_enabled_and_dist_rank_0():
-    return is_fsdp_enabled() and torch.distributed.get_rank() == 0
+    return is_fsdp_enabled() and int(os.environ.get("LOCAL_RANK", -1)) == 0
 
 
 if is_sagemaker_mp_enabled():
@@ -985,12 +989,33 @@ class ModuleUtilsMixin:
             embedding_param_names = [
                 f"{name}.weight" for name, module_type in self.named_modules() if isinstance(module_type, nn.Embedding)
             ]
-            non_embedding_parameters = [
+            total_parameters = [
                 parameter for name, parameter in self.named_parameters() if name not in embedding_param_names
             ]
-            return sum(p.numel() for p in non_embedding_parameters if p.requires_grad or not only_trainable)
         else:
-            return sum(p.numel() for p in self.parameters() if p.requires_grad or not only_trainable)
+            total_parameters = list(self.parameters())
+
+        total_numel = []
+        is_loaded_in_4bit = getattr(self, "is_loaded_in_4bit", False)
+        if is_loaded_in_4bit:
+            if is_bitsandbytes_available():
+                import bitsandbytes as bnb
+            else:
+                raise ValueError(
+                    "bitsandbytes is not installed but it seems that the model has been loaded in 4bit precision, something went wrong"
+                    " make sure to install bitsandbytes with `pip install bitsandbytes`."
+                )
+
+        for param in total_parameters:
+            if param.requires_grad or not only_trainable:
+                # For 4bit models, we need to multiply the number of parameters by 2 as half of the parameters are
+                # used for the 4bit quantization (uint8 tensors are stored)
+                if is_loaded_in_4bit and isinstance(param, bnb.nn.Params4bit):
+                    total_numel.append(param.numel() * 2)
+                else:
+                    total_numel.append(param.numel())
+
+        return sum(total_numel)
 
     def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]) -> int:
         """
@@ -1411,7 +1436,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
                 returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
             pad_to_multiple_of (`int`, *optional*):
-                If set will pad the embedding matrix to a multiple of the provided value.
+                If set will pad the embedding matrix to a multiple of the provided value.If `new_num_tokens` is set to
+                `None` will just pad the embedding to a multiple of `pad_to_multiple_of`.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
@@ -1422,12 +1448,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
         model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        if new_num_tokens is None:
+        if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
         # Update base model and current model config
-        self.config.vocab_size = new_num_tokens
-        self.vocab_size = new_num_tokens
+        self.config.vocab_size = model_embeds.weight.shape[0]
+        self.vocab_size = model_embeds.weight.shape[0]
 
         # Tie weights again if needed
         self.tie_weights()
@@ -1483,7 +1509,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 vectors from the end. If not provided or `None`, just returns a pointer to the input tokens
                 `torch.nn.Embedding` module of the model without doing anything.
             pad_to_multiple_of (`int`, *optional*):
-                If set will pad the embedding matrix to a multiple of the provided value.
+                If set will pad the embedding matrix to a multiple of the provided value. If `new_num_tokens` is set to
+                `None` will just pad the embedding to a multiple of `pad_to_multiple_of`.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
@@ -1503,7 +1530,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             if new_num_tokens is None:
                 new_num_tokens = old_embeddings.weight.shape[0]
-            new_num_tokens = ((new_num_tokens // pad_to_multiple_of) + 1) * pad_to_multiple_of
+            new_num_tokens = ((new_num_tokens + pad_to_multiple_of - 1) // pad_to_multiple_of) * pad_to_multiple_of
         else:
             logger.warning(
                 "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
@@ -1523,7 +1550,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
 
-        if old_num_tokens == new_num_tokens:
+        if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
             return old_embeddings
 
         if not isinstance(old_embeddings, nn.Embedding):
@@ -1533,40 +1560,34 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f" {nn.Embedding}."
             )
 
+        # Build new embeddings
+
+        # When using DeepSpeed ZeRO-3, we shouldn't create new embeddings with DeepSpeed init
+        # because the shape of the new embedding layer is used across various modeling files
+        # as well as to update config vocab size. Shape will be 0 when using DeepSpeed init leading
+        # to errors when training.
+        new_embeddings = nn.Embedding(
+            new_num_tokens,
+            old_embedding_dim,
+            device=old_embeddings.weight.device,
+            dtype=old_embeddings.weight.dtype,
+        )
+
+        # initialize all new embeddings (in particular added tokens)
+        self._init_weights(new_embeddings)
+
+        # Copy token embeddings from the previous weights
+
         # numbers of tokens to copy
         n = min(old_num_tokens, new_num_tokens)
+
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
-                # Build new embeddings
-                new_embeddings = nn.Embedding(
-                    new_num_tokens,
-                    old_embedding_dim,
-                    device=old_embeddings.weight.device,
-                    dtype=old_embeddings.weight.dtype,
-                )
-
             params = [old_embeddings.weight, new_embeddings.weight]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
-                # initialize all new embeddings (in particular added tokens)
-                self._init_weights(new_embeddings)
-
-                # Copy token embeddings from the previous weights
                 new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
         else:
-            # Build new embeddings
-            new_embeddings = nn.Embedding(
-                new_num_tokens,
-                old_embedding_dim,
-                device=old_embeddings.weight.device,
-                dtype=old_embeddings.weight.dtype,
-            )
-
-            # initialize all new embeddings (in particular added tokens)
-            self._init_weights(new_embeddings)
-
-            # Copy token embeddings from the previous weights
             new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
         return new_embeddings
@@ -1609,7 +1630,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
             )
 
-        if old_num_tokens == new_num_tokens:
+        if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
             return old_lm_head
 
         if not isinstance(old_lm_head, nn.Linear):
@@ -1623,50 +1644,49 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
         has_new_lm_head_bias = old_lm_head.bias is not None
 
+        # When using DeepSpeed ZeRO-3, we shouldn't create new embeddings with DeepSpeed init
+        # because the shape of the new embedding layer is used across various modeling files
+        # as well as to update config vocab size. Shape will be 0 when using DeepSpeed init leading
+        # to errors when training.
+        new_lm_head = nn.Linear(
+            *new_lm_head_shape,
+            bias=has_new_lm_head_bias,
+            device=old_lm_head.weight.device,
+            dtype=old_lm_head.weight.dtype,
+        )
+
+        # initialize new lm head (in particular added tokens)
+        self._init_weights(new_lm_head)
+
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
-        # XXX: put the long block of code in a wrapper
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
-                new_lm_head = nn.Linear(
-                    *new_lm_head_shape,
-                    bias=has_new_lm_head_bias,
-                    device=old_lm_head.weight.device,
-                    dtype=old_lm_head.weight.dtype,
-                )
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
-                self._init_weights(new_lm_head)
-                # Copy old lm head weights to new lm head
-                if not transposed:
-                    new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
-                else:
-                    new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
-
-                # Copy bias weights to new lm head
-                if has_new_lm_head_bias:
-                    new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
+                self._copy_lm_head_original_to_resized(
+                    new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
+                )
         else:
-            new_lm_head = nn.Linear(
-                *new_lm_head_shape,
-                bias=has_new_lm_head_bias,
-                device=old_lm_head.weight.device,
-                dtype=old_lm_head.weight.dtype,
+            self._copy_lm_head_original_to_resized(
+                new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
-            self._init_weights(new_lm_head)
-            # Copy old lm head weights to new lm head
-            if not transposed:
-                new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
-            else:
-                new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
-
-            # Copy bias weights to new lm head
-            if has_new_lm_head_bias:
-                new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
 
         return new_lm_head
+
+    def _copy_lm_head_original_to_resized(
+        self, new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
+    ):
+        # Copy old lm head weights to new lm head
+        if not transposed:
+            new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
+        else:
+            new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
+
+        # Copy bias weights to new lm head
+        if has_new_lm_head_bias:
+            new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         raise NotImplementedError(
@@ -1725,6 +1745,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
         self.apply(partial(self._set_gradient_checkpointing, value=True))
 
+        if getattr(self, "_hf_peft_config_loaded", False):
+            # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True
+            # we do it also on PEFT: https://github.com/huggingface/peft/blob/85013987aa82aa1af3da1236b6902556ce3e483e/src/peft/peft_model.py#L334
+            # When training with PEFT, only LoRA layers will have requires grad set to True, but the output of frozen layers need to propagate
+            # the gradients to make sure the gradient flows.
+            self.enable_input_require_grads()
+
     def gradient_checkpointing_disable(self):
         """
         Deactivates gradient checkpointing for the current model.
@@ -1734,6 +1761,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if self.supports_gradient_checkpointing:
             self.apply(partial(self._set_gradient_checkpointing, value=False))
+
+        if getattr(self, "_hf_peft_config_loaded", False):
+            self.disable_input_require_grads()
 
     @property
     def is_gradient_checkpointing(self) -> bool:
