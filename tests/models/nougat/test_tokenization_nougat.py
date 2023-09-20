@@ -116,8 +116,13 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 class MarkdownCompatibleTest(unittest.TestCase):
     def test_equation_tag(self):
-        input_text = "[Equation 3] (1.618z) \\[Extra Text\\]"
-        excepted_output = "[Equation 3] (1.618z) \\[Extra Text\\]"
+        input_text = "(3.2) \[Equation Text\]"
+        excepted_output = "\[Equation Text \\tag{3.2}\]"
+        self.assertEqual(markdown_compatible(input_text), excepted_output)
+
+    def test_equation_tag_letters(self):
+        input_text = "(18a) \[Equation Text\]"
+        excepted_output = "\[Equation Text \\tag{18a}\]"
         self.assertEqual(markdown_compatible(input_text), excepted_output)
 
     def test_bold_formatting(self):
@@ -133,6 +138,16 @@ class MarkdownCompatibleTest(unittest.TestCase):
     def test_algorithm_code_block(self):
         input_text = "```python\nprint('Hello, world!')\n```"
         expected_output = "```\npython\nprint('Hello, world!')\n```"
+        self.assertEqual(markdown_compatible(input_text), expected_output)
+
+    def test_escape_characters(self):
+        input_text = r"Escaped characters like \n should not be \\[affected\\]"
+        expected_output = r"Escaped characters like \n should not be \\[affected\\]"
+        self.assertEqual(markdown_compatible(input_text), expected_output)
+
+    def test_nested_tags(self):
+        input_text = r"This is a super nested \bm{\bm{\bm{\bm{\bm{bold}}}}} tag."
+        expected_output = r"This is a super nested \mathbf{\mathbf{\mathbf{\mathbf{\mathbf{bold}}}}} tag."
         self.assertEqual(markdown_compatible(input_text), expected_output)
 
 
