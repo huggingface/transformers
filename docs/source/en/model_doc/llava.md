@@ -29,7 +29,8 @@ Checkout all HF friendly Llava models [here](https://huggingface.co/models?searc
 
 Tips:
 
-- Weights for the Llava models can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-7B-hf/)
+- Weights for the Llava 7B can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-7B-hf/)
+- Weights for the Llava 13B can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-13B-hf/)
 - The architecture is very similar to the first Llama, with the addition of Grouped Query Attention (GQA) following this [paper](https://arxiv.org/pdf/2305.13245.pdf)
 
 Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
