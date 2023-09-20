@@ -74,7 +74,7 @@ def markdown_compatible(text: str) -> str:
     text = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M)
     # Replace lines that start with a pattern like \[some text\] (decimal)  with \[[some text] \tag{decimal}\].
     text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.M)
-    # Replace lines that start with a pattern like \[some text\] (1) \[another text\]  with \[[some text] \tag{1}\] [another text].
+    # Replace lines that start with a pattern like \[some text\] (digits) \[another text\]  with \[[some text] \tag{digits}\] [another text].
     text = re.sub(
         r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\) (\\\[.+?\\\])$",
         r"\[\1 \\tag{\2}\] \3",
@@ -86,7 +86,7 @@ def markdown_compatible(text: str) -> str:
     # bold formatting
     text = text.replace(r"\bm{", r"\mathbf{").replace(r"{\\bm ", r"\mathbf{")
     text = re.sub(r"\\mbox{ ?\\boldmath\$(.*?)\$}", r"\\mathbf{\1}", text)
-    # Reformat urls (http, ftp and https only) to markdown 
+    # Reformat urls (http, ftp and https only) to markdown [url](url) clickable format
     text = re.sub(
         r"((?:http|ftp|https):\/\/(?:[\w_-]+(?:(?:\.[\w_-]+)+))(?:[\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-]))",
         r"[\1](\1)",
@@ -416,6 +416,38 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         )
         return text
 
+    def correct_tables(self, generation: str) -> str:
+        """
+        Takes a generated string and fixes tables/tabulars to make them match the markdown format needed.
+
+        Args:
+            generation (str): The generated text to be postprocessed.
+
+        Returns:
+            str: The postprocessed text.
+
+        Example:
+        >>> correct_tables("\\begin{table} \\begin{tabular}{l l}  & \\ \\end{tabular} \\end{table}")
+        "\\begin{table}\n\\begin{tabular}{l l}  & \\ \\end{tabular}\n\\end{table}"
+        """
+        # remove obvious wrong tables
+        for l in generation.split("\n"):
+            if l.count("\\begin{tabular}") > 15 or l.count("\\multicolumn") > 60 or l.count("&") > 400:
+                generation = generation.replace(l, "")
+        # whitespace corrections
+
+        generation = generation.replace("\\begin{table} \\begin{tabular}", "\\begin{table}\n\\begin{tabular}")
+        generation = generation.replace("\\end{tabular} \\end{table}", "\\end{tabular}\n\\end{table}")
+        generation = generation.replace("\\end{table} Tab", "\\end{table}\nTab")
+
+        generation = re.sub(r"(^.+)\\begin{tab", r"\1\n\\begin{tab", generation, flags=re.M)
+
+        # Remove left-aligned empty LaTeX tabular blocks.
+        generation = generation.replace(r"\begin{tabular}{l l}  & \\ \end{tabular}", "")
+        # Remove tabulars with just 2 newline characters.
+        generation = generation.replace("\\begin{tabular}{}\n\n\\end{tabular}", "")
+        return generation
+
     def post_process_single(self, generation: str, fix_markdown: bool = True) -> str:
         """
         Postprocess a single generated text. Regular expressions are taken from the Nougat article authors.
@@ -488,22 +520,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
                 generation += " "
 
         # table corrections
-        # remove obvious wrong tables
-        for l in generation.split("\n"):
-            if l.count("\\begin{tabular}") > 15 or l.count("\\multicolumn") > 60 or l.count("&") > 400:
-                generation = generation.replace(l, "")
-        # whitespace corrections
-
-        generation = generation.replace("\\begin{table} \\begin{tabular}", "\\begin{table}\n\\begin{tabular}")
-        generation = generation.replace("\\end{tabular} \\end{table}", "\\end{tabular}\n\\end{table}")
-        generation = generation.replace("\\end{table} Tab", "\\end{table}\nTab")
-
-        generation = re.sub(r"(^.+)\\begin{tab", r"\1\n\\begin{tab", generation, flags=re.M)
-
-        # Remove left-aligned empty LaTeX tabular blocks.
-        generation = generation.replace(r"\begin{tabular}{l l}  & \\ \end{tabular}", "")
-        # Remove tabulars with just 2 newline characters.
-        generation = generation.replace("\\begin{tabular}{}\n\n\\end{tabular}", "")
+        generation = self.correct_tables(generation)
         # Remove optional, empty square brackets after begin{array}
         generation = generation.replace("\\begin{array}[]{", "\\begin{array}{")
         # Remove empty or malformed LaTeX tabular blocks with 2 or more columns specified, with spaces and ampersands.

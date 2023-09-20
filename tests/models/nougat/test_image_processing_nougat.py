@@ -187,3 +187,4 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_cropped_py = image_processor.crop_margin(image)
         image_cropped_cv2 = image_processor.cv2_crop_margin(image)
         self.assertTrue(np.array_equal(image_cropped_py, image_cropped_cv2))
+        
