@@ -3174,7 +3174,7 @@ class Trainer:
         if self.is_deepspeed_enabled and self.deepspeed is None:
             _, _ = deepspeed_init(self, num_training_steps=0, inference=True)
 
-        model = self._wrap_model(self.model, training=False, dataloader=dataloader)
+        model = self._wrap_model(self.model_wrapped, training=False, dataloader=dataloader)
 
         if len(self.accelerator._models) == 0 and model is self.model:
             model = (
