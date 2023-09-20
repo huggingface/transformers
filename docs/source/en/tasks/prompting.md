@@ -155,9 +155,9 @@ also adding the beginning of the response - `"Sentiment: "`:
 ```python
 >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 >>> prompt = """Classify the text into neutral, negative or positive. 
-    Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
-    Sentiment:
-    """
+... Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
+... Sentiment:
+... """
 
 >>> sequences = pipeline(
 ...     prompt,
@@ -194,9 +194,9 @@ so that output doesn't contain the prompt:
 ```python
 >>> torch.manual_seed(1) # doctest: +IGNORE_RESULT
 >>> prompt = """Return a list of named entities in the text.
-Text: The Golden State Warriors are an American professional basketball team based in San Francisco.
-Named entities:
-"""
+... Text: The Golden State Warriors are an American professional basketball team based in San Francisco.
+... Named entities:
+... """
 
 >>> sequences = pipeline(
 ...     prompt,
@@ -226,9 +226,9 @@ you can write a basic prompt to instruct a model to translate a piece of text fr
 ```python
 >>> torch.manual_seed(2) # doctest: +IGNORE_RESULT
 >>> prompt = """Translate the English text to Italian.
-Text: Sometimes, I've believed as many as six impossible things before breakfast.
-Translation:
-"""
+... Text: Sometimes, I've believed as many as six impossible things before breakfast.
+... Translation:
+... """
 
 >>> sequences = pipeline(
 ...     prompt,
@@ -260,9 +260,9 @@ also be a suitable location for instructions. Typically, it's better to place th
 ```python
 >>> torch.manual_seed(3) # doctest: +IGNORE_RESULT
 >>> prompt = """Permaculture is a design process mimicking the diversity, functionality and resilience of natural ecosystems. The principles and practices are drawn from traditional ecological knowledge of indigenous cultures combined with modern scientific understanding and technological innovations. Permaculture design provides a framework helping individuals and communities develop innovative, creative and effective strategies for meeting basic needs while preparing for and mitigating the projected impacts of climate change.
-Write a summary of the above text.
-Summary:
-"""
+... Write a summary of the above text.
+... Summary:
+... """
 
 >>> sequences = pipeline(
 ...     prompt,
@@ -287,10 +287,10 @@ the leading word or phrase (`"Answer:"`) to nudge the model to start generating 
 ```python
 >>> torch.manual_seed(4) # doctest: +IGNORE_RESULT
 >>> prompt = """Answer the question using the context below.
-Context: Gazpacho is a cold soup and drink made of raw, blended vegetables. Most gazpacho includes stale bread, tomato, cucumbers, onion, bell peppers, garlic, olive oil, wine vinegar, water, and salt. Northern recipes often include cumin and/or pimentón (smoked sweet paprika). Traditionally, gazpacho was made by pounding the vegetables in a mortar with a pestle; this more laborious method is still sometimes used as it helps keep the gazpacho cool and avoids the foam and silky consistency of smoothie versions made in blenders or food processors.
-Question: What modern tool is used to make gazpacho?
-Answer:
-"""
+... Context: Gazpacho is a cold soup and drink made of raw, blended vegetables. Most gazpacho includes stale bread, tomato, cucumbers, onion, bell peppers, garlic, olive oil, wine vinegar, water, and salt. Northern recipes often include cumin and/or pimentón (smoked sweet paprika). Traditionally, gazpacho was made by pounding the vegetables in a mortar with a pestle; this more laborious method is still sometimes used as it helps keep the gazpacho cool and avoids the foam and silky consistency of smoothie versions made in blenders or food processors.
+... Question: What modern tool is used to make gazpacho?
+... Answer:
+... """
 
 >>> sequences = pipeline(
 ...     prompt,
@@ -394,10 +394,10 @@ Here's an example:
 ```python
 >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 >>> prompt = """Text: The first human went into space and orbited the Earth on April 12, 1961.
-Date: 04/12/1961
+... Date: 04/12/1961
 
-Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
-Date:"""
+... Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
+... Date:"""
 
 >>> sequences = pipeline(
 ...     prompt,
