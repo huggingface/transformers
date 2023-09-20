@@ -34,7 +34,6 @@ from .utils.import_utils import (
     requires_backends,
 )
 
-
 if is_vision_available():
     import PIL
 
@@ -760,6 +759,37 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
         return image
 
     image = image.convert("RGB")
+    return image
+
+
+def convert_to_grayscale(
+    image: ImageInput,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> ImageInput:
+    """
+    Converts an image to grayscale format using the NTSC formula.
+    Only support numpy and PIL Image.
+    TODO support torch and tensorflow grayscale conversion
+
+    Args:
+        image (Image):
+            The image to convert.
+    """
+    requires_backends(convert_to_grayscale, ["vision"])
+
+    if isinstance(image, np.ndarray):
+        if input_data_format == ChannelDimension.FIRST or input_data_format == "channels_first":
+            gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+            gray_image = gray_image[None, ...]
+        elif input_data_format == ChannelDimension.LAST or input_data_format == "channels_last":
+            gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+            gray_image = gray_image[..., None]
+        return gray_image
+
+    if not isinstance(image, PIL.Image.Image):
+        return image
+
+    image = image.convert("L")
     return image
 
 

@@ -11,10 +11,21 @@ from ...image_utils import (
     valid_images,
     is_scaled_image,
     infer_channel_dimension_format,
+    ImageInput,
 )
 from ...utils import logging, TensorType
 
 logger = logging.get_logger(__name__)
+
+
+def is_grayscale(
+    image: ImageInput,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+):
+    if input_data_format == ChannelDimension.FIRST or input_data_format == "channels_first":
+        return image.shape[0] == 1
+    elif input_data_format == ChannelDimension.LAST or input_data_format == "channels_last":
+        return image.shape[-1] == 1
 
 
 class SuperPointImageProcessor(BaseImageProcessor):
@@ -62,6 +73,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ):
@@ -89,7 +101,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         return resize(
             image,
             size=resize_size,
-            data_format=ChannelDimension.FIRST,
+            data_format=data_format,
             input_data_format=input_data_format,
             **kwargs,
         )
@@ -187,7 +199,14 @@ class SuperPointImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        images = [convert_to_grayscale(image) for image in images]
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
+        # Checking if image is RGB or grayscale
+        for i in range(len(images)):
+            if not is_grayscale(images[i], input_data_format):
+                images[i] = convert_to_grayscale(images[i], input_data_format=input_data_format)
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
