@@ -35,6 +35,9 @@ if is_levenshtein_available():
 if is_nltk_available():
     import nltk
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 INIT_TOKENIZER_DOCSTRING += """
         tokenizer_object ([`tokenizers.Tokenizer`]):
@@ -450,7 +453,9 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
 
     def post_process_single(self, generation: str, fix_markdown: bool = True) -> str:
         """
-        Postprocess a single generated text. Regular expressions are taken from the Nougat article authors.
+        Postprocess a single generated text. Regular expressions used here are
+        taken directly from the Nougat article authors. These expressions are
+        commented for clarity and tested end-to-end in most cases.
 
         Args:
             generation (str): The generated text to be postprocessed.
@@ -471,7 +476,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         # most likely hallucinated titles
         lines = generation.split("\n")
         if lines[-1].startswith("#") and lines[-1].lstrip("#").startswith(" ") and len(lines) > 1:
-            print("INFO: likely hallucinated title at the end of the page: " + lines[-1])
+            logger.info("Likely hallucinated title at the end of the page: " + lines[-1])
             generation = "\n".join(lines[:-1])
         # obvious repetition detection
         generation = truncate_repetitions(generation)
@@ -529,7 +534,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
             "",
             generation,
         )
-        # Remove lines containing "S.A.B." one or more times.
+        # Remove lines containing "S.A.B." one or more times. Was included in Nougat's code.
         generation = re.sub(r"(\*\*S\. A\. B\.\*\*\n+){2,}", "", generation)
         # Remove markdown-style headers that are incomplete or empty on multiple lines.
         generation = re.sub(r"^#+( [\[\d\w])?$", "", generation, flags=re.M)
