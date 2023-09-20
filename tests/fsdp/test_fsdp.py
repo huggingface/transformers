@@ -79,6 +79,7 @@ if is_torch_available():
     # hack to restore original logging level pre #21700
     get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
 
+require_fsdp_version = require_fsdp
 if is_accelerate_available():
     from accelerate.utils.constants import (
         FSDP_PYTORCH_VERSION,
