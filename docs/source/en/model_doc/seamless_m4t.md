@@ -158,6 +158,7 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 ## SeamlessM4TTokenizer
 
 [[autodoc]] SeamlessM4TTokenizer
+    - __call__
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
@@ -167,16 +168,17 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 ## SeamlessM4TTokenizerFast
 
 [[autodoc]] SeamlessM4TTokenizerFast
-
+    - __call__
 
 ## SeamlessM4TFeatureExtractor
 
 [[autodoc]] SeamlessM4TFeatureExtractor
+    - __call__
 
 ## SeamlessM4TProcessor
 
 [[autodoc]] SeamlessM4TProcessor
-
+    - __call__
 
 ## SeamlessM4TCodeHifiGan
 
