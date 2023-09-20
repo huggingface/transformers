@@ -388,7 +388,12 @@ def text_processor(text: str, config):
     return tokenized_for_encoder, tokenized.attention_mask.bool()
 
 @torch.no_grad()
-def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
+def convert_grounding_dino_checkpoint(
+    model_name: str, 
+    checkpoint_path: str, 
+    pytorch_dump_folder_path: str = None, 
+    push_to_hub: bool = False
+):
     #Define default GroundingDINO configuation
     config = get_grounding_dino_config(model_name)
 
@@ -420,6 +425,7 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
     image_inputs = image_processor(image)
     text_inputs, text_token_mask = text_processor(text, config)
 
+    # Running forward
     outputs = model(
         pixel_values=image_inputs.unsqueeze(0),
         input_ids=text_inputs["input_ids"],
@@ -430,19 +436,17 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
         position_ids=text_inputs["position_ids"],
     )
 
-    print("Finished")
+    if pytorch_dump_folder_path is not None:
+        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
 
-    # if pytorch_dump_folder_path is not None:
-    #     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-    #     model.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
-    #     print(f"Saving image processor to {pytorch_dump_folder_path}")
-    #     image_processor.save_pretrained(pytorch_dump_folder_path)
-
-    # if push_to_hub:
-    #     print(f"Pushing model and image processor for {model_name} to hub")
-    #     model.push_to_hub(f"microsoft/{model_name}")
-    #     image_processor.push_to_hub(f"microsoft/{model_name}")
+    if push_to_hub:
+        print(f"Pushing model and image processor for {model_name} to hub")
+        model.push_to_hub(f"microsoft/{model_name}")
+        image_processor.push_to_hub(f"microsoft/{model_name}")
 
 
 if __name__ == "__main__":
@@ -469,4 +473,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_grounding_dino_checkpoint(args.model_name, args.checkpoint_path)
+    convert_grounding_dino_checkpoint(
+        args.model_name, 
+        args.checkpoint_path, 
+        args.pytorch_dump_folder_path, 
+        args.push_to_hub
+    )
