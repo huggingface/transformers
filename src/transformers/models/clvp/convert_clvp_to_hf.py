@@ -12,363 +12,209 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLVP model checkpoint conversion."""
 
+"""
+Weights conversion script for Clvp
+"""
 
+import os
 import torch
-from tortoise.models.clvp import CLVP
-
-from transformers import CLVPConfig, CLVPModel
-
-
-cfg = CLVPConfig.from_pretrained("susnato/clvp_dev")
-model = CLVPModel(cfg)
-
-# This is the official weights of clvp and autoregressive model and it is downloaded from
-# https://huggingface.co/jbetker/tortoise-tts-v2/blob/main/.models/clvp2.pth
-# https://huggingface.co/jbetker/tortoise-tts-v2/blob/main/.models/autoregressive.pth
-weights_ar = torch.load("./autoregressive.pth")
-weights_clvp = torch.load("./clvp2.pth")
-
-# init the clvp model
-clvp = (
-    CLVP(
-        dim_text=768,
-        dim_speech=768,
-        dim_latent=768,
-        text_enc_depth=20,
-        speech_enc_depth=20,
-        text_heads=12,
-        speech_heads=12,
-        num_text_tokens=256,
-        num_speech_tokens=8192,
-        text_seq_len=350,
-        speech_seq_len=430,
-        use_xformers=True,
-    )
-    .cpu()
-    .eval()
-)
-clvp.load_state_dict(weights_clvp, strict=True)
-clvp.eval()
+import argparse
+from huggingface_hub import hf_hub_download
+from transformers import ClvpConfig, ClvpModelForConditionalGeneration
 
 
-# Define weights for our hf model
-model_weights = {}
+_MODELS = {
+    "clvp": "https://huggingface.co/jbetker/tortoise-tts-v2/blob/main/.models/clvp2.pth",
+    "decoder": "https://huggingface.co/jbetker/tortoise-tts-v2/blob/main/.models/autoregressive.pth",
+}
 
 dim = 1024
-n_heads = 16
 
-# AutoRegressive Model weights
-for i in range(cfg.autoregressive_config.n_layer):
-    w1, w2, w3 = weights_ar[f"gpt.h.{i}.attn.c_attn.weight"].squeeze(-1).T.split(split_size=1024, dim=0)
-    b1, b2, b3 = weights_ar[f"gpt.h.{i}.attn.c_attn.bias"].split(split_size=dim, dim=0)
+CLVP_ENCODERS_MAPPING = {
+    "text_transformer.transformer.attn_layers": "text_encoder_model",
+    "speech_transformer.transformer.attn_layers": "speech_encoder_model",
+    "text_transformer.transformer.norm": "text_encoder_model.final_layer_norm",
+    "speech_transformer.transformer.norm": "speech_encoder_model.final_layer_norm",
+    "to_text_latent": "text_encoder_model.projection",
+    "to_speech_latent": "speech_encoder_model.projection",
+    "text_emb": "text_encoder_model.token_embedding",
+    "speech_emb": "speech_encoder_model.token_embedding",
+    "1.wrap.net.0": "mlp.fc1",
+    "1.wrap.net.3": "mlp.fc2",
+    "1.wrap": "self_attn",
+    "to_out": "out_proj",
+    "to_q": "q_proj",
+    "to_k": "k_proj",
+    "to_v": "v_proj",
+    "temperature": "logit_scale",
+}
 
-    model_weights[f"speech_autoregressive_model.layers.{i}.attn.q_proj.weight"] = w1
-    model_weights[f"speech_autoregressive_model.layers.{i}.attn.q_proj.bias"] = b1
-
-    model_weights[f"speech_autoregressive_model.layers.{i}.attn.k_proj.weight"] = w2
-    model_weights[f"speech_autoregressive_model.layers.{i}.attn.k_proj.bias"] = b2
-
-    model_weights[f"speech_autoregressive_model.layers.{i}.attn.v_proj.weight"] = w3
-    model_weights[f"speech_autoregressive_model.layers.{i}.attn.v_proj.bias"] = b3
-
-    model_weights[f"speech_autoregressive_model.layers.{i}.attn.out_proj.weight"] = (
-        weights_ar[f"gpt.h.{i}.attn.c_proj.weight"].squeeze(-1).T
-    )
-    model_weights[f"speech_autoregressive_model.layers.{i}.attn.out_proj.bias"] = weights_ar[
-        f"gpt.h.{i}.attn.c_proj.bias"
-    ].squeeze(-1)
-
-    model_weights[f"speech_autoregressive_model.layers.{i}.ln_1.bias"] = weights_ar[f"gpt.h.{i}.ln_1.bias"]
-    model_weights[f"speech_autoregressive_model.layers.{i}.ln_1.weight"] = weights_ar[f"gpt.h.{i}.ln_1.weight"]
-    model_weights[f"speech_autoregressive_model.layers.{i}.ln_2.bias"] = weights_ar[f"gpt.h.{i}.ln_2.bias"]
-    model_weights[f"speech_autoregressive_model.layers.{i}.ln_2.weight"] = weights_ar[f"gpt.h.{i}.ln_2.weight"]
-
-    model_weights[f"speech_autoregressive_model.layers.{i}.mlp.c_fc.bias"] = weights_ar[f"gpt.h.{i}.mlp.c_fc.bias"]
-    model_weights[f"speech_autoregressive_model.layers.{i}.mlp.c_fc.weight"] = weights_ar[f"gpt.h.{i}.mlp.c_fc.weight"]
-    model_weights[f"speech_autoregressive_model.layers.{i}.mlp.c_proj.bias"] = weights_ar[f"gpt.h.{i}.mlp.c_proj.bias"]
-    model_weights[f"speech_autoregressive_model.layers.{i}.mlp.c_proj.weight"] = weights_ar[
-        f"gpt.h.{i}.mlp.c_proj.weight"
-    ]
-
-model_weights["speech_autoregressive_model.final_norm.bias"] = weights_ar["final_norm.bias"]
-model_weights["speech_autoregressive_model.final_norm.weight"] = weights_ar["final_norm.weight"]
-model_weights["speech_autoregressive_model.lm_head.bias"] = weights_ar["mel_head.bias"]
-model_weights["speech_autoregressive_model.lm_head.weight"] = weights_ar["mel_head.weight"]
-model_weights["speech_autoregressive_model.layer_norm.bias"] = weights_ar["gpt.ln_f.bias"]
-model_weights["speech_autoregressive_model.layer_norm.weight"] = weights_ar["gpt.ln_f.weight"]
-model_weights["speech_autoregressive_model.position_embeds_layer.weight"] = weights_ar["mel_pos_embedding.emb.weight"]
-model_weights["speech_autoregressive_model.input_embeds_layer.weight"] = weights_ar["mel_embedding.weight"]
+CLVP_DECODER_MAPPING = {
+    "conditioning_encoder.init": "conditioning_encoder.mel_conv",
+    "conditioning_encoder.attn": "conditioning_encoder.mel_attn_blocks",
+    "text_embedding": "conditioning_encoder.text_token_embedding",
+    "text_pos_embedding.emb": "conditioning_encoder.text_position_embedding",
+    "final_norm": "speech_decoder_model.final_norm",
+    "mel_head": "speech_decoder_model.lm_head",
+    "gpt.ln_f": "speech_decoder_model.model.decoder.layer_norm",
+    "mel_embedding": "speech_decoder_model.model.decoder.input_embeds_layer",
+    "mel_pos_embedding.emb": "speech_decoder_model.model.decoder.position_embeds_layer",
+    "gpt.h": "speech_decoder_model.model.decoder.layers",
+}
 
 
-# Conditioning Encoder Model weights
+def update_index(present_index):
+    if present_index % 2 == 0:
+        return int(present_index / 2)
+    else:
+        return int((present_index - 1) / 2)
 
-model_weights["conditioning_encoder.mel_conv.bias"] = weights_ar["conditioning_encoder.init.bias"]
-model_weights["conditioning_encoder.mel_conv.weight"] = weights_ar["conditioning_encoder.init.weight"]
-model_weights["conditioning_encoder.text_position_embedding.weight"] = weights_ar["text_pos_embedding.emb.weight"]
-model_weights["conditioning_encoder.text_token_embedding.weight"] = weights_ar["text_embedding.weight"]
 
-for i in range(6):
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.norm.weight"] = weights_ar[
-        f"conditioning_encoder.attn.{i}.norm.weight"
-    ]
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.norm.bias"] = weights_ar[
-        f"conditioning_encoder.attn.{i}.norm.bias"
-    ]
+def convert_encoder_weights(original_weights):
+    converted_weights = {}
+    original_weights_keys = sorted(original_weights.keys())
+    for original_key in original_weights_keys:
+        updated_key = original_key
+        # for pre_branch_norm1.weight and pre_branch_norm2.weight
+        if "0.0.g" in updated_key:
+            present_index = updated_key.split(".")[4]
+            if int(present_index) % 2 == 0:
+                updated_key = updated_key.replace("0.0.g", "pre_branch_norm1.weight")
+            else:
+                updated_key = updated_key.replace("0.0.g", "pre_branch_norm2.weight")
 
-    w1, w2, w3 = weights_ar[f"conditioning_encoder.attn.{i}.qkv.weight"].squeeze(-1).split(split_size=dim, dim=0)
-    b1, b2, b3 = weights_ar[f"conditioning_encoder.attn.{i}.qkv.bias"].split(split_size=dim, dim=0)
+        if "transformer.attn_layers.layers" in updated_key:
+            present_index = updated_key.split(".")[4]
+            updated_index = update_index(int(present_index))
+            updated_key = updated_key.replace(
+                f"transformer.attn_layers.layers.{present_index}",
+                f"transformer.attn_layers.layers.{updated_index}"
+            )
 
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.q_proj.weight"] = torch.concatenate(
-        [
-            w1[0 * (dim // n_heads) : 1 * (dim // n_heads), :],
-            w1[3 * (dim // n_heads) : 4 * (dim // n_heads), :],
-            w1[6 * (dim // n_heads) : 7 * (dim // n_heads), :],
-            w1[9 * (dim // n_heads) : 10 * (dim // n_heads), :],
-            w1[12 * (dim // n_heads) : 13 * (dim // n_heads), :],
-            w1[15 * (dim // n_heads) : 16 * (dim // n_heads), :],
-            w2[2 * (dim // n_heads) : 3 * (dim // n_heads), :],
-            w2[5 * (dim // n_heads) : 6 * (dim // n_heads), :],
-            w2[8 * (dim // n_heads) : 9 * (dim // n_heads), :],
-            w2[11 * (dim // n_heads) : 12 * (dim // n_heads), :],
-            w2[14 * (dim // n_heads) : 15 * (dim // n_heads), :],
-            w3[1 * (dim // n_heads) : 2 * (dim // n_heads), :],
-            w3[4 * (dim // n_heads) : 5 * (dim // n_heads), :],
-            w3[7 * (dim // n_heads) : 8 * (dim // n_heads), :],
-            w3[10 * (dim // n_heads) : 11 * (dim // n_heads), :],
-            w3[13 * (dim // n_heads) : 14 * (dim // n_heads), :],
-        ],
-        axis=0,
-    )
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.q_proj.bias"] = torch.concatenate(
-        [
-            b1[0 * (dim // n_heads) : 1 * (dim // n_heads)],
-            b1[3 * (dim // n_heads) : 4 * (dim // n_heads)],
-            b1[6 * (dim // n_heads) : 7 * (dim // n_heads)],
-            b1[9 * (dim // n_heads) : 10 * (dim // n_heads)],
-            b1[12 * (dim // n_heads) : 13 * (dim // n_heads)],
-            b1[15 * (dim // n_heads) : 16 * (dim // n_heads)],
-            b2[2 * (dim // n_heads) : 3 * (dim // n_heads)],
-            b2[5 * (dim // n_heads) : 6 * (dim // n_heads)],
-            b2[8 * (dim // n_heads) : 9 * (dim // n_heads)],
-            b2[11 * (dim // n_heads) : 12 * (dim // n_heads)],
-            b2[14 * (dim // n_heads) : 15 * (dim // n_heads)],
-            b3[1 * (dim // n_heads) : 2 * (dim // n_heads)],
-            b3[4 * (dim // n_heads) : 5 * (dim // n_heads)],
-            b3[7 * (dim // n_heads) : 8 * (dim // n_heads)],
-            b3[10 * (dim // n_heads) : 11 * (dim // n_heads)],
-            b3[13 * (dim // n_heads) : 14 * (dim // n_heads)],
-        ],
-        axis=0,
-    )
+        for k, v in CLVP_ENCODERS_MAPPING.items():
+            if k in updated_key:
+                updated_key = updated_key.replace(k, v)
 
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.k_proj.weight"] = torch.concatenate(
-        [
-            w1[1 * (dim // n_heads) : 2 * (dim // n_heads), :],
-            w1[4 * (dim // n_heads) : 5 * (dim // n_heads), :],
-            w1[7 * (dim // n_heads) : 8 * (dim // n_heads), :],
-            w1[10 * (dim // n_heads) : 11 * (dim // n_heads), :],
-            w1[13 * (dim // n_heads) : 14 * (dim // n_heads), :],
-            w2[0 * (dim // n_heads) : 1 * (dim // n_heads), :],
-            w2[3 * (dim // n_heads) : 4 * (dim // n_heads), :],
-            w2[6 * (dim // n_heads) : 7 * (dim // n_heads), :],
-            w2[9 * (dim // n_heads) : 10 * (dim // n_heads), :],
-            w2[12 * (dim // n_heads) : 13 * (dim // n_heads), :],
-            w2[15 * (dim // n_heads) : 16 * (dim // n_heads), :],
-            w3[2 * (dim // n_heads) : 3 * (dim // n_heads), :],
-            w3[5 * (dim // n_heads) : 6 * (dim // n_heads), :],
-            w3[8 * (dim // n_heads) : 9 * (dim // n_heads), :],
-            w3[11 * (dim // n_heads) : 12 * (dim // n_heads), :],
-            w3[14 * (dim // n_heads) : 15 * (dim // n_heads), :],
-        ],
-        axis=0,
-    )
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.k_proj.bias"] = torch.concatenate(
-        [
-            b1[1 * (dim // n_heads) : 2 * (dim // n_heads)],
-            b1[4 * (dim // n_heads) : 5 * (dim // n_heads)],
-            b1[7 * (dim // n_heads) : 8 * (dim // n_heads)],
-            b1[10 * (dim // n_heads) : 11 * (dim // n_heads)],
-            b1[13 * (dim // n_heads) : 14 * (dim // n_heads)],
-            b2[0 * (dim // n_heads) : 1 * (dim // n_heads)],
-            b2[3 * (dim // n_heads) : 4 * (dim // n_heads)],
-            b2[6 * (dim // n_heads) : 7 * (dim // n_heads)],
-            b2[9 * (dim // n_heads) : 10 * (dim // n_heads)],
-            b2[12 * (dim // n_heads) : 13 * (dim // n_heads)],
-            b2[15 * (dim // n_heads) : 16 * (dim // n_heads)],
-            b3[2 * (dim // n_heads) : 3 * (dim // n_heads)],
-            b3[5 * (dim // n_heads) : 6 * (dim // n_heads)],
-            b3[8 * (dim // n_heads) : 9 * (dim // n_heads)],
-            b3[11 * (dim // n_heads) : 12 * (dim // n_heads)],
-            b3[14 * (dim // n_heads) : 15 * (dim // n_heads)],
-        ],
-        axis=0,
-    )
+        converted_weights[updated_key] = original_weights.pop(original_key)
 
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.v_proj.weight"] = torch.concatenate(
-        [
-            w1[2 * (dim // n_heads) : 3 * (dim // n_heads), :],
-            w1[5 * (dim // n_heads) : 6 * (dim // n_heads), :],
-            w1[8 * (dim // n_heads) : 9 * (dim // n_heads), :],
-            w1[11 * (dim // n_heads) : 12 * (dim // n_heads), :],
-            w1[14 * (dim // n_heads) : 15 * (dim // n_heads), :],
-            w2[1 * (dim // n_heads) : 2 * (dim // n_heads), :],
-            w2[4 * (dim // n_heads) : 5 * (dim // n_heads), :],
-            w2[7 * (dim // n_heads) : 8 * (dim // n_heads), :],
-            w2[10 * (dim // n_heads) : 11 * (dim // n_heads), :],
-            w2[13 * (dim // n_heads) : 14 * (dim // n_heads), :],
-            w3[0 * (dim // n_heads) : 1 * (dim // n_heads), :],
-            w3[3 * (dim // n_heads) : 4 * (dim // n_heads), :],
-            w3[6 * (dim // n_heads) : 7 * (dim // n_heads), :],
-            w3[9 * (dim // n_heads) : 10 * (dim // n_heads), :],
-            w3[12 * (dim // n_heads) : 13 * (dim // n_heads), :],
-            w3[15 * (dim // n_heads) : 16 * (dim // n_heads), :],
-        ],
-        axis=0,
-    )
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.v_proj.bias"] = torch.concatenate(
-        [
-            b1[2 * (dim // n_heads) : 3 * (dim // n_heads)],
-            b1[5 * (dim // n_heads) : 6 * (dim // n_heads)],
-            b1[8 * (dim // n_heads) : 9 * (dim // n_heads)],
-            b1[11 * (dim // n_heads) : 12 * (dim // n_heads)],
-            b1[14 * (dim // n_heads) : 15 * (dim // n_heads)],
-            b2[1 * (dim // n_heads) : 2 * (dim // n_heads)],
-            b2[4 * (dim // n_heads) : 5 * (dim // n_heads)],
-            b2[7 * (dim // n_heads) : 8 * (dim // n_heads)],
-            b2[10 * (dim // n_heads) : 11 * (dim // n_heads)],
-            b2[13 * (dim // n_heads) : 14 * (dim // n_heads)],
-            b3[0 * (dim // n_heads) : 1 * (dim // n_heads)],
-            b3[3 * (dim // n_heads) : 4 * (dim // n_heads)],
-            b3[6 * (dim // n_heads) : 7 * (dim // n_heads)],
-            b3[9 * (dim // n_heads) : 10 * (dim // n_heads)],
-            b3[12 * (dim // n_heads) : 13 * (dim // n_heads)],
-            b3[15 * (dim // n_heads) : 16 * (dim // n_heads)],
-        ],
-        axis=0,
-    )
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.out_proj.weight"] = weights_ar[
-        f"conditioning_encoder.attn.{i}.proj_out.weight"
-    ].squeeze(-1)
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.out_proj.bias"] = weights_ar[
-        f"conditioning_encoder.attn.{i}.proj_out.bias"
-    ].squeeze(-1)
+    return converted_weights
 
-# Transformer Encoder Models weights
 
-for i in range(cfg.text_config.num_hidden_layers):
-    ## text model
-    model_weights.update(
-        {
-            f"text_model.transformer.encoder.layers.{i}.self_attn.k_proj.weight": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_k.weight"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.self_attn.v_proj.weight": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_v.weight"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.self_attn.q_proj.weight": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_q.weight"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.self_attn.out_proj.weight": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_out.weight"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.self_attn.out_proj.bias": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_out.bias"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.mlp.fc1.proj.weight": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.1.wrap.net.0.proj.weight"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.mlp.fc1.proj.bias": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.1.wrap.net.0.proj.bias"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.mlp.fc2.weight": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.1.wrap.net.3.weight"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.mlp.fc2.bias": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.1.wrap.net.3.bias"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.pre_branch_norm1.gain": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{2 * i}.0.0.g"
-            ],
-            f"text_model.transformer.encoder.layers.{i}.pre_branch_norm2.gain": weights_clvp[
-                f"text_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.0.0.g"
-            ],
-        }
-    )
+def convert_decoder_weights(original_weights):
+    converted_weights = {}
+    original_weights_keys = sorted(original_weights.keys())
+    for original_key in original_weights_keys:
+        updated_key = original_key
 
-for i in range(cfg.speech_config.num_hidden_layers):
-    ## speech model
-    model_weights.update(
-        {
-            f"speech_model.transformer.encoder.layers.{i}.self_attn.k_proj.weight": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_k.weight"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.self_attn.v_proj.weight": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_v.weight"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.self_attn.q_proj.weight": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_q.weight"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.self_attn.out_proj.weight": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_out.weight"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.self_attn.out_proj.bias": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{2 * i}.1.wrap.to_out.bias"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.mlp.fc1.proj.weight": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.1.wrap.net.0.proj.weight"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.mlp.fc1.proj.bias": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.1.wrap.net.0.proj.bias"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.mlp.fc2.weight": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.1.wrap.net.3.weight"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.mlp.fc2.bias": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.1.wrap.net.3.bias"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.pre_branch_norm1.gain": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{2 * i}.0.0.g"
-            ],
-            f"speech_model.transformer.encoder.layers.{i}.pre_branch_norm2.gain": weights_clvp[
-                f"speech_transformer.transformer.attn_layers.layers.{(2 * i) + 1}.0.0.g"
-            ],
-        }
-    )
+        # for decoder attention
+        if "attn.c_attn" in updated_key:
+            attr = updated_key.split(".")[-1]
+            if attr == "weight":
+                slice1, slice2, slice3 = original_weights[updated_key].squeeze(-1).T.split(split_size=dim, dim=0)
+            else:
+                slice1, slice2, slice3 = original_weights[updated_key].split(split_size=dim, dim=0)
+            index = updated_key.split(".")[2]
+            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.q_proj.{attr}"] = slice1
+            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.k_proj.{attr}"] = slice2
+            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.v_proj.{attr}"] = slice3
+            continue
 
-## for text
-# inv_freq(rotary embedding)
-model_weights["text_model.transformer.encoder.rotary_pos_emb.inv_freq"] = weights_clvp[
-    "text_transformer.transformer.attn_layers.rotary_pos_emb.inv_freq"
-]
-# norm
-model_weights["text_model.transformer.final_layer_norm.weight"] = weights_clvp[
-    "text_transformer.transformer.norm.weight"
-]
-model_weights["text_model.transformer.final_layer_norm.bias"] = weights_clvp["text_transformer.transformer.norm.bias"]
-# word embedding
-model_weights["text_model.transformer.token_embedding.weight"] = weights_clvp["text_emb.weight"]
-# projection
-model_weights["text_model.projection.weight"] = weights_clvp["to_text_latent.weight"]
+        if "attn.c_proj" in updated_key:
+            index = updated_key.split(".")[2]
+            attr = updated_key.split(".")[-1]
 
-model_weights["logit_scale"] = weights_clvp["temperature"]
+            converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.out_proj.{attr}"] = \
+            original_weights[updated_key].squeeze(-1).T
+            continue
 
-## for speech
-# inv_freq(rotary embedding)
-model_weights["speech_model.transformer.encoder.rotary_pos_emb.inv_freq"] = weights_clvp[
-    "speech_transformer.transformer.attn_layers.rotary_pos_emb.inv_freq"
-]
-# norm
-model_weights["speech_model.transformer.final_layer_norm.weight"] = weights_clvp[
-    "speech_transformer.transformer.norm.weight"
-]
-model_weights["speech_model.transformer.final_layer_norm.bias"] = weights_clvp[
-    "speech_transformer.transformer.norm.bias"
-]
-# word embedding
-model_weights["speech_model.transformer.token_embedding.weight"] = weights_clvp["speech_emb.weight"]
-# projection
-model_weights["speech_model.projection.weight"] = weights_clvp["to_speech_latent.weight"]
+        if "attn.bias" in updated_key or "attn.masked_bias" in updated_key or "text_head" in updated_key:
+            original_weights.pop(updated_key)
+            continue
 
-model.load_state_dict(model_weights, strict=True)
+        # conditional encoder attention
+        if "qkv" in updated_key:
+            attr = updated_key.split(".")[-1]
+            if attr == "weight":
+                slice1, slice2, slice3 = original_weights[updated_key].squeeze(-1).split(split_size=dim, dim=0)
+            else:
+                slice1, slice2, slice3 = original_weights[updated_key].split(split_size=dim, dim=0)
+            index = updated_key.split(".")[2]
+            sub_dim = dim // 16
+
+            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.q_proj.{attr}"] = \
+                torch.concatenate([*[slice1[i * sub_dim: (i + 1) * sub_dim] for i in range(0, 16, 3)],
+                                   *[slice2[i * sub_dim: (i + 1) * sub_dim] for i in range(2, 16, 3)],
+                                   *[slice3[i * sub_dim: (i + 1) * sub_dim] for i in range(1, 14, 3)],
+                                   ], axis=0)
+            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.k_proj.{attr}"] = \
+                torch.concatenate([*[slice1[i * sub_dim: (i + 1) * sub_dim] for i in range(1, 14, 3)],
+                                   *[slice2[i * sub_dim: (i + 1) * sub_dim] for i in range(0, 16, 3)],
+                                   *[slice3[i * sub_dim: (i + 1) * sub_dim] for i in range(2, 16, 3)],
+                                   ], axis=0)
+            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.v_proj.{attr}"] = \
+                torch.concatenate([*[slice1[i * sub_dim: (i + 1) * sub_dim] for i in range(2, 16, 3)],
+                                   *[slice2[i * sub_dim: (i + 1) * sub_dim] for i in range(1, 14, 3)],
+                                   *[slice3[i * sub_dim: (i + 1) * sub_dim] for i in range(0, 16, 3)],
+                                   ], axis=0)
+            continue
+        if "proj_out" in updated_key:
+            index = updated_key.split(".")[2]
+            attr = updated_key.split(".")[-1]
+            converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.out_proj.{attr}"] = original_weights[
+                updated_key].squeeze(-1)
+            continue
+
+        for k, v in CLVP_DECODER_MAPPING.items():
+            if k in updated_key:
+                updated_key = updated_key.replace(k, v)
+
+        converted_weights[updated_key] = original_weights.pop(original_key)
+
+    return converted_weights
+
+
+def _download(url: str, root: str):
+    repo_id = f"{url.split('/')[3]}/{url.split('/')[4]}"
+    filename = f"{url.split('/')[-2]}/{url.split('/')[-1]}"
+    hf_hub_download(repo_id=repo_id,
+                    filename=filename,
+                    force_filename=root,
+                    local_dir_use_symlinks=False,
+                    )
+
+
+def convert_clvp_weights(checkpoint_path, pytorch_dump_folder_path):
+    converted_checkpoint = {}
+
+    for each_model_name, each_model_url in _MODELS.items():
+        each_model_path = os.path.join(checkpoint_path, each_model_url.split('/')[-1])
+        if not os.path.exists(each_model_path):
+            print(f"\n{each_model_name} was not found! Downloading it to {each_model_path}")
+            _download(url=each_model_url, root=each_model_path)
+
+        if each_model_name == "clvp":
+            clvp_checkpoint = torch.load(each_model_path, map_location="cpu")
+        else:
+            decoder_checkpoint = torch.load(each_model_path, map_location="cpu")
+
+    # Converting the weights
+    converted_checkpoint.update(**convert_encoder_weights(clvp_checkpoint))
+    converted_checkpoint.update(**convert_decoder_weights(decoder_checkpoint))
+
+    config = ClvpConfig.from_pretrained("susnato/clvp_dev")
+    model = ClvpModelForConditionalGeneration(config)
+
+    model.load_state_dict(converted_checkpoint, strict=True)
+    model.save_pretrained(pytorch_dump_folder_path)
+    print(f"Model saved at {pytorch_dump_folder_path}!")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # # Required parameters
+    parser.add_argument("--checkpoint_path", type=str, help="Path to the folder of downloaded checkpoints. (Please enter full path)")
+    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model. (Please enter full path)")
+    args = parser.parse_args()
+
+    convert_clvp_weights(args.checkpoint_path, args.pytorch_dump_folder_path)
