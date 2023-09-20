@@ -200,7 +200,7 @@ class TvpImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    def pad(
+    def pad_image(
         self,
         image: np.ndarray,
         pad_size: Dict[str, int] = None,
@@ -306,7 +306,7 @@ class TvpImageProcessor(BaseImageProcessor):
             )
 
         if do_pad:
-            image = self.pad(
+            image = self.pad_image(
                 image=image,
                 pad_size=pad_size,
                 constant_values=constant_values,

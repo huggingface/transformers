@@ -809,6 +809,7 @@ class TvpIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L456
 class TvpOutputLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
