@@ -1005,9 +1005,9 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         )
         attention_output = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
         hidden_states = hidden_states + attention_output
-        residual = hidden_states
-
         hidden_states = self.layer_norm_before(hidden_states)
+
+        residual = hidden_states
         hidden_states = self.activation(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
@@ -1426,7 +1426,7 @@ class GroundingDINOEncoderLayer(nn.Module):
 
         (vision_features, vision_deformable_attn) = self.deformable_layer(
             hidden_states=vision_features,
-            attention_mask=key_padding_mask,
+            attention_mask=~key_padding_mask,
             position_embeddings=vision_position_embedding,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
@@ -1517,9 +1517,10 @@ class GroundingDINODecoderLayer(nn.Module):
         residual = hidden_states
 
         # Self Attention
+        q = k = self.with_pos_embed(hidden_states, position_embeddings)
         hidden_states, self_attn_weights = self.self_attn(
-            query=self.with_pos_embed(hidden_states, position_embeddings),
-            key=self.with_pos_embed(hidden_states, position_embeddings),
+            query=q,
+            key=k,
             value=hidden_states,
             attn_mask=self_attn_mask,
             average_attn_weights=False
@@ -1825,9 +1826,6 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        #TODO check if this is necessary according to original implementation
-        vision_features = nn.functional.dropout(vision_features, p=self.dropout, training=self.training)
 
         reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=vision_features.device)
 
