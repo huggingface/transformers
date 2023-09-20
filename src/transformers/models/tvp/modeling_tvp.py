@@ -12,6 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""PyTorch Tvp Model"""
+
 import math
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
@@ -21,17 +23,67 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
+from ...utils import logging
 from .configuration_tvp import TvpConfig
 
+
+logger = logging.get_logger(__name__)
 
 TVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Intel/tvp-base",
     "Intel/tvp-base-ANet",
     # See all Tvp models at https://huggingface.co/models?filter=tvp
 ]
+
+
+TVP_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`TvpConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+TVP_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
+            IDs?](../glossary#input-ids)
+
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`TvpImageProcessor`]. See [`TvpImageProcessor.__call__`]
+            for details.
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 @dataclass
@@ -185,7 +237,6 @@ class TvpVisionBatchNorm2d(nn.Module):
         self.register_buffer("bias", torch.zeros(num_features))
         self.register_buffer("running_mean", torch.zeros(num_features))
         self.register_buffer("running_var", torch.ones(num_features) - eps)
-        self.register_buffer("num_batches_tracked", torch.tensor(0, dtype=torch.long))
 
     def forward(self, x):
         return F.batch_norm(
@@ -339,6 +390,8 @@ class TvpVisionBottleneckBlock(nn.Module):
         )
 
     def forward(self, x):
+        # print(x[-1][-1][-1])
+        # import pdb; pdb.set_trace()
         out = self.conv1(x)
         out = F.relu_(out)
 
@@ -677,6 +730,7 @@ class TvpSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L378
 class TvpSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -691,6 +745,7 @@ class TvpSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L392
 class TvpAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -738,6 +793,7 @@ class TvpAttention(nn.Module):
         return outputs
 
 
+# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L441
 class TvpIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -860,6 +916,7 @@ class TvpEncoder(nn.Module):
         )
 
 
+# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L654
 class TvpPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1055,6 +1112,10 @@ class TvpFramePadPrompter(nn.Module):
         return prompt
 
 
+@add_start_docstrings(
+    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on" " top.",
+    TVP_START_DOCSTRING,
+)
 class TvpModel(TvpPreTrainedModel):
     def __init__(self, config):
         super(TvpModel, self).__init__(config)
@@ -1070,7 +1131,22 @@ class TvpModel(TvpPreTrainedModel):
         elif config.visual_prompter_type == "framepad":
             self.visual_prompter = TvpFramePadPrompter(config.max_img_size, config.pad_size, config.num_frm)
 
+    @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
     def add_vision_prompt(self, pixel_values):
+        r"""
+        Returns:
+
+        Examples:
+        ```python
+        >>> import torch
+        >>> from transformers import AutoConfig, TvpModel
+
+        >>> config = AutoConfig.from_pretrained("Intel/tvp-base")
+        >>> model = TvpModel(config)
+
+        >>> x = torch.rand(1, 48, 3, 448, 448)
+        >>> y = model.add_vision_prompt(x)
+        ```"""
         if self.config.visual_prompter_apply != "remove":
             visual_prompt = self.visual_prompter(pixel_values).to(pixel_values.dtype)
 
@@ -1111,6 +1187,8 @@ class TvpModel(TvpPreTrainedModel):
 
         return pixel_values
 
+    @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=TvpConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1121,6 +1199,23 @@ class TvpModel(TvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+        ```python
+        >>> import torch
+        >>> from transformers import AutoConfig, AutoTokenizer, TvpModel
+
+        >>> config = AutoConfig.from_pretrained("Intel/tvp-base")
+        >>> model = TvpModel(config)
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("Intel/tvp-base")
+
+        >>> pixel_values = torch.rand(1, 48, 3, 448, 448)
+        >>> text_inputs = tokenizer("This is an example inputs", return_tensors="pt")
+        >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
+        ```"""
         pixel_values = self.add_vision_prompt(pixel_values)
         pixel_values = self.cnn(pixel_values)
         outputs = self.transformer(
@@ -1150,6 +1245,12 @@ class TvpVideoGroundingHead(nn.Module):
         return x
 
 
+@add_start_docstrings(
+    """
+    Tvp Model with a video grounding head on top computing Iou, distance, and duration loss.
+    """,
+    TVP_START_DOCSTRING,
+)
 class TvpForVideoGrounding(TvpPreTrainedModel):
     def __init__(self, config):
         super(TvpForVideoGrounding, self).__init__(config)
@@ -1157,6 +1258,8 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         self.model = TvpModel(config)
         self.video_grounding_head = TvpVideoGroundingHead(config.hidden_size)
 
+    @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TvpOutput, config_class=TvpConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1168,6 +1271,144 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        r"""
+        labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):
+            The labels contains duration, start time, and end time of the video corresponding to the text.
+        Returns:
+
+        Examples:
+        ```python
+        >>> import av
+        >>> import cv2
+        >>> import numpy as np
+        >>> import torch
+        >>> from huggingface_hub import hf_hub_download
+        >>> from transformers import AutoProcessor, TvpForVideoGrounding
+
+
+        >>> def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
+        ...     '''
+        ...     Convert the video from its original fps to the target_fps and decode the video with PyAV decoder.
+        ...     Returns:
+        ...         frames (tensor): decoded frames from the video. Return None if the no
+        ...             video stream was found.
+        ...         fps (float): the number of frames per second of the video.
+        ...     '''
+        ...     fps = float(container.streams.video[0].average_rate)
+        ...     clip_size = sampling_rate * num_frames / target_fps * fps
+        ...     delta = max(container.streams.video[0].frames - clip_size, 0)
+        ...     start_idx = delta * clip_idx / num_clips
+        ...     end_idx = start_idx + clip_size - 1
+        ...     timebase = container.streams.video[0].duration / container.streams.video[0].frames
+        ...     video_start_pts = int(start_idx * timebase)
+        ...     video_end_pts = int(end_idx * timebase)
+        ...     stream_name = {"video": 0}
+        ...     seek_offset = max(video_start_pts - 1024, 0)
+        ...     container.seek(seek_offset, any_frame=False, backward=True, stream=container.streams.video[0])
+        ...     frames = {}
+        ...     for frame in container.decode(**stream_name):
+        ...         if frame.pts < video_start_pts:
+        ...             continue
+        ...         if frame.pts <= video_end_pts:
+        ...             frames[frame.pts] = frame
+        ...         else:
+        ...             frames[frame.pts] = frame
+        ...             break
+        ...     frames = [frames[pts] for pts in sorted(frames)]
+        ...     return frames, fps
+
+
+        >>> def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
+        ...     '''
+        ...     Decode the video and perform temporal sampling.
+        ...     Args:
+        ...         container (container): pyav container.
+        ...         sampling_rate (int): frame sampling rate (interval between two sampled frames).
+        ...         num_frames (int): number of frames to sample.
+        ...         clip_idx (int): if clip_idx is -1, perform random temporal sampling.
+        ...             If clip_idx is larger than -1, uniformly split the video to num_clips
+        ...             clips, and select the clip_idx-th video clip.
+        ...         num_clips (int): overall number of clips to uniformly sample from the given video.
+        ...         target_fps (int): the input video may have different fps, convert it to
+        ...             the target video fps before frame sampling.
+        ...     Returns:
+        ...         frames (tensor): decoded frames from the video.
+        ...     '''
+        ...     assert clip_idx >= -2, "Not a valied clip_idx {}".format(clip_idx)
+        ...     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
+        ...     clip_size = sampling_rate * num_frames / target_fps * fps
+        ...     index = torch.linspace(0, clip_size - 1, num_frames)
+        ...     index = torch.clamp(index, 0, len(frames) - 1).long().tolist()
+        ...     frames = [frames[idx] for idx in index]
+        ...     frames = [frame.to_rgb().to_ndarray() for frame in frames]
+        ...     frames = torch.from_numpy(np.stack(frames))
+        ...     return frames
+
+
+        >>> def get_resize_size(image, max_size):
+        ...     '''
+        ...     Args:
+        ...         image: np.ndarray
+        ...         max_size: The max size of height and width
+        ...     Returns:
+        ...         (height, width)
+        ...     Note the height/width order difference >>> pil_img = Image.open("raw_img_tensor.jpg") >>> pil_img.size (640,
+        ...     480) # (width, height) >>> np_img = np.array(pil_img) >>> np_img.shape (480, 640, 3) # (height, width, 3)
+        ...     '''
+        ...     height, width = image.shape[-2:]
+        ...     if height >= width:
+        ...         ratio = width * 1.0 / height
+        ...         new_height = max_size
+        ...         new_width = new_height * ratio
+        ...     else:
+        ...         ratio = height * 1.0 / width
+        ...         new_width = max_size
+        ...         new_height = new_width * ratio
+        ...     size = {"height": int(new_height), "width": int(new_width)}
+        ...     return size
+
+
+        >>> file = hf_hub_download(repo_id="Intel/tvp_demo", filename="3MSZA.mp4", repo_type="dataset")
+        >>> model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
+
+        >>> decoder_kwargs = dict(
+        ...     container=av.open(file, metadata_errors="ignore"),
+        ...     sampling_rate=1,
+        ...     num_frames=model.config.num_frm,
+        ...     clip_idx=0,
+        ...     num_clips=1,
+        ...     target_fps=3,
+        ... )
+
+        >>> raw_sampled_frms = decode(**decoder_kwargs).permute(0, 3, 1, 2)
+        >>> text = "person turn a light on."
+        >>> processor = AutoProcessor.from_pretrained("Intel/tvp-base")
+        >>> size = get_resize_size(raw_sampled_frms, model.config.max_img_size)
+        >>> data = processor(
+        ...     text=[text], videos=list(raw_sampled_frms.numpy()), return_tensors="pt", max_text_length=100, size=size
+        ... )
+
+        >>> data["pixel_values"] = data["pixel_values"].to(model.dtype)
+        >>> data["labels"] = torch.tensor([30.96, 24.3, 30.4])
+        >>> output = model(**data)
+
+
+        >>> def get_video_duration(filename):
+        ...     cap = cv2.VideoCapture(filename)
+        ...     if cap.isOpened():
+        ...         rate = cap.get(5)
+        ...         frame_num = cap.get(7)
+        ...         duration = frame_num / rate
+        ...         return duration
+        ...     return -1
+
+
+        >>> duration = get_video_duration(file)
+        >>> timestamp = output["logits"].tolist()
+        >>> start, end = round(timestamp[0][0] * duration, 1), round(timestamp[0][1] * duration, 1)
+        >>> print(f'The time slot of the video corresponding to the text "{text}" is from {start}s to {end}s')
+        The time slot of the video corresponding to the text "person turn a light on." is from 13.5s to 28.4s
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.model(
             input_ids,

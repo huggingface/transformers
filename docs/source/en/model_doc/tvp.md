@@ -186,7 +186,7 @@ This model was contributed by [Jiqing Feng](https://huggingface.co/Jiqing). The 
 Tips:
 
 - This implementation of TVP uses [`BertTokenizer`] to generate text embeddings and Resnet-50 model to compute visual embeddings.
-- Checkpoints for pre-trained [tvp-base](xxx) is released.
+- Checkpoints for pre-trained [tvp-base](https://huggingface.co/Intel/tvp-base) is released.
 - Please refer to [Table 2](https://arxiv.org/pdf/2303.04995.pdf) for TVP's performance on Temporal Video Grounding task.
 - The PyTorch version of this model is only available in torch 1.10 and higher.
 
@@ -212,11 +212,6 @@ Tips:
 ## TvpModel
 
 [[autodoc]] TvpModel
-    - forward
-
-## TvpVisionModel
-
-[[autodoc]] TvpVisionModel
     - forward
 
 ## TvpForVideoGrounding

@@ -43,7 +43,6 @@ else:
         "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TvpModel",
         "TvpPreTrainedModel",
-        "TvpVisionModel",
         "TvpForVideoGrounding",
     ]
 
@@ -74,7 +73,6 @@ if TYPE_CHECKING:
             TvpForVideoGrounding,
             TvpModel,
             TvpPreTrainedModel,
-            TvpVisionModel,
         )
 
 else:

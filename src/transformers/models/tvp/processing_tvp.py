@@ -92,7 +92,13 @@ class TvpProcessor(ProcessorMixin):
         encoding = {}
         if text is not None:
             textual_input = self.tokenizer.batch_encode_plus(
-                text, max_length=max_text_length, pad_to_max_length=True, return_tensors=return_tensors, **kwargs
+                text,
+                truncation=True,
+                padding="max_length",
+                max_length=max_text_length,
+                pad_to_max_length=True,
+                return_tensors=return_tensors,
+                **kwargs,
             )
             # Tvp model do not need token_type_ids currently
             del textual_input["token_type_ids"]

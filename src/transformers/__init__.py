@@ -2829,7 +2829,6 @@ else:
             "TvpForVideoGrounding",
             "TvpModel",
             "TvpPreTrainedModel",
-            "TvpVisionModel",
         ]
     )
     _import_structure["models.umt5"].extend(
@@ -6521,7 +6520,6 @@ if TYPE_CHECKING:
             TvpForVideoGrounding,
             TvpModel,
             TvpPreTrainedModel,
-            TvpVisionModel,
         )
         from .models.umt5 import (
             UMT5EncoderModel,

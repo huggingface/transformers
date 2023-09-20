@@ -7496,20 +7496,6 @@ class TvpPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class TvpVisionModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TvpTransformer(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class TvpForVideoGrounding(metaclass=DummyObject):
     _backends = ["torch"]
 

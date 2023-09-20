@@ -63,16 +63,13 @@ class TvpVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import TvpVisionModel, TvpVisionConfig
+    >>> from transformers import TvpVisionConfig
 
-    >>> # Initializing a TvpVisionModel
+    >>> # Initializing a configuration for the vision model
     >>> configuration = TvpVisionConfig()
 
-    >>> # Initializing a TvpVisionModel model
-    >>> model = TvpVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+    >>> # Accessing the configuration
+    >>> configuration
     ```"""
 
     model_type = "tvp_vision_model"
