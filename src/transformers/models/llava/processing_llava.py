@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for LlavaLlama. Largely copy of Blip2Processor with addition of CLIPVisionModel.
+Processor class for LlavaLlama..
 """
 
 from typing import List, Optional, Union

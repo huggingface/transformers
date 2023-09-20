@@ -215,7 +215,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         <bos>[INST] Prompt [/INST]
         """
 
-
         template = (
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
