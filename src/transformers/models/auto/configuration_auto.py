@@ -24,7 +24,6 @@ from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 
-
 logger = logging.get_logger(__name__)
 
 CONFIG_MAPPING_NAMES = OrderedDict(
@@ -210,6 +209,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SpeechT5Config"),
         ("splinter", "SplinterConfig"),
         ("squeezebert", "SqueezeBertConfig"),
+        ("superpoint", "SuperPointConfig"),
         ("swiftformer", "SwiftFormerConfig"),
         ("swin", "SwinConfig"),
         ("swin2sr", "Swin2SRConfig"),
@@ -683,6 +683,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("speecht5", "SpeechT5"),
         ("splinter", "Splinter"),
         ("squeezebert", "SqueezeBERT"),
+        ("superpoint", "SuperPoint"),
         ("swiftformer", "SwiftFormer"),
         ("swin", "Swin Transformer"),
         ("swin2sr", "Swin2SR"),

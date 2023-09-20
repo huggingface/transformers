@@ -108,9 +108,6 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     assert outputs.scores.shape == expected_scores_shape
     assert outputs.descriptors.shape == expected_descriptors_shape
 
-    expected_keypoints = outputs.keypoints[:3]
-    expected_scores = outputs.scores[:9]
-
     assert torch.allclose(outputs.keypoints[:3], expected_keypoints_values, atol=1e-3)
     assert torch.allclose(outputs.scores[:9], expected_scores_values, atol=1e-3)
     assert torch.allclose(outputs.descriptors[0, 0], expected_descriptors_value, atol=1e-3)
