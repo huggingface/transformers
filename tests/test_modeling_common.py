@@ -2735,7 +2735,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=True).to(
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True).to(
                     torch_device
                 )
 
@@ -2761,10 +2761,10 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=True)
+                model_fa = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True)
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=False)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False)
                 model.to(torch_device)
 
                 dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
@@ -2799,10 +2799,10 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=True)
+                model_fa = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True)
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attn_2=False)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False)
                 model.to(torch_device)
 
                 dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
@@ -2838,7 +2838,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=False, low_cpu_mem_usage=True
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
                 ).to(torch_device)
 
                 dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
@@ -2849,7 +2849,7 @@ class ModelTesterMixin:
                 )
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=True, low_cpu_mem_usage=True
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
                 ).to(torch_device)
 
                 out_fa = model.generate(
@@ -2875,7 +2875,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=False, low_cpu_mem_usage=True
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
                 ).to(torch_device)
 
                 dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
@@ -2886,7 +2886,7 @@ class ModelTesterMixin:
                 )
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=True, low_cpu_mem_usage=True
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
                 ).to(torch_device)
 
                 out_fa = model.generate(

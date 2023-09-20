@@ -1264,7 +1264,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if not cls._supports_flash_attn_2:
             raise ValueError(
                 "The current architecture does not support Flash Attention 2.0. Please open an issue on GitHub to "
-                "request support for this architecture."
+                "request support for this architecture: https://github.com/huggingface/transformers/issues/new"
             )
 
         if not is_flash_attn_available():
@@ -1273,10 +1273,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " installing it."
             )
         else:
-            is_flash_greater_than_2 = version.parse(importlib.metadata.version("flash_attn")) > version.parse("2.0.0")
+            flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
+            is_flash_greater_than_2 = flash_attention_version > version.parse("2.0.0")
             if not is_flash_greater_than_2:
                 raise ValueError(
-                    "You need flash_attn package version to be greater than 2.0. Make sure to have that version installed."
+                    f"You need flash_attn package version to be greater than 2.0. Make sure to have that version installed - detected version {flash_attention_version}"
                 )
 
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
@@ -1298,7 +1299,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if device_map is None:
             if torch.cuda.is_available():
-                warnings.warn(
+                logger.warning(
                     "You are attempting to use Flash Attention 2.0 with a model initialized on CPU. Make sure to move the model to GPU"
                     " after initializing it on CPU with `model.to('cuda')`."
                 )
@@ -2462,7 +2463,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         variant = kwargs.pop("variant", None)
         _adapter_model_path = kwargs.pop("_adapter_model_path", None)
         adapter_name = kwargs.pop("adapter_name", "default")
-        use_flash_attn_2 = kwargs.pop("use_flash_attn_2", False)
+        use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
@@ -3074,7 +3075,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
-        if use_flash_attn_2:
+        if use_flash_attention_2:
             config = cls._check_and_enable_flash_attn_2(config, torch_dtype=torch_dtype, device_map=device_map)
 
         with ContextManagers(init_contexts):
