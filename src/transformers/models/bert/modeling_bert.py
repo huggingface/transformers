@@ -887,6 +887,7 @@ class BertModel(BertPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
+        a = 3
 
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertEncoder(config)

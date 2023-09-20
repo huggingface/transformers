@@ -9,6 +9,7 @@ on:
     branches:
       - ci_*
       - ci-*
+      - run-amd
     paths:
       - "src/**"
       - "tests/**"
