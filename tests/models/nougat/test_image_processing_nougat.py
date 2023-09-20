@@ -173,3 +173,17 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self.image_processing_class(**self.image_processor_dict)
         aligned_image = image_processor.align_long_axis(image, size, data_format=data_format)
         self.assertEqual((3, 100, 200), aligned_image.shape)
+
+    def prepare_dummy_np_image(self):
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_pdf.png", repo_type="dataset"
+        )
+        image = Image.open(filepath).convert("RGB")
+        return np.array(image)
+
+    def test_crop_margin_equality_cv2_py(self):
+        image = self.prepare_dummy_np_image()
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        image_cropped_py = image_processor.crop_margin(image)
+        image_cropped_cv2 = image_processor.cv2_crop_margin(image)
+        self.assertTrue(np.array_equal(image_cropped_py, image_cropped_cv2))
