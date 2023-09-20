@@ -2619,14 +2619,13 @@ def _generate_speech(
                 meet_indexes = torch.where(meet_thresholds)[0].tolist()
             else:
                 meet_indexes = range(len(prob))
-            for meet_index in meet_indexes:
-                if meet_index in result_spectrogram:
-                    continue
+            meet_indexes = [i for i in meet_indexes if i not in result_spectrogram]
+            if len(meet_indexes) > 0:
                 spectrograms = torch.stack(spectrogram)
                 spectrograms = spectrograms.transpose(0, 1).flatten(1, 2)
                 spectrograms = model.speech_decoder_postnet.postnet(spectrograms)
-                result_spectrogram[meet_index] = spectrograms[meet_index]
-
+                for meet_index in meet_indexes:
+                    result_spectrogram[meet_index] = spectrograms[meet_index]
             if len(result_spectrogram) >= bsz:
                 break
     spectrograms = [result_spectrogram[i] for i in range(len(result_spectrogram))]
