@@ -2206,7 +2206,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 " it is kept for forward compatibility, but it is recommended to update your `tokenizer_config.json` by uploading it again."
                 " You will see the new `added_tokens_decoder` attribute that will store the relevant information."
             )
-
+            # ISSUEEE FSNETTTTTTTT
             # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:

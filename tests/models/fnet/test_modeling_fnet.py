@@ -529,12 +529,12 @@ class FNetModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
-    @slow
+    # @slow
     @require_tokenizers
     def test_inference_long_sentence(self):
+        tokenizer = FNetTokenizerFast.from_pretrained("google/fnet-base")
         model = FNetForMaskedLM.from_pretrained("google/fnet-base")
         model.to(torch_device)
-        tokenizer = FNetTokenizerFast.from_pretrained("google/fnet-base")
 
         inputs = tokenizer(
             "the man worked as a [MASK].",
