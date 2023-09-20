@@ -44,7 +44,7 @@ Flash Attention 2 can only be used for models in the fp16 or bf16 dtypes and run
 
 ### Quick usage
 
-To enable Flash Attention 2 in your model, add `use_flash_attn_2` in the `from_pretrained` arguments:
+To enable Flash Attention 2 in your model, add `use_flash_attention_2` in the `from_pretrained` arguments:
 
 ```python
 import torch
@@ -56,7 +56,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     torch_dtype=torch.bfloat16, 
-    use_flash_attn_2=True,
+    use_flash_attention_2=True,
 )
 ```
 
@@ -66,23 +66,23 @@ And use it for generation or fine-tuning.
 
 You can benefit from considerable speedups for fine-tuning and inference, especially for long sequences. However, since Flash Attention does not support computing attention scores with padding tokens under the hood, we must manually pad / unpad the attention scores for batched inference when the sequence contains padding tokens. This leads to a significant slowdown for batched generations with padding tokens. 
 
-To overcome this, one should use Flash Attention without padding tokens in the sequence for training (e.g., by packing a dataset, i.e., concatenating sequences until reaching the maximum sequence length).
+To overcome this, one should use Flash Attention without padding tokens in the sequence for training (e.g., by packing a dataset, i.e., concatenating sequences until reaching the maximum sequence length, for example, we perform something in the following lines specifically [here](https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py#L516).
 
 Below is the expected speedup you can get for a simple forward pass on tiiuae/falcon-7b with a sequence length of 4096 and various batch sizes without padding tokens:
 
-Below is the expected speedup you can get for a simple forward pass on `tiiuae/falcon-7b` with a sequence length of 4096 and various batch sizes, without padd tokens:
+Below is the expected speedup you can get for a simple forward pass on `tiiuae/falcon-7b` with a sequence length of 4096 and various batch sizes, without padding tokens:
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/falcon-7b-inference-large-seqlen.png">
 </div>
 
-Below is the expected speedup you can get for a simple forward pass on `meta-llama/Llama-7b-hf` with a sequence length of 4096 and various batch sizes, without padd tokens:
+Below is the expected speedup you can get for a simple forward pass on `meta-llama/Llama-7b-hf` with a sequence length of 4096 and various batch sizes, without padding tokens:
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-7b-inference-large-seqlen.png">
 </div>
 
-For sequences with padd tokens (training with padd tokens or generating with padd tokens), we need to unpad / pad the input sequences to compute correctly the attention scores. For relatively small sequence length, on pure forward pass, this creates an overhead leading to a small speedup (below we used a padding rate of 0.3). 
+For sequences with padding tokens (training with padding tokens or generating with padding tokens), we need to unpad / pad the input sequences to compute correctly the attention scores. For relatively small sequence length, on pure forward pass, this creates an overhead leading to a small speedup (below we used a padding rate of 0.3). 
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-2-small-seqlen-padding.png">
@@ -115,7 +115,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     load_in_8bit=True,
-    use_flash_attn_2=True,
+    use_flash_attention_2=True,
 )
 ```
 
@@ -133,7 +133,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     load_in_4bit=True,
-    use_flash_attn_2=True,
+    use_flash_attention_2=True,
 )
 ```
 
@@ -152,7 +152,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     load_in_4bit=True,
-    use_flash_attn_2=True,
+    use_flash_attention_2=True,
 )
 
 lora_config = LoraConfig(
