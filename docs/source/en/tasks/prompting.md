@@ -77,10 +77,6 @@ Run inference with decoder-only models with the `text-generation` pipeline:
 >>> prompt = "Hello, I'm a language model"
 
 >>> generator(prompt, max_length = 30)
-```
-
-Output:
-```text
 [{'generated_text': "Hello, I'm a language model programmer.\n\nYou know what? I've got to explain my language concepts to a lot of people. What"}]
 ```
 
@@ -93,10 +89,6 @@ To run inference with an encoder-decoder, use the `text2text-generation` pipelin
 >>> prompt = "Translate from English to French: I'm very happy to see you"
 
 >>> text2text_generator(prompt)
-```
-
-Output:
-```text
 [{'generated_text': 'Je suis très heureuse de vous voir'}]
 ```
 
@@ -175,14 +167,10 @@ also adding the beginning of the response - `"Sentiment: "`:
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-```
-
-Output:
-```text
-Result: Classify the text into neutral, negative or positive. 
+"""Result: Classify the text into neutral, negative or positive. 
 Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 Sentiment:
-Positive
+Positive"""
 ```
 
 As a result, the output contains a classification label from the list we have provided in the instructions, and it is a correct one!
@@ -218,13 +206,9 @@ so that output doesn't contain the prompt:
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-```
-
-Output:
-```text
-- State Warriors
+"""- State Warriors
 - San Francisco
-- National Basketball Association
+- National Basketball Association"""
 ```
 
 As you can see, the model correctly identified two named entities from the given text, however, it has also added a new 
@@ -255,11 +239,7 @@ you can write a basic prompt to instruct a model to translate a piece of text fr
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-```
-
-Output:
-```text
-A volte, ho creduto a sei impossibili cose prima di colazione.
+"A volte, ho creduto a sei impossibili cose prima di colazione."
 ```
 
 [//]: # (Perhaps we could add a note here about languages used in prompts themselves, e.g. prompting in Italian. What changes? 
@@ -292,11 +272,7 @@ also be a suitable location for instructions. Typically, it's better to place th
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-```
-
-Output:
-```text
-Permaculture is an ecosystem design mimicking natural, diverse functionalities and resilience, aiming to meet basic needs and prepare for climate change in communities.
+"Permaculture is an ecosystem design mimicking natural, diverse functionalities and resilience, aiming to meet basic needs and prepare for climate change in communities."
 ```
 
 #### Question answering
@@ -323,11 +299,7 @@ Answer:
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-```
-
-Output:
-```text
-Result: A blender or a food processor.
+"Result: A blender or a food processor."
 ```
 
 #### Reasoning
@@ -352,11 +324,7 @@ Let's try if we can make a model reason about a simple arithmetics task with a b
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-```
-
-Output:
-```text
-Result: There are 20 students in the class.
+"Result: There are 20 students in the class."
 ```
 
 Correct! Let's increase the complexity a little and see if we can still get away with a basic prompt:
@@ -376,12 +344,8 @@ Correct! Let's increase the complexity a little and see if we can still get away
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-```
-
-Output:
-```text
-Result: 
-We now have 13 muffins.
+"""Result: 
+We now have 13 muffins."""
 ```
 
 This is a wrong answer. Looks like at this point basic prompts are not enough and for more complex reasoning tasks we'll need to apply some 
@@ -436,15 +400,11 @@ Here's an example:
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-```
-
-Output:
-```text
-Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
+"""Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
 Date: 04/12/1961
 
 Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
-Date: 09/28/1960
+Date: 09/28/1960"""
 ```
 
 In the above code snippet we used a single example to demonstrate the desired output to the model, so this can be called a 
@@ -482,11 +442,7 @@ Take a deep breath and work on this problem step-by-step."""
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-```
-
-Output:
-```text
-Result: 
+"""Result: 
 1. We have 15 muffins.
 2. We ate 2, so we have 13 muffins left.
 3. We gave away 5, so we have 8 muffins left.
@@ -494,6 +450,7 @@ Result:
 5. We have 2 muffins left.
 6. We ate 2, so we have 0 muffins left.
 7. We have 0 muffins left.
+"""
 ```
 
 The answer is still wrong, however, the reasoning was correct up until step 4. In this particular case, we are using 
