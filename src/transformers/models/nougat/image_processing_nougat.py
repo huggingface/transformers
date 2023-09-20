@@ -124,10 +124,8 @@ class NougatImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-
-    def pythonfindNonZero(self, image:np.array):
+    def pythonfindNonZero(self, image: np.array):
         """This is a reimplementation of a findNonZero function similar to cv2."""
-        assert len(image.shape) == 2, "Input must be a 2D array"
         non_zero_indices = np.column_stack(np.nonzero(image))
         idxvec = non_zero_indices[:, [1, 0]]
         idxvec = idxvec.reshape(-1, 1, 2)
@@ -135,9 +133,12 @@ class NougatImageProcessor(BaseImageProcessor):
 
     def pythonBoundingRect(self, coordinates):
         """This is a reimplementation of a BoundingRect function similar to cv2."""
-        min_vals = np.min(coordinates, axis=(0, 1)).astype(int)
-        max_vals = np.max(coordinates, axis=(0, 1)).astype(int)
-        return min_vals[0], min_vals[1], max_vals[0] - min_vals[0] + 1, max_vals[1] - min_vals[1] + 1
+        min_values = np.min(coordinates, axis=(0, 1)).astype(int)
+        max_values = np.max(coordinates, axis=(0, 1)).astype(int)
+        x_min, y_min = min_values[0], min_values[1]
+        width = max_values[0] - x_min + 1
+        height = max_values[1] - y_min + 1
+        return x_min, y_min, width, height
 
     def crop_margin(
         self,
@@ -178,8 +179,8 @@ class NougatImageProcessor(BaseImageProcessor):
         data = (data - min_val) / (max_val - min_val) * 255
         gray = data < gray_threshold
         coords = self.pythonfindNonZero(gray)
-        a, b, w, h = self.pythonBoundingRect(coords)
-        image = image.crop((a, b, w + a, h + b))
+        x_min, y_min, width, height = self.pythonBoundingRect(coords)
+        image = image.crop((x_min, y_min, x_min + width, y_min + height))
         image = np.array(image).astype(np.uint8)
         image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
 
@@ -188,7 +189,6 @@ class NougatImageProcessor(BaseImageProcessor):
         )
 
         return image
-
 
     def cv2_crop_margin(
         self,
