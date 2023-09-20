@@ -46,7 +46,6 @@ from .utils import (
     logging,
 )
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -971,6 +970,7 @@ else:
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
+    _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
@@ -2703,7 +2703,12 @@ else:
         ]
     )
     _import_structure["models.superpoint"].extend(
-        ["SuperPointModel", "SuperPointPretrainedModel", "SuperPointModelForInterestPointDescription"]
+        [
+            "SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SuperPointModel",
+            "SuperPointPretrainedModel",
+            "SuperPointModelForInterestPointDescription",
+        ]
     )
     _import_structure["models.swiftformer"].extend(
         [
@@ -4981,6 +4986,7 @@ if TYPE_CHECKING:
         from .models.pvt import PvtImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
+        from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
@@ -6412,6 +6418,7 @@ if TYPE_CHECKING:
             SqueezeBertPreTrainedModel,
         )
         from .models.superpoint import (
+            SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SuperPointModel,
             SuperPointModelForInterestPointDescription,
         )

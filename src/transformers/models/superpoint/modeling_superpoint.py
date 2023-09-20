@@ -1,11 +1,16 @@
-from typing import List, Tuple, Union, Optional
+from typing import Tuple, Union, Optional
 
 import torch
-from torch import nn, Tensor
+from torch import nn
 
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import ImagePointDescriptionOutput, BaseModelOutputWithNoAttention
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
+from ...utils import logging
+
+logger = logging.get_logger(__name__)
+
+SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = ["stevenbucaille/superpoint"]
 
 
 class SuperPointEncoder(nn.Module):

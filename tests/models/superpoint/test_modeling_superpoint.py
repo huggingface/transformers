@@ -2,23 +2,26 @@ import inspect
 import unittest
 from typing import List
 
-from transformers.utils import is_torch_available
-
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
-from tests.test_configuration_common import ConfigTester
-from tests.test_modeling_common import floats_tensor, ModelTesterMixin
 from transformers.models.superpoint.modeling_superpoint import SuperPointModel
-from transformers.testing_utils import torch_device, require_torch
+from transformers.testing_utils import torch_device, require_torch, slow, require_vision
 from transformers.utils import cached_property, is_torch_available, is_vision_available
-
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import floats_tensor, ModelTesterMixin
 
 if is_torch_available():
     import torch
 
-    from transformers import SuperPointModel, SuperPointModelForInterestPointDescription
+    from transformers import (
+        SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        SuperPointModel,
+        SuperPointModelForInterestPointDescription,
+    )
 
 if is_vision_available():
     from PIL import Image
+
+    from transformers import AutoImageProcessor
 
 
 class SuperPointModelTester:
@@ -187,15 +190,50 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = SuperPointModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
 
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
 
 
+@require_torch
+@require_vision
 class SuperPointModelIntegrationTest(unittest.TestCase):
-    def default_model(self):
-        return SuperPointModel.from_pretrained("superpoint")
+    @cached_property
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained("stevenbucaille/superpoint") if is_vision_available() else None
 
+    @slow
     def test_inference(self):
-        model = SuperPointModel.from_pretrained("superpoint").to(torch_device)
+        model = SuperPointModel.from_pretrained("stevenbucaille/superpoint").to(torch_device)
+
+        preprocessor = self.default_image_processor
+        image = prepare_img()
+        inputs = preprocessor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_keypoints_shape = torch.Size((568, 2))
+        expected_scores_shape = torch.Size((568,))
+        expected_descriptors_shape = torch.Size((256, 568))
+
+        expected_keypoints_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]]).to(torch_device)
+        expected_scores_values = torch.tensor(
+            [0.0064, 0.0140, 0.0595, 0.0728, 0.5170, 0.0175, 0.1523, 0.2055, 0.0336]
+        ).to(torch_device)
+        expected_descriptors_value = torch.tensor(-0.1096).to(torch_device)
+
+        self.assertEqual(outputs.keypoints.shape, expected_keypoints_shape)
+        self.assertEqual(outputs.scores.shape, expected_scores_shape)
+        self.assertEqual(outputs.descriptors.shape, expected_descriptors_shape)
+
+        self.assertTrue(torch.allclose(outputs.keypoints[:3], expected_keypoints_values, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.scores[:9], expected_scores_values, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.descriptors[0, 0], expected_descriptors_value, atol=1e-4))
