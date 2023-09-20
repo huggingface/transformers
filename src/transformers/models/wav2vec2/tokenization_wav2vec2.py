@@ -232,7 +232,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         # make sure that tokens made of several
         # characters are not split at tokenization
-        self.add_tokens([ tok for token in self.encoder.keys() if len(token)>1])
+        self.add_tokens([ token for token in self.encoder.keys() if len(token)>1])
 
 
     @property
