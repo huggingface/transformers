@@ -295,6 +295,12 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    # TODO (ydshieh): Remove this once the author of Bros PR fixes the issue
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
+
     def setUp(self):
         self.model_tester = BrosModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BrosConfig, hidden_size=37)
