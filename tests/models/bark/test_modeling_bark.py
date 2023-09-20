@@ -38,8 +38,8 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-from ..encodec.test_modeling_encodec import EncodecModelTester
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ..encodec.test_modeling_encodec import EncodecModelTester
 
 
 if is_torch_available():
