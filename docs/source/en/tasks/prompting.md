@@ -141,7 +141,7 @@ version of CUDA and works best on modern cards.
 
 You also need to allow remote code execution. This is because the Falcon models use a new architecture that is not part of transformers yet - instead, the code necessary is provided by the model authors in the repo.
 
-- </Tip>
+</Tip>
 
 Now that we have the model loaded via the pipeline, let's explore how you can use prompts to solve NLP tasks.
 
