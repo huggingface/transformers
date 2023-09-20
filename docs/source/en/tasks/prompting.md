@@ -155,9 +155,9 @@ also adding the beginning of the response - `"Sentiment: "`:
 ```python
 >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 >>> prompt = """Classify the text into neutral, negative or positive. 
-Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
-Sentiment:
-"""
+    Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
+    Sentiment:
+    """
 
 >>> sequences = pipeline(
 ...     prompt,
