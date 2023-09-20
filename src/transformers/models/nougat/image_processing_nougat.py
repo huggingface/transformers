@@ -124,7 +124,73 @@ class NougatImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
+
+    def pythonfindNonZero(self, image:np.array):
+        """This is a reimplementation of a findNonZero function similar to cv2."""
+        assert len(image.shape) == 2, "Input must be a 2D array"
+        non_zero_indices = np.column_stack(np.nonzero(image))
+        idxvec = non_zero_indices[:, [1, 0]]
+        idxvec = idxvec.reshape(-1, 1, 2)
+        return idxvec
+
+    def pythonBoundingRect(self, coordinates):
+        """This is a reimplementation of a BoundingRect function similar to cv2."""
+        min_vals = np.min(coordinates, axis=(0, 1)).astype(int)
+        max_vals = np.max(coordinates, axis=(0, 1)).astype(int)
+        return min_vals[0], min_vals[1], max_vals[0] - min_vals[0] + 1, max_vals[1] - min_vals[1] + 1
+
     def crop_margin(
+        self,
+        image: np.array,
+        gray_threshold: int = 200,
+        data_format: Optional[ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Crops the margin of the image.
+
+        Args:
+            image (`np.array`):
+                The image to be cropped.
+            gray_threshold (`int`, defaults to `200`)
+                Value below which pixels are considered to be gray.
+            data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the output image. If unset, will use the inferred format from the
+                input.
+            input_data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If unset, will use the inferred format from the input.
+        """
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+
+        image = to_pil_image(image, input_data_format=input_data_format)
+        data = np.array(image.convert("L")).astype(np.uint8)
+        max_val = data.max()
+        min_val = data.min()
+        if max_val == min_val:
+            image = np.array(image)
+            image = (
+                to_channel_dimension_format(image, data_format, input_data_format)
+                if data_format is not None
+                else image
+            )
+            return image
+        data = (data - min_val) / (max_val - min_val) * 255
+        gray = data < gray_threshold
+        coords = self.pythonfindNonZero(gray)
+        a, b, w, h = self.pythonBoundingRect(coords)
+        image = image.crop((a, b, w + a, h + b))
+        image = np.array(image).astype(np.uint8)
+        image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
+
+        image = (
+            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+        )
+
+        return image
+
+
+    def cv2_crop_margin(
         self,
         image: np.array,
         data_format: Optional[ChannelDimension] = None,
