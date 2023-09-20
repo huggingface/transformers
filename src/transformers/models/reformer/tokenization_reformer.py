@@ -106,6 +106,10 @@ class ReformerTokenizer(PreTrainedTokenizer):
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        self.vocab_file = vocab_file
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
@@ -113,10 +117,6 @@ class ReformerTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-        self.vocab_file = vocab_file
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
 
     @property
     def vocab_size(self):

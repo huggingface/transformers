@@ -37,7 +37,6 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # We have a SentencePiece fixture for testing
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.sanitize_special_tokens()
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_convert_token_and_id(self):

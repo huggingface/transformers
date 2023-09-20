@@ -841,7 +841,7 @@ class TFGenerationMixin:
                 UserWarning,
             )
         elif generation_config.max_new_tokens is not None:
-            if not has_default_max_length:
+            if not has_default_max_length and generation_config.max_length is not None:
                 logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "

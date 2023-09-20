@@ -14,16 +14,12 @@
 # limitations under the License.
 """Tokenization classes for GPTNeoX."""
 import json
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import Optional, Tuple
 
 from tokenizers import pre_tokenizers
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -133,12 +129,10 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """This corresponds to DialoGPT variants of models."""
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+    @property
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
+    def default_chat_template(self):
+        """
+        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
+        """
+        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"

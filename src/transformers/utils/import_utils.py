@@ -91,6 +91,7 @@ except importlib.metadata.PackageNotFoundError:
 _ftfy_available = _is_package_available("ftfy")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jieba_available = _is_package_available("jieba")
+_jinja_available = _is_package_available("jinja2")
 _kenlm_available = _is_package_available("kenlm")
 _keras_nlp_available = _is_package_available("keras_nlp")
 _librosa_available = _is_package_available("librosa")
@@ -605,6 +606,10 @@ def is_accelerate_available(min_version: str = None):
     return _accelerate_available
 
 
+def is_fsdp_available(min_version: str = "1.12.0"):
+    return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
+
+
 def is_optimum_available():
     return _optimum_available
 
@@ -791,6 +796,10 @@ def is_cython_available():
 
 def is_jieba_available():
     return _jieba_available
+
+
+def is_jinja_available():
+    return _jinja_available
 
 
 # docstyle-ignore
@@ -1081,6 +1090,11 @@ PEFT_IMPORT_ERROR = """
 peft`. Please note that you may need to restart your runtime after installation.
 """
 
+JINJA_IMPORT_ERROR = """
+{0} requires the jinja library but it was not found in your environment. You can install it with pip: `pip install
+jinja2`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
@@ -1118,6 +1132,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
+        ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
     ]
 )
 

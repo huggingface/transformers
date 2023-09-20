@@ -379,19 +379,16 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         self.assertNotEqual(new_a, a)
 
     def test_hf_scheduler_ds_optimizer(self):
+        a = 0
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_zero2_dict = self.get_config_dict(ZERO2)
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_zero2_dict["zero_optimization"]["offload_optimizer"]["device"] = "none"
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
-            with self.assertRaises(Exception) as context:
-                trainer.train()
-        self.assertIn(
-            "Found `optimizer` configured in the DeepSpeed config, but no `scheduler`. "
-            "Please configure a scheduler in the DeepSpeed config.",
-            str(context.exception),
-        )
+            trainer = get_regression_trainer(a=a, local_rank=0, fp16=True, deepspeed=ds_config_zero2_dict)
+            trainer.train()
+        new_a = trainer.model.a.item()
+        self.assertNotEqual(new_a, a)
 
     @require_deepspeed_aio
     def test_stage3_nvme_offload(self):
