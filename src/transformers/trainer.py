@@ -402,19 +402,23 @@ class Trainer:
                     " to `True` to avoid any unexpected behavior such as device placement mismatching."
                 )
 
+        _is_peft_model = is_peft_available() and isinstance(model, PeftModel)
+        _is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
+            model, "_hf_peft_config_loaded", False
+        )
+
         # At this stage the model is already loaded
-        if getattr(model, "is_quantized", False) and not getattr(model, "_hf_peft_config_loaded", False):
-            if getattr(model, "_is_quantized_training_enabled", False):
-                logger.info(
-                    "The model is quantized. To train this model you need to add additional modules"
-                    " inside the model such as adapters using `peft` library and freeze the model weights. Please"
-                    " check the examples in https://github.com/huggingface/peft for more details."
-                )
-            else:
-                raise ValueError(
-                    "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
-                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
-                )
+        if _is_quantized_and_base_model and not _is_peft_model:
+            raise ValueError(
+                "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
+                " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
+                " for more details"
+            )
+        elif _is_quantized_and_base_model and not getattr(model, "_is_quantized_training_enabled", False):
+            raise ValueError(
+                "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
+                " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+            )
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
@@ -1700,9 +1704,6 @@ class Trainer:
 
         model = self._wrap_model(self.model_wrapped)
 
-        if (is_sagemaker_mp_enabled() or self.is_fsdp_enabled) and resume_from_checkpoint is not None:
-            self._load_from_checkpoint(resume_from_checkpoint, model)
-
         # as the model is wrapped, don't use `accelerator.prepare`
         # this is for unhandled cases such as
         # Fairscale Sharded DDP, FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
@@ -1728,7 +1729,7 @@ class Trainer:
                 )
 
         if self.is_fsdp_enabled:
-            self.model = model
+            self.model = self.model_wrapped = model
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -1738,16 +1739,20 @@ class Trainer:
         if self.is_deepspeed_enabled:
             self.deepspeed = self.model_wrapped
 
-        # deepspeed ckpt loading
-        if resume_from_checkpoint is not None and self.is_deepspeed_enabled:
-            deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
+        # ckpt loading
+        if resume_from_checkpoint is not None:
+            if self.is_deepspeed_enabled:
+                deepspeed_load_checkpoint(self.model_wrapped, resume_from_checkpoint)
+            elif is_sagemaker_mp_enabled() or self.is_fsdp_enabled:
+                self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped)
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
         # important: at this point:
         # self.model         is the Transformers Model
-        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
+        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model),
+        # FSDP(Transformers Model), Dynamo Optimized Module(Transformers Model) etc.
 
         # Train!
         logger.info("***** Running training *****")
@@ -2088,17 +2093,28 @@ class Trainer:
         weights_index_file = os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
         safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
+        is_fsdp_ckpt = os.path.isdir(resume_from_checkpoint) and any(
+            WEIGHTS_NAME.split(".")[0] in folder_name
+            for folder_name in os.listdir(resume_from_checkpoint)
+            if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
+        )
 
-        if not any(
-            os.path.isfile(f)
-            for f in [
-                weights_file,
-                safe_weights_file,
-                weights_index_file,
-                safe_weights_index_file,
-                adapter_weights_file,
-                adapter_safe_weights_file,
-            ]
+        if is_fsdp_ckpt and not self.is_fsdp_enabled:
+            raise ValueError(f"Checkpoint found at {resume_from_checkpoint} is only supported when using PyTorch FSDP")
+
+        if not (
+            any(
+                os.path.isfile(f)
+                for f in [
+                    weights_file,
+                    safe_weights_file,
+                    weights_index_file,
+                    safe_weights_index_file,
+                    adapter_weights_file,
+                    adapter_safe_weights_file,
+                ]
+            )
+            or is_fsdp_ckpt
         ):
             raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
@@ -2114,7 +2130,7 @@ class Trainer:
                     "yield to errors or unwanted behaviors."
                 )
 
-        if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file):
+        if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file) or is_fsdp_ckpt:
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
@@ -2184,6 +2200,10 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if self.is_deepspeed_enabled:
             deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
+        elif self.is_fsdp_enabled:
+            load_result = load_fsdp_model(
+                self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
+            )
         elif (
             os.path.exists(best_model_path)
             or os.path.exists(best_safe_model_path)
@@ -2211,10 +2231,6 @@ class Trainer:
 
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
-            elif self.is_fsdp_enabled:
-                load_result = load_fsdp_model(
-                    self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
-                )
             else:
                 if is_peft_available() and isinstance(model, PeftModel):
                     # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
@@ -2503,6 +2519,14 @@ class Trainer:
             else (
                 os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
                 or os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME_BIN))
+                or (
+                    os.path.isdir(checkpoint)
+                    and any(
+                        OPTIMIZER_NAME_BIN.split(".")[0] in folder_name
+                        for folder_name in os.listdir(checkpoint)
+                        if os.path.isdir(os.path.join(checkpoint, folder_name))
+                    )
+                )
             )
         )
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):

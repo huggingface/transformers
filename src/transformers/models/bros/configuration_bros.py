@@ -21,8 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BROS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "naver-clova-ocr/bros-base-uncased": "https://huggingface.co/naver-clova-ocr/bros-base-uncased/resolve/main/config.json",
-    "naver-clova-ocr/bros-large-uncased": "https://huggingface.co/naver-clova-ocr/bros-large-uncased/resolve/main/config.json",
+    "jinho8345/bros-base-uncased": "https://huggingface.co/jinho8345/bros-base-uncased/blob/main/config.json",
+    "jinho8345/bros-large-uncased": "https://huggingface.co/jinho8345/bros-large-uncased/blob/main/config.json",
 }
 
 
@@ -31,7 +31,7 @@ class BrosConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`BrosModel`] or a [`TFBrosModel`]. It is used to
     instantiate a Bros model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Bros
-    [naver-clova-ocr/bros-base-uncased](https://huggingface.co/naver-clova-ocr/bros-base-uncased) architecture.
+    [jinho8345/bros-base-uncased](https://huggingface.co/jinho8345/bros-base-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -81,10 +81,10 @@ class BrosConfig(PretrainedConfig):
     ```python
     >>> from transformers import BrosConfig, BrosModel
 
-    >>> # Initializing a BROS naver-clova-ocr/bros-base-uncased style configuration
+    >>> # Initializing a BROS jinho8345/bros-base-uncased style configuration
     >>> configuration = BrosConfig()
 
-    >>> # Initializing a model from the naver-clova-ocr/bros-base-uncased style configuration
+    >>> # Initializing a model from the jinho8345/bros-base-uncased style configuration
     >>> model = BrosModel(configuration)
 
     >>> # Accessing the model configuration
