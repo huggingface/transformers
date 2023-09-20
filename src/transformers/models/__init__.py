@@ -214,6 +214,7 @@ from . import (
     vit_mae,
     vit_msn,
     vitdet,
+    vitmatte,
     vits,
     vivit,
     wav2vec2,

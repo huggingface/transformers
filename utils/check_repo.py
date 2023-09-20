@@ -280,6 +280,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
+    "VitMatteForImageMatting",
     "SeamlessM4TTextToUnitModel",
     "SeamlessM4TTextToUnitForConditionalGeneration",
     "SeamlessM4TCodeHifiGan",
