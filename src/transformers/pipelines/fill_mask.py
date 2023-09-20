@@ -62,7 +62,7 @@ class FillMaskPipeline(Pipeline):
     joint probabilities (See [discussion](https://github.com/huggingface/transformers/pull/10222)).
 
     </Tip>
-    
+
     <Tip>
 
     This pipeline now supports tokenizer_kwargs. For example try:
@@ -106,7 +106,9 @@ class FillMaskPipeline(Pipeline):
             for input_ids in model_inputs["input_ids"]:
                 self._ensure_exactly_one_mask_token(input_ids)
 
-    def preprocess(self, inputs, return_tensors=None, tokenizer_kwargs=None, **preprocess_parameters) -> Dict[str, GenericTensor]:
+    def preprocess(
+        self, inputs, return_tensors=None, tokenizer_kwargs=None, **preprocess_parameters
+    ) -> Dict[str, GenericTensor]:
         if return_tensors is None:
             return_tensors = self.framework
         if tokenizer_kwargs is None:
@@ -218,21 +220,19 @@ class FillMaskPipeline(Pipeline):
         return target_ids
 
     def _sanitize_parameters(self, top_k=None, targets=None, tokenizer_kwargs=None):
-
         preprocess_params = {}
 
         if tokenizer_kwargs is not None:
-            preprocess_params['tokenizer_kwargs'] = tokenizer_kwargs
+            preprocess_params["tokenizer_kwargs"] = tokenizer_kwargs
 
         postprocess_params = {}
-        
+
         if targets is not None:
             target_ids = self.get_target_ids(targets, top_k)
             postprocess_params["target_ids"] = target_ids
 
         if top_k is not None:
             postprocess_params["top_k"] = top_k
-
 
         if self.tokenizer.mask_token_id is None:
             raise PipelineException(

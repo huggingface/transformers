@@ -211,8 +211,10 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
-        outputs = unmasker("My name is <mask>" +"Lorem ipsum dolor sit amet, consectetur adipiscing elit,"*100,
-                           tokenizer_kwargs={'truncation':True})
+        outputs = unmasker(
+            "My name is <mask>" + "Lorem ipsum dolor sit amet, consectetur adipiscing elit," * 100,
+            tokenizer_kwargs={"truncation": True},
+        )
         self.assertEqual(
             nested_simplify(outputs, decimals=6),
             [
