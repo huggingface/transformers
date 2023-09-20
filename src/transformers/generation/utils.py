@@ -1251,18 +1251,10 @@ class GenerationMixin:
                 " generate arguments will also show up in this list)"
             )
 
-    def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
+    def _validate_generated_length(self, generation_config, input_ids_length):
         """Performs validation related to the resulting generated length"""
 
         # 1. Max length warnings related to poor parameterization
-        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
-            # 20 is the default max_length of the generation config
-            warnings.warn(
-                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) to control the "
-                "generation length. We recommend setting `max_new_tokens` to control the maximum length of the "
-                "generation.",
-                UserWarning,
-            )
         if input_ids_length >= generation_config.max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             warnings.warn(
@@ -1277,10 +1269,6 @@ class GenerationMixin:
             " Generation will stop at the defined maximum length. You should decrease the minimum length and/or "
             "increase the maximum length."
         )
-        if has_default_max_length:
-            min_length_error_suffix += (
-                f" Note that `max_length` is set to {generation_config.max_length}, its default value."
-            )
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             warnings.warn(
                 f"Unfeasible length constraints: `min_length` ({generation_config.min_length}) is larger than"
@@ -1515,9 +1503,8 @@ class GenerationMixin:
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[-1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if generation_config.max_new_tokens is not None:
-            if not has_default_max_length and generation_config.max_length is not None:
+            if generation_config.max_length is not None:
                 logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
@@ -1525,7 +1512,7 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
-        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
+        self._validate_generated_length(generation_config, input_ids_length)
 
         # 7. determine generation mode
         generation_mode = self._get_generation_mode(generation_config, assistant_model)
