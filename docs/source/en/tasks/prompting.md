@@ -72,24 +72,25 @@ Run inference with decoder-only models with the `text-generation` pipeline:
 
 ```python
 >>> from transformers import pipeline
+>>> import torch
+
+>>> torch.manual_seed(0)
 
 >>> generator = pipeline('text-generation', model = 'gpt2')
 >>> prompt = "Hello, I'm a language model"
 
 >>> generator(prompt, max_length = 30)
-[{'generated_text': "Hello, I'm a language model programmer.\n\nYou know what? I've got to explain my language concepts to a lot of people. What"}]
+[{'generated_text': "Hello, I'm a language model expert, so I'm a big believer in the concept that I know very well and then I try to look into"}]
 ```
 
 To run inference with an encoder-decoder, use the `text2text-generation` pipeline:
 
 ```python
->>> from transformers import pipeline
-
 >>> text2text_generator = pipeline("text2text-generation", model = 'google/flan-t5-base')
 >>> prompt = "Translate from English to French: I'm very happy to see you"
 
 >>> text2text_generator(prompt)
-[{'generated_text': 'Je suis très heureuse de vous voir'}]
+[{'generated_text': 'Je suis très heureuse de vous rencontrer.'}]
 ```
 
 ### Base vs instruct/chat models
@@ -116,14 +117,14 @@ pip install -q transformers einops
 Next, let's load the model with the appropriate pipeline (`"text-generation"`): 
 
 ```python
->>> from transformers import AutoTokenizer
->>> import transformers
+>>> from transformers import pipeline, AutoTokenizer
 >>> import torch
 
+>>> torch.manual_seed(0)
 >>> model = "tiiuae/falcon-7b-instruct"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(model)
->>> pipeline = transformers.pipeline(
+>>> pipeline = pipeline(
 ...     "text-generation",
 ...     model=model,
 ...     tokenizer=tokenizer,
@@ -135,11 +136,12 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 
 <Tip>
 
-Note that:
-* Falcon models were trained using the `bfloat16` datatype, so we recommend you use the same. This requires a recent 
-version of CUDA and works best on modern cards. 
-* You need to allow remote code execution. This is because the Falcon models use a new architecture that is not part of transformers yet - instead, the code necessary is provided by the model authors in the repo.
-</Tip>
+Note that Falcon models were trained using the `bfloat16` datatype, so we recommend you use the same. This requires a recent 
+version of CUDA and works best on modern cards.
+
+You also need to allow remote code execution. This is because the Falcon models use a new architecture that is not part of transformers yet - instead, the code necessary is provided by the model authors in the repo.
+
+- </Tip>
 
 Now that we have the model loaded via the pipeline, let's explore how you can use prompts to solve NLP tasks.
 
@@ -151,10 +153,11 @@ We'll start by giving the instruction, and then specifying the text to classify.
 also adding the beginning of the response - `"Sentiment: "`:
 
 ```python
+>>> torch.manual_seed(0) 
 >>> prompt = """Classify the text into neutral, negative or positive. 
-    Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
-    Sentiment:
-    """
+Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
+Sentiment:
+"""
 
 >>> sequences = pipeline(
 ...     prompt,
@@ -189,14 +192,15 @@ Let's modify the instructions in the prompt to make the LLM perform this task. H
 so that output doesn't contain the prompt:
 
 ```python
+>>> torch.manual_seed(1)
 >>> prompt = """Return a list of named entities in the text.
-    Text: The Golden State Warriors are an American professional basketball team based in San Francisco.
-    Named entities:
-    """
+Text: The Golden State Warriors are an American professional basketball team based in San Francisco.
+Named entities:
+"""
 
 >>> sequences = pipeline(
 ...     prompt,
-...     max_length=80,
+...     max_length=43,
 ...     do_sample=True,
 ...     top_k=10,
 ...     num_return_sequences=1,
@@ -206,14 +210,12 @@ so that output doesn't contain the prompt:
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-"""- State Warriors
+"""- The Golden State Warriors
 - San Francisco
-- National Basketball Association"""
+"""
 ```
 
-As you can see, the model correctly identified two named entities from the given text, however, it has also added a new 
-entity that is not present in the text but is contextually very close in meaning. Further in the guide we'll talk about 
-techniques you can use to improve your prompts.
+As you can see, the model correctly identified two named entities from the given text.
 
 #### Translation
 
@@ -222,10 +224,11 @@ for the simplicity of the examples, we'll keep using Falcon-7b-instruct, which d
 you can write a basic prompt to instruct a model to translate a piece of text from English to Italian: 
 
 ```python
+>>> torch.manual_seed(2)
 >>> prompt = """Translate the English text to Italian.
-    Text: Sometimes, I've believed as many as six impossible things before breakfast.
-    Translation:
-    """
+Text: Sometimes, I've believed as many as six impossible things before breakfast.
+Translation:
+"""
 
 >>> sequences = pipeline(
 ...     prompt,
@@ -255,14 +258,15 @@ Previously, we have placed the instructions at the very beginning of the prompt.
 also be a suitable location for instructions. Typically, it's better to place the instruction on one of the extreme ends.  
 
 ```python
+>>> torch.manual_seed(3)
 >>> prompt = """Permaculture is a design process mimicking the diversity, functionality and resilience of natural ecosystems. The principles and practices are drawn from traditional ecological knowledge of indigenous cultures combined with modern scientific understanding and technological innovations. Permaculture design provides a framework helping individuals and communities develop innovative, creative and effective strategies for meeting basic needs while preparing for and mitigating the projected impacts of climate change.
-    Write a summary of the above text.
-    Summary:
-    """
+Write a summary of the above text.
+Summary:
+"""
 
 >>> sequences = pipeline(
 ...     prompt,
-...     max_length=300,
+...     max_length=100,
 ...     do_sample=True,
 ...     top_k=10,
 ...     num_return_sequences=1,
@@ -272,7 +276,7 @@ also be a suitable location for instructions. Typically, it's better to place th
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-"Permaculture is an ecosystem design mimicking natural, diverse functionalities and resilience, aiming to meet basic needs and prepare for climate change in communities."
+"Permaculture is an ecological design mimicking natural ecosystems to meet basic needs"
 ```
 
 #### Question answering
@@ -281,6 +285,7 @@ For question answering task we can structure the prompt into the following logic
 the leading word or phrase (`"Answer:"`) to nudge the model to start generating the answer:
 
 ```python
+>>> torch.manual_seed(4)
 >>> prompt = """Answer the question using the context below.
 Context: Gazpacho is a cold soup and drink made of raw, blended vegetables. Most gazpacho includes stale bread, tomato, cucumbers, onion, bell peppers, garlic, olive oil, wine vinegar, water, and salt. Northern recipes often include cumin and/or pimentón (smoked sweet paprika). Traditionally, gazpacho was made by pounding the vegetables in a mortar with a pestle; this more laborious method is still sometimes used as it helps keep the gazpacho cool and avoids the foam and silky consistency of smoothie versions made in blenders or food processors.
 Question: What modern tool is used to make gazpacho?
@@ -289,7 +294,7 @@ Answer:
 
 >>> sequences = pipeline(
 ...     prompt,
-...     max_length=200,
+...     max_length=160,
 ...     do_sample=True,
 ...     top_k=10,
 ...     num_return_sequences=1,
@@ -299,7 +304,7 @@ Answer:
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-"Result: A blender or a food processor."
+"Result: Modern tools are used, such as immersion blenders"
 ```
 
 #### Reasoning
@@ -310,6 +315,7 @@ Reasoning is one of the most difficult tasks for LLMs, and achieving good result
 Let's try if we can make a model reason about a simple arithmetics task with a basic prompt: 
 
 ```python
+>>> torch.manual_seed(5)
 >>> prompt = """There are 5 groups of students in the class. Each group has 4 students. How many students are there in the class?"""
 
 >>> sequences = pipeline(
@@ -324,17 +330,19 @@ Let's try if we can make a model reason about a simple arithmetics task with a b
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-"Result: There are 20 students in the class."
+"""Result: 
+There are a total of 5 groups, so there are 5 x 4=20 students in the class."""
 ```
 
 Correct! Let's increase the complexity a little and see if we can still get away with a basic prompt:
 
 ```python
+>>> torch.manual_seed(6)
 >>> prompt = """I baked 15 muffins. I ate 2 muffins and gave 5 muffins to a neighbor. My partner then bought 6 more muffins and ate 2. How many muffins do we now have?"""
 
 >>> sequences = pipeline(
 ...     prompt,
-...     max_length=100,
+...     max_length=80,
 ...     do_sample=True,
 ...     top_k=10,
 ...     num_return_sequences=1,
@@ -345,11 +353,12 @@ Correct! Let's increase the complexity a little and see if we can still get away
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
 """Result: 
-We now have 13 muffins."""
+The total number of muffins now is 21. You baked 15 muffins, ate 2, and then gave another 5 to a neighbor, so that's 16 muffins."""
 ```
 
-This is a wrong answer. Looks like at this point basic prompts are not enough and for more complex reasoning tasks we'll need to apply some 
-advanced techniques that are covered later in this guide.
+This is a wrong answer, it should be 12. In this case, this can be due to the prompt being too basic, or due to the choice 
+of model, after all we've picked the smallest version of Falcon. Reasoning is difficult for models of all sizes, but larger 
+models are likely to perform better. 
 
 ## Best practices of LLM prompting
 
@@ -383,11 +392,12 @@ The examples condition the model to generate the output following the patterns i
 Here's an example: 
 
 ```python
+>>> torch.manual_seed(0)
 >>> prompt = """Text: The first human went into space and orbited the Earth on April 12, 1961.
-    Date: 04/12/1961
+Date: 04/12/1961
 
-    Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
-    Date:"""
+Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
+Date:"""
 
 >>> sequences = pipeline(
 ...     prompt,
@@ -424,39 +434,9 @@ There are two ways of steering a model to producing the reasoning steps:
 - few-shot prompting by illustrating examples with detailed answers to questions, showing the model how to work through a problem.
 - by instructing the model to reason by adding phrases like "Let's think step by step" or "Take a deep breath and work through the problem step by step."
 
-Let's apply CoT technique to the muffins example from the [reasoning section](#reasoning):
-
-```python
->>> prompt = """I baked 15 muffins. I ate 2 muffins and gave 5 muffins to a neighbor. My partner then bought 6 more muffins and ate 2. How many muffins do we now have?
-Take a deep breath and work on this problem step-by-step."""
-
->>> sequences = pipeline(
-...     prompt,
-...     max_length=200,
-...     do_sample=True,
-...     top_k=10,
-...     num_return_sequences=1,
-...     return_full_text = False,
-...     eos_token_id=tokenizer.eos_token_id,
-... )
-
->>> for seq in sequences:
-...     print(f"Result: {seq['generated_text']}")
-"""Result: 
-1. We have 15 muffins.
-2. We ate 2, so we have 13 muffins left.
-3. We gave away 5, so we have 8 muffins left.
-4. We bought 6 more, so we have 14 muffins left.
-5. We have 2 muffins left.
-6. We ate 2, so we have 0 muffins left.
-7. We have 0 muffins left.
-"""
-```
-
-The answer is still wrong, however, the reasoning was correct up until step 4. In this particular case, we are using 
-the smallest version of the Falcon model, and its capabilities are limited. Because reasoning is a very difficult task for LLMs, 
-it's best to use a larger model for it. For instance, when trying the same prompt with a much more powerful `tiiuae/falcon-180B-chat`, 
-we get the following output: 
+If we apply the CoT technique to the muffins example from the [reasoning section](#reasoning) and use a larger model, 
+such as (`tiiuae/falcon-180B-chat`) which you can play with in the [HuggingChat](https://huggingface.co/chat/), 
+we'll get a significant improvement on the reasoning result:
 
 ```text
 Let's go through this step-by-step:
