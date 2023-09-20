@@ -2880,8 +2880,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
                 all the concrete lengths for each spectrogram.
                 - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
-                `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum
-                length.
+                `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum length.
                 - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
                 the concrete lengths for each waveform.
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
@@ -2963,8 +2962,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
                 all the concrete lengths for each spectrogram.
                 - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
-                `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum
-                length.
+                `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum length.
                 - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
                 the concrete lengths for each waveform.
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
@@ -3197,8 +3195,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
                 - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
                 all the concrete lengths for each spectrogram.
                 - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
-                `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum
-                length.
+                `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum length.
                 - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
                 the concrete lengths for each waveform.
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
