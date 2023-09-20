@@ -1032,7 +1032,6 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         model = self.default_model
         model.to(torch_device)
         processor = self.default_processor
-
         set_seed(555)  # make deterministic
 
         input_text = [
@@ -1041,26 +1040,26 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
         ]
         inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+
         speaker_embeddings = torch.zeros((1, 512), device=torch_device)
         spectrograms, spectrogram_lengths = model.generate_speech(
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
             attention_mask=inputs["attention_mask"],
         )
-        self.assertEqual(spectrograms.shape, (662, model.config.num_mel_bins))
-        self.assertEqual(len(spectrogram_lengths), 3)
-        self.assertEqual(spectrogram_lengths[0] + spectrogram_lengths[1] + spectrogram_lengths[2], 662)
+        self.assertEqual(spectrograms.shape, (3, 266, model.config.num_mel_bins))
 
         # Check results when batching are consistent with results without batching
         set_seed(555)  # make deterministic
 
         input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
         inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
-        spectrogram_second = model.generate_speech(
+        spectrogram = model.generate_speech(
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
         )
-        self.assertTrue(torch.allclose(spectrogram_second, spectrograms[: spectrogram_lengths[0]], atol=1e-4))
+        self.assertEqual(spectrogram.shape, spectrograms[0][: spectrogram_lengths[0]].shape)
+        self.assertTrue(torch.allclose(spectrogram, spectrograms[0][: spectrogram_lengths[0]], atol=1e-4))
 
 
 @require_torch
