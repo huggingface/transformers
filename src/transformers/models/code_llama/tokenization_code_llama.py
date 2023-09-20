@@ -293,6 +293,8 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
         tokens = self.sp_model.encode(text, out_type=str)
+        if not text.startswith((SPIECE_UNDERLINE, " ")):
+            return tokens
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']

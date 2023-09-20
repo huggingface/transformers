@@ -559,6 +559,18 @@ class LlamaIntegrationTest(unittest.TestCase):
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
+    def test_spm_edge_cases(self):
+        # the word inform should be split as ['in', 'form']
+        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
+        tokens = tokenizer.tokenize("[INST] How are you doing?<s>[/INST]")
+        self.assertEqual(
+            tokens, ["▁[", "INST", "]", "▁How", "▁are", "▁you", "▁doing", "?", "<s>", "[", "/", "INST", "]"]
+        )
+        inputs_ids = tokenizer.encode("[INST] How are you doing?<s>[/INST]")
+        self.assertEqual(
+            inputs_ids, [1, 518, 25580, 29962, 1128, 526, 366, 2599, 29973, 1, 29961, 29914, 25580, 29962]
+        )
+
     def test_infilling_tokenization(self):
         PROMPTS = [
             '''def remove_non_ascii(s: str) -> str:
