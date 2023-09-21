@@ -61,8 +61,8 @@ into a single instance to both extract the input features and decode the predict
 >>> from datasets import load_dataset
 >>> import torch
 
->>> processor = NougatProcessor.from_pretrained("nielsr/nougat")
->>> model = VisionEncoderDecoderModel.from_pretrained("nielsr/nougat")
+>>> processor = NougatProcessor.from_pretrained("facebook/nougat-base")
+>>> model = VisionEncoderDecoderModel.from_pretrained("facebook/nougat-base")
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model.to(device)  # doctest: +IGNORE_RESULT
@@ -106,3 +106,4 @@ See the [model hub](https://huggingface.co/models?filter=nougat) to look for Nou
     - save_pretrained
     - batch_decode
     - decode
+    - post_process_generation

@@ -34,7 +34,7 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        tokenizer = NougatTokenizerFast.from_pretrained("nielsr/nougat")
+        tokenizer = NougatTokenizerFast.from_pretrained("facebook/nougat-base")
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_rust_tokenizer(self, **kwargs):
@@ -172,7 +172,7 @@ class TestNormalizeListLikeLines(unittest.TestCase):
 class NougatPostProcessingTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.tokenizer = NougatTokenizerFast.from_pretrained("nielsr/nougat")
+        self.tokenizer = NougatTokenizerFast.from_pretrained("facebook/nougat-base")
 
     def test_correct_tables_basic(self):
         input_str = "\\begin{table} \\begin{tabular}{l l}  & \\ \\end{tabular} \\end{table}"

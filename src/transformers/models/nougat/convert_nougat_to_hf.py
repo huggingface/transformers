@@ -248,8 +248,8 @@ def convert_nougat_checkpoint(model_tag, pytorch_dump_folder_path=None, push_to_
         tag_to_name = {"0.1.0-base": "nougat-base", "0.1.0-small": "nougat-small"}
         model_name = tag_to_name[model_tag]
 
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"facebook/{model_name}")
+        processor.push_to_hub(f"facebook/{model_name}")
 
 
 if __name__ == "__main__":

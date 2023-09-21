@@ -51,12 +51,12 @@ INIT_TOKENIZER_DOCSTRING += """
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "tokenizer_file": {
-        "nielsr/nougat": "https://huggingface.co/nielsr/nougat/tokenizer/blob/main/tokenizer.json",
+        "facebook/nougat-base": "https://huggingface.co/facebook/nougat-base/tokenizer/blob/main/tokenizer.json",
     },
 }
 
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"nielsr/nougat": 3584}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/nougat-base": 3584}
 
 
 def markdown_compatible(text: str) -> str:

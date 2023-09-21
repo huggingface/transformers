@@ -1013,11 +1013,11 @@ class DonutModelIntegrationTest(unittest.TestCase):
 class NougatModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return NougatProcessor.from_pretrained("nielsr/nougat") if is_vision_available() else None
+        return NougatProcessor.from_pretrained("facebook/nougat-base") if is_vision_available() else None
 
     @cached_property
     def default_model(self):
-        return VisionEncoderDecoderModel.from_pretrained("nielsr/nougat").to(torch_device)
+        return VisionEncoderDecoderModel.from_pretrained("facebook/nougat-base").to(torch_device)
 
     @cached_property
     def default_image(self):
