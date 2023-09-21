@@ -90,6 +90,12 @@ class TrainingArguments:
     per_device_eval_batch_size: int = field(
         default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
     )
+    gradient_accumulation_steps: int = field(
+        default=1,
+        metadata={
+            "help": "Number of updates steps to accumulate before performing a backward/update pass."
+        },
+    )
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
     adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
@@ -656,7 +662,7 @@ def main():
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
-    train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
+    train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count() * training_args.gradient_accumulation_steps
     per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
     eval_batch_size = per_device_eval_batch_size * jax.device_count()
     steps_per_epoch = len(train_dataset) // train_batch_size
@@ -705,6 +711,13 @@ def main():
             mask=decay_mask_fn,
         )
 
+	
+    # add gradient accumulation
+    if training_args.gradient_accumulation_steps > 1:
+        optimizer = optax.chain(
+            optax.apply_every(training_args.gradient_accumulation_steps), optimizer
+        )
+
     # Setup train state
     state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=optimizer, dropout_rng=dropout_rng)
 
@@ -729,8 +742,8 @@ def main():
         grad = jax.lax.pmean(grad, "batch")
 
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
-
-        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
+        
+        metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step // training_args.gradient_accumulation_steps)}
         metrics = jax.lax.pmean(metrics, axis_name="batch")
 
         return new_state, metrics
@@ -771,18 +784,18 @@ def main():
         rng, input_rng = jax.random.split(rng)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        train_loader = data_loader(input_rng, train_dataset, train_batch_size, shuffle=True)
+        train_loader = data_loader(input_rng, train_dataset // training_args.gradient_accumulation_steps, train_batch_size, shuffle=True)
         steps_per_epoch = len(train_dataset) // train_batch_size
         # train
-        for step in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
+        for step in tqdm(range(steps_per_epoch * training_args.gradient_accumulation_steps), desc="Training...", position=1, leave=False):
             batch = next(train_loader)
             batch = shard(batch)
             state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
 
-            cur_step = epoch * (len(train_dataset) // train_batch_size) + step
+            cur_step = epoch * (steps_per_epoch * training_args.gradient_accumulation_steps) + step
 
-            if cur_step % training_args.logging_steps == 0 and cur_step > 0:
+            if cur_step % (training_args.logging_steps * training_args.gradient_accumulation_steps) == 0 and cur_step > 0:
                 # Save metrics
                 train_metric = unreplicate(train_metric)
                 train_time += time.time() - train_start
@@ -796,17 +809,16 @@ def main():
 
                 train_metrics = []
 
-            if cur_step % training_args.eval_steps == 0 and cur_step > 0:
+            if cur_step % (training_args.eval_steps * training_args.gradient_accumulation_steps) == 0 and cur_step > 0:
                 # ======================== Evaluating ==============================
                 eval_metrics = []
-                eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size, drop_last=False)
-                eval_steps = math.ceil(len(eval_dataset) / eval_batch_size)
+                eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
+                eval_steps = len(eval_dataset) // eval_batch_size
                 for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
                     # Model forward
                     batch = next(eval_loader)
-                    metrics = pad_shard_unpad(p_eval_step, static_return=True)(
-                        state.params, batch, min_device_batch=per_device_eval_batch_size
-                    )
+                    batch = shard(batch)
+                    metrics = p_eval_step(state.params, batch)
                     eval_metrics.append(metrics)
 
                 # normalize eval metrics
@@ -830,7 +842,7 @@ def main():
                 if has_tensorboard and jax.process_index() == 0:
                     write_eval_metric(summary_writer, eval_metrics, cur_step)
 
-            if cur_step % training_args.save_steps == 0 and cur_step > 0:
+            if cur_step % (training_args.save_steps * training_args.gradient_accumulation_steps) == 0 and cur_step > 0:
                 # save checkpoint after each epoch and push checkpoint to the hub
                 if jax.process_index() == 0:
                     params = jax.device_get(unreplicate(state.params))
@@ -842,14 +854,12 @@ def main():
     # Eval after training
     if training_args.do_eval:
         eval_metrics = []
-        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size, drop_last=False)
-        eval_steps = math.ceil(len(eval_dataset) / eval_batch_size)
+        eval_loader = data_loader(input_rng, eval_dataset, eval_batch_size)
+        eval_steps = len(eval_dataset) // eval_batch_size
         for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
             # Model forward
-            batch = next(eval_loader)
-            metrics = pad_shard_unpad(p_eval_step, static_return=True)(
-                state.params, batch, min_device_batch=per_device_eval_batch_size
-            )
+            batch = shard(next(eval_loader))
+            metrics = p_eval_step(state.params, batch)
             eval_metrics.append(metrics)
 
         # normalize eval metrics
