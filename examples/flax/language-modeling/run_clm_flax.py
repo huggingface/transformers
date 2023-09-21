@@ -37,7 +37,6 @@ from typing import Callable, Optional
 import datasets
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 from datasets import Dataset, load_dataset
 from flax import jax_utils, traverse_util
@@ -290,9 +289,9 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
     """
     if shuffle:
         batch_idx = jax.random.permutation(rng, len(dataset))
-        batch_idx = np.asarray(batch_idx)
+        batch_idx = jnp.asarray(batch_idx)
     else:
-        batch_idx = np.arange(len(dataset))
+        batch_idx = jnp.arange(len(dataset))
 
     if drop_last:
         steps_per_epoch = len(dataset) // batch_size
@@ -300,11 +299,11 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
         batch_idx = batch_idx.reshape((steps_per_epoch, batch_size))
     else:
         steps_per_epoch = math.ceil(len(dataset) / batch_size)
-        batch_idx = np.array_split(batch_idx, steps_per_epoch)
+        batch_idx = jnp.array_split(batch_idx, steps_per_epoch)
 
     for idx in batch_idx:
         batch = dataset[idx]
-        batch = {k: np.array(v) for k, v in batch.items()}
+        batch = {k: jnp.array(v) for k, v in batch.items()}
 
         yield batch
 
