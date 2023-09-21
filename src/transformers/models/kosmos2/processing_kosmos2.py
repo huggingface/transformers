@@ -613,6 +613,7 @@ def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
     >>> clean_text, entities = clean_text_and_extract_entities_with_bboxes(text)
     >>> clean_text
     An image of a snowman warming himself by a fire.
+
     >>> entities
     [('a snowman', (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]), ('a fire', (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)])]
     ```"""
