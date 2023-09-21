@@ -196,10 +196,6 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         self.num_patch_index_tokens = num_patch_index_tokens
         patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
 
-        if not _tag_and_patch_index_tokens_already_built:
-            for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
-                self.add_tokens(AddedToken(token, lstrip=True, rstrip=False))
-
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -212,6 +208,12 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
             num_patch_index_tokens=num_patch_index_tokens,
             **kwargs,
         )
+
+        # This has to be after `super().__init__` so `self._added_tokens_decoder` is available
+        # (or we can set it directly here rather in the parent class)
+        if not _tag_and_patch_index_tokens_already_built:
+            for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
+                self.add_tokens(AddedToken(token, lstrip=True, rstrip=False))
 
     def _decode(
         self,
