@@ -38,7 +38,7 @@ Tips:
 - The quickest way to get started with Nougat is by checking the [tutorial
   notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Nougat), which show how to use the model
   at inference time as well as fine-tuning on custom data.
-- Nougat is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
+- Nougat is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework. The model is identical to [Donut](donut) in terms of architecture.
 
 ## Inference
 
