@@ -124,7 +124,7 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 >>> model = "tiiuae/falcon-7b-instruct"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(model)
->>> pipeline = pipeline(
+>>> pipe = pipeline(
 ...     "text-generation",
 ...     model=model,
 ...     tokenizer=tokenizer,
@@ -159,7 +159,7 @@ also adding the beginning of the response - `"Sentiment: "`:
 ... Sentiment:
 ... """
 
->>> sequences = pipeline(
+>>> sequences = pipe(
 ...     prompt,
 ...     max_length=100,
 ...     do_sample=True,
@@ -170,10 +170,10 @@ also adding the beginning of the response - `"Sentiment: "`:
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-"""Result: Classify the text into neutral, negative or positive. 
+Result: Classify the text into neutral, negative or positive. 
 Text: This movie is definitely one of my favorite movies of its kind. The interaction between respectable and morally strong characters is an ode to chivalry and the honor code amongst thieves and policemen.
 Sentiment:
-Positive"""
+Positive
 ```
 
 As a result, the output contains a classification label from the list we have provided in the instructions, and it is a correct one!
@@ -198,7 +198,7 @@ so that output doesn't contain the prompt:
 ... Named entities:
 ... """
 
->>> sequences = pipeline(
+>>> sequences = pipe(
 ...     prompt,
 ...     max_length=43,
 ...     do_sample=True,
@@ -210,9 +210,8 @@ so that output doesn't contain the prompt:
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-"""- The Golden State Warriors
+- The Golden State Warriors
 - San Francisco
-"""
 ```
 
 As you can see, the model correctly identified two named entities from the given text.
@@ -230,7 +229,7 @@ you can write a basic prompt to instruct a model to translate a piece of text fr
 ... Translation:
 ... """
 
->>> sequences = pipeline(
+>>> sequences = pipe(
 ...     prompt,
 ...     max_length=100,
 ...     do_sample=True,
@@ -242,7 +241,7 @@ you can write a basic prompt to instruct a model to translate a piece of text fr
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-"A volte, ho creduto a sei impossibili cose prima di colazione."
+A volte, ho creduto a sei impossibili cose prima di colazione.
 ```
 
 [//]: # (Perhaps we could add a note here about languages used in prompts themselves, e.g. prompting in Italian. What changes? 
@@ -264,7 +263,7 @@ also be a suitable location for instructions. Typically, it's better to place th
 ... Summary:
 ... """
 
->>> sequences = pipeline(
+>>> sequences = pipe(
 ...     prompt,
 ...     max_length=100,
 ...     do_sample=True,
@@ -276,7 +275,7 @@ also be a suitable location for instructions. Typically, it's better to place th
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-"Permaculture is an ecological design mimicking natural ecosystems to meet basic needs"
+Permaculture is an ecological design mimicking natural ecosystems to meet basic needs
 ```
 
 #### Question answering
@@ -292,7 +291,7 @@ the leading word or phrase (`"Answer:"`) to nudge the model to start generating 
 ... Answer:
 ... """
 
->>> sequences = pipeline(
+>>> sequences = pipe(
 ...     prompt,
 ...     max_length=160,
 ...     do_sample=True,
@@ -304,7 +303,7 @@ the leading word or phrase (`"Answer:"`) to nudge the model to start generating 
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-"Result: Modern tools are used, such as immersion blenders"
+Result: Modern tools are used, such as immersion blenders
 ```
 
 #### Reasoning
@@ -318,7 +317,7 @@ Let's try if we can make a model reason about a simple arithmetics task with a b
 >>> torch.manual_seed(5) # doctest: +IGNORE_RESULT
 >>> prompt = """There are 5 groups of students in the class. Each group has 4 students. How many students are there in the class?"""
 
->>> sequences = pipeline(
+>>> sequences = pipe(
 ...     prompt,
 ...     max_length=100,
 ...     do_sample=True,
@@ -330,8 +329,8 @@ Let's try if we can make a model reason about a simple arithmetics task with a b
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-"""Result: 
-There are a total of 5 groups, so there are 5 x 4=20 students in the class."""
+Result: 
+There are a total of 5 groups, so there are 5 x 4=20 students in the class.
 ```
 
 Correct! Let's increase the complexity a little and see if we can still get away with a basic prompt:
@@ -340,7 +339,7 @@ Correct! Let's increase the complexity a little and see if we can still get away
 >>> torch.manual_seed(6) # doctest: +IGNORE_RESULT
 >>> prompt = """I baked 15 muffins. I ate 2 muffins and gave 5 muffins to a neighbor. My partner then bought 6 more muffins and ate 2. How many muffins do we now have?"""
 
->>> sequences = pipeline(
+>>> sequences = pipe(
 ...     prompt,
 ...     max_length=80,
 ...     do_sample=True,
@@ -352,8 +351,8 @@ Correct! Let's increase the complexity a little and see if we can still get away
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-"""Result: 
-The total number of muffins now is 21. You baked 15 muffins, ate 2, and then gave another 5 to a neighbor, so that's 16 muffins."""
+Result: 
+The total number of muffins now is 21. You baked 15 muffins, ate 2, and then gave another 5 to a neighbor, so that's 16 muffins.
 ```
 
 This is a wrong answer, it should be 12. In this case, this can be due to the prompt being too basic, or due to the choice 
@@ -399,7 +398,7 @@ Here's an example:
 ... Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
 ... Date:"""
 
->>> sequences = pipeline(
+>>> sequences = pipe(
 ...     prompt,
 ...     max_length=80,
 ...     do_sample=True,
@@ -410,11 +409,11 @@ Here's an example:
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
-"""Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
+Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
 Date: 04/12/1961
 
 Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
-Date: 09/28/1960"""
+Date: 09/28/1960
 ```
 
 In the above code snippet we used a single example to demonstrate the desired output to the model, so this can be called a 
