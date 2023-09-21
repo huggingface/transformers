@@ -550,7 +550,6 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 num_proc=data_args.preprocessing_num_workers,
-
             )
     else:
         data_files = {}
