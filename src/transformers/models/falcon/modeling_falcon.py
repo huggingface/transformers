@@ -949,6 +949,7 @@ class FalconModel(FalconPreTrainedModel):
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
+                    presents = None
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
