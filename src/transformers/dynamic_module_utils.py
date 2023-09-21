@@ -606,7 +606,7 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
             except Exception:
                 # OS which does not support signal.SIGALRM
                 raise ValueError(
-                    f"The repository for {model_name} contains custom code which must be executed to correctly\n"
+                    f"The repository for {model_name} contains custom code which must be executed to correctly"
                     f"load the model. You can inspect the repository content at https://hf.co/{model_name}.\n"
                     f"Please pass the argument `trust_remote_code=True` to allow custom code to be run."
                 )
