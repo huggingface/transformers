@@ -16,7 +16,13 @@
 Processor class for Nougat.
 """
 
+from typing import Dict, List, Optional, Union
+
+from transformers.image_utils import ChannelDimension, PILImageResampling
+from transformers.tokenization_utils_base import PreTokenizedInput, TextInput, TruncationStrategy
+
 from ...processing_utils import ProcessorMixin
+from ...utils import PaddingStrategy, TensorType
 
 
 class NougatProcessor(ProcessorMixin):
@@ -36,35 +42,93 @@ class NougatProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
+    def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
-    def __call__(self, *args, **kwargs):
-        """
-        When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
-        [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
-        [`~NougatProcessor.as_target_processor`] this method forwards all its arguments to NougatTokenizer's
-        [`~NougatTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
-        """
-        images = kwargs.pop("images", None)
-        text = kwargs.pop("text", None)
-        if len(args) > 0:
-            images = args[0]
-            args = args[1:]
-
+    def __call__(
+        self,
+        images=None,
+        text=None,
+        do_crop_margin: bool = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_thumbnail: bool = None,
+        do_align_long_axis: bool = None,
+        do_pad: bool = None,
+        do_rescale: bool = None,
+        rescale_factor: Union[int, float] = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair_target: Optional[
+            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+        ] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+    ):
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
-            inputs = self.image_processor(images, *args, **kwargs)
+            inputs = self.image_processor(
+                images,
+                do_crop_margin=do_crop_margin,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_thumbnail=do_thumbnail,
+                do_align_long_axis=do_align_long_axis,
+                do_pad=do_pad,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                return_tensors=return_tensors,
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            encodings = self.tokenizer(
+                text,
+                text_pair=text_pair,
+                text_target=text_target,
+                text_pair_target=text_pair_target,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                is_split_into_words=is_split_into_words,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,
+            )
 
         if text is None:
             return inputs
