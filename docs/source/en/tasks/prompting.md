@@ -374,7 +374,6 @@ Here's an example:
 >>> torch.manual_seed(0) # doctest: +IGNORE_RESULT
 >>> prompt = """Text: The first human went into space and orbited the Earth on April 12, 1961.
 ... Date: 04/12/1961
-
 ... Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
 ... Date:"""
 
@@ -383,15 +382,12 @@ Here's an example:
 ...     max_new_tokens=8,
 ...     do_sample=True,
 ...     top_k=10,
-...     num_return_sequences=1,
-...     eos_token_id=tokenizer.eos_token_id,
 ... )
 
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
 Result: Text: The first human went into space and orbited the Earth on April 12, 1961.
 Date: 04/12/1961
-
 Text: The first-ever televised presidential debate in the United States took place on September 28, 1960, between presidential candidates John F. Kennedy and Richard Nixon. 
 Date: 09/28/1960
 ```
