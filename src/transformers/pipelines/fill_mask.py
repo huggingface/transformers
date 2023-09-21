@@ -70,7 +70,7 @@ class FillMaskPipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> fill_masker = pipeline(model="bert-base-uncased")
-    >>> tokenizer_kwargs = {'truncation': True}
+    >>> tokenizer_kwargs = {"truncation": True}
     >>> fill_masker("This is a simple [MASK]. " + "...with a large amount of repeated text appended. " * 100, tokenizer_kwargs=tokenizer_kwargs)
 
 
