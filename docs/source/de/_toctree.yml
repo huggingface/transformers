@@ -19,6 +19,8 @@
     title: Trainieren mit einem Skript
   - local: accelerate
     title: Verteiltes Training mit 🤗 Accelerate
+  - local: peft
+    title: Laden und Trainieren von Adaptern mit 🤗 PEFT
   - local: model_sharing
     title: Ein Modell teilen
   title: Tutorials
