@@ -122,10 +122,6 @@ class Kosmos2TokenizerFast(PreTrainedTokenizerFast):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        _tag_and_patch_index_tokens_already_built = kwargs.get("_tag_and_patch_index_tokens_already_built", False)
-        if not _tag_and_patch_index_tokens_already_built:
-            kwargs["_tag_and_patch_index_tokens_already_built"] = True
-
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
@@ -177,9 +173,10 @@ class Kosmos2TokenizerFast(PreTrainedTokenizerFast):
         self.num_patch_index_tokens = num_patch_index_tokens
         patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
 
-        if not _tag_and_patch_index_tokens_already_built:
-            for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
-                self.add_tokens(AddedToken(token, lstrip=True, rstrip=False))
+        tokens_to_add = []
+        for token in self.tag_tokens + patch_index_tokens:
+            tokens_to_add.append(AddedToken(token, lstrip=True, rstrip=False))
+        self.add_tokens(tokens_to_add)
 
     @property
     def can_save_slow_tokenizer(self) -> bool:
