@@ -76,7 +76,7 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
         raise ValueError('mel_scale should be one of "htk", "slaney" or "kaldi".')
 
     if mel_scale == "htk":
-        return 700.0 * (np.exp(mels / 2595.0, base=10) - 1.0)
+        return 700.0 * (np.power(10, mels / 2595.0) - 1.0)
     elif mel_scale == "kaldi":
         return 700.0 * (np.exp(mels / 1127.0) - 1.0)
 
