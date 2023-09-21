@@ -138,10 +138,6 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        _tag_and_patch_index_tokens_already_built = kwargs.get("_tag_and_patch_index_tokens_already_built", False)
-        if not _tag_and_patch_index_tokens_already_built:
-            kwargs["_tag_and_patch_index_tokens_already_built"] = True
-
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
