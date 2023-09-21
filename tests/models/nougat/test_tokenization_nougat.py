@@ -116,13 +116,13 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 class MarkdownCompatibleTest(unittest.TestCase):
     def test_equation_tag(self):
-        input_text = "(3.2) \[Equation Text\]"
-        excepted_output = "\[Equation Text \\tag{3.2}\]"
+        input_text = "(3.2) \\[Equation Text\\]"
+        excepted_output = "\\[Equation Text \\tag{3.2}\\]"
         self.assertEqual(markdown_compatible(input_text), excepted_output)
 
     def test_equation_tag_letters(self):
-        input_text = "(18a) \[Equation Text\]"
-        excepted_output = "\[Equation Text \\tag{18a}\]"
+        input_text = "(18a) \\[Equation Text\\]"
+        excepted_output = "\\[Equation Text \\tag{18a}\\]"
         self.assertEqual(markdown_compatible(input_text), excepted_output)
 
     def test_bold_formatting(self):

@@ -54,17 +54,12 @@ class NougatProcessor(ProcessorMixin):
         """
         images = kwargs.pop("images", None)
         text = kwargs.pop("text", None)
-        if args:
-            if images is not None:
-                raise ValueError("You've specified `images` both as a positional argument and keyword argument.")
-            if text is not None and len(args) > 1:
-                raise ValueError("You've specified `text` both as a positional argument and keyword argument.")
+        if len(args) > 0:
             images = args[0]
-            text = args[1]
-            args = args[2:]
+            args = args[1:]
 
         if images is None and text is None:
-            raise ValueError("You need to specify either `images` or `text` input to process.")
+            raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
             inputs = self.image_processor(images, *args, **kwargs)

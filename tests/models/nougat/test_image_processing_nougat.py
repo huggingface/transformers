@@ -16,21 +16,22 @@
 
 import unittest
 
-import requests
 import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers.testing_utils import require_cv2, require_torch, require_vision
-from transformers.utils import is_vision_available, is_torch_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
 
 if is_torch_available():
     import torch
 
 if is_vision_available():
-    from transformers import NougatImageProcessor
     from PIL import Image
+
+    from transformers import NougatImageProcessor
 
 
 class NougatImageProcessingTester(unittest.TestCase):
@@ -146,10 +147,10 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_crop_margin_centered_black_square(self):
         image = np.ones((100, 100, 3), dtype=np.uint8) * 255
-        image[45:55, 45:55, :] = 0 
+        image[45:55, 45:55, :] = 0
         image_processor = self.image_processing_class(**self.image_processor_dict)
         cropped_image = image_processor.crop_margin(image)
-        expected_cropped = image[45:55, 45:55, :]        
+        expected_cropped = image[45:55, 45:55, :]
         self.assertTrue(np.array_equal(expected_cropped, cropped_image))
 
     def test_align_long_axis_no_rotation(self):
@@ -158,17 +159,17 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         size = {"height": 200, "width": 300}
         aligned_image = image_processor.align_long_axis(image, size)
         self.assertEqual(image.shape, aligned_image.shape)
-    
+
     def test_align_long_axis_with_rotation(self):
         image = np.uint8(np.ones((200, 100, 3)) * 255)
         image_processor = self.image_processing_class(**self.image_processor_dict)
         size = {"height": 300, "width": 200}
         aligned_image = image_processor.align_long_axis(image, size)
         self.assertEqual((200, 100, 3), aligned_image.shape)
-        
+
     def test_align_long_axis_data_format(self):
         image = np.uint8(np.ones((100, 200, 3)) * 255)
-        data_format = 'channels_first'
+        data_format = "channels_first"
         size = {"height": 200, "width": 300}
         image_processor = self.image_processing_class(**self.image_processor_dict)
         aligned_image = image_processor.align_long_axis(image, size, data_format=data_format)
@@ -187,4 +188,3 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_cropped_py = image_processor.crop_margin(image)
         image_cropped_cv2 = image_processor.cv2_crop_margin(image)
         self.assertTrue(np.array_equal(image_cropped_py, image_cropped_cv2))
-        

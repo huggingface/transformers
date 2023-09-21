@@ -35,9 +35,6 @@ if is_levenshtein_available():
 if is_nltk_available():
     import nltk
 
-import logging
-
-logger = logging.getLogger(__name__)
 
 logger = logging.get_logger(__name__)
 
@@ -106,9 +103,9 @@ def markdown_compatible(text: str) -> str:
 
 def normalize_list_like_lines(generation):
     """
-    Normalize lines in the given text that resemble list items. The function looks for lines
-    that start optionally with '-' or '*', possibly followed by Roman numerals or digits
-    indicating nesting levels. The function reformats such lines to make them more structured.
+    Normalize lines in the given text that resemble list items. The function looks for lines that start optionally with
+    '-' or '*', possibly followed by Roman numerals or digits indicating nesting levels. The function reformats such
+    lines to make them more structured.
 
     Args:
         generation (str): The input text containing lines that need to be normalized.
@@ -117,10 +114,9 @@ def normalize_list_like_lines(generation):
         str: The input text with the list-like lines normalized.
 
     Note:
-        The function uses regular expressions to identify and reformat the list-like lines.
-        The patterns capture optional bullet points, nesting levels indicated by numerals,
-        and the actual list item content. The normalization adjusts the bullet point style
-        and nesting levels based on the captured patterns.
+        The function uses regular expressions to identify and reformat the list-like lines. The patterns capture
+        optional bullet points, nesting levels indicated by numerals, and the actual list item content. The
+        normalization adjusts the bullet point style and nesting levels based on the captured patterns.
     """
 
     # This matches lines starting with - or *, not followed by - or * (lists)
@@ -432,9 +428,8 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             str: The postprocessed text.
 
-        Example:
-        >>> correct_tables("\\begin{table} \\begin{tabular}{l l}  & \\ \\end{tabular} \\end{table}")
-        "\\begin{table}\n\\begin{tabular}{l l}  & \\ \\end{tabular}\n\\end{table}"
+        Example: >>> correct_tables("\\begin{table} \\begin{tabular}{l l} & \\ \\end{tabular} \\end{table}")
+        "\\begin{table}\n\\begin{tabular}{l l} & \\ \\end{tabular}\n\\end{table}"
         """
         # remove obvious wrong tables
         for l in generation.split("\n"):
@@ -456,9 +451,8 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
 
     def post_process_single(self, generation: str, fix_markdown: bool = True) -> str:
         """
-        Postprocess a single generated text. Regular expressions used here are
-        taken directly from the Nougat article authors. These expressions are
-        commented for clarity and tested end-to-end in most cases.
+        Postprocess a single generated text. Regular expressions used here are taken directly from the Nougat article
+        authors. These expressions are commented for clarity and tested end-to-end in most cases.
 
         Args:
             generation (str): The generated text to be postprocessed.
