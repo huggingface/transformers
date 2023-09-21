@@ -147,6 +147,15 @@ class PeftAdapterMixin:
                 "You should either pass a `peft_model_id` or a `peft_config` and `adapter_state_dict` to load an adapter."
             )
 
+        # We keep `revision` in the signature for backward compatibility
+        if revision is not None and "revision" not in adapter_hub_kwargs:
+            adapter_hub_kwargs["revision"] = revision
+        elif revision is not None and "revision" in adapter_hub_kwargs:
+            logger.warning(
+                "You passed a `revision` argument both in `adapter_hub_kwargs` and as a standalone argument. "
+                "The one in `adapter_hub_kwargs` will be used."
+            )
+
         if peft_config is None:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
