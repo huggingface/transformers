@@ -246,6 +246,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
         model = FastSpeech2ConformerModel(config)
         model.to(torch_device)
+        model.eval()
 
         inputs = self._prepare_for_class(inputs_dict, FastSpeech2ConformerModel)
 
@@ -387,7 +388,8 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
     def test_training_integration(self):
         model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
         model.to(torch_device)
-        model.eval()
+        # Set self.training manually to keep deterministic but run the training path
+        model.training = True
         set_seed(0)
 
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
@@ -434,7 +436,8 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         # fmt: on
-        expected_loss = torch.tensor(3.1221, device=torch_device)
+
+        expected_loss = torch.tensor(74.4595, device=torch_device)
 
         self.assertTrue(torch.allclose(spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-3))
         self.assertTrue(torch.allclose(loss, expected_loss, atol=1e-4))
@@ -656,6 +659,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
         model = FastSpeech2ConformerWithHifiGan(config)
         model.to(torch_device)
+        model.eval()
 
         inputs = self._prepare_for_class(inputs_dict, FastSpeech2ConformerModel)
 

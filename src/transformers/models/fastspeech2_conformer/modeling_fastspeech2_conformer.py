@@ -225,14 +225,13 @@ class FastSpeech2ConformerDurationPredictor(nn.Module):
             self.conv_layers.append(layer)
         self.linear = nn.Linear(config.duration_predictor_channels, 1)
 
-    def forward(self, encoder_hidden_states, is_inference=False):
+    def forward(self, encoder_hidden_states):
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(batch_size, max_text_length, input_dim)`):
                 Batch of input sequences.
             padding_masks (`torch.ByteTensor` of shape `(batch_size, max_text_length)`, *optional*):
                 Batch of masks indicating padded part.
-            is_inference (`bool`, *optional*, defaults to `False`): Whether or not the model is running inference.
 
         Returns:
             `torch.Tensor`: Batch of predicted durations in log domain `(batch_size, max_text_length)`.
@@ -246,7 +245,7 @@ class FastSpeech2ConformerDurationPredictor(nn.Module):
         # NOTE: calculate in log domain, (batch_size, max_text_length)
         hidden_states = self.linear(hidden_states.transpose(1, -1)).squeeze(-1)
 
-        if is_inference:
+        if not self.training:
             # NOTE: calculate in linear domain
             hidden_states = torch.clamp(torch.round(hidden_states.exp() - self.log_domain_offset), min=0).long()
 
@@ -1267,9 +1266,11 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(input_ids.shape)
 
-        is_inference = (
+        has_missing_labels = (
             spectrogram_labels is None or duration_labels is None or pitch_labels is None or energy_labels is None
         )
+        if self.training and has_missing_labels:
+            raise ValueError("All labels must be provided to run in training mode.")
 
         # forward encoder
         text_masks = attention_mask.unsqueeze(-2)
@@ -1311,10 +1312,10 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         else:
             energy_predictions = self.energy_predictor(hidden_states, duration_mask.unsqueeze(-1))
 
-        duration_predictions = self.duration_predictor(hidden_states, is_inference=is_inference)
+        duration_predictions = self.duration_predictor(hidden_states)
         duration_predictions = duration_predictions.masked_fill(duration_mask, 0.0)
 
-        if is_inference:
+        if not self.training:
             # use prediction in inference
             embedded_pitch_curve = self.pitch_embed(pitch_predictions)
             embedded_energy_curve = self.energy_embed(energy_predictions)
@@ -1328,7 +1329,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             hidden_states = self.length_regulator(hidden_states, duration_labels)
 
         # forward decoder
-        if is_inference:
+        if not self.training:
             hidden_mask = None
         else:
             spectrogram_mask = (spectrogram_labels != -100).any(dim=-1)
@@ -1349,7 +1350,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         outputs_before_postnet, outputs_after_postnet = self.speech_decoder_postnet(decoder_outputs[0])
 
         loss = None
-        if not is_inference:
+        if self.training:
             # calculate loss
             loss_duration_mask = ~duration_mask
             loss_spectrogram_mask = spectrogram_mask.unsqueeze(-1).bool()
@@ -1676,10 +1677,10 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         )
 
         if not return_dict:
-            is_inference = (
+            has_missing_labels = (
                 spectrogram_labels is None or duration_labels is None or pitch_labels is None or energy_labels is None
             )
-            if is_inference:
+            if has_missing_labels:
                 spectrogram = model_outputs[0]
             else:
                 spectrogram = model_outputs[1]
