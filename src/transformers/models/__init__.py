@@ -104,6 +104,7 @@ from . import (
     hubert,
     ibert,
     idefics,
+    imagebind,
     imagegpt,
     informer,
     instructblip,

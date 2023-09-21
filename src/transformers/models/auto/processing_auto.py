@@ -58,6 +58,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
         ("idefics", "IdeficsProcessor"),
+        ("imagebind", "ImageBindProcessor"),
         ("instructblip", "InstructBlipProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),

@@ -519,6 +519,8 @@
         title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/imagebind
+        title: ImageBind
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit

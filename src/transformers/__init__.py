@@ -371,6 +371,17 @@ _import_structure = {
         "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "IdeficsConfig",
     ],
+    "models.imagebind": [
+        "IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ImageBindAudioConfig",
+        "ImageBindConfig",
+        "ImageBindDepthConfig",
+        "ImageBindImuConfig",
+        "ImageBindOnnxConfig",
+        "ImageBindTextConfig",
+        "ImageBindThermalConfig",
+        "ImageBindVisionConfig",
+    ],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -842,6 +853,7 @@ else:
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
+    _import_structure["models.imagebind"].append("ImageBindTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
     _import_structure["models.layoutlmv3"].append("LayoutLMv3TokenizerFast")
@@ -963,6 +975,7 @@ else:
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
+    _import_structure["models.imagebind"].extend(["ImageBindFeatureExtractor", "ImageBindImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
@@ -1985,6 +1998,25 @@ else:
             "IdeficsModel",
             "IdeficsPreTrainedModel",
             "IdeficsProcessor",
+        ]
+    )
+    _import_structure["models.imagebind"].extend(
+        [
+            "IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ImageBindAudioModel",
+            "ImageBindAudioModelWithProjection",
+            "ImageBindDepthModel",
+            "ImageBindDepthModelWithProjection",
+            "ImageBindImuModel",
+            "ImageBindImuModelWithProjection",
+            "ImageBindModel",
+            "ImageBindPreTrainedModel",
+            "ImageBindTextModel",
+            "ImageBindTextModelWithProjection",
+            "ImageBindThermalModel",
+            "ImageBindThermalModelWithProjection",
+            "ImageBindVisionModel",
+            "ImageBindVisionModelWithProjection",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -4488,6 +4520,17 @@ if TYPE_CHECKING:
         IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IdeficsConfig,
     )
+    from .models.imagebind import (
+        IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ImageBindAudioConfig,
+        ImageBindConfig,
+        ImageBindDepthConfig,
+        ImageBindImuConfig,
+        ImageBindOnnxConfig,
+        ImageBindTextConfig,
+        ImageBindThermalConfig,
+        ImageBindVisionConfig,
+    )
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -4924,6 +4967,7 @@ if TYPE_CHECKING:
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
+        from .models.imagebind import ImageBindTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.layoutlmv3 import LayoutLMv3TokenizerFast
@@ -5016,6 +5060,7 @@ if TYPE_CHECKING:
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.idefics import IdeficsImageProcessor
+        from .models.imagebind import ImageBindFeatureExtractor, ImageBindImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
@@ -5873,6 +5918,23 @@ if TYPE_CHECKING:
             IdeficsModel,
             IdeficsPreTrainedModel,
             IdeficsProcessor,
+        )
+        from .models.imagebind import (
+            IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ImageBindAudioModel,
+            ImageBindAudioModelWithProjection,
+            ImageBindDepthModel,
+            ImageBindDepthModelWithProjection,
+            ImageBindImuModel,
+            ImageBindImuModelWithProjection,
+            ImageBindModel,
+            ImageBindPreTrainedModel,
+            ImageBindTextModel,
+            ImageBindTextModelWithProjection,
+            ImageBindThermalModel,
+            ImageBindThermalModelWithProjection,
+            ImageBindVisionModel,
+            ImageBindVisionModelWithProjection,
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
