@@ -13,101 +13,101 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# How to convert a 🤗 Transformers model to TensorFlow?
+# Wie konvertiert man ein 🤗 Transformers-Modell in TensorFlow?
 
-Having multiple frameworks available to use with 🤗 Transformers gives you flexibility to play their strengths when
-designing your application, but it implies that compatibility must be added on a per-model basis. The good news is that
-adding TensorFlow compatibility to an existing model is simpler than [adding a new model from scratch](add_new_model)!
-Whether you wish to have a deeper understanding of large TensorFlow models, make a major open-source contribution, or
-enable TensorFlow for your model of choice, this guide is for you.
+Die Tatsache, dass mehrere Frameworks für die Verwendung mit 🤗 Transformers zur Verfügung stehen, gibt Ihnen die Flexibilität, deren Stärken beim Entwurf Ihrer Anwendung auszuspielen.
+Ihre Anwendung zu entwerfen, aber das bedeutet auch, dass die Kompatibilität für jedes Modell einzeln hinzugefügt werden muss. Die gute Nachricht ist, dass
+das Hinzufügen von TensorFlow-Kompatibilität zu einem bestehenden Modell einfacher ist als [das Hinzufügen eines neuen Modells von Grund auf](add_new_model)!
+Ob Sie ein tieferes Verständnis für große TensorFlow-Modelle haben möchten, einen wichtigen Open-Source-Beitrag leisten oder
+TensorFlow für das Modell Ihrer Wahl aktivieren wollen, dieser Leitfaden ist für Sie.
 
-This guide empowers you, a member of our community, to contribute TensorFlow model weights and/or
-architectures to be used in 🤗 Transformers, with minimal supervision from the Hugging Face team. Writing a new model
-is no small feat, but hopefully this guide will make it less of a rollercoaster 🎢 and more of a walk in the park 🚶.
-Harnessing our collective experiences is absolutely critical to make this process increasingly easier, and thus we
-highly encourage that you suggest improvements to this guide!
+Dieser Leitfaden befähigt Sie, ein Mitglied unserer Gemeinschaft, TensorFlow-Modellgewichte und/oder
+Architekturen beizusteuern, die in 🤗 Transformers verwendet werden sollen, und zwar mit minimaler Betreuung durch das Hugging Face Team. Das Schreiben eines neuen Modells
+ist keine Kleinigkeit, aber ich hoffe, dass dieser Leitfaden dazu beiträgt, dass es weniger eine Achterbahnfahrt 🎢 und mehr ein Spaziergang im Park 🚶 ist.
+Die Nutzung unserer kollektiven Erfahrungen ist absolut entscheidend, um diesen Prozess immer einfacher zu machen, und deshalb möchten wir
+ermutigen Sie daher, Verbesserungsvorschläge für diesen Leitfaden zu machen!
 
-Before you dive deeper, it is recommended that you check the following resources if you're new to 🤗 Transformers:
-- [General overview of 🤗 Transformers](add_new_model#general-overview-of-transformers)
-- [Hugging Face's TensorFlow Philosophy](https://huggingface.co/blog/tensorflow-philosophy)
+Bevor Sie tiefer eintauchen, empfehlen wir Ihnen, die folgenden Ressourcen zu lesen, wenn Sie neu in 🤗 Transformers sind:
+- [Allgemeiner Überblick über 🤗 Transformers](add_new_model#general-overview-of-transformers)
+- [Die TensorFlow-Philosophie von Hugging Face](https://huggingface.co/blog/tensorflow-philosophy)
 
-In the remainder of this guide, you will learn what's needed to add a new TensorFlow model architecture, the
-procedure to convert PyTorch into TensorFlow model weights, and how to efficiently debug mismatches across ML
-frameworks. Let's get started!
+Im Rest dieses Leitfadens werden Sie lernen, was nötig ist, um eine neue TensorFlow Modellarchitektur hinzuzufügen, die
+Verfahren zur Konvertierung von PyTorch in TensorFlow-Modellgewichte und wie Sie Unstimmigkeiten zwischen ML
+Frameworks. Legen Sie los!
 
 <Tip>
 
-Are you unsure whether the model you wish to use already has a corresponding TensorFlow architecture?
+Sind Sie unsicher, ob das Modell, das Sie verwenden möchten, bereits eine entsprechende TensorFlow-Architektur hat?
 
 &nbsp;
 
-Check the `model_type` field of the `config.json` of your model of choice
-([example](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14)). If the corresponding model folder in
-🤗 Transformers has a file whose name starts with "modeling_tf", it means that it has a corresponding TensorFlow
-architecture ([example](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert)).
+Überprüfen Sie das Feld `model_type` in der `config.json` des Modells Ihrer Wahl
+([Beispiel](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14)). Wenn der entsprechende Modellordner in
+🤗 Transformers eine Datei hat, deren Name mit "modeling_tf" beginnt, bedeutet dies, dass es eine entsprechende TensorFlow
+Architektur hat ([Beispiel](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert)).
 
 </Tip>
 
 
-## Step-by-step guide to add TensorFlow model architecture code
+## Schritt-für-Schritt-Anleitung zum Hinzufügen von TensorFlow-Modellarchitektur-Code
 
-There are many ways to design a large model architecture, and multiple ways of implementing said design. However,
-you might recall from our [general overview of 🤗 Transformers](add_new_model#general-overview-of-transformers)
-that we are an opinionated bunch - the ease of use of 🤗 Transformers relies on consistent design choices. From
-experience, we can tell you a few important things about adding TensorFlow models:
+Es gibt viele Möglichkeiten, eine große Modellarchitektur zu entwerfen, und viele Möglichkeiten, diesen Entwurf zu implementieren. Wie auch immer,
+Sie erinnern sich vielleicht an unseren [allgemeinen Überblick über 🤗 Transformers](add_new_model#general-overview-of-transformers)
+wissen, dass wir ein meinungsfreudiger Haufen sind - die Benutzerfreundlichkeit von 🤗 Transformers hängt von konsistenten Designentscheidungen ab. Aus
+Erfahrung können wir Ihnen ein paar wichtige Dinge über das Hinzufügen von TensorFlow-Modellen sagen:
 
-- Don't reinvent the wheel! More often than not, there are at least two reference implementations you should check: the
-PyTorch equivalent of the model you are implementing and other TensorFlow models for the same class of problems.
-- Great model implementations survive the test of time. This doesn't happen because the code is pretty, but rather
-because the code is clear, easy to debug and build upon. If you make the life of the maintainers easy with your
-TensorFlow implementation, by replicating the same patterns as in other TensorFlow models and minimizing the mismatch
-to the PyTorch implementation, you ensure your contribution will be long lived.
-- Ask for help when you're stuck! The 🤗 Transformers team is here to help, and we've probably found solutions to the same
-problems you're facing.
+- Erfinden Sie das Rad nicht neu! In den meisten Fällen gibt es mindestens zwei Referenzimplementierungen, die Sie überprüfen sollten: das
+PyTorch-Äquivalent des Modells, das Sie implementieren, und andere TensorFlow-Modelle für dieselbe Klasse von Problemen.
+- Gute Modellimplementierungen überleben den Test der Zeit. Dies geschieht nicht, weil der Code hübsch ist, sondern eher
+sondern weil der Code klar, einfach zu debuggen und darauf aufzubauen ist. Wenn Sie den Maintainern das Leben mit Ihrer
+TensorFlow-Implementierung leicht machen, indem Sie die gleichen Muster wie in anderen TensorFlow-Modellen nachbilden und die Abweichung
+zur PyTorch-Implementierung minimieren, stellen Sie sicher, dass Ihr Beitrag lange Bestand haben wird.
+- Bitten Sie um Hilfe, wenn Sie nicht weiterkommen! Das 🤗 Transformers-Team ist da, um zu helfen, und wir haben wahrscheinlich Lösungen für die gleichen
+Probleme gefunden, vor denen Sie stehen.
 
-Here's an overview of the steps needed to add a TensorFlow model architecture:
-1. Select the model you wish to convert
-2. Prepare transformers dev environment
-3. (Optional) Understand theoretical aspects and the existing implementation
-4. Implement the model architecture
-5. Implement model tests
-6. Submit the pull request
-7. (Optional) Build demos and share with the world
+Hier finden Sie einen Überblick über die Schritte, die zum Hinzufügen einer TensorFlow-Modellarchitektur erforderlich sind:
+1. Wählen Sie das Modell, das Sie konvertieren möchten
+2. Bereiten Sie die Transformers-Entwicklungsumgebung vor.
+3. (Optional) Verstehen Sie die theoretischen Aspekte und die bestehende Implementierung
+4. Implementieren Sie die Modellarchitektur
+5. Implementieren Sie Modelltests
+6. Reichen Sie den Pull-Antrag ein
+7. (Optional) Erstellen Sie Demos und teilen Sie diese mit der Welt
 
-### 1.-3. Prepare your model contribution
+### 1.-3. Bereiten Sie Ihren Modellbeitrag vor
 
-**1. Select the model you wish to convert**
+**1. Wählen Sie das Modell, das Sie konvertieren möchten**
 
-Let's start off with the basics: the first thing you need to know is the architecture you want to convert. If you
-don't have your eyes set on a specific architecture, asking the 🤗 Transformers team for suggestions is a great way to
-maximize your impact - we will guide you towards the most prominent architectures that are missing on the TensorFlow
-side. If the specific model you want to use with TensorFlow already has a TensorFlow architecture implementation in
-🤗 Transformers but is lacking weights, feel free to jump straight into the
-[weight conversion section](#adding-tensorflow-weights-to-hub)
-of this page.
+Beginnen wir mit den Grundlagen: Als erstes müssen Sie die Architektur kennen, die Sie konvertieren möchten. Wenn Sie
+Sie sich nicht auf eine bestimmte Architektur festgelegt haben, ist es eine gute Möglichkeit, das 🤗 Transformers-Team um Vorschläge zu bitten.
+Wir werden Sie zu den wichtigsten Architekturen führen, die auf der TensorFlow-Seite noch fehlen.
+Seite fehlen. Wenn das spezifische Modell, das Sie mit TensorFlow verwenden möchten, bereits eine Implementierung der TensorFlow-Architektur in
+🤗 Transformers, aber es fehlen Gewichte, können Sie direkt in den
+Abschnitt [Gewichtskonvertierung](#adding-tensorflow-weights-to-hub)
+auf dieser Seite.
 
-For simplicity, the remainder of this guide assumes you've decided to contribute with the TensorFlow version of
-*BrandNewBert* (the same example as in the [guide](add_new_model) to add a new model from scratch).
+Der Einfachheit halber wird im Rest dieser Anleitung davon ausgegangen, dass Sie sich entschieden haben, mit der TensorFlow-Version von
+*BrandNewBert* (dasselbe Beispiel wie in der [Anleitung](add_new_model), um ein neues Modell von Grund auf hinzuzufügen).
 
 <Tip>
 
-Before starting the work on a TensorFlow model architecture, double-check that there is no ongoing effort to do so.
-You can search for `BrandNewBert` on the
-[pull request GitHub page](https://github.com/huggingface/transformers/pulls?q=is%3Apr) to confirm that there is no
-TensorFlow-related pull request.
+Bevor Sie mit der Arbeit an einer TensorFlow-Modellarchitektur beginnen, sollten Sie sich vergewissern, dass es keine laufenden Bemühungen in dieser Richtung gibt.
+Sie können nach `BrandNewBert` auf der
+[pull request GitHub page](https://github.com/huggingface/transformers/pulls?q=is%3Apr), um zu bestätigen, dass es keine
+TensorFlow-bezogene Pull-Anfrage gibt.
 
 </Tip>
 
 
-**2. Prepare transformers dev environment**
+**2. Transformers-Entwicklungsumgebung vorbereiten**
 
-Having selected the model architecture, open a draft PR to signal your intention to work on it. Follow the
-instructions below to set up your environment and open a draft PR.
+Nachdem Sie die Modellarchitektur ausgewählt haben, öffnen Sie einen PR-Entwurf, um Ihre Absicht zu signalisieren, daran zu arbeiten. Folgen Sie den
+Anweisungen, um Ihre Umgebung einzurichten und einen PR-Entwurf zu öffnen.
 
-1. Fork the [repository](https://github.com/huggingface/transformers) by clicking on the 'Fork' button on the
-   repository's page. This creates a copy of the code under your GitHub user account.
+1. Forken Sie das [repository](https://github.com/huggingface/transformers), indem Sie auf der Seite des Repositorys auf die Schaltfläche 'Fork' klicken.
+   Seite des Repositorys klicken. Dadurch wird eine Kopie des Codes unter Ihrem GitHub-Benutzerkonto erstellt.
 
-2. Clone your `transformers` fork to your local disk, and add the base repository as a remote:
+2. Klonen Sie Ihren `transformers` Fork auf Ihre lokale Festplatte und fügen Sie das Basis-Repository als Remote hinzu:
 
 ```bash
 git clone https://github.com/[your Github handle]/transformers.git
@@ -115,7 +115,7 @@ cd transformers
 git remote add upstream https://github.com/huggingface/transformers.git
 ```
 
-3. Set up a development environment, for instance by running the following command:
+3. Richten Sie eine Entwicklungsumgebung ein, indem Sie z.B. den folgenden Befehl ausführen:
 
 ```bash
 python -m venv .env
@@ -123,32 +123,32 @@ source .env/bin/activate
 pip install -e ".[dev]"
 ```
 
-Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
-failure with this command. If that's the case make sure to install TensorFlow then do:
+Abhängig von Ihrem Betriebssystem und da die Anzahl der optionalen Abhängigkeiten von Transformers wächst, kann es sein, dass Sie bei diesem Befehl einen
+Fehler mit diesem Befehl erhalten. Wenn das der Fall ist, stellen Sie sicher, dass Sie TensorFlow installieren und dann ausführen:
 
 ```bash
 pip install -e ".[quality]"
 ```
 
-**Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
+**Hinweis:** Sie müssen CUDA nicht installiert haben. Es reicht aus, das neue Modell auf der CPU laufen zu lassen.
 
-4. Create a branch with a descriptive name from your main branch
+4. Erstellen Sie eine Verzweigung mit einem beschreibenden Namen von Ihrer Hauptverzweigung
 
 ```bash
 git checkout -b add_tf_brand_new_bert
 ```
 
-5. Fetch and rebase to current main
+5. Abrufen und zurücksetzen auf die aktuelle Hauptversion
 
 ```bash
 git fetch upstream
 git rebase upstream/main
 ```
 
-6. Add an empty `.py` file in `transformers/src/models/brandnewbert/` named `modeling_tf_brandnewbert.py`. This will
-be your TensorFlow model file.
+6. Fügen Sie eine leere `.py` Datei in `transformers/src/models/brandnewbert/` mit dem Namen `modeling_tf_brandnewbert.py` hinzu. Dies wird
+Ihre TensorFlow-Modelldatei sein.
 
-7. Push the changes to your account using:
+7. Übertragen Sie die Änderungen auf Ihr Konto mit:
 
 ```bash
 git add .
@@ -156,201 +156,201 @@ git commit -m "initial commit"
 git push -u origin add_tf_brand_new_bert
 ```
 
-8. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
-   GitHub handle of some members of the Hugging Face team as reviewers, so that the Hugging Face team gets notified for
-   future changes.
+8. Wenn Sie zufrieden sind, gehen Sie auf die Webseite Ihrer Abspaltung auf GitHub. Klicken Sie auf "Pull request". Stellen Sie sicher, dass Sie das
+   GitHub-Handle einiger Mitglieder des Hugging Face-Teams als Reviewer hinzuzufügen, damit das Hugging Face-Team über zukünftige Änderungen informiert wird.
+   zukünftige Änderungen benachrichtigt wird.
 
-9. Change the PR into a draft by clicking on “Convert to draft” on the right of the GitHub pull request web page.
-
-
-Now you have set up a development environment to port *BrandNewBert* to TensorFlow in 🤗 Transformers.
+9. Ändern Sie den PR in einen Entwurf, indem Sie auf der rechten Seite der GitHub-Pull-Request-Webseite auf "In Entwurf umwandeln" klicken.
 
 
-**3. (Optional) Understand theoretical aspects and the existing implementation**
-
-You should take some time to read *BrandNewBert's* paper, if such descriptive work exists. There might be large
-sections of the paper that are difficult to understand. If this is the case, this is fine - don't worry! The goal is
-not to get a deep theoretical understanding of the paper, but to extract the necessary information required to
-effectively re-implement the model in 🤗 Transformers using TensorFlow. That being said, you don't have to spend too
-much time on the theoretical aspects, but rather focus on the practical ones, namely the existing model documentation
-page (e.g. [model docs for BERT](model_doc/bert)).
-
-After you've grasped the basics of the models you are about to implement, it's important to understand the existing
-implementation. This is a great chance to confirm that a working implementation matches your expectations for the
-model, as well as to foresee technical challenges on the TensorFlow side.
-
-It's perfectly natural that you feel overwhelmed with the amount of information that you've just absorbed. It is
-definitely not a requirement that you understand all facets of the model at this stage. Nevertheless, we highly
-encourage you to clear any pressing questions in our [forum](https://discuss.huggingface.co/).
+Jetzt haben Sie eine Entwicklungsumgebung eingerichtet, um *BrandNewBert* nach TensorFlow in 🤗 Transformers zu portieren.
 
 
-### 4. Model implementation
+**3. (Optional) Verstehen Sie die theoretischen Aspekte und die bestehende Implementierung**
 
-Now it's time to finally start coding. Our suggested starting point is the PyTorch file itself: copy the contents of
-`modeling_brand_new_bert.py` inside `src/transformers/models/brand_new_bert/` into
-`modeling_tf_brand_new_bert.py`. The goal of this section is to modify the file and update the import structure of
-🤗 Transformers such that you can import `TFBrandNewBert` and
-`TFBrandNewBert.from_pretrained(model_repo, from_pt=True)` successfully loads a working TensorFlow *BrandNewBert* model.
+Sie sollten sich etwas Zeit nehmen, um die Arbeit von *BrandNewBert* zu lesen, falls eine solche Beschreibung existiert. Möglicherweise gibt es große
+Abschnitte des Papiers, die schwer zu verstehen sind. Wenn das der Fall ist, ist das in Ordnung - machen Sie sich keine Sorgen! Das Ziel ist
+ist es nicht, ein tiefes theoretisches Verständnis des Papiers zu erlangen, sondern die notwendigen Informationen zu extrahieren, um
+das Modell mit Hilfe von TensorFlow effektiv in 🤗 Transformers neu zu implementieren. Das heißt, Sie müssen nicht zu viel Zeit auf die
+viel Zeit auf die theoretischen Aspekte verwenden, sondern sich lieber auf die praktischen Aspekte konzentrieren, nämlich auf die bestehende Modelldokumentation
+Seite (z.B. [model docs for BERT](model_doc/bert)).
 
-Sadly, there is no prescription to convert a PyTorch model into TensorFlow. You can, however, follow our selection of
-tips to make the process as smooth as possible:
-- Prepend `TF` to the name of all classes (e.g. `BrandNewBert` becomes `TFBrandNewBert`).
-- Most PyTorch operations have a direct TensorFlow replacement. For example, `torch.nn.Linear` corresponds to
-  `tf.keras.layers.Dense`, `torch.nn.Dropout` corresponds to `tf.keras.layers.Dropout`, etc. If you're not sure
-  about a specific operation, you can use the [TensorFlow documentation](https://www.tensorflow.org/api_docs/python/tf)
-  or the [PyTorch documentation](https://pytorch.org/docs/stable/).
-- Look for patterns in the 🤗 Transformers codebase. If you come across a certain operation that doesn't have a direct
-   replacement, the odds are that someone else already had the same problem.
-- By default, keep the same variable names and structure as in PyTorch. This will make it easier to debug, track
-   issues, and add fixes down the line.
-- Some layers have different default values in each framework. A notable example is the batch normalization layer's
+Nachdem Sie die Grundlagen der Modelle, die Sie implementieren wollen, verstanden haben, ist es wichtig, die bestehende
+Implementierung zu verstehen. Dies ist eine gute Gelegenheit, sich zu vergewissern, dass eine funktionierende Implementierung mit Ihren Erwartungen an das
+Modell entspricht, und um technische Herausforderungen auf der TensorFlow-Seite vorauszusehen.
+
+Es ist ganz natürlich, dass Sie sich von der Menge an Informationen, die Sie gerade aufgesogen haben, überwältigt fühlen. Es ist
+Es ist definitiv nicht erforderlich, dass Sie in dieser Phase alle Facetten des Modells verstehen. Dennoch empfehlen wir Ihnen dringend
+ermutigen wir Sie, alle dringenden Fragen in unserem [Forum](https://discuss.huggingface.co/) zu klären.
+
+
+### 4. Implementierung des Modells
+
+Jetzt ist es an der Zeit, endlich mit dem Programmieren zu beginnen. Als Ausgangspunkt empfehlen wir die PyTorch-Datei selbst: Kopieren Sie den Inhalt von
+modeling_brand_new_bert.py` in `src/transformers/models/brand_new_bert/` nach
+modeling_tf_brand_new_bert.py`. Das Ziel dieses Abschnitts ist es, die Datei zu ändern und die Importstruktur von
+🤗 Transformers zu aktualisieren, so dass Sie `TFBrandNewBert` und
+`TFBrandNewBert.from_pretrained(model_repo, from_pt=True)` erfolgreich ein funktionierendes TensorFlow *BrandNewBert* Modell lädt.
+
+Leider gibt es kein Rezept, um ein PyTorch-Modell in TensorFlow zu konvertieren. Sie können jedoch unsere Auswahl an
+Tipps befolgen, um den Prozess so reibungslos wie möglich zu gestalten:
+- Stellen Sie `TF` dem Namen aller Klassen voran (z.B. wird `BrandNewBert` zu `TFBrandNewBert`).
+- Die meisten PyTorch-Operationen haben einen direkten TensorFlow-Ersatz. Zum Beispiel entspricht `torch.nn.Linear` der Klasse
+  `tf.keras.layers.Dense`, `torch.nn.Dropout` entspricht `tf.keras.layers.Dropout`, usw. Wenn Sie sich nicht sicher sind
+  über eine bestimmte Operation nicht sicher sind, können Sie die [TensorFlow-Dokumentation](https://www.tensorflow.org/api_docs/python/tf)
+  oder die [PyTorch-Dokumentation](https://pytorch.org/docs/stable/).
+- Suchen Sie nach Mustern in der Codebasis von 🤗 Transformers. Wenn Sie auf eine bestimmte Operation stoßen, für die es keinen direkten Ersatz gibt
+   Ersatz hat, stehen die Chancen gut, dass jemand anderes bereits das gleiche Problem hatte.
+- Behalten Sie standardmäßig die gleichen Variablennamen und die gleiche Struktur wie in PyTorch bei. Dies erleichtert die Fehlersuche, die Verfolgung von
+   Probleme zu verfolgen und spätere Korrekturen vorzunehmen.
+- Einige Ebenen haben in jedem Framework unterschiedliche Standardwerte. Ein bemerkenswertes Beispiel ist die Schicht für die Batch-Normalisierung
    epsilon (`1e-5` in [PyTorch](https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html#torch.nn.BatchNorm2d)
-   and `1e-3` in [TensorFlow](https://www.tensorflow.org/api_docs/python/tf/keras/layers/BatchNormalization)).
-   Double-check the documentation!
-- PyTorch's `nn.Parameter` variables typically need to be initialized within TF Layer's `build()`. See the following
-   example: [PyTorch](https://github.com/huggingface/transformers/blob/655f72a6896c0533b1bdee519ed65a059c2425ac/src/transformers/models/vit_mae/modeling_vit_mae.py#L212) /
+   und `1e-3` in [TensorFlow](https://www.tensorflow.org/api_docs/python/tf/keras/layers/BatchNormalization)).
+   Prüfen Sie die Dokumentation genau!
+- Die Variablen `nn.Parameter` von PyTorch müssen in der Regel innerhalb von TF Layer's `build()` initialisiert werden. Siehe das folgende
+   Beispiel: [PyTorch](https://github.com/huggingface/transformers/blob/655f72a6896c0533b1bdee519ed65a059c2425ac/src/transformers/models/vit_mae/modeling_vit_mae.py#L212) /
    [TensorFlow](https://github.com/huggingface/transformers/blob/655f72a6896c0533b1bdee519ed65a059c2425ac/src/transformers/models/vit_mae/modeling_tf_vit_mae.py#L220)
-- If the PyTorch model has a `#copied from ...` on top of a function, the odds are that your TensorFlow model can also
-   borrow that function from the architecture it was copied from, assuming it has a TensorFlow architecture.
-- Assigning the `name` attribute correctly in TensorFlow functions is critical to do the `from_pt=True` weight
-   cross-loading. `name` is almost always the name of the corresponding variable in the PyTorch code. If `name` is not
-   properly set, you will see it in the error message when loading the model weights.
-- The logic of the base model class, `BrandNewBertModel`, will actually reside in `TFBrandNewBertMainLayer`, a Keras
-   layer subclass ([example](https://github.com/huggingface/transformers/blob/4fd32a1f499e45f009c2c0dea4d81c321cba7e02/src/transformers/models/bert/modeling_tf_bert.py#L719)).
-   `TFBrandNewBertModel` will simply be a wrapper around this layer.
-- Keras models need to be built in order to load pretrained weights. For that reason, `TFBrandNewBertPreTrainedModel`
-   will need to hold an example of inputs to the model, the `dummy_inputs`
-   ([example](https://github.com/huggingface/transformers/blob/4fd32a1f499e45f009c2c0dea4d81c321cba7e02/src/transformers/models/bert/modeling_tf_bert.py#L916)).
-- If you get stuck, ask for help - we're here to help you! 🤗
+- Wenn das PyTorch-Modell ein `#copied from ...` am Anfang einer Funktion hat, stehen die Chancen gut, dass Ihr TensorFlow-Modell diese Funktion auch
+   diese Funktion von der Architektur ausleihen kann, von der sie kopiert wurde, vorausgesetzt, es hat eine TensorFlow-Architektur.
+- Die korrekte Zuweisung des Attributs `name` in TensorFlow-Funktionen ist entscheidend, um das `from_pt=True` Gewicht zu erreichen
+   Cross-Loading. Name" ist fast immer der Name der entsprechenden Variablen im PyTorch-Code. Wenn `name` nicht
+   nicht richtig gesetzt ist, sehen Sie dies in der Fehlermeldung beim Laden der Modellgewichte.
+- Die Logik der Basismodellklasse, `BrandNewBertModel`, befindet sich in `TFBrandNewBertMainLayer`, einer Keras
+   Schicht-Unterklasse ([Beispiel](https://github.com/huggingface/transformers/blob/4fd32a1f499e45f009c2c0dea4d81c321cba7e02/src/transformers/models/bert/modeling_tf_bert.py#L719)).
+   TFBrandNewBertModel" ist lediglich ein Wrapper für diese Schicht.
+- Keras-Modelle müssen erstellt werden, um die vorher trainierten Gewichte zu laden. Aus diesem Grund muss `TFBrandNewBertPreTrainedModel`
+   ein Beispiel für die Eingaben in das Modell enthalten, die `dummy_inputs`
+   ([Beispiel](https://github.com/huggingface/transformers/blob/4fd32a1f499e45f009c2c0dea4d81c321cba7e02/src/transformers/models/bert/modeling_tf_bert.py#L916)).
+- Wenn Sie nicht weiterkommen, fragen Sie nach Hilfe - wir sind für Sie da! 🤗
 
-In addition to the model file itself, you will also need to add the pointers to the model classes and related
-documentation pages. You can complete this part entirely following the patterns in other PRs
-([example](https://github.com/huggingface/transformers/pull/18020/files)). Here's a list of the needed manual
-changes:
-- Include all public classes of *BrandNewBert* in `src/transformers/__init__.py`
-- Add *BrandNewBert* classes to the corresponding Auto classes in `src/transformers/models/auto/modeling_tf_auto.py`
-- Add the lazy loading classes related to *BrandNewBert* in `src/transformers/utils/dummy_tf_objects.py`
-- Update the import structures for the public classes in `src/transformers/models/brand_new_bert/__init__.py`
-- Add the documentation pointers to the public methods of *BrandNewBert* in `docs/source/en/model_doc/brand_new_bert.md`
-- Add yourself to the list of contributors to *BrandNewBert* in `docs/source/en/model_doc/brand_new_bert.md`
-- Finally, add a green tick ✅ to the TensorFlow column of *BrandNewBert* in `docs/source/en/index.md`
+Neben der Modelldatei selbst müssen Sie auch die Verweise auf die Modellklassen und die zugehörigen
+Dokumentationsseiten hinzufügen. Sie können diesen Teil ganz nach den Mustern in anderen PRs erledigen
+([Beispiel](https://github.com/huggingface/transformers/pull/18020/files)). Hier ist eine Liste der erforderlichen manuellen
+Änderungen:
+- Fügen Sie alle öffentlichen Klassen von *BrandNewBert* in `src/transformers/__init__.py` ein.
+- Fügen Sie *BrandNewBert* Klassen zu den entsprechenden Auto Klassen in `src/transformers/models/auto/modeling_tf_auto.py` hinzu.
+- Fügen Sie die *BrandNewBert* zugehörigen Klassen für träges Laden in `src/transformers/utils/dummy_tf_objects.py` hinzu.
+- Aktualisieren Sie die Importstrukturen für die öffentlichen Klassen in `src/transformers/models/brand_new_bert/__init__.py`.
+- Fügen Sie die Dokumentationszeiger auf die öffentlichen Methoden von *BrandNewBert* in `docs/source/de/model_doc/brand_new_bert.md` hinzu.
+- Fügen Sie sich selbst zur Liste der Mitwirkenden an *BrandNewBert* in `docs/source/de/model_doc/brand_new_bert.md` hinzu.
+- Fügen Sie schließlich ein grünes Häkchen ✅ in der TensorFlow-Spalte von *BrandNewBert* in `docs/source/de/index.md` hinzu.
 
-When you're happy with your implementation, run the following checklist to confirm that your model architecture is
-ready:
-1. All layers that behave differently at train time (e.g. Dropout) are called with a `training` argument, which is
-propagated all the way from the top-level classes
-2. You have used `#copied from ...` whenever possible
-3. `TFBrandNewBertMainLayer` and all classes that use it have their `call` function decorated with `@unpack_inputs`
-4. `TFBrandNewBertMainLayer` is decorated with `@keras_serializable`
-5. A TensorFlow model can be loaded from PyTorch weights using `TFBrandNewBert.from_pretrained(model_repo, from_pt=True)`
-6. You can call the TensorFlow model using the expected input format
+Wenn Sie mit Ihrer Implementierung zufrieden sind, führen Sie die folgende Checkliste aus, um zu bestätigen, dass Ihre Modellarchitektur
+fertig ist:
+1. Alle Schichten, die sich zur Trainingszeit anders verhalten (z.B. Dropout), werden mit einem `Training` Argument aufgerufen, das
+von den Top-Level-Klassen weitergegeben wird
+2. Sie haben `#copied from ...` verwendet, wann immer es möglich war.
+3. Die Funktion `TFBrandNewBertMainLayer` und alle Klassen, die sie verwenden, haben ihre Funktion `call` mit `@unpack_inputs` dekoriert
+4. TFBrandNewBertMainLayer` ist mit `@keras_serializable` dekoriert
+5. Ein TensorFlow-Modell kann aus PyTorch-Gewichten mit `TFBrandNewBert.from_pretrained(model_repo, from_pt=True)` geladen werden.
+6. Sie können das TensorFlow Modell mit dem erwarteten Eingabeformat aufrufen
 
 
-### 5. Add model tests
+### 5. Modell-Tests hinzufügen
 
-Hurray, you've implemented a TensorFlow model! Now it's time to add tests to make sure that your model behaves as
-expected. As in the previous section, we suggest you start by copying the `test_modeling_brand_new_bert.py` file in
-`tests/models/brand_new_bert/` into `test_modeling_tf_brand_new_bert.py`, and continue by making the necessary
-TensorFlow replacements. For now, in all `.from_pretrained()` calls, you should use the `from_pt=True` flag to load
-the existing PyTorch weights.
+Hurra, Sie haben ein TensorFlow-Modell implementiert! Jetzt ist es an der Zeit, Tests hinzuzufügen, um sicherzustellen, dass sich Ihr Modell wie erwartet verhält.
+erwartet. Wie im vorigen Abschnitt schlagen wir vor, dass Sie zunächst die Datei `test_modeling_brand_new_bert.py` in
+`tests/models/brand_new_bert/` in die Datei `test_modeling_tf_brand_new_bert.py` zu kopieren und dann die notwendigen
+TensorFlow-Ersetzungen vornehmen. Für den Moment sollten Sie in allen Aufrufen von `.from_pretrained()` das Flag `from_pt=True` verwenden, um die
+die vorhandenen PyTorch-Gewichte zu laden.
 
-After you're done, it's time for the moment of truth: run the tests! 😬
-
-```bash
-NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 \
-py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
-```
-
-The most likely outcome is that you'll see a bunch of errors. Don't worry, this is expected! Debugging ML models is
-notoriously hard, and the key ingredient to success is patience (and `breakpoint()`). In our experience, the hardest
-problems arise from subtle mismatches between ML frameworks, for which we have a few pointers at the end of this guide.
-In other cases, a general test might not be directly applicable to your model, in which case we suggest an override
-at the model test class level. Regardless of the issue, don't hesitate to ask for help in your draft pull request if
-you're stuck.
-
-When all tests pass, congratulations, your model is nearly ready to be added to the 🤗 Transformers library! 🎉
-
-### 6.-7. Ensure everyone can use your model
-
-**6. Submit the pull request**
-
-Once you're done with the implementation and the tests, it's time to submit a pull request. Before pushing your code,
-run our code formatting utility, `make fixup` 🪄. This will automatically fix any formatting issues, which would cause
-our automatic checks to fail.
-
-It's now time to convert your draft pull request into a real pull request. To do so, click on the "Ready for
-review" button and add Joao (`@gante`) and Matt (`@Rocketknight1`) as reviewers. A model pull request will need
-at least 3 reviewers, but they will take care of finding appropriate additional reviewers for your model.
-
-After all reviewers are happy with the state of your PR, the final action point is to remove the `from_pt=True` flag in
-`.from_pretrained()` calls. Since there are no TensorFlow weights, you will have to add them! Check the section
-below for instructions on how to do it.
-
-Finally, when the TensorFlow weights get merged, you have at least 3 reviewer approvals, and all CI checks are
-green, double-check the tests locally one last time
+Wenn Sie damit fertig sind, kommt der Moment der Wahrheit: Führen Sie die Tests durch! 😬
 
 ```bash
 NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 \
 py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
 ```
 
-and we will merge your PR! Congratulations on the milestone 🎉
+Das wahrscheinlichste Ergebnis ist, dass Sie eine Reihe von Fehlern sehen werden. Machen Sie sich keine Sorgen, das ist zu erwarten! Das Debuggen von ML-Modellen ist
+notorisch schwierig, und der Schlüssel zum Erfolg ist Geduld (und `breakpoint()`). Nach unserer Erfahrung sind die schwierigsten
+Probleme aus subtilen Unstimmigkeiten zwischen ML-Frameworks, zu denen wir am Ende dieses Leitfadens ein paar Hinweise geben.
+In anderen Fällen kann es sein, dass ein allgemeiner Test nicht direkt auf Ihr Modell anwendbar ist; in diesem Fall empfehlen wir eine Überschreibung
+auf der Ebene der Modelltestklasse. Zögern Sie nicht, in Ihrem Entwurf einer Pull-Anfrage um Hilfe zu bitten, wenn
+Sie nicht weiterkommen.
 
-**7. (Optional) Build demos and share with the world**
+Wenn alle Tests erfolgreich waren, können Sie Ihr Modell in die 🤗 Transformers-Bibliothek aufnehmen! 🎉
 
-One of the hardest parts about open-source is discovery. How can the other users learn about the existence of your
-fabulous TensorFlow contribution? With proper communication, of course! 📣
+### 6.-7. Stellen Sie sicher, dass jeder Ihr Modell verwenden kann
 
-There are two main ways to share your model with the community:
-- Build demos. These include Gradio demos, notebooks, and other fun ways to show off your model. We highly
-   encourage you to add a notebook to our [community-driven demos](https://huggingface.co/docs/transformers/community).
-- Share stories on social media like Twitter and LinkedIn. You should be proud of your work and share
-   your achievement with the community - your model can now be used by thousands of engineers and researchers around
-   the world 🌍! We will be happy to retweet your posts and help you share your work with the community.
+**6. Reichen Sie den Pull Request ein**
+
+Sobald Sie mit der Implementierung und den Tests fertig sind, ist es an der Zeit, eine Pull-Anfrage einzureichen. Bevor Sie Ihren Code einreichen,
+führen Sie unser Dienstprogramm zur Codeformatierung, `make fixup` 🪄, aus. Damit werden automatisch alle Formatierungsfehler behoben, die dazu führen würden, dass
+unsere automatischen Prüfungen fehlschlagen würden.
+
+Nun ist es an der Zeit, Ihren Entwurf einer Pull-Anfrage in eine echte Pull-Anfrage umzuwandeln. Klicken Sie dazu auf die Schaltfläche "Bereit für
+Review" und fügen Sie Joao (`@gante`) und Matt (`@Rocketknight1`) als Reviewer hinzu. Eine Modell-Pull-Anfrage benötigt
+mindestens 3 Reviewer, aber sie werden sich darum kümmern, geeignete zusätzliche Reviewer für Ihr Modell zu finden.
+
+Nachdem alle Gutachter mit dem Stand Ihres PR zufrieden sind, entfernen Sie als letzten Aktionspunkt das Flag `from_pt=True` in
+.from_pretrained()-Aufrufen zu entfernen. Da es keine TensorFlow-Gewichte gibt, müssen Sie sie hinzufügen! Lesen Sie den Abschnitt
+unten, um zu erfahren, wie Sie dies tun können.
+
+Wenn schließlich die TensorFlow-Gewichte zusammengeführt werden, Sie mindestens 3 Genehmigungen von Prüfern haben und alle CI-Checks grün sind
+grün sind, überprüfen Sie die Tests ein letztes Mal lokal
+
+```bash
+NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 \
+py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
+```
+
+und wir werden Ihren PR zusammenführen! Herzlichen Glückwunsch zu dem Meilenstein 🎉.
+
+**7. (Optional) Erstellen Sie Demos und teilen Sie sie mit der Welt**
+
+Eine der schwierigsten Aufgaben bei Open-Source ist die Entdeckung. Wie können die anderen Benutzer von der Existenz Ihres
+fabelhaften TensorFlow-Beitrags erfahren? Mit der richtigen Kommunikation, natürlich! 📣
+
+Es gibt vor allem zwei Möglichkeiten, Ihr Modell mit der Community zu teilen:
+- Erstellen Sie Demos. Dazu gehören Gradio-Demos, Notebooks und andere unterhaltsame Möglichkeiten, Ihr Modell vorzuführen. Wir raten Ihnen
+   ermutigen Sie, ein Notizbuch zu unseren [community-driven demos](https://huggingface.co/docs/transformers/community) hinzuzufügen.
+- Teilen Sie Geschichten in sozialen Medien wie Twitter und LinkedIn. Sie sollten stolz auf Ihre Arbeit sein und sie mit der
+   Ihre Leistung mit der Community teilen - Ihr Modell kann nun von Tausenden von Ingenieuren und Forschern auf der ganzen Welt genutzt werden
+   der Welt genutzt werden 🌍! Wir werden Ihre Beiträge gerne retweeten und Ihnen helfen, Ihre Arbeit mit der Community zu teilen.
 
 
-## Adding TensorFlow weights to 🤗 Hub
+## Hinzufügen von TensorFlow-Gewichten zum 🤗 Hub
 
-Assuming that the TensorFlow model architecture is available in 🤗 Transformers, converting PyTorch weights into
-TensorFlow weights is a breeze!
+Unter der Annahme, dass die TensorFlow-Modellarchitektur in 🤗 Transformers verfügbar ist, ist die Umwandlung von PyTorch-Gewichten in
+TensorFlow-Gewichte ist ein Kinderspiel!
 
-Here's how to do it:
-1. Make sure you are logged into your Hugging Face account in your terminal. You can log in using the command
-   `huggingface-cli login` (you can find your access tokens [here](https://huggingface.co/settings/tokens))
-2. Run `transformers-cli pt-to-tf --model-name foo/bar`, where `foo/bar` is the name of the model repository
-   containing the PyTorch weights you want to convert
-3. Tag `@joaogante` and `@Rocketknight1` in the 🤗 Hub PR the command above has just created
+Hier sehen Sie, wie es geht:
+1. Stellen Sie sicher, dass Sie in Ihrem Terminal bei Ihrem Hugging Face Konto angemeldet sind. Sie können sich mit dem folgenden Befehl anmelden
+   `huggingface-cli login` (Ihre Zugangstoken finden Sie [hier](https://huggingface.co/settings/tokens))
+2. Führen Sie `transformers-cli pt-to-tf --model-name foo/bar` aus, wobei `foo/bar` der Name des Modell-Repositorys ist
+   ist, das die PyTorch-Gewichte enthält, die Sie konvertieren möchten.
+3. Markieren Sie `@joaogante` und `@Rocketknight1` in dem 🤗 Hub PR, den der obige Befehl gerade erstellt hat
 
-That's it! 🎉
+Das war's! 🎉
 
 
-## Debugging mismatches across ML frameworks 🐛
+## Fehlersuche in verschiedenen ML-Frameworks 🐛
 
-At some point, when adding a new architecture or when creating TensorFlow weights for an existing architecture, you
-might come across errors complaining about mismatches between PyTorch and TensorFlow. You might even decide to open the
-model architecture code for the two frameworks, and find that they look identical. What's going on? 🤔
+Irgendwann, wenn Sie eine neue Architektur hinzufügen oder TensorFlow-Gewichte für eine bestehende Architektur erstellen, werden Sie
+stoßen Sie vielleicht auf Fehler, die sich über Unstimmigkeiten zwischen PyTorch und TensorFlow beschweren. Sie könnten sich sogar dazu entschließen, den
+Modellarchitektur-Code für die beiden Frameworks zu öffnen, und stellen fest, dass sie identisch aussehen. Was ist denn da los? 🤔
 
-First of all, let's talk about why understanding these mismatches matters. Many community members will use 🤗
-Transformers models out of the box, and trust that our models behave as expected. When there is a large mismatch
-between the two frameworks, it implies that the model is not following the reference implementation for at least one
-of the frameworks. This might lead to silent failures, in which the model runs but has poor performance. This is
-arguably worse than a model that fails to run at all! To that end, we aim at having a framework mismatch smaller than
-`1e-5` at all stages of the model.
+Lassen Sie uns zunächst darüber sprechen, warum es wichtig ist, diese Diskrepanzen zu verstehen. Viele Community-Mitglieder werden 🤗
+Transformers-Modelle und vertrauen darauf, dass sich unsere Modelle wie erwartet verhalten. Wenn es eine große Diskrepanz gibt
+zwischen den beiden Frameworks auftritt, bedeutet dies, dass das Modell nicht der Referenzimplementierung für mindestens eines der Frameworks folgt.
+der Frameworks folgt. Dies kann zu stillen Fehlern führen, bei denen das Modell zwar läuft, aber eine schlechte Leistung aufweist. Dies ist
+wohl schlimmer als ein Modell, das überhaupt nicht läuft! Aus diesem Grund streben wir an, dass die Abweichung zwischen den Frameworks kleiner als
+1e-5" in allen Phasen des Modells.
 
-As in other numerical problems, the devil is in the details. And as in any detail-oriented craft, the secret
-ingredient here is patience. Here is our suggested workflow for when you come across this type of issues:
-1. Locate the source of mismatches. The model you're converting probably has near identical inner variables up to a
-   certain point. Place `breakpoint()` statements in the two frameworks' architectures, and compare the values of the
-   numerical variables in a top-down fashion until you find the source of the problems.
-2. Now that you've pinpointed the source of the issue, get in touch with the 🤗 Transformers team. It is possible
-   that we've seen a similar problem before and can promptly provide a solution. As a fallback, scan popular pages
-   like StackOverflow and GitHub issues.
-3. If there is no solution in sight, it means you'll have to go deeper. The good news is that you've located the
-   issue, so you can focus on the problematic instruction, abstracting away the rest of the model! The bad news is
-   that you'll have to venture into the source implementation of said instruction. In some cases, you might find an
-   issue with a reference implementation - don't abstain from opening an issue in the upstream repository.
+Wie bei anderen numerischen Problemen auch, steckt der Teufel im Detail. Und wie bei jedem detailorientierten Handwerk ist die geheime
+Zutat hier Geduld. Hier ist unser Vorschlag für den Arbeitsablauf, wenn Sie auf diese Art von Problemen stoßen:
+1. Lokalisieren Sie die Quelle der Abweichungen. Das Modell, das Sie konvertieren, hat wahrscheinlich bis zu einem gewissen Punkt nahezu identische innere Variablen.
+   bestimmten Punkt. Platzieren Sie `Breakpoint()`-Anweisungen in den Architekturen der beiden Frameworks und vergleichen Sie die Werte der
+   numerischen Variablen von oben nach unten, bis Sie die Quelle der Probleme gefunden haben.
+2. Nachdem Sie nun die Ursache des Problems gefunden haben, setzen Sie sich mit dem 🤗 Transformers-Team in Verbindung. Es ist möglich
+   dass wir ein ähnliches Problem schon einmal gesehen haben und umgehend eine Lösung anbieten können. Als Ausweichmöglichkeit können Sie beliebte Seiten
+   wie StackOverflow und GitHub-Probleme.
+3. Wenn keine Lösung in Sicht ist, bedeutet das, dass Sie tiefer gehen müssen. Die gute Nachricht ist, dass Sie das Problem gefunden haben.
+   Problem ausfindig gemacht haben, so dass Sie sich auf die problematische Anweisung konzentrieren und den Rest des Modells ausblenden können! Die schlechte Nachricht ist
+   dass Sie sich in die Quellimplementierung der besagten Anweisung einarbeiten müssen. In manchen Fällen finden Sie vielleicht ein
+   Problem mit einer Referenzimplementierung - verzichten Sie nicht darauf, ein Problem im Upstream-Repository zu öffnen.
 
-In some cases, in discussion with the 🤗 Transformers team, we might find that fixing the mismatch is infeasible.
-When the mismatch is very small in the output layers of the model (but potentially large in the hidden states), we
-might decide to ignore it in favor of distributing the model. The `pt-to-tf` CLI mentioned above has a `--max-error`
-flag to override the error message at weight conversion time.
+In einigen Fällen können wir nach Rücksprache mit dem 🤗 Transformers-Team zu dem Schluss kommen, dass die Behebung der Abweichung nicht machbar ist.
+Wenn die Abweichung in den Ausgabeschichten des Modells sehr klein ist (aber möglicherweise groß in den versteckten Zuständen), können wir
+könnten wir beschließen, sie zu ignorieren und das Modell zu verteilen. Die oben erwähnte CLI `pt-to-tf` hat ein `--max-error`
+Flag, um die Fehlermeldung bei der Gewichtskonvertierung zu überschreiben.
