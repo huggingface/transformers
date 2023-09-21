@@ -211,9 +211,10 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
 
         # This has to be after `super().__init__` so `self._added_tokens_decoder` is available
         # (or we can set it directly here rather in the parent class)
-        if not _tag_and_patch_index_tokens_already_built:
-            for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
-                self.add_tokens(AddedToken(token, lstrip=True, rstrip=False))
+        tokens_to_add = []
+        for token in self.tag_tokens + patch_index_tokens:
+            tokens_to_add.append(AddedToken(token, lstrip=True, rstrip=False))
+        self.add_tokens(tokens_to_add)
 
     def _decode(
         self,
