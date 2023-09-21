@@ -176,9 +176,10 @@ As a result, the output contains a classification label from the list we have pr
 
 <Tip>
 
-You may notice that in addition to the prompt, we pass a number of text generation parameters. We cover these parameters 
-in other docs, such as the [Text generation strategies](../generation_strategies) guide. For the purposes of this guide, 
-you only need to know that  `max_new_tokens` controls the number of tokens the model shall generate. 
+You may notice that in addition to the prompt, we pass a `max_new_tokens` parameter. It controls the number of tokens the 
+model shall generate, and it is one of the many text generation parameters that you can learn about 
+in [Text generation strategies](../generation_strategies) guide.
+
 </Tip>
 
 #### Named Entity Recognition
@@ -196,13 +197,13 @@ so that output doesn't contain the prompt:
 
 >>> sequences = pipe(
 ...     prompt,
-...     max_length=43,
+...     max_new_tokens=15,
 ...     return_full_text = False,    
 ... )
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-- The Golden State Warriors
+- Golden State Warriors
 - San Francisco
 ```
 
@@ -223,7 +224,7 @@ you can write a basic prompt to instruct a model to translate a piece of text fr
 
 >>> sequences = pipe(
 ...     prompt,
-...     max_length=100,
+...     max_new_tokens=20,
 ...     do_sample=True,
 ...     top_k=10,
 ...     return_full_text = False,
@@ -234,10 +235,7 @@ you can write a basic prompt to instruct a model to translate a piece of text fr
 A volte, ho creduto a sei impossibili cose prima di colazione.
 ```
 
-[//]: # (Perhaps we could add a note here about languages used in prompts themselves, e.g. prompting in Italian. What changes? 
-Anecdotal accounts mention that for common western languages, the "accuracy" of the results is more or less the same, but 
-there may be difference in latency due to the number of tokens varying between the languages. More tokens => increased 
-computation => longer latency. Has this been researched though?)
+Here we've added a `do_sample=True` and `top_k=10` to allow the model to be a bit more flexible when generating output.
 
 #### Text summarization
 
@@ -255,7 +253,7 @@ also be a suitable location for instructions. Typically, it's better to place th
 
 >>> sequences = pipe(
 ...     prompt,
-...     max_length=100,
+...     max_new_tokens=30,
 ...     do_sample=True,
 ...     top_k=10,
 ...     return_full_text = False,
@@ -263,7 +261,7 @@ also be a suitable location for instructions. Typically, it's better to place th
 
 >>> for seq in sequences:
 ...     print(f"{seq['generated_text']}")
-Permaculture is an ecological design mimicking natural ecosystems to meet basic needs
+Permaculture is an ecological design mimicking natural ecosystems to meet basic needs and prepare for climate change. It is based on traditional knowledge and scientific understanding.
 ```
 
 #### Question answering
@@ -281,7 +279,7 @@ the leading word or phrase (`"Answer:"`) to nudge the model to start generating 
 
 >>> sequences = pipe(
 ...     prompt,
-...     max_length=160,
+...     max_new_tokens=10,
 ...     do_sample=True,
 ...     top_k=10,
 ...     return_full_text = False,
@@ -305,7 +303,7 @@ Let's try if we can make a model reason about a simple arithmetics task with a b
 
 >>> sequences = pipe(
 ...     prompt,
-...     max_length=100,
+...     max_new_tokens=30,
 ...     do_sample=True,
 ...     top_k=10,
 ...     return_full_text = False,
@@ -325,7 +323,7 @@ Correct! Let's increase the complexity a little and see if we can still get away
 
 >>> sequences = pipe(
 ...     prompt,
-...     max_length=80,
+...     max_new_tokens=10,
 ...     do_sample=True,
 ...     top_k=10,
 ...     return_full_text = False,
@@ -334,7 +332,7 @@ Correct! Let's increase the complexity a little and see if we can still get away
 >>> for seq in sequences:
 ...     print(f"Result: {seq['generated_text']}")
 Result: 
-The total number of muffins now is 21. You baked 15 muffins, ate 2, and then gave another 5 to a neighbor, so that's 16 muffins.
+The total number of muffins now is 21
 ```
 
 This is a wrong answer, it should be 12. In this case, this can be due to the prompt being too basic, or due to the choice 
@@ -382,7 +380,7 @@ Here's an example:
 
 >>> sequences = pipe(
 ...     prompt,
-...     max_length=80,
+...     max_new_tokens=8,
 ...     do_sample=True,
 ...     top_k=10,
 ...     num_return_sequences=1,
