@@ -603,9 +603,10 @@ class FalconFlashAttention2(FalconAttention):
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 
-
         attn_dropout = self.attention_dropout if self.training else 0.0
-        attn_output = self._flash_attention_forward(query_layer, key_layer, value_layer, padding_mask, query_length, dropout=attn_dropout)
+        attn_output = self._flash_attention_forward(
+            query_layer, key_layer, value_layer, padding_mask, query_length, dropout=attn_dropout
+        )
 
         attn_weights = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.dense(attn_weights)
@@ -614,10 +615,11 @@ class FalconFlashAttention2(FalconAttention):
             attn_weights = None
 
         return attn_output, past_key_value, attn_weights
-    
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
-    def _flash_attention_forward(self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None):
+    def _flash_attention_forward(
+        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None
+    ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
         first unpad the input, then computes the attention scores and pad the final attention scores.
@@ -630,12 +632,12 @@ class FalconFlashAttention2(FalconAttention):
             value_states (`torch.Tensor`):
                 Input value states to be passed to Flash Attention API
             padding_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the position
-                of padding tokens and 1 for the position of non-padding tokens.
+                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+                position of padding tokens and 1 for the position of non-padding tokens.
             dropout (`int`, *optional*):
                 Attention dropout
             softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)            
+                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
         # Contains at least one padding token in the sequence
         if padding_mask is not None:
@@ -662,7 +664,9 @@ class FalconFlashAttention2(FalconAttention):
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
-            attn_output = flash_attn_func(query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True)
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+            )
 
         return attn_output
 
