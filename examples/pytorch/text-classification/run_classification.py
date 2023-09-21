@@ -28,7 +28,7 @@ import datasets
 import evaluate
 import numpy as np
 from datasets import Value, load_dataset
-
+from peft import LoraConfig, TaskType, get_peft_model
 import transformers
 from transformers import (
     AutoConfig,
@@ -256,6 +256,10 @@ class ModelArguments:
     ignore_mismatched_sizes: bool = field(
         default=False,
         metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
+    )
+    use_peft: bool = field(
+        default=False,
+        metadata={"help": "Will enable to parameter-efficient fine-tuning."},
     )
 
 
@@ -513,6 +517,7 @@ def main():
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
+    tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
@@ -523,6 +528,13 @@ def main():
         trust_remote_code=model_args.trust_remote_code,
         ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
+
+    if model_args.use_peft:
+        peft_config = LoraConfig(
+            task_type=TaskType.SEQ_CLS, inference_mode=False, r=2, lora_alpha=32, lora_dropout=0.1
+        )
+        model = get_peft_model(model, peft_config)
+        model.to(training_args.device)
 
     # Padding strategy
     if data_args.pad_to_max_length:
