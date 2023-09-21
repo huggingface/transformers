@@ -784,7 +784,7 @@ def main():
         rng, input_rng = jax.random.split(rng)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        train_loader = data_loader(input_rng, train_dataset // training_args.gradient_accumulation_steps, train_batch_size, shuffle=True)
+        train_loader = data_loader(input_rng, train_dataset, train_batch_size // training_args.gradient_accumulation_steps, shuffle=True)
         steps_per_epoch = len(train_dataset) // train_batch_size
         # train
         for step in tqdm(range(steps_per_epoch * training_args.gradient_accumulation_steps), desc="Training...", position=1, leave=False):
