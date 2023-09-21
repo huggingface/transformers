@@ -77,6 +77,7 @@ class PeftAdapterMixin:
         offload_index: Optional[int] = None,
         peft_config: Dict[str, Any] = None,
         adapter_state_dict: Optional[Dict[str, "torch.Tensor"]] = None,
+        adapter_hub_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
@@ -132,6 +133,8 @@ class PeftAdapterMixin:
         check_peft_version(min_version=MIN_PEFT_VERSION)
 
         adapter_name = adapter_name if adapter_name is not None else "default"
+        if adapter_hub_kwargs is None:
+            adapter_hub_kwargs = {}
 
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
@@ -147,8 +150,8 @@ class PeftAdapterMixin:
         if peft_config is None:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
-                revision=revision,
                 token=token,
+                **adapter_hub_kwargs,
             )
 
             if adapter_config_file is None:
@@ -159,8 +162,8 @@ class PeftAdapterMixin:
 
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
-                revision=revision,
                 use_auth_token=token,
+                **adapter_hub_kwargs,
             )
 
         # Create and add fresh new adapters into the model.
@@ -170,7 +173,7 @@ class PeftAdapterMixin:
             self._hf_peft_config_loaded = True
 
         if peft_model_id is not None:
-            adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=token)
+            adapter_state_dict = load_peft_weights(peft_model_id, use_auth_token=token, **adapter_hub_kwargs)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
