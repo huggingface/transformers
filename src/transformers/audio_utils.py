@@ -382,7 +382,8 @@ def spectrogram(
             Sets the maximum dynamic range in decibels. For example, if `db_range = 80`, the difference between the
             peak value and the smallest value will never be more than 80 dB. Must be greater than zero.
         remove_dc_offset (`bool`, *optional*):
-            Subtract mean from waveform on each frame, applied before pre-emphasis.
+            Subtract mean from waveform on each frame, applied before pre-emphasis. This should be set to `true` in order to get the same results as 
+            `torchaudio.compliance.kaldi.fbank` when computing mel filters.
         dtype (`np.dtype`, *optional*, defaults to `np.float32`):
             Data type of the spectrogram tensor. If `power` is None, this argument is ignored and the dtype will be
             `np.complex64`.
