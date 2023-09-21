@@ -20,3 +20,11 @@
   - local: model_sharing
     title: Ein Modell teilen
   title: Tutorials
+- sections:
+  - local: add_new_model
+    title: Wie fügt man ein Modell zu 🤗 Transformers hinzu?
+  - local: add_tensorflow_model
+    title: Wie konvertiert man ein 🤗 Transformers-Modell in TensorFlow?
+  - local: add_new_pipeline
+    title: Wie fügt man eine Pipeline zu 🤗 Transformers hinzu?
+  title: Contribute
