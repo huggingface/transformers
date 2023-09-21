@@ -105,7 +105,6 @@ class NougatImageProcessingTester(unittest.TestCase):
         )
 
 
-@require_cv2
 @require_torch
 @require_vision
 class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
@@ -182,6 +181,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = Image.open(filepath).convert("RGB")
         return np.array(image)
 
+    @require_cv2
     def test_crop_margin_equality_cv2_py(self):
         image = self.prepare_dummy_np_image()
         image_processor = self.image_processing_class(**self.image_processor_dict)
