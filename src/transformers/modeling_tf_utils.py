@@ -2646,7 +2646,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         tf_to_pt_weight_rename = kwargs.pop("tf_to_pt_weight_rename", None)
 
         # Not relevant for TF models
-        _ = kwargs.pop("adapter_kwargs")
+        _ = kwargs.pop("adapter_kwargs", None)
 
         if use_auth_token is not None:
             warnings.warn(
