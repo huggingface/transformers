@@ -142,19 +142,6 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         if not _tag_and_patch_index_tokens_already_built:
             kwargs["_tag_and_patch_index_tokens_already_built"] = True
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            num_patch_index_tokens=num_patch_index_tokens,
-            **kwargs,
-        )
-
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -212,6 +199,19 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         if not _tag_and_patch_index_tokens_already_built:
             for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
                 self.add_tokens(AddedToken(token, lstrip=True, rstrip=False))
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            num_patch_index_tokens=num_patch_index_tokens,
+            **kwargs,
+        )
 
     def _decode(
         self,
