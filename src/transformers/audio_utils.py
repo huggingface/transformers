@@ -76,7 +76,7 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
         raise ValueError('mel_scale should be one of "htk", "slaney" or "kaldi".')
 
     if mel_scale == "htk":
-        return 700.0 * (np.exp(mels / 2595.0, base =10) - 1.0)
+        return 700.0 * (np.exp(mels / 2595.0, base=10) - 1.0)
     elif mel_scale == "kaldi":
         return 700.0 * (np.exp(mels / 1127.0) - 1.0)
 
@@ -162,8 +162,8 @@ def mel_filter_bank(
         mel_scale (`str`, *optional*, defaults to `"htk"`):
             The mel frequency scale to use, `"htk"`, `"kaldi"` or `"slaney"`.
         triangularize_in_mel_space (`bool`, *optional*, defaults to `False`):
-            If this option is enabled, the triangular filter is applied in mel space rather than frequency space. This should be set to `true` in order to get the same results as 
-            `torchaudio` when computing mel filters.
+            If this option is enabled, the triangular filter is applied in mel space rather than frequency space. This
+            should be set to `true` in order to get the same results as `torchaudio` when computing mel filters.
 
     Returns:
         `np.ndarray` of shape (`num_frequency_bins`, `num_mel_filters`): Triangular filter bank matrix. This is a
@@ -186,8 +186,8 @@ def mel_filter_bank(
     else:
         # frequencies of FFT bins in Hz
         fft_freqs = np.linspace(0, sampling_rate // 2, num_frequency_bins)
-        
-mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
+
+    mel_filters = _create_triangular_filter_bank(fft_freqs, filter_freqs)
 
     if norm is not None and norm == "slaney":
         # Slaney-style mel is scaled to be approx constant energy per channel
