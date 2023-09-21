@@ -508,6 +508,7 @@ class IdeficsModelIntegrationTest(TestCasePlus):
     @require_bitsandbytes
     @slow
     def test_inference_natural_language_visual_reasoning(self):
+        # TODO tokenizer updates seem to have broken this
         cat_image_path = self.tests_dir / "fixtures/tests_samples/COCO/000000039769.png"
         cats_image_obj = Image.open(cat_image_path)  # 2 cats
         dogs_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
