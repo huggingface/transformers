@@ -161,11 +161,7 @@ also adding the beginning of the response - `"Sentiment: "`:
 
 >>> sequences = pipe(
 ...     prompt,
-...     max_length=100,
-...     do_sample=True,
-...     top_k=10,
-...     num_return_sequences=1,
-...     eos_token_id=tokenizer.eos_token_id,
+...     max_new_tokens=10,
 ... )
 
 >>> for seq in sequences:
@@ -182,7 +178,7 @@ As a result, the output contains a classification label from the list we have pr
 
 You may notice that in addition to the prompt, we pass a number of text generation parameters. We cover these parameters 
 in other docs, such as the [Text generation strategies](../generation_strategies) guide. For the purposes of this guide, 
-you only need to know that  `max_length` controls the length of the total output (including the initial prompt). 
+you only need to know that  `max_new_tokens` controls the number of tokens the model shall generate. 
 </Tip>
 
 #### Named Entity Recognition
@@ -201,11 +197,7 @@ so that output doesn't contain the prompt:
 >>> sequences = pipe(
 ...     prompt,
 ...     max_length=43,
-...     do_sample=True,
-...     top_k=10,
-...     num_return_sequences=1,
 ...     return_full_text = False,    
-...     eos_token_id=tokenizer.eos_token_id,
 ... )
 
 >>> for seq in sequences:
@@ -234,9 +226,7 @@ you can write a basic prompt to instruct a model to translate a piece of text fr
 ...     max_length=100,
 ...     do_sample=True,
 ...     top_k=10,
-...     num_return_sequences=1,
-...     return_full_text = False,    
-...     eos_token_id=tokenizer.eos_token_id,
+...     return_full_text = False,
 ... )
 
 >>> for seq in sequences:
@@ -268,9 +258,7 @@ also be a suitable location for instructions. Typically, it's better to place th
 ...     max_length=100,
 ...     do_sample=True,
 ...     top_k=10,
-...     num_return_sequences=1,
-...     return_full_text = False,      
-...     eos_token_id=tokenizer.eos_token_id,
+...     return_full_text = False,
 ... )
 
 >>> for seq in sequences:
@@ -296,9 +284,7 @@ the leading word or phrase (`"Answer:"`) to nudge the model to start generating 
 ...     max_length=160,
 ...     do_sample=True,
 ...     top_k=10,
-...     num_return_sequences=1,
 ...     return_full_text = False,
-...     eos_token_id=tokenizer.eos_token_id,
 ... )
 
 >>> for seq in sequences:
@@ -322,9 +308,7 @@ Let's try if we can make a model reason about a simple arithmetics task with a b
 ...     max_length=100,
 ...     do_sample=True,
 ...     top_k=10,
-...     num_return_sequences=1,
 ...     return_full_text = False,
-...     eos_token_id=tokenizer.eos_token_id,
 ... )
 
 >>> for seq in sequences:
@@ -344,9 +328,7 @@ Correct! Let's increase the complexity a little and see if we can still get away
 ...     max_length=80,
 ...     do_sample=True,
 ...     top_k=10,
-...     num_return_sequences=1,
 ...     return_full_text = False,
-...     eos_token_id=tokenizer.eos_token_id,
 ... )
 
 >>> for seq in sequences:
