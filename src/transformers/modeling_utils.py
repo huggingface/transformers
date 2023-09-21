@@ -1306,7 +1306,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 raise ValueError(
                     "You are attempting to use Flash Attention 2.0 with a model initialized on CPU and with no GPU available. "
-                    "This is not supported. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
+                    "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
                     "or initialising the model on CPU and then moving it to GPU."
                 )
         elif (
