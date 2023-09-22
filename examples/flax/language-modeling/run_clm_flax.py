@@ -421,6 +421,7 @@ def main():
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
             token=model_args.token,
+            num_proc=data_args.preprocessing_num_workers,
         )
 
         if "validation" not in dataset.keys():
@@ -430,6 +431,7 @@ def main():
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
             dataset["train"] = load_dataset(
                 data_args.dataset_name,
@@ -437,6 +439,7 @@ def main():
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
     else:
         data_files = {}
@@ -455,6 +458,7 @@ def main():
             cache_dir=model_args.cache_dir,
             **dataset_args,
             token=model_args.token,
+            num_proc=data_args.preprocessing_num_workers,
         )
 
         if "validation" not in dataset.keys():
@@ -465,6 +469,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 **dataset_args,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
             dataset["train"] = load_dataset(
                 extension,
@@ -473,6 +478,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 **dataset_args,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
