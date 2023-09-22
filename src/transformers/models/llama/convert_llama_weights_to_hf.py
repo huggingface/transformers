@@ -68,6 +68,7 @@ NUM_SHARDS = {
     "70B-chat": 8,
 }
 
+LLAMA_2_BASE_FOLDER_NAME = 'llama-2-'
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
     return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
@@ -88,7 +89,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
     if not os.path.isfile(os.path.join(input_base_path, "params.json")):
         model_path = model_size
         if model_size == ('7B' or '13B' or '70B' or '7B-chat' or '13B-chat' or '70B-chat'):
-            model_path = 'llama-2-' + model_size.lower()
+            model_path = LLAMA_2_BASE_FOLDER_NAME + model_size.lower()
         input_base_path = os.path.join(input_base_path, model_path)
 
     os.makedirs(model_path, exist_ok=True)
