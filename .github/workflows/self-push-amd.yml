@@ -348,7 +348,7 @@ jobs:
         check_runners,
         setup_gpu,
         run_tests_single_gpu,
-#        run_tests_multi_gpu,
+        run_tests_multi_gpu,
 #        run_tests_torch_cuda_extensions_single_gpu,
 #        run_tests_torch_cuda_extensions_multi_gpu
     ]
