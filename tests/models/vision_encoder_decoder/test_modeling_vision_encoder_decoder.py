@@ -23,7 +23,6 @@ from packaging import version
 
 from transformers import DonutProcessor, NougatProcessor, TrOCRProcessor
 from transformers.testing_utils import (
-    require_cv2,
     require_levenshtein,
     require_nltk,
     require_sentencepiece,
@@ -1004,7 +1003,6 @@ class DonutModelIntegrationTest(unittest.TestCase):
         )
 
 
-@require_cv2
 @require_levenshtein
 @require_nltk
 @require_torch

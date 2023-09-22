@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from transformers.testing_utils import require_cv2, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -181,10 +181,10 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = Image.open(filepath).convert("RGB")
         return np.array(image)
 
-    @require_cv2
-    def test_crop_margin_equality_cv2_py(self):
+    def test_crop_margin_equality_cv2_python(self):
         image = self.prepare_dummy_np_image()
         image_processor = self.image_processing_class(**self.image_processor_dict)
-        image_cropped_py = image_processor.crop_margin(image)
-        image_cropped_cv2 = image_processor.cv2_crop_margin(image)
-        self.assertTrue(np.array_equal(image_cropped_py, image_cropped_cv2))
+        image_cropped_python = image_processor.crop_margin(image)
+
+        self.assertEqual(image_cropped_python.shape, (850, 685, 3))
+        self.assertEqual(image_cropped_python.mean(), 237.43881150708458)

@@ -39,7 +39,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, logging, requires_backends
+from ...utils import TensorType, logging
 from ...utils.import_utils import is_cv2_available, is_vision_available
 
 
@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 if is_cv2_available():
-    import cv2
+    pass
 
 
 if is_vision_available():
@@ -183,57 +183,6 @@ class NougatImageProcessor(BaseImageProcessor):
         coords = self.python_find_non_zero(gray)
         x_min, y_min, width, height = self.python_bounding_rect(coords)
         image = image.crop((x_min, y_min, x_min + width, y_min + height))
-        image = np.array(image).astype(np.uint8)
-        image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
-
-        image = (
-            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
-        )
-
-        return image
-
-    def cv2_crop_margin(
-        self,
-        image: np.array,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.array:
-        """
-        Crops the margin of the image.
-
-        Args:
-            image (`np.array`):
-                The image to be cropped.
-            data_format (`ChannelDimension`, *optional*):
-                The channel dimension format of the output image. If unset, will use the inferred format from the
-                input.
-            input_data_format (`ChannelDimension`, *optional*):
-                The channel dimension format of the input image. If unset, will use the inferred format from the input.
-        """
-        requires_backends(self, "cv2")
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-
-        image = to_pil_image(image, input_data_format=input_data_format)
-        data = np.array(image.convert("L")).astype(np.uint8)
-        max_val = data.max()
-        min_val = data.min()
-        if max_val == min_val:
-            image = np.array(image)
-            image = (
-                to_channel_dimension_format(image, data_format, input_data_format)
-                if data_format is not None
-                else image
-            )
-            return image
-
-        data = (data - min_val) / (max_val - min_val) * 255
-        gray = 255 * (data < 200).astype(np.uint8)
-
-        coords = cv2.findNonZero(gray)  # Find all non-zero points (text)
-        top_left_x, top_left_y, width, height = cv2.boundingRect(coords)  # Find minimum spanning bounding box
-
-        image = image.crop((top_left_x, top_left_y, width + top_left_x, height + top_left_y))
         image = np.array(image).astype(np.uint8)
         image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
 
