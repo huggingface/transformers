@@ -257,7 +257,7 @@ class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 class TFCTRLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_ctrl(self):
-        model = TFCTRLLMHeadModel.from_pretrained("ctrl")
+        model = TFCTRLLMHeadModel.from_pretrained("Salesforce/ctrl")
         input_ids = tf.convert_to_tensor([[11859, 0, 1611, 8]], dtype=tf.int32)  # Legal the president is
         expected_output_ids = [
             11859,
