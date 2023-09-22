@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import io
 import json
 import os
 import warnings
@@ -20,29 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from huggingface_hub import model_info
-from numpy import isin
 
-from ..configuration_utils import PretrainedConfig
-from ..dynamic_module_utils import get_class_from_dynamic_module
-from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..image_processing_utils import BaseImageProcessor
-from ..models.auto.configuration_auto import AutoConfig
-from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
-from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
-from ..models.auto.modeling_auto import AutoModelForDepthEstimation
-from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import (
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
-    find_adapter_config_file,
-    is_kenlm_available,
-    is_offline_mode,
-    is_peft_available,
-    is_pyctcdecode_available,
-    is_tf_available,
-    is_torch_available,
-    logging,
-)
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -85,11 +62,29 @@ from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
-
+from ..configuration_utils import PretrainedConfig
+from ..dynamic_module_utils import get_class_from_dynamic_module
+from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..image_processing_utils import BaseImageProcessor
+from ..models.auto.configuration_auto import AutoConfig
+from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
+from ..models.auto.modeling_auto import AutoModelForDepthEstimation
+from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
+from ..tokenization_utils import PreTrainedTokenizer
+from ..utils import (
+    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    find_adapter_config_file,
+    is_kenlm_available,
+    is_offline_mode,
+    is_peft_available,
+    is_pyctcdecode_available,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 
 if is_tf_available():
-    import tensorflow as tf
-
     from ..models.auto.modeling_tf_auto import (
         TFAutoModel,
         TFAutoModelForCausalLM,
@@ -394,6 +389,13 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("facebook/sam-vit-huge", "997b15")}},
         "type": "multimodal",
     },
+    # "image-matching": {
+    #     "impl": ImageMatchingPipeline,
+    #     "tf": (),
+    #     "pt": (AutoModelForImageMatching,) if is_torch_available() else (),
+    #     "default": {"model": {"pt": ("facebook/deit-base-distilled-patch16-224", "f2f7e0")}},
+    #     "type": "multimodal",
+    # },
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
