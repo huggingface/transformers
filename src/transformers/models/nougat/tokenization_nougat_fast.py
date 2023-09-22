@@ -480,7 +480,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         Example:
 
         ```python
-        >>> correct_tables("\\begin{table} \\begin{tabular}{l l} & \\ \\end{tabular} \\end{table}")
+        correct_tables("\\begin{table} \\begin{tabular}{l l} & \\ \\end{tabular} \\end{table}")
         "\\begin{table}\n\\begin{tabular}{l l} & \\ \\end{tabular}\n\\end{table}"
         ```
         """
