@@ -113,6 +113,10 @@ class NougatTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_prepare_for_model(self):
         pass
 
+    @unittest.skip("This needs a slow tokenizer. Nougat does not have one!")
+    def test_encode_decode_with_spaces(self):
+        pass
+
 
 class MarkdownCompatibleTest(unittest.TestCase):
     def test_equation_tag(self):
