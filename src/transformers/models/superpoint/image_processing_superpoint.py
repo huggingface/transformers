@@ -23,9 +23,9 @@ def is_grayscale(
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
     if input_data_format == ChannelDimension.FIRST or input_data_format == "channels_first":
-        return image.shape[0] == 1
+        return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
     elif input_data_format == ChannelDimension.LAST or input_data_format == "channels_last":
-        return image.shape[-1] == 1
+        return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
 
 
 class SuperPointImageProcessor(BaseImageProcessor):
