@@ -246,7 +246,7 @@ jobs:
 
   run_tests_multi_gpu:
     name: Model tests
-    needs: setup
+    needs: setup_gpu
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
     strategy:
