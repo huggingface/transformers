@@ -63,7 +63,7 @@ TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LARGE_NEGATIVE = -1e8
 
 
-def create_sinusiodal_positions(num_positions: int, embedding_dim: int, padding_idx: Optional[int]) -> tf.Tensor:
+def create_sinusoidal_positions(num_positions: int, embedding_dim: int, padding_idx: Optional[int]) -> tf.Tensor:
     half_dim = embedding_dim // 2
     emb = math.log(10000) / (half_dim - 1)
     emb = tf.exp(tf.range(half_dim, dtype=tf.float32) * -emb)
@@ -83,7 +83,7 @@ def create_sinusiodal_positions(num_positions: int, embedding_dim: int, padding_
         )
         emb *= _padding_mask
 
-    return tf.Variable(emb, trainable=False, name="model.embed_positions.weights")
+    return tf.constant(emb, name="embed_positions")
 
 
 def _create_position_ids_from_input_ids(
@@ -438,7 +438,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
             )
 
         self.offset = 2
-        self._embed_positions_weights = create_sinusiodal_positions(
+        self._embed_positions_weights = create_sinusoidal_positions(
             num_positions=config.max_position_embeddings + self.offset,
             embedding_dim=config.d_model,
             padding_idx=config.pad_token_id,

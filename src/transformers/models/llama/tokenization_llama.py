@@ -31,7 +31,6 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
     from ...tokenization_utils_base import TextInput
 
 logger = logging.get_logger(__name__)
@@ -123,6 +122,24 @@ class LlamaTokenizer(PreTrainedTokenizer):
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        if legacy is None:
+            logger.warning_once(
+                f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
+                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
+                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
+                " means, and thouroughly read the reason why this was added as explained in"
+                " https://github.com/huggingface/transformers/pull/24565"
+            )
+            legacy = True
+
+        self.legacy = legacy
+        self.vocab_file = vocab_file
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
+        self.use_default_system_prompt = use_default_system_prompt
+        self.sp_model = self.get_spm_processor()
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -137,23 +154,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             legacy=legacy,
             **kwargs,
         )
-        if legacy is None:
-            logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
-                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
-                " If you want to use the new behaviour, set `legacy=True`. This should only be set if you understand what it"
-                " means, and thouroughly read the reason why this was added as explained in"
-                " https://github.com/huggingface/transformers/pull/24565"
-            )
-            legacy = True
-
-        self.legacy = legacy
-        self.vocab_file = vocab_file
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
-        self.use_default_system_prompt = use_default_system_prompt
-
-        self.sp_model = self.get_spm_processor()
 
     @property
     def unk_token_length(self):
@@ -200,18 +200,17 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return vocab
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
         """
-        if self.legacy:
+        if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        if len(text) > 0:
-            tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
 
-        if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
         return tokens
 
@@ -375,67 +374,53 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         return output
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        r"""Builds the input ids for a conversation.
-        This is the format used in the provided examples. System prompts should be manually added at the beginning of
-        the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
-        ```
-        <bos>[INST] B_SYS SytemPrompt E_SYS Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST]
-        ```
-
-        If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
-        ```python
-        >>> from transformers import Conversation
-
-        >>> Conversation(
-        ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
-        ... )  # doctest: +IGNORE_RESULT
-        ```
-        Args:
-            conversation (`Conversation`):
-                Conversation to build input ids for.
-        Returns:
-            `List[int]`:
-                Input ids for the conversation.
+    @property
+    def default_chat_template(self):
         """
-        if self.use_default_system_prompt:
-            if len(conversation.past_user_inputs) > 0:
-                if (
-                    not conversation.past_user_inputs[0].startswith(B_SYS)
-                    or E_SYS not in conversation.past_user_inputs[0]
-                ):
-                    conversation.past_user_inputs[0] = (
-                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                    )
-            elif conversation.new_user_input:
-                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-            else:
-                raise ValueError("Last message must be from user")
+        LLaMA uses [INST] and [/INST] to indicate user messages, and <<SYS>> and <</SYS>> to indicate system messages.
+        Assistant messages do not have special tokens, because LLaMA chat models are generally trained with strict
+        user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
+        rather than needing special tokens. The system message is partly 'embedded' in the first user message, which
+        results in an unusual token ordering when it is present. This template should definitely be changed if you wish
+        to fine-tune a model with more flexible role ordering!
 
-        dialogue = list(conversation.iter_texts())
-        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
-            [not is_user for is_user, msg in dialogue[1::2]]
-        ):
-            raise ValueError(
-                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
-            )
+        The output should look something like:
 
-        dialog_tokens: List[int] = []
-        dialog_tokens += sum(
-            [
-                [self.bos_token_id]
-                + self.encode(
-                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
-                )
-                + [self.eos_token_id]
-                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
-            ],
-            [],
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST]
+        """
+
+        template = (
+            "{% if messages[0]['role'] == 'system' %}"
+            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
+            "{% set system_message = messages[0]['content'] %}"
+            "{% elif USE_DEFAULT_PROMPT == true and not '<<SYS>>' in messages[0]['content'] %}"
+            "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
+            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
+            "{% else %}"
+            "{% set loop_messages = messages %}"
+            "{% set system_message = false %}"
+            "{% endif %}"
+            "{% for message in loop_messages %}"  # Loop over all non-system messages
+            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
+            "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
+            "{% endif %}"
+            "{% if loop.index0 == 0 and system_message != false %}"  # Embed system message in first message
+            "{% set content = '<<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n' + message['content'] %}"
+            "{% else %}"
+            "{% set content = message['content'] %}"
+            "{% endif %}"
+            "{% if message['role'] == 'user' %}"  # After all of that, handle messages/roles in a fairly normal way
+            "{{ bos_token + '[INST] ' + content.strip() + ' [/INST]' }}"
+            "{% elif message['role'] == 'system' %}"
+            "{{ '<<SYS>>\\n' + content.strip() + '\\n<</SYS>>\\n\\n' }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{{ ' '  + content.strip() + ' ' + eos_token }}"
+            "{% endif %}"
+            "{% endfor %}"
         )
-        dialog_tokens += [self.bos_token_id] + self.encode(
-            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
-        )
-        return dialog_tokens
+        template = template.replace("USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false")
+        default_message = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
+        template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
+
+        return template

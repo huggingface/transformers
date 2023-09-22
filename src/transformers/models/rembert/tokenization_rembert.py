@@ -111,6 +111,13 @@ class RemBertTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         **kwargs,
     ):
+        self.do_lower_case = do_lower_case
+        self.remove_space = remove_space
+        self.keep_accents = keep_accents
+        self.vocab_file = vocab_file
+
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(vocab_file)
         super().__init__(
             do_lower_case=do_lower_case,
             remove_space=remove_space,
@@ -124,14 +131,6 @@ class RemBertTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-
-        self.do_lower_case = do_lower_case
-        self.remove_space = remove_space
-        self.keep_accents = keep_accents
-        self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(vocab_file)
 
     @property
     def vocab_size(self):
@@ -263,7 +262,11 @@ class RemBertTokenizer(PreTrainedTokenizer):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
+        elif not os.path.isfile(self.vocab_file):
+            with open(out_vocab_file, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
         return (out_vocab_file,)

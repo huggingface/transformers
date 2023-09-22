@@ -31,6 +31,7 @@ if is_tf_available():
 
     from transformers import (
         TFDebertaV2ForMaskedLM,
+        TFDebertaV2ForMultipleChoice,
         TFDebertaV2ForQuestionAnswering,
         TFDebertaV2ForSequenceClassification,
         TFDebertaV2ForTokenClassification,
@@ -196,6 +197,22 @@ class TFDebertaV2ModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
+    def create_and_check_for_multiple_choice(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_choices = self.num_choices
+        model = TFDebertaV2ForMultipleChoice(config=config)
+        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+        inputs = {
+            "input_ids": multiple_choice_inputs_ids,
+            "attention_mask": multiple_choice_input_mask,
+            "token_type_ids": multiple_choice_token_type_ids,
+        }
+        result = model(inputs)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -218,6 +235,7 @@ class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             TFDebertaV2Model,
             TFDebertaV2ForMaskedLM,
             TFDebertaV2ForQuestionAnswering,
+            TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForSequenceClassification,
             TFDebertaV2ForTokenClassification,
         )

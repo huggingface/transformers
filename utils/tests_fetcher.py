@@ -395,6 +395,31 @@ def get_all_doctest_files() -> List[str]:
     return sorted(test_files_to_run)
 
 
+def get_new_doctest_files(repo, base_commit, branching_commit) -> List[str]:
+    """
+    Get the list of files that were removed from "utils/not_doctested.txt", between `base_commit` and
+    `branching_commit`.
+
+    Returns:
+        `List[str]`: List of files that were removed from "utils/not_doctested.txt".
+    """
+    for diff_obj in branching_commit.diff(base_commit):
+        # Ignores all but the "utils/not_doctested.txt" file.
+        if diff_obj.a_path != "utils/not_doctested.txt":
+            continue
+        # Loads the two versions
+        folder = Path(repo.working_dir)
+        with checkout_commit(repo, branching_commit):
+            with open(folder / "utils/not_doctested.txt", "r", encoding="utf-8") as f:
+                old_content = f.read()
+        with open(folder / "utils/not_doctested.txt", "r", encoding="utf-8") as f:
+            new_content = f.read()
+        # Compute the removed lines and return them
+        removed_content = set(old_content.split("\n")) - set(new_content.split("\n"))
+        return sorted(removed_content)
+    return []
+
+
 def get_doctest_files(diff_with_last_commit: bool = False) -> List[str]:
     """
     Return a list of python and Markdown files where doc example have been modified between:
@@ -425,6 +450,10 @@ def get_doctest_files(diff_with_last_commit: bool = False) -> List[str]:
         test_files_to_run = get_diff_for_doctesting(repo, repo.head.commit, parent_commits)
 
     all_test_files_to_run = get_all_doctest_files()
+
+    # Add to the test files to run any removed entry from "utils/not_doctested.txt".
+    new_test_files = get_new_doctest_files(repo, repo.head.commit, repo.refs.main.commit)
+    test_files_to_run = list(set(test_files_to_run + new_test_files))
 
     # Do not run slow doctest tests on CircleCI
     with open("utils/slow_documentation_tests.txt") as fp:

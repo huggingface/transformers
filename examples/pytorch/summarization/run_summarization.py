@@ -18,7 +18,6 @@ Fine-tuning the library models for sequence to sequence.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
-import dataclasses
 import logging
 import os
 import sys
@@ -54,7 +53,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.33.0.dev0")
+check_min_version("4.34.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
 
@@ -675,10 +674,14 @@ def main():
         return result
 
     # Override the decoding parameters of Seq2SeqTrainer
-    if training_args.generation_max_length is None:
-        training_args = dataclasses.replace(training_args, generation_max_length=data_args.val_max_target_length)
-    if training_args.generation_num_beams is None:
-        training_args = dataclasses.replace(training_args, generation_num_beams=data_args.num_beams)
+    training_args.generation_max_length = (
+        training_args.generation_max_length
+        if training_args.generation_max_length is not None
+        else data_args.val_max_target_length
+    )
+    training_args.generation_num_beams = (
+        data_args.num_beams if data_args.num_beams is not None else training_args.generation_num_beams
+    )
 
     # Initialize our Trainer
     trainer = Seq2SeqTrainer(

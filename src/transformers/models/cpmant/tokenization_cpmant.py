@@ -131,18 +131,6 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         requires_backends(self, ["jieba"])
-        super().__init__(
-            bod_token=bod_token,
-            eod_token=eod_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            unk_token=unk_token,
-            line_token=line_token,
-            space_token=space_token,
-            padding_side=padding_side,
-            **kwargs,
-        )
         self.bod_token = bod_token
         self.eod_token = eod_token
         self.encoder = load_vocab(vocab_file)
@@ -155,7 +143,20 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         self.encoder = collections.OrderedDict(sorted(self.encoder.items(), key=lambda x: x[1]))
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.encoder, unk_token=self.unk_token)
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.encoder, unk_token=unk_token)
+
+        super().__init__(
+            bod_token=bod_token,
+            eod_token=eod_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            unk_token=unk_token,
+            line_token=line_token,
+            space_token=space_token,
+            padding_side=padding_side,
+            **kwargs,
+        )
 
     @property
     def bod_token_id(self):
