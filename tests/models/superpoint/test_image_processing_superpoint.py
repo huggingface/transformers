@@ -2,7 +2,10 @@ import unittest
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 if is_vision_available():
     from transformers import SuperPointImageProcessor
@@ -13,7 +16,7 @@ class SuperPointImageProcessingTester(unittest.TestCase):
         self,
         parent,
         batch_size=7,
-        num_channels=1,
+        num_channels=3,
         image_size=18,
         min_resolution=30,
         max_resolution=400,
