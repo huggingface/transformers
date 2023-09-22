@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 class ImageToImagePipeline(Pipeline):
     """
     Image to Image pipeline using any `AutoModelForImageToImage`. This pipeline generates an image based on a previous
-    image.
+    image input.
 
     Example:
 
