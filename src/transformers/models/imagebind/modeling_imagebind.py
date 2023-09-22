@@ -259,7 +259,6 @@ class ImageBindImuModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# TODO: add other embedding output (e.g. audio, depth, etc.) to outputs here
 @dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->ImageBind
 class ImageBindOutput(ModelOutput):
@@ -273,27 +272,75 @@ class ImageBindOutput(ModelOutput):
         logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
+        logits_per_audio:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `audio_embeds` and `image_embeds`. This represents the audio-image
+            similarity scores.
+        logits_per_depth:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `depth_embeds` and `image_embeds`. This represents the depth-image
+            similarity scores.
+        logits_per_thermal:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `thermal_embeds` and `image_embeds`. This represents the thermal-image
+            similarity scores.
+        logits_per_imu:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+            The scaled dot product scores between `imu_embeds` and `image_embeds`. This represents the IMU-image
+            similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`ImageBindTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of [`ImageBindVisionModel`].
+        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The audio embeddings obtained by applying the projection layer to the pooled output of [`ImageBindAudioModel`].
+        depth_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The depth embeddings obtained by applying the projection layer to the pooled output of [`ImageBindDepthModel`].
+        thermal_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The thermal embeddings obtained by applying the projection layer to the pooled output of [`ImageBindThermalModel`].
+        imu_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The IMU embeddings obtained by applying the projection layer to the pooled output of [`ImageBindImuModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`ImageBindTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
             The output of the [`ImageBindVisionModel`].
+        audio_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ImageBindAudioModel`].
+        depth_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ImageBindDepthModel`].
+        thermal_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ImageBindThermalModel`].
+        imu_model_output(`BaseModelOutputWithPooling`):
+            The output of the [`ImageBindImuModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
     logits_per_image: torch.FloatTensor = None
     logits_per_text: torch.FloatTensor = None
+    logits_per_audio: torch.FloatTensor = None
+    logits_per_depth: torch.FloatTensor = None
+    logits_per_thermal: torch.FloatTensor = None
+    logits_per_imu: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
+    audio_embeds: torch.FloatTensor = None
+    depth_embeds: torch.FloatTensor = None
+    thermal_embeds: torch.FloatTensor = None
+    imu_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
+    audio_model_output: BaseModelOutputWithPooling = None
+    depth_model_output: BaseModelOutputWithPooling = None
+    thermal_model_output: BaseModelOutputWithPooling = None
+    imu_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> Tuple[Any]:
+        fields_to_exclude = [
+            "text_model_output",
+            "vision_model_output",
+            "audio_model_output",
+            "depth_model_output",
+            "thermal_model_output",
+            "imu_model_output",
+        ]
         return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            self[k] if k not in fields_to_exclude else getattr(self, k).to_tuple()
             for k in self.keys()
         )
 
