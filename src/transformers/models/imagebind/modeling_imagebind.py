@@ -430,8 +430,7 @@ class RGBDTPatchEmbedding(nn.Module):
         if self.norm_layer is not None:
             patch_embeds = self.norm_layer(patch_embeds)
 
-        # class_embeds = self.class_embedding.expand(batch_size, 1, -1)
-        class_embeds = self.class_embedding.expand(batch_size, -1)
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
@@ -467,13 +466,41 @@ class ImageBindThermalEmbeddings(RGBDTPatchEmbedding):
     def forward(self, thermal: torch.FloatTensor) -> torch.Tensor:
         super().forward(pixel_values=thermal)
 
-# TODO: implement IMU embeddings
+
 class ImageBindImuEmbeddings(nn.Module):
     def __init__(self, config: ImageBindImuConfig):
         super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.kernel_size = config.kernel_size
+        self.in_features = config.input_shape[0] * self.kernel_size
+
+        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+
+        self.patch_embedding = nn.Linear(self.in_features, self.embed_dim, bias=False)
+        self.norm_layer = nn.LayerNorm(self.embed_dim)
+
+        self.num_patches = config.input_shape[1] // self.kernel_size
+        self.num_positions = self.num_patches + 1
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
     
-    def forward(self):
-        pass
+    def forward(self, imu: torch.FloatTensor) -> torch.Tensor:
+        batch_size = imu.shape[0]
+
+        # Patchify
+        # (B, L, D) -> (B, L, D // K, K) -> (B, D // K, L, K)
+        patches = imu.unfold(-1, self.kernel_size, self.kernel_size).permute(0, 2, 1, 3)
+        patches = patches.reshape(batch_size, patches.shape[1], -1)
+
+        patch_embeds = self.patch_embedding(patches)
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+        patch_embeds = self.norm_layer(patch_embeds)
+
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->ImageBind

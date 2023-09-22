@@ -619,6 +619,8 @@ class ImageBindImuConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
+        input_shape ('Tuple[int]`, *optional*, defaults to `(6, 2000)`):
+            The shape of the input IMU data.
         kernel_size (`int`, *optional*, defaults to 8):
             The kernel size of the 2D convolution layers. (TODO)
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
@@ -654,6 +656,7 @@ class ImageBindImuConfig(PretrainedConfig):
         projection_dim=1024,
         num_hidden_layers=6,
         num_attention_heads=8,
+        input_shape=(6, 2000),
         kernel_size=8,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
@@ -669,6 +672,7 @@ class ImageBindImuConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.input_shape = input_shape
         self.kernel_size = kernel_size
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
