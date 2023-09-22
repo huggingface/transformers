@@ -17,6 +17,8 @@
 
 import argparse
 import json
+import re
+from functools import reduce
 from pathlib import Path
 
 import requests
@@ -131,6 +133,16 @@ def prepare_img():
     return im
 
 
+def parse_integer_following_string(in_string: str, search: str):
+    to_search = search + "(\\d+)"
+    match = re.search(to_search, in_string)
+
+    if match is not None:
+        return int(reduce(lambda x, y: x or y, match.groups()))
+
+    return match
+
+
 @torch.no_grad()
 def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     """
@@ -140,12 +152,15 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     # define default ViT configuration
     config = ViTConfig()
     base_model = False
+    config.patch_size = parse_integer_following_string(vit_name, "patch")
+    config.image_size = parse_integer_following_string(vit_name, f"patch{config.patch_size}_")
+
+    if config.patch_size is None or config.image_size is None:
+        raise ValueError(f"{vit_name} cannot be converted as patch or image size is unknown.")
+
     # dataset (ImageNet-21k only or also fine-tuned on ImageNet 2012), patch_size and image_size
-    if vit_name[-5:] == "in21k":
-        base_model = True
-        config.patch_size = int(vit_name[-12:-10])
-        config.image_size = int(vit_name[-9:-6])
-    else:
+    if vit_name.endswith("in1k"):
+        # This is a finetuned model.
         config.num_labels = 1000
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
@@ -153,8 +168,10 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
-        config.patch_size = int(vit_name[-6:-4])
-        config.image_size = int(vit_name[-3:])
+    else:
+        print(f"{vit_name }is going to be converted as a feature extractor only. This is not guaranteed to work.")
+        base_model = True
+
     # size of the architecture
     if "deit" in vit_name:
         if vit_name[9:].startswith("tiny"):
@@ -170,23 +187,41 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         else:
             pass
     else:
+        # The intermediate size comes from timm's mlp_ratio argument.
+        if vit_name[4:].startswith("tiny"):
+            config.hidden_size = 192
+            config.intermediate_size = config.hidden_size * 4
+            config.num_hidden_layers = 12
+            config.num_attention_heads = 3
         if vit_name[4:].startswith("small"):
-            config.hidden_size = 768
-            config.intermediate_size = 2304
-            config.num_hidden_layers = 8
-            config.num_attention_heads = 8
+            config.hidden_size = 384
+            config.intermediate_size = config.hidden_size * 4
+            config.num_hidden_layers = 12
+            config.num_attention_heads = 6
         elif vit_name[4:].startswith("base"):
             pass
         elif vit_name[4:].startswith("large"):
             config.hidden_size = 1024
-            config.intermediate_size = 4096
+            config.intermediate_size = config.hidden_size * 4
             config.num_hidden_layers = 24
             config.num_attention_heads = 16
         elif vit_name[4:].startswith("huge"):
             config.hidden_size = 1280
-            config.intermediate_size = 5120
+            config.intermediate_size = config.hidden_size * 4
             config.num_hidden_layers = 32
             config.num_attention_heads = 16
+        elif vit_name[4:].startswith("giant"):
+            config.hidden_size = 1408
+            config.intermediate_size = config.hidden_size * 48 // 11
+            config.num_hidden_layers = 40
+            config.num_attention_heads = 16
+        elif vit_name[4:].startswith("gigantic"):
+            config.hidden_size = 1664
+            config.intermediate_size = config.hidden_size * 64 // 13
+            config.num_hidden_layers = 48
+            config.num_attention_heads = 16
+        else:
+            raise ValueError("Cannot determine ViT configuration from {vit_name}.")
 
     # load original model from timm
     timm_model = timm.create_model(vit_name, pretrained=True)
