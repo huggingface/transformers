@@ -56,13 +56,16 @@ come in several checkpoints they each contain a part of each weight of the model
 NUM_SHARDS = {
     "7B": 1,
     "7Bf": 1,
+    "7B-chat": 1, 
     "13B": 2,
     "13Bf": 2,
+    "13B-chat": 2,
     "34B": 4,
     "30B": 4,
     "65B": 8,
     "70B": 8,
     "70Bf": 8,
+    "70B-chat": 8,
 }
 
 
@@ -83,7 +86,10 @@ def write_json(text, path):
 def write_model(model_path, input_base_path, model_size, tokenizer_path=None, safe_serialization=True):
     # for backward compatibility, before you needed the repo to be called `my_repo/model_size`
     if not os.path.isfile(os.path.join(input_base_path, "params.json")):
-        input_base_path = os.path.join(input_base_path, model_size)
+        model_path = model_size
+        if model_size == ('7B' or '13B' or '70B' or '7B-chat' or '13B-chat' or '70B-chat'):
+            model_path = 'llama-2-' + model_size.lower()
+        input_base_path = os.path.join(input_base_path, model_path)
 
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
@@ -292,7 +298,7 @@ def main():
     )
     parser.add_argument(
         "--model_size",
-        choices=["7B", "7Bf", "13B", "13Bf", "30B", "34B", "65B", "70B", "70Bf", "tokenizer_only"],
+        choices=["7B", "7Bf", "7B-chat", "13B", "13Bf", "13B-chat", "30B", "34B", "65B", "70B", "70Bf", "70B-chat","tokenizer_only"],
         help="'f' models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, checkout the original repo: https://huggingface.co/meta-llama",
     )
     parser.add_argument(
