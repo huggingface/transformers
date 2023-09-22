@@ -18,7 +18,6 @@
 import argparse
 import json
 import re
-from functools import reduce
 from pathlib import Path
 
 import requests
