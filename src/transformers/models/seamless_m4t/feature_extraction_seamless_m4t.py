@@ -16,17 +16,15 @@
 Feature extractor class for Speech2Text
 """
 
+import copy
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
-import torchaudio.compliance.kaldi as ta_kaldi
-import copy
 
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
 
 
 logger = logging.get_logger(__name__)
@@ -69,19 +67,19 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         self.num_mel_bins = num_mel_bins
         self.return_attention_mask = True
         self.stride = stride
-        
+
         mel_filters = mel_filter_bank(
             num_frequency_bins=256,
             num_mel_filters=self.num_mel_bins,
             min_frequency=20,
-            max_frequency=sampling_rate//2,
+            max_frequency=sampling_rate // 2,
             sampling_rate=sampling_rate,
             norm=None,
             mel_scale="kaldi",
             triangularize_in_mel_space=True,
         )
-        
-        self.mel_filters = np.pad(mel_filters, ((0,1), (0,0)))
+
+        self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
         self.window = window_function(400, "povey", periodic=False)
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -243,8 +241,11 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
         if do_normalize_per_mel_bins:
             # contrarily to torch, from which the original code follow the implementation, numpy use ddof=0 by default.
-            features = [(x - np.expand_dims(x.mean(0), 0)) / np.sqrt(np.expand_dims(x.var(0, ddof=1),0) + 1e-7) for x in features]
-            
+            features = [
+                (x - np.expand_dims(x.mean(0), 0)) / np.sqrt(np.expand_dims(x.var(0, ddof=1), 0) + 1e-7)
+                for x in features
+            ]
+
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
 
@@ -269,7 +270,9 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             input_features = input_features[:, :num_frames, :]
             attention_mask = attention_mask[:, :num_frames]
 
-        input_features = np.reshape(input_features,(batch_size, num_frames // self.stride, num_channels * self.stride))
+        input_features = np.reshape(
+            input_features, (batch_size, num_frames // self.stride, num_channels * self.stride)
+        )
 
         indices = np.arange(0, num_frames)
         attention_mask = attention_mask[:, indices % self.stride == 1]
@@ -281,7 +284,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
-    
+
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary.
@@ -296,4 +299,3 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         if "window" in output:
             del output["window"]
         return output
-

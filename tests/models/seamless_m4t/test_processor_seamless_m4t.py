@@ -16,22 +16,17 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import is_speech_available
+from transformers import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor
 from transformers.models.seamless_m4t import (
     SeamlessM4TTokenizer,
     SeamlessM4TTokenizerFast,
 )
-from transformers.testing_utils import require_torch, require_torchaudio
+from transformers.testing_utils import require_torch
 
 from .test_feature_extraction_seamless_m4t import floats_list
 
 
-if is_speech_available():
-    from transformers import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor
-
-
 @require_torch
-@require_torchaudio
 class SeamlessM4TProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "ylacombe/hf-seamless-m4t-medium"

@@ -17,7 +17,6 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_sentencepiece_available,
-    is_speech_available,
     is_tokenizers_available,
     is_torch_available,
 )
@@ -25,6 +24,8 @@ from ...utils import (
 
 _import_structure = {
     "configuration_seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig"],
+    "feature_extraction_seamless_m4t": ["SeamlessM4TFeatureExtractor"],
+    "processing_seamless_m4t": ["SeamlessM4TProcessor"],
 }
 
 try:
@@ -63,18 +64,10 @@ else:
         "SeamlessM4TTextToUnitModel",
     ]
 
-try:
-    if not is_speech_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_seamless_m4t"] = ["SeamlessM4TFeatureExtractor"]
-    _import_structure["processing_seamless_m4t"] = ["SeamlessM4TProcessor"]
-
-
 if TYPE_CHECKING:
     from .configuration_seamless_m4t import SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP, SeamlessM4TConfig
+    from .feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
+    from .processing_seamless_m4t import SeamlessM4TProcessor
 
     try:
         if not is_sentencepiece_available():
@@ -111,15 +104,6 @@ if TYPE_CHECKING:
             SeamlessM4TTextToUnitForConditionalGeneration,
             SeamlessM4TTextToUnitModel,
         )
-
-    try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
-        from .processing_seamless_m4t import SeamlessM4TProcessor
 
 else:
     import sys

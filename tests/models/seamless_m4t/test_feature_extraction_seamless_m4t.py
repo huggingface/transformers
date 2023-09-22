@@ -23,15 +23,12 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from transformers import is_speech_available
+from transformers import SeamlessM4TFeatureExtractor, is_speech_available
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
-
-if is_speech_available():
-    from transformers import SeamlessM4TFeatureExtractor
 
 if is_torch_available():
     import torch
@@ -54,7 +51,6 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-@require_torchaudio
 class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,

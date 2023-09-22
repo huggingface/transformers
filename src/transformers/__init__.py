@@ -907,8 +907,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
-    _import_structure["models.seamless_m4t"].append("SeamlessM4TFeatureExtractor")
-    _import_structure["models.seamless_m4t"].append("SeamlessM4TProcessor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
 # Tensorflow-text-specific objects
@@ -5005,7 +5003,6 @@ if TYPE_CHECKING:
         from .utils.dummy_speech_objects import *
     else:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
-        from .models.seamless_m4t import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:
