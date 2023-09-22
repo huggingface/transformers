@@ -138,7 +138,7 @@ def parse_integer_following_string(in_string: str, search: str):
     match = re.search(to_search, in_string)
 
     if match is not None:
-        return int(reduce(lambda x, y: x or y, match.groups()))
+        return match.group(1)
 
     return match
 
