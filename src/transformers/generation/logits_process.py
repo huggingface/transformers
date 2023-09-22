@@ -1330,11 +1330,12 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] Whisper specific Processor. This processor is specifically designed for the Whisper Automatic
-    Speech Recognition model. It facilitates the manipulation of log probabilities for a predefined list of tokens
-    during text generation. By using this processor, you can effectively "force" certain tokens to be selected at
-    specific positions in the generated sequence. When tokens are passed to this processor, their log probabilities are
-    set to `inf` (infinity), ensuring that they are chosen at their corresponding indices.
+
+    [`LogitsProcessor`] that modifies the logits for the generation of timestamps in the transcription.
+    When the input tokens are at a specific threshold, the processor sets the scores to  negative infinity and returned.
+    The timestamps are processed to be in pairs except right before the end-of-sequence token.
+    If the total probability of all timestamp tokens is greater than any individual non-timestamp token,
+    the processor sets those non-timestamp logits to negative infinity
 
     See [the paper](https://arxiv.org/abs/2212.04356) for more information.
 
