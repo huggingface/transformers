@@ -73,7 +73,7 @@ def markdown_compatible(text: str) -> str:
         `str`: The Markdown-compatible text.
     """
     # equation tag
-    # Replace lines that start with a pattern like (decimal) \[some text\] it with \[[some text] \tag{decimal}\].
+    # Replace lines that start with a pattern like (decimal) \[some text\] with \[[some text] \tag{decimal}\].
     text = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M)
     # Replace lines that start with a pattern like \[some text\] (decimal)  with \[[some text] \tag{decimal}\].
     text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.M)
@@ -477,8 +477,12 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             str: The postprocessed text.
 
-        Example: >>> correct_tables("\\begin{table} \\begin{tabular}{l l} & \\ \\end{tabular} \\end{table}")
+        Example:
+
+        ```python
+        >>> correct_tables("\\begin{table} \\begin{tabular}{l l} & \\ \\end{tabular} \\end{table}")
         "\\begin{table}\n\\begin{tabular}{l l} & \\ \\end{tabular}\n\\end{table}"
+        ```
         """
         # remove obvious wrong tables
         for l in generation.split("\n"):
@@ -603,6 +607,8 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         Postprocess a generated text or a list of generated texts.
 
         This function can be used to perform postprocessing on generated text, such as fixing Markdown formatting.
+
+        Postprocessing is quite slow so it is recommended to use multiprocessing to speed up the process.
 
         Args:
             generation (Union[str, List[str]]):

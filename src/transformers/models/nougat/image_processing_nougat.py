@@ -34,6 +34,7 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -124,15 +125,15 @@ class NougatImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    def pythonfindNonZero(self, image: np.array):
-        """This is a reimplementation of a findNonZero function similar to cv2."""
+    def python_find_non_zero(self, image: np.array):
+        """This is a reimplementation of a findNonZero function equivalent to cv2."""
         non_zero_indices = np.column_stack(np.nonzero(image))
         idxvec = non_zero_indices[:, [1, 0]]
         idxvec = idxvec.reshape(-1, 1, 2)
         return idxvec
 
-    def pythonBoundingRect(self, coordinates):
-        """This is a reimplementation of a BoundingRect function similar to cv2."""
+    def python_bounding_rect(self, coordinates):
+        """This is a reimplementation of a BoundingRect function equivalent to cv2."""
         min_values = np.min(coordinates, axis=(0, 1)).astype(int)
         max_values = np.max(coordinates, axis=(0, 1)).astype(int)
         x_min, y_min = min_values[0], min_values[1]
@@ -148,12 +149,13 @@ class NougatImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
         """
-        Crops the margin of the image.
+        Crops the margin of the image. Gray pixels are considered margin (i.e., pixels with a value below the
+        threshold).
 
         Args:
             image (`np.array`):
                 The image to be cropped.
-            gray_threshold (`int`, defaults to `200`)
+            gray_threshold (`int`, *optional*, defaults to `200`)
                 Value below which pixels are considered to be gray.
             data_format (`ChannelDimension`, *optional*):
                 The channel dimension format of the output image. If unset, will use the inferred format from the
@@ -178,8 +180,8 @@ class NougatImageProcessor(BaseImageProcessor):
             return image
         data = (data - min_val) / (max_val - min_val) * 255
         gray = data < gray_threshold
-        coords = self.pythonfindNonZero(gray)
-        x_min, y_min, width, height = self.pythonBoundingRect(coords)
+        coords = self.python_find_non_zero(gray)
+        x_min, y_min, width, height = self.python_bounding_rect(coords)
         image = image.crop((x_min, y_min, x_min + width, y_min + height))
         image = np.array(image).astype(np.uint8)
         image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
@@ -286,7 +288,7 @@ class NougatImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """
-        Pad the image to the specified size.
+        Pad the image to the specified size at the top, bottom, left and right.
 
         Args:
             image (`np.ndarray`):
@@ -510,6 +512,12 @@ class NougatImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
