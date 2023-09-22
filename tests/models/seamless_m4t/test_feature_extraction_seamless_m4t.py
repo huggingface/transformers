@@ -68,8 +68,6 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
         return_attention_mask=True,
         do_normalize=True,
         stride=2,
-        src_lang="fra",
-        tgt_lang="min",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -82,8 +80,6 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
         self.do_normalize = do_normalize
         self.feature_size = feature_size
         self.stride = stride
-        self.src_lang = src_lang
-        self.tgt_lang = tgt_lang
         self.num_mel_bins = feature_size
 
     def prepare_feat_extract_dict(self):
@@ -93,8 +89,6 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
             "padding_value": self.padding_value,
             "sampling_rate": self.sampling_rate,
             "stride": self.stride,
-            "src_lang": self.src_lang,
-            "tgt_lang": self.tgt_lang,
             "return_attention_mask": self.return_attention_mask,
             "do_normalize": self.do_normalize,
         }
@@ -134,10 +128,7 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
-
-        self.assertTrue(feat_extract_first.src_lang == feat_extract_second.src_lang)
-        self.assertTrue(feat_extract_first.tgt_lang == feat_extract_second.tgt_lang)
-        self.assertEqual(dict_first, dict_second)
+        self.assertDictEqual(dict_first, dict_second)
 
     def test_feat_extract_to_json_file(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
@@ -149,8 +140,6 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
-        self.assertTrue(feat_extract_first.src_lang == feat_extract_second.src_lang)
-        self.assertTrue(feat_extract_first.tgt_lang == feat_extract_second.tgt_lang)
         self.assertEqual(dict_first, dict_second)
 
     def test_call(self):
