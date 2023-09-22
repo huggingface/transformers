@@ -25,6 +25,7 @@ import torchaudio.compliance.kaldi as ta_kaldi
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 
 
 logger = logging.get_logger(__name__)
@@ -58,6 +59,8 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
             by default.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+        use_torchaudio (`bool`, *optional*, defaults to `True`):
+            Whether or not to use torchaudio implementation of mel-filter banks. If `False`, use a numpy porting of torchaudio mel-filter banks implementation.
     """
 
     model_input_names = ["input_values", "attention_mask"]
@@ -73,6 +76,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         mean=-4.2677393,
         std=4.5689974,
         return_attention_mask=False,
+        use_torchaudio=True,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -82,6 +86,22 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         self.mean = mean
         self.std = std
         self.return_attention_mask = return_attention_mask
+        
+        self.use_torchaudio = use_torchaudio
+        if not use_torchaudio:
+            mel_filters = mel_filter_bank(
+                num_frequency_bins=256,
+                num_mel_filters=self.num_mel_bins,
+                min_frequency=20,
+                max_frequency=sampling_rate//2,
+                sampling_rate=sampling_rate,
+                norm=None,
+                mel_scale="kaldi",
+                triangularize_in_mel_space=True,
+            )
+
+            self.mel_filters = np.pad(mel_filters, ((0,1), (0,0)))
+            self.window = window_function(400, "hann", periodic=False)
 
     def _extract_fbank_features(
         self,
@@ -93,13 +113,32 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         and hence the waveform should not be normalized before feature extraction.
         """
         # waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
-        waveform = torch.from_numpy(waveform).unsqueeze(0)
-        fbank = ta_kaldi.fbank(
-            waveform,
-            sample_frequency=self.sampling_rate,
-            window_type="hanning",
-            num_mel_bins=self.num_mel_bins,
-        )
+        if self.use_torchaudio:
+            waveform = torch.from_numpy(waveform).unsqueeze(0)
+            fbank = ta_kaldi.fbank(
+                waveform,
+                sample_frequency=self.sampling_rate,
+                window_type="hanning",
+                num_mel_bins=self.num_mel_bins,
+            )
+        else:
+            waveform = np.squeeze(waveform)
+            fbank = spectrogram(
+                waveform,
+                self.window,
+                frame_length=400,
+                hop_length=160,
+                fft_length=512,
+                power=2.0,
+                center=False,
+                preemphasis=0.97,
+                mel_filters=self.mel_filters,
+                log_mel="log",
+                mel_floor=1.192092955078125e-07,
+                remove_dc_offset=True,
+            ).T
+            
+            fbank = torch.from_numpy(fbank)
 
         n_frames = fbank.shape[0]
         difference = max_length - n_frames

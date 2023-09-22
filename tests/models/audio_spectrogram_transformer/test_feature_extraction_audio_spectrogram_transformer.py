@@ -132,6 +132,33 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+            
+            
+    def test_call_audio_utils(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict(), use_torchaudio=False)
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test not batched input
+        encoded_sequences_1 = feat_extract(speech_inputs[0], return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs[0], return_tensors="np").input_values
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+
+        # Test batched
+        encoded_sequences_1 = feat_extract(speech_inputs, padding=True, return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs, padding=True, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        encoded_sequences_1 = feat_extract(speech_inputs, return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     @require_torch
     def test_double_precision_pad(self):
@@ -169,6 +196,12 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
 
         input_speech = self._load_datasamples(1)
         feature_extractor = ASTFeatureExtractor()
+        input_values = feature_extractor(input_speech, return_tensors="pt").input_values
+        self.assertEquals(input_values.shape, (1, 1024, 128))
+        self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
+
+        # test audio_utils implementation
+        feature_extractor = ASTFeatureExtractor(use_torchaudio=False)
         input_values = feature_extractor(input_speech, return_tensors="pt").input_values
         self.assertEquals(input_values.shape, (1, 1024, 128))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
