@@ -30,6 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_llama import LlamaConfig
 
@@ -89,7 +90,10 @@ class LlamaRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-class LlamaRotaryEmbedding(torch.nn.Module):
+ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
+
+
+class LlamaRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 

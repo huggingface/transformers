@@ -149,20 +149,6 @@ class DistilBertTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
-        super().__init__(
-            do_lower_case=do_lower_case,
-            do_basic_tokenize=do_basic_tokenize,
-            never_split=never_split,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            tokenize_chinese_chars=tokenize_chinese_chars,
-            strip_accents=strip_accents,
-            **kwargs,
-        )
-
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -178,7 +164,21 @@ class DistilBertTokenizer(PreTrainedTokenizer):
                 tokenize_chinese_chars=tokenize_chinese_chars,
                 strip_accents=strip_accents,
             )
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
+
+        super().__init__(
+            do_lower_case=do_lower_case,
+            do_basic_tokenize=do_basic_tokenize,
+            never_split=never_split,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            **kwargs,
+        )
 
     @property
     # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.do_lower_case

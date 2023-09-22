@@ -72,7 +72,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Persimmon
-class PersimmonRotaryEmbedding(torch.nn.Module):
+class PersimmonRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -790,11 +790,11 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, PersimmonForCausalLM
 
-        >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base").cuda()
+        >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base")
         >>> tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-base")
 
         >>> prompt = "human: Hey, what should I eat for dinner?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt").cuda()
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)

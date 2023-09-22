@@ -17,7 +17,7 @@ import unittest
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    PreTrainedTokenizer,
+    PreTrainedTokenizerBase,
     is_vision_available,
 )
 from transformers.pipelines import ImageClassificationPipeline, pipeline
@@ -166,7 +166,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         )
 
     def test_custom_tokenizer(self):
-        tokenizer = PreTrainedTokenizer()
+        tokenizer = PreTrainedTokenizerBase()
 
         # Assert that the pipeline can be initialized with a feature extractor that is not in any mapping
         image_classifier = pipeline(

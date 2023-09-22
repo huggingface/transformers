@@ -244,6 +244,29 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         additional_special_tokens: Optional[List[str]] = None,
         **kwargs,
     ):
+        if not os.path.isfile(vocab_file):
+            raise ValueError(
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+            )
+        self.vocab = load_vocab(vocab_file)
+        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+        self.do_basic_tokenize = do_basic_tokenize
+        if do_basic_tokenize:
+            self.basic_tokenizer = BasicTokenizer(
+                do_lower_case=do_lower_case,
+                never_split=never_split,
+                tokenize_chinese_chars=tokenize_chinese_chars,
+                strip_accents=strip_accents,
+            )
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
+
+        # additional properties
+        self.cls_token_box = cls_token_box
+        self.sep_token_box = sep_token_box
+        self.pad_token_box = pad_token_box
+        self.pad_token_label = pad_token_label
+        self.only_label_first_subword = only_label_first_subword
         super().__init__(
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
@@ -264,30 +287,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
-        if not os.path.isfile(vocab_file):
-            raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
-            )
-        self.vocab = load_vocab(vocab_file)
-        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
-        self.do_basic_tokenize = do_basic_tokenize
-        if do_basic_tokenize:
-            self.basic_tokenizer = BasicTokenizer(
-                do_lower_case=do_lower_case,
-                never_split=never_split,
-                tokenize_chinese_chars=tokenize_chinese_chars,
-                strip_accents=strip_accents,
-            )
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
-
-        # additional properties
-        self.cls_token_box = cls_token_box
-        self.sep_token_box = sep_token_box
-        self.pad_token_box = pad_token_box
-        self.pad_token_label = pad_token_label
-        self.only_label_first_subword = only_label_first_subword
 
     @property
     def do_lower_case(self):
