@@ -469,10 +469,10 @@ class LlamaFlashAttention2(LlamaAttention):
         # It is recommended to use dropout with FA according to the docs
         # when training.
         dropout_rate = 0.0  # if not self.training else self.attn_dropout
-        
+
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected. 
+        # cast them back in float16 just to be sure everything works as expected.
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
         input_dtype = query_states.dtype
@@ -482,11 +482,10 @@ class LlamaFlashAttention2(LlamaAttention):
                 " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
                 " float16."
             )
-            
+
             query_states = query_states.to(torch.float16)
             key_states = key_states.to(torch.float16)
             value_states = value_states.to(torch.float16)
-            
 
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, padding_mask, q_len, dropout=dropout_rate

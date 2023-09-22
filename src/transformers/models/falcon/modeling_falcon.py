@@ -607,7 +607,7 @@ class FalconFlashAttention2(FalconAttention):
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected. 
+        # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_layer.dtype
         if input_dtype == torch.float32:
             logger.warning_once(
@@ -615,7 +615,7 @@ class FalconFlashAttention2(FalconAttention):
                 " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
                 " float16."
             )
-                        
+
             query_layer = query_layer.to(torch.float16)
             key_layer = key_layer.to(torch.float16)
             value_layer = value_layer.to(torch.float16)
