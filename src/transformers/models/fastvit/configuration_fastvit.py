@@ -43,7 +43,7 @@ class FastViTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`FastViTModel`]. It is used to instantiate an
     FastViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the FastViT
-    [google/fastvit-base-patch16-224](https://huggingface.co/google/fastvit-base-patch16-224) architecture.
+    [apple/fastvit-t8](https://huggingface.co/google/fastvit-t8) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -54,8 +54,6 @@ class FastViTConfig(PretrainedConfig):
             The size (resolution) of each image.
         num_channels (`int`, *optional*, defaults to `3`):
             The number of input channels.
-        patch_size (`int`, *optional*, defaults to `4`):
-            The size (resolution) of each patch.
         depths (`List[int]`, *optional*, defaults to `[2, 2, 4, 2]`):
             The number of Token Mixer blocks in each FastViTLayer Block.
         num_attention_heads (`int`, *optional*, defaults to 32):
@@ -103,7 +101,6 @@ class FastViTConfig(PretrainedConfig):
         self,
         image_size=256,
         num_channels=3,
-        patch_size=4,
         depths=[2, 2, 4, 2],
         num_attention_heads=32,
         hidden_sizes=[48, 96, 192, 384],
@@ -131,7 +128,6 @@ class FastViTConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.num_attention_heads = num_attention_heads
