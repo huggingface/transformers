@@ -62,8 +62,9 @@ class FastViTConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         hidden_sizes (`List[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
             Dimensionality of the encoder layers in each FastViTLayer Block.
-        pos_embeds (`List[Bool]`, *optional*, defaults to `False`, equivalent to `[False, False, False, False]`)
-            Wheter to add a Conditional Positional Encoding in each FastViTLayer Block.
+        pos_embeds (`List[Bool]`, *optional*, defaults to `None`, equivalent to `[None, None, None, None]`)
+            Wheter to add a Conditional Positional Encoding in each FastViTLayer Block. `"RepCPE"` is the option to put
+            CPE in a specific Layer.
         token_mixers (`List[str]` *optional*, defaults to `[repmixer, repmixer, repmixer, repmixer]`)
             Wheter to use RepMixer block or Attention block per each FastViTLayer Block. `"repmixer"` and `"attention"`
             are supported.

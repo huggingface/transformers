@@ -68,8 +68,8 @@ class FastViTEmbeddings(nn.Module):
         self.patch_embeddings = FastViTPatchEmbeddings(config, inference_mode=inference_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.dropout(embeddings)
 
         return embeddings
@@ -82,16 +82,12 @@ class FastViTPatchEmbeddings(nn.Module):
 
     def __init__(self, config: FastViTConfig, inference_mode: bool = False) -> None:
         super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
+        image_size = config.image_size
         num_channels, hidden_size = config.num_channels, config.hidden_sizes[0]
 
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
-        self.num_patches = num_patches
         self.inference_mode = inference_mode
         self.config = config
 
@@ -125,7 +121,7 @@ class FastViTPatchEmbeddings(nn.Module):
             ),
         )
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
 
         if num_channels != self.num_channels:
@@ -133,12 +129,6 @@ class FastViTPatchEmbeddings(nn.Module):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
 
         embeddings = self.projection(pixel_values)
 
@@ -258,27 +248,28 @@ class FastViTConvLayer(nn.Module):
             return features
 
         # Skip branch output
-        identity_out = 0
+        identity_br = 0
         if self.rbr_skip is not None:
-            identity_out = self.rbr_skip(embeddings)
+            identity_br = self.rbr_skip(embeddings)
 
         # Scale branch output
-        scale_out = 0
+        scale_br = 0
         if self.rbr_scale is not None:
-            scale_out = self.rbr_scale(embeddings)
+            scale_br = self.rbr_scale(embeddings)
 
-        out = scale_out + identity_out
+        # Sum of both scales
+        total_br = scale_br + identity_br
         if self.rbr_conv is not None:
-            out = out + self.rbr_conv(embeddings)
+            total_br = total_br + self.rbr_conv(embeddings)
 
         # SE block
         if self.use_se:
-            out = self.se(out)
+            total_br = self.se(total_br)
         # Activation
         if self.use_act:
-            out = self.activation(out)
+            total_br = self.activation(total_br)
 
-        return out
+        return total_br
 
 
 class FastViTSEBlock(nn.Module):
@@ -310,16 +301,19 @@ class FastViTSEBlock(nn.Module):
             bias=True,
         )
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """Apply forward pass."""
-        b, c, h, w = inputs.size()
-        x = nn.functional.avg_pool2d(inputs, kernel_size=[h, w])
-        x = self.reduce(x)
-        x = nn.functional.relu(x)
-        x = self.expand(x)
-        x = torch.sigmoid(x)
-        x = x.view(-1, c, 1, 1)
-        return inputs * x
+        batch_size, channel, height, width = hidden_state.size()
+        shortcut = hidden_state
+
+        hidden_state = nn.functional.avg_pool2d(hidden_state, kernel_size=[height, width])
+        hidden_state = self.reduce(hidden_state)
+        hidden_state = nn.functional.relu(hidden_state)
+        hidden_state = self.expand(hidden_state)
+        hidden_state = torch.sigmoid(hidden_state)
+        hidden_state = hidden_state.view(-1, channel, 1, 1)
+
+        return shortcut * hidden_state
 
 
 class FastViTReparamLKConv(nn.Module):
@@ -403,16 +397,16 @@ class FastViTReparamLKConv(nn.Module):
                     )
                 )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
         """Apply forward pass."""
         if self.inference_mode:
-            out = self.lkb_reparam(x)
+            output_features = self.lkb_reparam(features)
         else:
-            out = self.large_conv(x)
-            if hasattr(self, "small_conv"):
-                out += self.small_conv(x)
+            output_features = self.large_conv(features)
+            if self.small_kernel is not None:
+                output_features = output_features + self.small_conv(features)
 
-        return out
+        return output_features
 
 
 class FastViTSelfAttention(nn.Module):
@@ -483,7 +477,7 @@ class FastViTRepMixer(nn.Module):
     def __init__(self, config: FastViTConfig, stage: str, inference_mode: bool = False) -> None:
         super().__init__()
         dimension = config.hidden_sizes[stage]
-        kernel_size = 3
+        kernel_size = 3  # Always apply kernel of 3
         layer_norm_eps = config.layer_norm_eps
         self.inference_mode = inference_mode
         self.dimension = dimension
@@ -558,15 +552,15 @@ class FastViTConvFFN(nn.Module):
         self.fc2 = nn.Conv2d(in_channels=mlp_hidden_dim, out_channels=hidden_size, kernel_size=1)
         self.drop = nn.Dropout(dropout_rate)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.conv(x)
-        x = self.bn(x)
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        output_features = self.conv(features)
+        output_features = self.bn(output_features)
+        output_features = self.fc1(output_features)
+        output_features = self.act(output_features)
+        output_features = self.drop(output_features)
+        output_features = self.fc2(output_features)
+        output_features = self.drop(output_features)
+        return output_features
 
 
 class FastViTDownsample(nn.Module):
@@ -594,17 +588,16 @@ class FastViTDownsample(nn.Module):
             inference_mode=inference_mode,
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.reparam_large_conv(x)
-        x = self.conv(x)
-        return x
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.reparam_large_conv(hidden_state)
+        hidden_state = self.conv(hidden_state)
+        return hidden_state
 
 
 class FastViTAttention(nn.Module):
     def __init__(self, config, stage: str) -> None:
         super().__init__()
         hidden_size = config.hidden_sizes[stage]
-        self.patch_size = config.patch_size
 
         self.norm = nn.BatchNorm2d(num_features=hidden_size)
         self.attention = FastViTSelfAttention(config, stage)
@@ -629,7 +622,7 @@ class FastViTAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # Apply Layernorm
+        # Apply Batchnorm
         hidden_states = self.norm(hidden_states)
 
         # Apply attention
@@ -648,9 +641,9 @@ class FastViTMixer(nn.Module):
         super().__init__()
         self.token_mixer = FastViTRepMixer(config, stage)
 
-    def forward(self, x: torch.tensor) -> torch.tensor:
-        x = self.token_mixer(x)
-        return x
+    def forward(self, hidden_states: torch.tensor) -> torch.tensor:
+        hidden_states = self.token_mixer(hidden_states)
+        return hidden_states
 
 
 class FastViTCPE(nn.Module):
@@ -706,13 +699,13 @@ class FastViTCPE(nn.Module):
                 bias=True,
             )
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
         if self.inference_mode:
-            CPE = self.reparam_conv(hidden_states)
+            embeddings = self.reparam_conv(embeddings)
         else:
-            CPE = self.pos_enc(hidden_states) + hidden_states
+            embeddings = self.pos_enc(embeddings) + embeddings
 
-        return CPE
+        return embeddings
 
 
 class FastViTIntermediate(nn.Module):
@@ -751,11 +744,11 @@ class FastViTIntermediate(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         output_token_mixer = self.token_mixer_block(hidden_states)
         if self.token_mixer_type == "repmixer":
-            output = output_token_mixer + self.drop_path(self.layer_scale * self.convffn(output_token_mixer))
+            output_features = output_token_mixer + self.drop_path(self.layer_scale * self.convffn(output_token_mixer))
         else:
-            output = hidden_states + self.drop_path(self.layer_scale_1 * output_token_mixer)
-            output = output + self.drop_path(self.layer_scale_2 * self.convffn(output))
-        return output
+            output_features = hidden_states + self.drop_path(self.layer_scale_1 * output_token_mixer)
+            output_features = output_features + self.drop_path(self.layer_scale_2 * self.convffn(output_features))
+        return output_features
 
 
 class FastViTLayer(nn.Module):
@@ -775,7 +768,7 @@ class FastViTLayer(nn.Module):
             self.pos_emb = FastViTCPE(
                 config.hidden_sizes[stage],
                 config.hidden_sizes[stage],
-                spatial_shape=(7, 7),
+                spatial_shape=(7, 7),  # Always 7
                 inference_mode=inference_mode,
             )
 
@@ -791,7 +784,6 @@ class FastViTLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         if self.pos_emb:
             hidden_states = self.pos_emb(hidden_states)
@@ -916,8 +908,6 @@ FASTVIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -963,7 +953,6 @@ class FastViTModel(FastViTPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
@@ -985,7 +974,7 @@ class FastViTModel(FastViTPreTrainedModel):
             if pixel_values.dtype != expected_dtype:
                 pixel_values = pixel_values.to(expected_dtype)
 
-        embedding_output = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1057,7 +1046,6 @@ class FastViTForImageClassification(FastViTPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
@@ -1072,7 +1060,6 @@ class FastViTForImageClassification(FastViTPreTrainedModel):
             pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
