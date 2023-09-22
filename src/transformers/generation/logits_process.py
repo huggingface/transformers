@@ -1370,7 +1370,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
 
     >>> #No timestamps & change EOS:
-    >>> #This allows the user to select a specific token to terminate the sequence on, in this case it's the word poem(21247)
+    >>> #This allows the user to select a specific token to terminate the sequence on, in this case it's the word "can"(460)
     >>> model.generation_config.eos_token_id = 460
     >>> generated_ids = model.generate(inputs=input_features,return_timestamps=False)
     >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
