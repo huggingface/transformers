@@ -144,6 +144,37 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_call_audio_utils(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict(), use_torchaudio=False)
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test feature size
+        input_features = feature_extractor(np_speech_inputs, padding=True, return_tensors="np").input_features
+        self.assertTrue(input_features.ndim == 3)
+        self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size)
+
+        # Test not batched input
+        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").input_features
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+
+        # Test batched
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
     def test_cepstral_mean_and_variance_normalization(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
@@ -276,6 +307,12 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
         input_speech = self._load_datasamples(1)
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+        self.assertEquals(input_features.shape, (1, 584, 24))
+        self.assertTrue(np.allclose(input_features[0, 0, :30], expected, atol=1e-4))
+
+        # test audio_utils implementation
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict(), use_torchaudio=False)
         input_features = feature_extractor(input_speech, return_tensors="pt").input_features
         self.assertEquals(input_features.shape, (1, 584, 24))
         self.assertTrue(np.allclose(input_features[0, 0, :30], expected, atol=1e-4))

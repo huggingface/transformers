@@ -25,7 +25,7 @@ import torchaudio.compliance.kaldi as ta_kaldi
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 
 logger = logging.get_logger(__name__)
 
@@ -55,6 +55,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             Whether or not to zero-mean normalize the extracted features.
         normalize_vars (`bool`, *optional*, defaults to `True`):
             Whether or not to unit-variance normalize the extracted features.
+        use_torchaudio (`bool`, *optional*, defaults to `True`):
+            Whether or not to use torchaudio implementation of mel-filter banks. If `False`, use a numpy porting of torchaudio mel-filter banks implementation.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -68,6 +70,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         do_ceptral_normalize=True,
         normalize_means=True,
         normalize_vars=True,
+        use_torchaudio=True,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -76,6 +79,22 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
         self.return_attention_mask = True
+        
+        self.use_torchaudio = use_torchaudio
+        if not use_torchaudio:
+            mel_filters = mel_filter_bank(
+                num_frequency_bins=256,
+                num_mel_filters=self.num_mel_bins,
+                min_frequency=20,
+                max_frequency=sampling_rate//2,
+                sampling_rate=sampling_rate,
+                norm=None,
+                mel_scale="kaldi",
+                triangularize_in_mel_space=True,
+            )
+
+            self.mel_filters = np.pad(mel_filters, ((0,1), (0,0)))
+            self.window = window_function(400, "povey", periodic=False)
 
     def _extract_fbank_features(
         self,
@@ -86,9 +105,27 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         and hence the waveform should not be normalized before feature extraction.
         """
         waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
-        waveform = torch.from_numpy(waveform).unsqueeze(0)
-        features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
-        return features.numpy()
+        if self.use_torchaudio:
+            waveform = torch.from_numpy(waveform).unsqueeze(0)
+            features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
+            features = features.numpy()
+        else:
+            waveform = np.squeeze(waveform)
+            features = spectrogram(
+                waveform,
+                self.window,
+                frame_length=400,
+                hop_length=160,
+                fft_length=512,
+                power=2.0,
+                center=False,
+                preemphasis=0.97,
+                mel_filters=self.mel_filters,
+                log_mel="log",
+                mel_floor=1.192092955078125e-07,
+                remove_dc_offset=True,
+            ).T
+        return features
 
     @staticmethod
     def utterance_cmvn(
