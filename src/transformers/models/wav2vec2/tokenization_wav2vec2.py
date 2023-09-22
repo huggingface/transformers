@@ -208,12 +208,12 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         # characters are not split at tokenization
 
         # TODO @ArthurZ add them or just update the trie?
-        unique_no_split_tokens = []
+        self.unique_no_split_tokens = []
         for token in self.encoder.keys():
             if len(token) > 1:
-                unique_no_split_tokens.append(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
+                self.unique_no_split_tokens.append(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
 
-        self.add_tokens(unique_no_split_tokens)
+        self.add_tokens(self.unique_no_split_tokens)
 
     def set_target_lang(self, target_lang: str):
         """
