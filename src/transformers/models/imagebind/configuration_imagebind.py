@@ -166,10 +166,20 @@ class ImageBindVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of channels in the input images.
+        num_frames (`int`, *optional*, defaults to 2):
+            If using video (spatiotemporal) input, the number of video frames in the spatiotemporal data.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
+        patch_size (`int` or `Tuple[int]`, *optional*, defaults to `(2, 14, 14)`):
+            The size (resolution) of each spatialtemporal patch. If `patch_size` is an int, spatial patches of shape
+            `(patch_size, patch_size)` will be used; otherwise, `patch_size` should be a tuple of shape
+            `(time_patch_size, height_patch_size, width_patch_size)`.
+        stride (`int` or `Tuple[int]`, *optional*, defaults to `(2, 14, 14)`):
+            The stride of the imate patch embedding. If `stride` is an int, spatial strides of shape
+            `(stride, stride)` will be used; otherwise, `patch_size` should be a tuple of shape
+            `(time_stride, height_stride, width_stride)`.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
@@ -208,8 +218,10 @@ class ImageBindVisionConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=16,
         num_channels=3,
+        num_frames=2,
         image_size=224,
-        patch_size=32,
+        patch_size=(2, 14, 14),
+        stride=(2, 14, 14),
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
@@ -225,7 +237,9 @@ class ImageBindVisionConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
+        self.num_frames = num_frames
         self.patch_size = patch_size
+        self.stride = stride
         self.image_size = image_size
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
@@ -277,10 +291,14 @@ class ImageBindAudioConfig(PretrainedConfig):
             The number of frequency bins in the log-mel spectrogram.
         target_len (`int`, *optional*, defaults to 204):
             TODO
-        kernel_size (`int`, *optional*, defaults to 16):
-            The kernel size of the 2D convolution layers. (TODO)
+        num_channels (`int`, *optional*, defaults to 1):
+            The number of channels in the input audio data.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each spectrogram, interpreted as a 2D image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The kernel size of the patch embedding 2D convolution layer.
         stride (`int`, *optional*, defaults to 10):
-            The stride of the 2D convolution layers. (TODO)
+            The stride of the patch embedding 2D convolution layer.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
@@ -316,7 +334,9 @@ class ImageBindAudioConfig(PretrainedConfig):
         num_attention_heads=12,
         num_mel_bins=128,
         target_len=204,
-        kernel_size=16,
+        num_channels=1,
+        image_size=224,
+        patch_size=16,
         stride=10,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
@@ -334,7 +354,9 @@ class ImageBindAudioConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_mel_bins = num_mel_bins
         self.target_len = target_len
-        self.kernel_size = kernel_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
         self.stride = stride
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
@@ -381,8 +403,14 @@ class ImageBindDepthConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        kernel_size (`int`, *optional*, defaults to 16):
-            The kernel size of the 2D convolution layers. (TODO)
+        num_channels (`int`, *optional*, defaults to 1):
+            The number of channels in the input depth data.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The kernel size of the depth patch embedding 2D convolution layer.
+        stride (`int`, *optional*, defaults to 16):
+            The stride of the depth patch embedding 2D convolution layer.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
@@ -416,7 +444,10 @@ class ImageBindDepthConfig(PretrainedConfig):
         projection_dim=1024,
         num_hidden_layers=12,
         num_attention_heads=8,
-        kernel_size=16,
+        num_channels=1,
+        image_size=224,
+        patch_size=16,
+        stride=16,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
@@ -431,7 +462,10 @@ class ImageBindDepthConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.kernel_size = kernel_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.stride = stride
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
@@ -477,8 +511,14 @@ class ImageBindThermalConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        kernel_size (`int`, *optional*, defaults to 16):
-            The kernel size of the 2D convolution layers. (TODO)
+        num_channels (`int`, *optional*, defaults to 1):
+            The number of channels in the input thermal data.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The kernel size of the thermal patch embedding 2D convolution layer.
+        stride (`int`, *optional*, defaults to 16):
+            The stride of the thermal patch embedding 2D convolution layer.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
@@ -512,7 +552,10 @@ class ImageBindThermalConfig(PretrainedConfig):
         projection_dim=1024,
         num_hidden_layers=12,
         num_attention_heads=12,
-        kernel_size=16,
+        num_channels=1,
+        image_size=224,
+        patch_size=16,
+        stride=16,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
@@ -527,7 +570,10 @@ class ImageBindThermalConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.kernel_size = kernel_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.stride = stride
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout

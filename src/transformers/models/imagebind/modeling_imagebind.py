@@ -345,41 +345,6 @@ class ImageBindOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->ImageBind
-class ImageBindVisionEmbeddings(nn.Module):
-    def __init__(self, config: ImageBindVisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            bias=False,
-        )
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
-
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
-        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
-
-
 # Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->ImageBind
 class ImageBindTextEmbeddings(nn.Module):
     def __init__(self, config: ImageBindTextConfig):
@@ -412,31 +377,97 @@ class ImageBindTextEmbeddings(nn.Module):
         return embeddings
 
 
-# TODO: audio, depth, thermal, IMU Embedding classes
-class ImageBindAudioEmbeddings(nn.Module):
+class RGBDTPatchEmbedding(nn.Module):
+    """
+    Creates patch embeddings for spatiotemporal data (e.g. images, video, depth etc.). This handles patch embeddings
+    for all image-like modalities (image/video, depth, thermal).
+    """
+    def __init__(
+        self,
+        config: Union[ImageBindAudioConfig, ImageBindDepthConfig, ImageBindThermalConfig, ImageBindVisionConfig],
+        norm_layer: Optional[nn.Module] = None,
+        is_temporal: bool = True,
+    ):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+        self.stride = config.stride
+
+        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+
+        if is_temporal:
+            patch_embedding_cls = nn.Conv3d
+        else:
+            patch_embedding_cls = nn.Conv2d
+        
+        self.patch_embedding = patch_embedding_cls(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.stride,
+            bias=False,
+        )
+        self.norm_layer = norm_layer
+
+        if is_temporal:
+            self.time_patch_size = self.patch_size.shape[0]
+            self.spatial_patch_size = self.patch_size.shape[1]
+            self.num_patches = (config.num_frames // self.time_patch_size) * (self.image_size // self.spatial_patch_size) ** 2
+        else:
+            self.time_patch_size = None
+            self.spatial_patch_size = self.patch_size
+            self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches + 1
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+    
+    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+        batch_size = pixel_values.shape[0]
+        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+        if self.norm_layer is not None:
+            patch_embeds = self.norm_layer(patch_embeds)
+
+        # class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        class_embeds = self.class_embedding.expand(batch_size, -1)
+        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
+
+
+class ImageBindVisionEmbeddings(RGBDTPatchEmbedding):
+    def __init__(self, config: ImageBindVisionConfig):
+        super().__init__(config, norm_layer=None, is_temporal=True)
+
+
+class ImageBindAudioEmbeddings(RGBDTPatchEmbedding):
     def __init__(self, config: ImageBindAudioConfig):
-        super().__init__()
+        layer_norm = nn.LayerNorm(config.hidden_size)
+        super().__init__(config, norm_layer=layer_norm, is_temporal=False)
     
-    def forward(self):
-        pass
+    def forward(self, audio: torch.FloatTensor) -> torch.Tensor:
+        super().forward(pixel_values=audio)
 
 
-class ImageBindDepthEmbeddings(nn.Module):
+class ImageBindDepthEmbeddings(RGBDTPatchEmbedding):
     def __init__(self, config: ImageBindDepthConfig):
-        super().__init__()
+        super().__init__(config, norm_layer=None, is_temporal=False)
     
-    def forward(self):
-        pass
+    def forward(self, depth: torch.FloatTensor) -> torch.Tensor:
+        super().forward(pixel_values=depth)
 
 
-class ImageBindThermalEmbeddings(nn.Module):
+class ImageBindThermalEmbeddings(RGBDTPatchEmbedding):
     def __init__(self, config: ImageBindThermalConfig):
-        super().__init__()
+        layer_norm = nn.LayerNorm(config.hidden_size)
+        super().__init__(config, norm_layer=layer_norm, is_temporal=False)
     
-    def forward(self):
-        pass
+    def forward(self, thermal: torch.FloatTensor) -> torch.Tensor:
+        super().forward(pixel_values=thermal)
 
-
+# TODO: implement IMU embeddings
 class ImageBindImuEmbeddings(nn.Module):
     def __init__(self, config: ImageBindImuConfig):
         super().__init__()
