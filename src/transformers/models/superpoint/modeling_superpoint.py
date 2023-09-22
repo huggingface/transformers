@@ -254,6 +254,22 @@ class SuperPointPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor):
+        """
+        Assuming pixel_values has shape (batch_size, 3, height, width), and that all channels values are the same,
+        extract the first channel value to get a tensor of shape (batch_size, 1, height, width) for SuperPoint.
+        This is a workaround for the issue discussed in :
+        https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
+    
+        Args:
+            pixel_values: torch.FloatTensor of shape (batch_size, 3, height, width)
+    
+        Returns:
+            pixel_values: torch.FloatTensor of shape (batch_size, 1, height, width)
+    
+        """
+        return pixel_values[:, 0, :, :][:, None, :, :]
+
 
 class SuperPointModel(SuperPointPreTrainedModel):
     def __init__(self, config: SuperPointConfig):
@@ -280,6 +296,8 @@ class SuperPointModel(SuperPointPreTrainedModel):
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
+
+        pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
         encoder_outputs = self.encoder(
             pixel_values,
