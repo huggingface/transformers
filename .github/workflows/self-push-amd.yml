@@ -44,7 +44,7 @@ jobs:
     needs: check_runner_status
     strategy:
       matrix:
-        machine_type: [single-gpu]
+        machine_type: [single-gpu, multi-gpu]
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', mi210]
     container:
       # --device /dev/dri/renderD128 == AMDGPU:0 (indexing for AMDGPU starts at 128 ...)
@@ -60,7 +60,7 @@ jobs:
     needs: check_runners
     strategy:
       matrix:
-        machine_type: [single-gpu]
+        machine_type: [single-gpu, multi-gpu]
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', mi210]
     container:
       # --device /dev/dri/renderD128 == AMDGPU:0 (indexing for AMDGPU starts at 128 ...)
