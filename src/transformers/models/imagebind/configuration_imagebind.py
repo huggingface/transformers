@@ -36,9 +36,6 @@ IMAGEBIND_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-# NOTE: currently copied from previous PR (#23284)
-
-
 class ImageBindTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ImageBindTextModel`]. It is used to instantiate a ImageBind
@@ -53,13 +50,16 @@ class ImageBindTextConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 49408):
             Vocabulary size of the ImageBind text model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`ImageBindModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
+        intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        projection_dim (`int`, *optional*, defaults to 1024):
+            If the ImageBind text model has an output projection layer, the dimension to which that projection layer
+            maps to.
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         max_position_embeddings (`int`, *optional*, defaults to 77):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
@@ -96,11 +96,11 @@ class ImageBindTextConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=49408,
-        hidden_size=512,
-        intermediate_size=2048,
-        projection_dim=512,
-        num_hidden_layers=12,
-        num_attention_heads=8,
+        hidden_size=1024,
+        intermediate_size=4096,
+        projection_dim=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
         max_position_embeddings=77,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-5,
@@ -155,13 +155,16 @@ class ImageBindVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1280):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 5120):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        projection_dim (`int`, *optional*, defaults to 1024):
+            If the ImageBind vision model has an output projection layer, the dimension to which that projection layer
+            maps to.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
@@ -199,11 +202,11 @@ class ImageBindVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        intermediate_size=3072,
-        projection_dim=512,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        hidden_size=1280,
+        intermediate_size=5120,
+        projection_dim=1024,
+        num_hidden_layers=32,
+        num_attention_heads=16,
         num_channels=3,
         image_size=224,
         patch_size=32,
@@ -259,7 +262,37 @@ class ImageBindAudioConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
     
     Args:
-        TODO
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        projection_dim (`int`, *optional*, defaults to 1024):
+            If the ImageBind audio model has an output projection layer, the dimension to which that projection layer
+            maps to.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_mel_bins (`int`, *optional*, defaults to 128):
+            The number of frequency bins in the log-mel spectrogram.
+        target_len (`int`, *optional*, defaults to 204):
+            TODO
+        kernel_size (`int`, *optional*, defaults to 16):
+            The kernel size of the 2D convolution layers. (TODO)
+        stride (`int`, *optional*, defaults to 10):
+            The stride of the 2D convolution layers. (TODO)
+        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_factor (`float`, *optional*, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
     
     Example:
     ```python
@@ -274,8 +307,40 @@ class ImageBindAudioConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        hidden_size=768,
+        intermediate_size=3072,
+        projection_dim=1024,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_mel_bins=128,
+        target_len=204,
+        kernel_size=16,
+        stride=10,
+        hidden_act="quick_gelu",
+        layer_norm_eps=1e-5,
+        attention_dropout=0.1,
+        initializer_range=0.02,
+        initializer_factor=1.0,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_mel_bins = num_mel_bins
+        self.target_len = target_len
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -298,14 +363,38 @@ class ImageBindDepthConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ImageBindDepthModel`]. It is used to instantiate a
     ImageBind depth encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the ImageBind
+    configuration with the defaults will yield a similar configuration to that of the depth encoder of the ImageBind
     [facebook/imagebind-huge](https://huggingface.co/facebook/imagebind-huge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     
     Args:
-        TODO
+        hidden_size (`int`, *optional*, defaults to 384):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 1536):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        projection_dim (`int`, *optional*, defaults to 1024):
+            If the ImageBind depth model has an output projection layer, the dimension to which that projection layer
+            maps to.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        kernel_size (`int`, *optional*, defaults to 16):
+            The kernel size of the 2D convolution layers. (TODO)
+        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_factor (`float`, *optional*, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
     
     Example:
     ```python
@@ -320,8 +409,34 @@ class ImageBindDepthConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        hidden_size=384,
+        intermediate_size=1536,
+        projection_dim=1024,
+        num_hidden_layers=12,
+        num_attention_heads=8,
+        kernel_size=16,
+        hidden_act="quick_gelu",
+        layer_norm_eps=1e-5,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        initializer_factor=1.0,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.kernel_size = kernel_size
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -344,14 +459,38 @@ class ImageBindThermalConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ImageBindThermalModel`]. It is used to instantiate a
     ImageBind thermal encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the ImageBind
+    configuration with the defaults will yield a similar configuration to that of the thermal encoder of the ImageBind
     [facebook/imagebind-huge](https://huggingface.co/facebook/imagebind-huge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     
     Args:
-        TODO
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        projection_dim (`int`, *optional*, defaults to 1024):
+            If the ImageBind thermal model has an output projection layer, the dimension to which that projection layer
+            maps to.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        kernel_size (`int`, *optional*, defaults to 16):
+            The kernel size of the 2D convolution layers. (TODO)
+        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_factor (`float`, *optional*, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
     
     Example:
     ```python
@@ -366,8 +505,34 @@ class ImageBindThermalConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        hidden_size=768,
+        intermediate_size=3072,
+        projection_dim=1024,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        kernel_size=16,
+        hidden_act="quick_gelu",
+        layer_norm_eps=1e-5,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        initializer_factor=1.0,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.kernel_size = kernel_size
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -390,14 +555,38 @@ class ImageBindImuConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ImageBindImuModel`]. It is used to instantiate a
     ImageBind IMU encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the ImageBind
+    configuration with the defaults will yield a similar configuration to that of the IMU encoder of the ImageBind
     [facebook/imagebind-huge](https://huggingface.co/facebook/imagebind-huge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     
     Args:
-        TODO
+        hidden_size (`int`, *optional*, defaults to 512):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        projection_dim (`int`, *optional*, defaults to 1024):
+            If the ImageBind thermal model has an output projection layer, the dimension to which that projection layer
+            maps to.
+        num_hidden_layers (`int`, *optional*, defaults to 6):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        kernel_size (`int`, *optional*, defaults to 8):
+            The kernel size of the 2D convolution layers. (TODO)
+        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.7):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_factor (`float`, *optional*, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
     
     Example:
     ```python
@@ -412,8 +601,34 @@ class ImageBindImuConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        hidden_size=512,
+        intermediate_size=2048,
+        projection_dim=1024,
+        num_hidden_layers=6,
+        num_attention_heads=8,
+        kernel_size=8,
+        hidden_act="quick_gelu",
+        layer_norm_eps=1e-5,
+        attention_dropout=0.7,
+        initializer_range=0.02,
+        initializer_factor=1.0,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.kernel_size = kernel_size
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -483,13 +698,26 @@ class ImageBindConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+        self,
+        text_config=None,
+        vision_config=None,
+        audio_config=None,
+        depth_config=None,
+        thermal_config=None,
+        imu_config=None,
+        projection_dim=1024,
+        logit_scale_init_value=2.6592,
+        **kwargs,
     ):
         # If `_config_dict` exist, we use them for the backward compatibility.
         # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
         # of confusion!).
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
+        audio_config_dict = kwargs.pop("audio_config_dict", None)
+        depth_config_dict = kwargs.pop("depth_config_dict", None)
+        thermal_config_dict = kwargs.pop("thermal_config_dict", None)
+        imu_config_dict = kwargs.pop("imu_config_dict", None)
 
         super().__init__(**kwargs)
 
@@ -554,6 +782,134 @@ class ImageBindConfig(PretrainedConfig):
 
             # Update all values in `vision_config` with the ones in `_vision_config_dict`.
             vision_config.update(_vision_config_dict)
+        
+        if audio_config_dict is not None:
+            if audio_config is None:
+                audio_config = {}
+
+            # This is the complete result when using `audio_config_dict`.
+            _audio_config_dict = ImageBindAudioConfig(**audio_config_dict).to_dict()
+            # convert keys to string instead of integer
+            if "id2label" in _vision_config_dict:
+                _vision_config_dict["id2label"] = {
+                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                }
+
+            # Give a warning if the values exist in both `_audio_config_dict` and `audio_config` but being different.
+            for key, value in _vision_config_dict.items():
+                if key in audio_config and value != audio_config[key] and key not in ["transformers_version"]:
+                    # If specified in `audio_config_dict`
+                    if key in audio_config_dict:
+                        message = (
+                            f"`{key}` is found in both `audio_config_dict` and `audio_config` but with different "
+                            f'values. The value `audio_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`audio_config_dict` is provided which will be used to initialize `ImageBindAudioConfig`. "
+                            f'The value `audio_config["{key}"]` will be overriden.'
+                        )
+                    logger.warning(message)
+
+            # Update all values in `vision_config` with the ones in `_audio_config_dict`.
+            audio_config.update(_audio_config_dict)
+        
+        if depth_config_dict is not None:
+            if depth_config is None:
+                depth_config = {}
+
+            # This is the complete result when using `depth_config_dict`.
+            _depth_config_dict = ImageBindDepthConfig(**depth_config_dict).to_dict()
+            # convert keys to string instead of integer
+            if "id2label" in _depth_config_dict:
+                _depth_config_dict["id2label"] = {
+                    str(key): value for key, value in _depth_config_dict["id2label"].items()
+                }
+
+            # Give a warning if the values exist in both `_depth_config_dict` and `depth_config` but being different.
+            for key, value in _depth_config_dict.items():
+                if key in depth_config and value != depth_config[key] and key not in ["transformers_version"]:
+                    # If specified in `depth_config_dict`
+                    if key in depth_config_dict:
+                        message = (
+                            f"`{key}` is found in both `depth_config_dict` and `depth_config` but with different "
+                            f'values. The value `depth_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`depth_config_dict` is provided which will be used to initialize `ImageBindDepthConfig`. "
+                            f'The value `depth_config["{key}"]` will be overriden.'
+                        )
+                    logger.warning(message)
+
+            # Update all values in `vision_config` with the ones in `_depth_config_dict`.
+            depth_config.update(_depth_config_dict)
+        
+        if thermal_config_dict is not None:
+            if thermal_config is None:
+                thermal_config = {}
+
+            # This is the complete result when using `thermal_config_dict`.
+            _thermal_config_dict = ImageBindThermalConfig(**thermal_config_dict).to_dict()
+            # convert keys to string instead of integer
+            if "id2label" in _thermal_config_dict:
+                _thermal_config_dict["id2label"] = {
+                    str(key): value for key, value in _thermal_config_dict["id2label"].items()
+                }
+
+            # Give a warning if the values exist in both `_thermal_config_dict` and `thermal_config` but being different.
+            for key, value in _thermal_config_dict.items():
+                if key in thermal_config and value != thermal_config[key] and key not in ["transformers_version"]:
+                    # If specified in `thermal_config_dict`
+                    if key in thermal_config_dict:
+                        message = (
+                            f"`{key}` is found in both `thermal_config_dict` and `thermal_config` but with different "
+                            f'values. The value `thermal_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`thermal_config_dict` is provided which will be used to initialize `ImageBindThermalConfig`. "
+                            f'The value `thermal_config["{key}"]` will be overriden.'
+                        )
+                    logger.warning(message)
+
+            # Update all values in `vision_config` with the ones in `_thermal_config_dict`.
+            thermal_config.update(_thermal_config_dict)
+        
+        if imu_config_dict is not None:
+            if imu_config is None:
+                imu_config = {}
+
+            # This is the complete result when using `imu_config_dict`.
+            _imu_config_dict = ImageBindImuConfig(**imu_config_dict).to_dict()
+            # convert keys to string instead of integer
+            if "id2label" in _imu_config_dict:
+                _imu_config_dict["id2label"] = {
+                    str(key): value for key, value in _imu_config_dict["id2label"].items()
+                }
+
+            # Give a warning if the values exist in both `_imu_config_dict` and `imu_config` but being different.
+            for key, value in _imu_config_dict.items():
+                if key in imu_config and value != imu_config[key] and key not in ["transformers_version"]:
+                    # If specified in `imu_config_dict`
+                    if key in imu_config_dict:
+                        message = (
+                            f"`{key}` is found in both `imu_config_dict` and `imu_config` but with different "
+                            f'values. The value `imu_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`imu_config_dict` is provided which will be used to initialize `ImageBindImuConfig`. "
+                            f'The value `imu_config["{key}"]` will be overriden.'
+                        )
+                    logger.warning(message)
+
+            # Update all values in `imu_config` with the ones in `_imu_config_dict`.
+            imu_config.update(_imu_config_dict)
 
         if text_config is None:
             text_config = {}
@@ -562,9 +918,29 @@ class ImageBindConfig(PretrainedConfig):
         if vision_config is None:
             vision_config = {}
             logger.info("`vision_config` is `None`. initializing the `ImageBindVisionConfig` with default values.")
+        
+        if audio_config is None:
+            audio_config = {}
+            logger.info("`audio_config` is `None`. initializing the `ImageBindAudioConfig` with default values.")
+        
+        if depth_config is None:
+            depth_config = {}
+            logger.info("`depth_config` is `None`. initializing the `ImageBindDepthConfig` with default values.")
+        
+        if thermal_config is None:
+            thermal_config = {}
+            logger.info("`thermal_config` is `None`. initializing the `ImageBindThermalConfig` with default values.")
+        
+        if imu_config is None:
+            imu_config = {}
+            logger.info("`imu_config` is `None`. initializing the `ImageBindImuConfig` with default values.")
 
         self.text_config = ImageBindTextConfig(**text_config)
         self.vision_config = ImageBindVisionConfig(**vision_config)
+        self.audio_config = ImageBindAudioConfig(**audio_config)
+        self.depth_config = ImageBindDepthConfig(**depth_config)
+        self.thermal_config = ImageBindThermalConfig(**thermal_config)
+        self.imu_config = ImageBindImuConfig(**imu_config)
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
@@ -592,6 +968,10 @@ class ImageBindConfig(PretrainedConfig):
         output = copy.deepcopy(self.__dict__)
         output["text_config"] = self.text_config.to_dict()
         output["vision_config"] = self.vision_config.to_dict()
+        output["audio_config"] = self.audio_config.to_dict()
+        output["depth_config"] = self.depth_config.to_dict()
+        output["thermal_config"] = self.thermal_config.to_dict()
+        output["imu_config"] = self.imu_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
 
