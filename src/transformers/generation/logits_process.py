@@ -1331,11 +1331,11 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
 
-    [`LogitsProcessor`] that modifies the logits for the generation of timestamps in the transcription.
-    When the input tokens are at a specific threshold, the processor sets the scores to  negative infinity and returned.
-    The timestamps are processed to be in pairs except right before the end-of-sequence token.
-    If the total probability of all timestamp tokens is greater than any individual non-timestamp token,
-    the processor sets those non-timestamp logits to negative infinity
+    [`LogitsProcessor`] that modifies the logits for the generation of timestamps in the transcription. When the input
+    tokens are at a specific threshold, the processor sets the scores to negative infinity and returned. The timestamps
+    are processed to be in pairs except right before the end-of-sequence token. If the total probability of all
+    timestamp tokens is greater than any individual non-timestamp token, the processor sets those non-timestamp logits
+    to negative infinity
 
     See [the paper](https://arxiv.org/abs/2212.04356) for more information.
 
