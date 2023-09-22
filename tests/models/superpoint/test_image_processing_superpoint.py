@@ -16,7 +16,7 @@ class SuperPointImageProcessingTester(unittest.TestCase):
         self,
         parent,
         batch_size=7,
-        num_channels = 3
+        num_channels=3,
         image_size=18,
         min_resolution=30,
         max_resolution=400,
