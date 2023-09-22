@@ -17,11 +17,14 @@
 import itertools
 import random
 import unittest
+import os
+import tempfile
+import copy
 
 import numpy as np
 
 from transformers import ASTFeatureExtractor
-from transformers.testing_utils import require_torch, require_torchaudio
+from transformers.testing_utils import require_torch, require_torchaudio, check_json_file_has_correct_format
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -205,3 +208,52 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         input_values = feature_extractor(input_speech, return_tensors="pt").input_values
         self.assertEquals(input_values.shape, (1, 1024, 128))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
+
+    def test_feat_extract_from_and_save_pretrained(self):
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
+            check_json_file_has_correct_format(saved_file)
+            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertDictEqual(dict_first, dict_second)
+        
+        
+        # test audio_utils implementation
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict, use_torchaudio=False)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
+            check_json_file_has_correct_format(saved_file)
+            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertDictEqual(dict_first, dict_second)
+
+    def test_feat_extract_to_json_file(self):
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            json_file_path = os.path.join(tmpdirname, "feat_extract.json")
+            feat_extract_first.to_json_file(json_file_path)
+            feat_extract_second = self.feature_extraction_class.from_json_file(json_file_path)
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertEqual(dict_first, dict_second)
+        
+        # test audio_utils implementation
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict, use_torchaudio=False)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            json_file_path = os.path.join(tmpdirname, "feat_extract.json")
+            feat_extract_first.to_json_file(json_file_path)
+            feat_extract_second = self.feature_extraction_class.from_json_file(json_file_path)
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertEqual(dict_first, dict_second)
