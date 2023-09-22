@@ -52,7 +52,7 @@ class FastViTConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "hidden_sizes"))
         self.parent.assertTrue(hasattr(config, "depths"))
         self.parent.assertTrue(hasattr(config, "token_mixers"))
-        self.parent.assertTrue(hasattr(config, "attention_head_dim"))
+        self.parent.assertTrue(hasattr(config, "num_attention_heads"))
 
 
 def _config_zero_init(config):
