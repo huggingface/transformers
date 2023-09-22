@@ -96,13 +96,9 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         waveform = torch.from_numpy(waveform).unsqueeze(0)
         fbank = ta_kaldi.fbank(
             waveform,
-            htk_compat=True,
             sample_frequency=self.sampling_rate,
-            use_energy=False,
             window_type="hanning",
             num_mel_bins=self.num_mel_bins,
-            dither=0.0,
-            frame_shift=10,
         )
 
         n_frames = fbank.shape[0]
