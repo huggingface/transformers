@@ -20,7 +20,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -117,6 +117,10 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
+    @cached_property
+    def image_processor(self):
+        return self.image_processing_class(**self.image_processor_dict)
+
     def test_image_processor_properties(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processing, "do_resize"))
@@ -134,34 +138,34 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_expected_output(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processor
         inputs = image_processor(dummy_image, return_tensors="pt")
         self.assertTrue(torch.allclose(inputs["pixel_values"].mean(), torch.tensor(0.4906), atol=1e-3, rtol=1e-3))
 
     def test_crop_margin_all_white(self):
         image = np.uint8(np.ones((100, 100, 3)) * 255)
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processor
         cropped_image = image_processor.crop_margin(image)
         self.assertTrue(np.array_equal(image, cropped_image))
 
     def test_crop_margin_centered_black_square(self):
         image = np.ones((100, 100, 3), dtype=np.uint8) * 255
         image[45:55, 45:55, :] = 0
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processor
         cropped_image = image_processor.crop_margin(image)
         expected_cropped = image[45:55, 45:55, :]
         self.assertTrue(np.array_equal(expected_cropped, cropped_image))
 
     def test_align_long_axis_no_rotation(self):
         image = np.uint8(np.ones((100, 200, 3)) * 255)
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processor
         size = {"height": 200, "width": 300}
         aligned_image = image_processor.align_long_axis(image, size)
         self.assertEqual(image.shape, aligned_image.shape)
 
     def test_align_long_axis_with_rotation(self):
         image = np.uint8(np.ones((200, 100, 3)) * 255)
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processor
         size = {"height": 300, "width": 200}
         aligned_image = image_processor.align_long_axis(image, size)
         self.assertEqual((200, 100, 3), aligned_image.shape)
@@ -170,7 +174,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = np.uint8(np.ones((100, 200, 3)) * 255)
         data_format = "channels_first"
         size = {"height": 200, "width": 300}
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processor
         aligned_image = image_processor.align_long_axis(image, size, data_format=data_format)
         self.assertEqual((3, 100, 200), aligned_image.shape)
 
@@ -183,7 +187,7 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_crop_margin_equality_cv2_python(self):
         image = self.prepare_dummy_np_image()
-        image_processor = self.image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processor
         image_cropped_python = image_processor.crop_margin(image)
 
         self.assertEqual(image_cropped_python.shape, (850, 685, 3))
