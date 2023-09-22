@@ -19,7 +19,7 @@ import copy
 import math
 import os
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Dict
 
 import torch
 from torch import nn
@@ -54,6 +54,20 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
 _CHECKPOINT_FOR_DOC = "t5-small"
+
+POSITION_EMBEDDING_SINUSOIDAL = "abs_sinusoidal"
+
+class SinusoidalPositionalEmbedding(nn.Module):
+    def __init__(self, dim, max_num_tokens=10000):
+        super().__init__()
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
+        t = torch.arange(max_num_tokens).type_as(inv_freq)
+        sinusoid_inp = torch.einsum("i , j -> i j", t, inv_freq)
+        emb = torch.cat((sinusoid_inp.sin(), sinusoid_inp.cos()), dim=-1)
+        self.embed = nn.Embedding.from_pretrained(emb, freeze=True)
+
+    def forward(self, position_ids: torch.Tensor):
+        return self.embed(position_ids.long())
 
 ####################################################
 # This dict contains ids and associated url
@@ -462,6 +476,7 @@ class T5Attention(nn.Module):
         query_length=None,
         use_cache=False,
         output_attentions=False,
+        add_t5_relative_position_embedding=True,
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -533,32 +548,38 @@ class T5Attention(nn.Module):
             query_states, key_states.transpose(3, 2)
         )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
-        if position_bias is None:
-            if not self.has_relative_attention_bias:
-                position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
-                )
-                if self.gradient_checkpointing and self.training:
-                    position_bias.requires_grad = True
+        if add_t5_relative_position_embedding:
+            if position_bias is None:
+                if not self.has_relative_attention_bias:
+                    position_bias = torch.zeros(
+                        (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                    )
+                    if self.gradient_checkpointing and self.training:
+                        position_bias.requires_grad = True
+                else:
+                    position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
+
+                # if key and values are already calculated
+                # we want only the last query position bias
+                if past_key_value is not None:
+                    position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+
+                if mask is not None:
+                    position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+
+            if self.pruned_heads:
+                mask = torch.ones(position_bias.shape[1])
+                mask[list(self.pruned_heads)] = 0
+                position_bias_masked = position_bias[:, mask.bool()]
             else:
-                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
+                position_bias_masked = position_bias
 
-            # if key and values are already calculated
-            # we want only the last query position bias
-            if past_key_value is not None:
-                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
-
-            if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
-
-        if self.pruned_heads:
-            mask = torch.ones(position_bias.shape[1])
-            mask[list(self.pruned_heads)] = 0
-            position_bias_masked = position_bias[:, mask.bool()]
+            scores += position_bias_masked
         else:
-            position_bias_masked = position_bias
+            if mask is not None:  
+                # MICHAL see above that mask is added to position_bias. Also in length-generalization.
+                scores += mask  # (batch_size, n_heads, seq_length, key_length)  
 
-        scores += position_bias_masked
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
@@ -597,6 +618,7 @@ class T5LayerSelfAttention(nn.Module):
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
+        add_t5_relative_position_embedding=True,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
@@ -607,6 +629,7 @@ class T5LayerSelfAttention(nn.Module):
             past_key_value=past_key_value,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            add_t5_relative_position_embedding=add_t5_relative_position_embedding,
         )
         hidden_states = hidden_states + self.dropout(attention_output[0])
         outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
@@ -631,6 +654,7 @@ class T5LayerCrossAttention(nn.Module):
         use_cache=False,
         query_length=None,
         output_attentions=False,
+        add_t5_relative_position_embedding=True,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -643,6 +667,7 @@ class T5LayerCrossAttention(nn.Module):
             use_cache=use_cache,
             query_length=query_length,
             output_attentions=output_attentions,
+            add_t5_relative_position_embedding=add_t5_relative_position_embedding,
         )
         layer_output = hidden_states + self.dropout(attention_output[0])
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
@@ -672,6 +697,7 @@ class T5Block(nn.Module):
         cross_attn_layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
+        add_t5_relative_position_embedding=True,
         output_attentions=False,
         return_dict=True,
     ):
@@ -700,6 +726,7 @@ class T5Block(nn.Module):
             past_key_value=self_attn_past_key_value,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            add_t5_relative_position_embedding=add_t5_relative_position_embedding,
         )
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
@@ -732,6 +759,7 @@ class T5Block(nn.Module):
                 query_length=query_length,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
+                add_t5_relative_position_embedding=add_t5_relative_position_embedding,
             )
             hidden_states = cross_attention_outputs[0]
 
@@ -911,6 +939,7 @@ class T5Stack(T5PreTrainedModel):
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
+        self.position_embedding_types = config.position_embedding_types
 
         self.block = nn.ModuleList(
             [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
@@ -918,6 +947,10 @@ class T5Stack(T5PreTrainedModel):
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+        self.position_embedding_dict = nn.ModuleDict()
+        self.position_embedding_dict[POSITION_EMBEDDING_SINUSOIDAL] = SinusoidalPositionalEmbedding(config.d_model)
+        for position_embedding_name, num_embeddings in config.position_embedding_types.items():
+            self.position_embedding_dict[position_embedding_name] =  nn.Embedding(num_embeddings, config.d_model)
         # Initialize weights and apply final processing
         self.post_init()
         # Model parallel
@@ -989,6 +1022,8 @@ class T5Stack(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        position_ids_dict=None,
+        add_t5_relative_position_embedding=True,
     ):
         # Model parallel
         if self.model_parallel:
@@ -1020,6 +1055,28 @@ class T5Stack(T5PreTrainedModel):
                 raise ValueError("You have to initialize the model with valid token embeddings")
             inputs_embeds = self.embed_tokens(input_ids)
 
+        if position_ids_dict is None:
+            position_ids_dict = {}
+
+        for position_ids, position_embedding_types  in position_ids_dict.values():
+            if position_ids is None:
+                device = input_ids.device if input_ids is not None else inputs_embeds.device
+                past_length = past_key_values[0][0].size(-2) if past_key_values is not None else 0
+                
+                position_ids = torch.arange(
+                    past_length,
+                    input_shape[-1] + past_length,
+                    dtype=torch.long,
+                    device=device,
+                )
+                position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+            else:
+                position_ids = position_ids.view(-1, input_shape[-1])
+            
+            
+            position_embeds = self.position_embedding_dict[position_embedding_types[0]](position_ids)
+            inputs_embeds += position_embeds
+            
         batch_size, seq_length = input_shape
 
         # required mask seq length can be calculated via length of past
@@ -1118,6 +1175,7 @@ class T5Stack(T5PreTrainedModel):
                     layer_head_mask,
                     cross_attn_layer_head_mask,
                     None,  # past_key_value is always None with gradient checkpointing
+                    add_t5_relative_position_embedding,
                 )
             else:
                 layer_outputs = layer_module(
@@ -1130,6 +1188,7 @@ class T5Stack(T5PreTrainedModel):
                     layer_head_mask=layer_head_mask,
                     cross_attn_layer_head_mask=cross_attn_layer_head_mask,
                     past_key_value=past_key_value,
+                    add_t5_relative_position_embedding=add_t5_relative_position_embedding,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                 )
@@ -1566,6 +1625,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
+        # collect info on declared position types, for input validity test during forward
+        self.position_embedding_types = set(config.position_embedding_types.keys())
+        self.position_embedding_types.add(POSITION_EMBEDDING_SINUSOIDAL)
+
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
@@ -1662,6 +1725,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        encoder_position_ids_dict: Optional[Dict[str, Tuple[torch.LongTensor,str]]] = None,
+        decoder_position_ids_dict: Optional[Dict[str, Tuple[torch.LongTensor,str]]] = None,
+        add_t5_relative_position_embedding=True,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1694,6 +1760,22 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
         >>> # studies have shown that owning a dog is good for you.
         ```"""
+
+        if encoder_position_ids_dict is None:
+            encoder_position_ids_dict = {}
+        
+        if decoder_position_ids_dict is None:
+            decoder_position_ids_dict = {}
+        
+        if add_t5_relative_position_embedding is None:
+            add_t5_relative_position_embedding = True
+
+        for _, position_embedding_types in encoder_position_ids_dict.values():
+            assert position_embedding_types[0] in self.position_embedding_types
+        
+        for _, position_embedding_types in decoder_position_ids_dict.values():
+            assert position_embedding_types[0] in self.position_embedding_types
+
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1714,6 +1796,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                position_ids_dict=encoder_position_ids_dict,
+                add_t5_relative_position_embedding=add_t5_relative_position_embedding,
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
@@ -1756,6 +1840,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            position_ids_dict=decoder_position_ids_dict,
+            add_t5_relative_position_embedding=add_t5_relative_position_embedding,
         )
 
         sequence_output = decoder_outputs[0]
