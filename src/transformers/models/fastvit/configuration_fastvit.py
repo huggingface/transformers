@@ -43,7 +43,7 @@ class FastViTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`FastViTModel`]. It is used to instantiate an
     FastViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the FastViT
-    [apple/fastvit-t8](https://huggingface.co/google/fastvit-t8) architecture.
+    [JorgeAV/fastvit_t8](https://huggingface.co/JorgeAV/fastvit_t8) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
