@@ -15,16 +15,15 @@
 
 
 import itertools
-import random
-import unittest
 import os
+import random
 import tempfile
-import copy
+import unittest
 
 import numpy as np
 
 from transformers import ASTFeatureExtractor
-from transformers.testing_utils import require_torch, require_torchaudio, check_json_file_has_correct_format
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -135,11 +134,12 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-            
-            
+
     def test_call_audio_utils(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict(), use_torchaudio=False)
+        feat_extract = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict(), use_torchaudio=False
+        )
         # create three inputs of length 800, 1000, and 1200
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
@@ -220,8 +220,7 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
         self.assertDictEqual(dict_first, dict_second)
-        
-        
+
         # test audio_utils implementation
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict, use_torchaudio=False)
 
@@ -245,7 +244,7 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
         self.assertEqual(dict_first, dict_second)
-        
+
         # test audio_utils implementation
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict, use_torchaudio=False)
 

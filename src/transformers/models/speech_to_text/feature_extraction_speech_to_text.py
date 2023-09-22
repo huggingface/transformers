@@ -16,17 +16,18 @@
 Feature extractor class for Speech2Text
 """
 
-from typing import List, Optional, Union
 import copy
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
 import torchaudio.compliance.kaldi as ta_kaldi
 
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+
 
 logger = logging.get_logger(__name__)
 
@@ -57,7 +58,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         normalize_vars (`bool`, *optional*, defaults to `True`):
             Whether or not to unit-variance normalize the extracted features.
         use_torchaudio (`bool`, *optional*, defaults to `True`):
-            Whether or not to use torchaudio implementation of mel-filter banks. If `False`, use a numpy porting of torchaudio mel-filter banks implementation.
+            Whether or not to use torchaudio implementation of mel-filter banks. If `False`, use a numpy porting of
+            torchaudio mel-filter banks implementation.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -80,21 +82,21 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
         self.return_attention_mask = True
-        
+
         self.use_torchaudio = use_torchaudio
         if not use_torchaudio:
             mel_filters = mel_filter_bank(
                 num_frequency_bins=256,
                 num_mel_filters=self.num_mel_bins,
                 min_frequency=20,
-                max_frequency=sampling_rate//2,
+                max_frequency=sampling_rate // 2,
                 sampling_rate=sampling_rate,
                 norm=None,
                 mel_scale="kaldi",
                 triangularize_in_mel_space=True,
             )
 
-            self.mel_filters = np.pad(mel_filters, ((0,1), (0,0)))
+            self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
             self.window = window_function(400, "povey", periodic=False)
 
     def _extract_fbank_features(
@@ -300,8 +302,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
     def to_dict(self):
         """
-        Serializes this instance to a Python dictionary.
-        Returns:
+        Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)

@@ -15,16 +15,15 @@
 
 
 import itertools
-import random
-import unittest
 import os
+import random
 import tempfile
-import copy 
+import unittest
 
 import numpy as np
 
 from transformers import is_speech_available
-from transformers.testing_utils import require_torch, require_torchaudio, check_json_file_has_correct_format
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
@@ -149,7 +148,9 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
     def test_call_audio_utils(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict(), use_torchaudio=False)
+        feature_extractor = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict(), use_torchaudio=False
+        )
         # create three inputs of length 800, 1000, and 1200
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
@@ -315,7 +316,9 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         self.assertTrue(np.allclose(input_features[0, 0, :30], expected, atol=1e-4))
 
         # test audio_utils implementation
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict(), use_torchaudio=False)
+        feature_extractor = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict(), use_torchaudio=False
+        )
         input_features = feature_extractor(input_speech, return_tensors="pt").input_features
         self.assertEquals(input_features.shape, (1, 584, 24))
         self.assertTrue(np.allclose(input_features[0, 0, :30], expected, atol=1e-4))
@@ -331,8 +334,7 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
         self.assertDictEqual(dict_first, dict_second)
-        
-        
+
         # test audio_utils implementation
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict, use_torchaudio=False)
 
@@ -356,7 +358,7 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
         self.assertEqual(dict_first, dict_second)
-        
+
         # test audio_utils implementation
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict, use_torchaudio=False)
 
