@@ -239,6 +239,10 @@ class FastViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip("No tiny model lesser than 1M parameters")
+    def test_model_is_small(self):
+        pass
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
