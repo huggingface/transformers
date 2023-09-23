@@ -660,7 +660,7 @@ class FlaxWhisperEncoder(nn.Module):
             gradient_checkpointing=self.gradient_checkpointing,
         )
 
-        def embedding_init(key, shape, dtype):
+        def embedding_init(key, shape, dtype = jnp.float_):
             return sinusoids(*shape).astype(dtype)
 
         self.embed_positions = nn.Embed(
