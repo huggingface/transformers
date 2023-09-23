@@ -144,7 +144,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
-|                      [GPT NeoX](model_doc/gpt_neox)                      |       ✅        |         ❌         |      ❌      |
+|                      [GPT NeoX](model_doc/gpt_neox)                      |       ✅        |         ❌         |      ✅      |
 |             [GPT NeoX Japanese](model_doc/gpt_neox_japanese)             |       ✅        |         ❌         |      ❌      |
 |                         [GPT-J](model_doc/gptj)                          |       ✅        |         ✅         |      ✅      |
 |                       [GPT-Sw3](model_doc/gpt-sw3)                       |       ✅        |         ✅         |      ✅      |

@@ -105,6 +105,7 @@ GPTNeoX_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 # Copied from transformers.models.gptj.modeling_flax_gptj.create_sinusoidal_positions
 def create_sinusoidal_positions(num_pos, dim):
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
@@ -197,7 +198,7 @@ class FlaxGPTNeoXAttention(nn.Module):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
         states from previous steps. This function is slighly adapted from the official Flax repository:
-        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/nn/attention.py#L252
+        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
         """
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
@@ -355,7 +356,6 @@ class FlaxGPTNeoXBlock(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-
         attn_outputs = self.attention(
             self.input_layernorm(hidden_states),
             attention_mask=attention_mask,
@@ -445,7 +445,7 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
         init_variables = self.module.init(
             jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
         )
-        return init_variables["cache"]
+        return unfreeze(init_variables["cache"])
 
     @add_start_docstrings_to_model_forward(GPTNeoX_INPUTS_DOCSTRING)
     def __call__(
