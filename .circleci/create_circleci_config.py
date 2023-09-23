@@ -151,10 +151,13 @@ class CircleCIJob:
         pytest_flags.append(
             f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
         )
+
+        steps.append({"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}})
+
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
-        test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+        test_command += f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
 
         if self.parallelism == 1:
             if self.tests_to_run is None:
@@ -255,6 +258,8 @@ class CircleCIJob:
         check_test_command += 'else echo "other fatal error"; echo ""; exit -1; fi;'
 
         steps.append({"run": {"name": "Check test results", "command": check_test_command}})
+
+        steps.append({"store_test_results": {"path": "test-results"}})
 
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})

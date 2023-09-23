@@ -31,6 +31,7 @@ from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -494,6 +495,9 @@ class IdeficsRMSNorm(nn.Module):
             hidden_states = hidden_states.to(self.weight.dtype)
 
         return self.weight * hidden_states
+
+
+ALL_LAYERNORM_LAYERS.append(IdeficsRMSNorm)
 
 
 # this was adapted from LlamaRotaryEmbedding
