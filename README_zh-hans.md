@@ -43,7 +43,7 @@ checkpoint: 检查点
     <br>
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo_name.png" width="400"/>
     <br>
-<p>
+</p>
 <p align="center">
     <a href="https://circleci.com/gh/huggingface/transformers">
         <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/main">
@@ -72,7 +72,7 @@ checkpoint: 检查点
         <a href="https://github.com/huggingface/transformers/blob/main/README_es.md">Español</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a>
-    <p>
+    </p>
 </h4>
 
 <h3 align="center">
@@ -441,6 +441,7 @@ conda install -c huggingface transformers
 1. **[ViT Hybrid](https://huggingface.co/docs/transformers/model_doc/vit_hybrid)** (来自 Google AI) 伴随论文 [An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale](https://arxiv.org/abs/2010.11929) 由 Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, Neil Houlsby 发布。
 1. **[VitDet](https://huggingface.co/docs/transformers/model_doc/vitdet)** (来自 Meta AI) 伴随论文 [Exploring Plain Vision Transformer Backbones for Object Detection](https://arxiv.org/abs/2203.16527) 由 Yanghao Li, Hanzi Mao, Ross Girshick, Kaiming He 发布。
 1. **[ViTMAE](https://huggingface.co/docs/transformers/model_doc/vit_mae)** (来自 Meta AI) 伴随论文 [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377) 由 Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, Ross Girshick 发布。
+1. **[ViTMatte](https://huggingface.co/docs/transformers/main/model_doc/vitmatte)** (来自 HUST-VL) 伴随论文 [ViTMatte: Boosting Image Matting with Pretrained Plain Vision Transformers](https://arxiv.org/abs/2305.15272) 由 Jingfeng Yao, Xinggang Wang, Shusheng Yang, Baoyuan Wang 发布。
 1. **[ViTMSN](https://huggingface.co/docs/transformers/model_doc/vit_msn)** (来自 Meta AI) 伴随论文 [Masked Siamese Networks for Label-Efficient Learning](https://arxiv.org/abs/2204.07141) by Mahmoud Assran, Mathilde Caron, Ishan Misra, Piotr Bojanowski, Florian Bordes, Pascal Vincent, Armand Joulin, Michael Rabbat, Nicolas Ballas 发布.
 1. **[VITS](https://huggingface.co/docs/transformers/model_doc/vits)** (来自 Kakao Enterprise) 伴随论文 [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) 由 Jaehyeon Kim, Jungil Kong, Juhee Son 发布。
 1. **[ViViT](https://huggingface.co/docs/transformers/model_doc/vivit)** (来自 Google Research) released with the paper [ViViT: A Video Vision Transformer](https://arxiv.org/abs/2103.15691) 由 Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid.

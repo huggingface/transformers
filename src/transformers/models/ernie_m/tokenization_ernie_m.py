@@ -112,6 +112,19 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         # is included in the raw text, there should be a match in a non-normalized sentence.
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
+        self.do_lower_case = do_lower_case
+        self.sentencepiece_model_ckpt = sentencepiece_model_ckpt
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(sentencepiece_model_ckpt)
+
+        # to mimic paddlenlp.transformers.ernie_m.tokenizer.ErnieMTokenizer functioning
+        if vocab_file is not None:
+            self.vocab = self.load_vocab(filepath=vocab_file)
+        else:
+            self.vocab = {self.sp_model.id_to_piece(id): id for id in range(self.sp_model.get_piece_size())}
+        self.reverse_vocab = {v: k for k, v in self.vocab.items()}
+
         super().__init__(
             do_lower_case=do_lower_case,
             unk_token=unk_token,
@@ -124,17 +137,6 @@ class ErnieMTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-        self.do_lower_case = do_lower_case
-        self.sentencepiece_model_ckpt = sentencepiece_model_ckpt
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(sentencepiece_model_ckpt)
-
-        # to mimic paddlenlp.transformers.ernie_m.tokenizer.ErnieMTokenizer functioning
-        if vocab_file is not None:
-            self.vocab = self.load_vocab(filepath=vocab_file)
-        else:
-            self.vocab = {self.sp_model.id_to_piece(id): id for id in range(self.sp_model.get_piece_size())}
-        self.reverse_vocab = {v: k for k, v in self.vocab.items()}
 
     def get_offset_mapping(self, text):
         if text is None:

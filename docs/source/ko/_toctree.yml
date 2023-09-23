@@ -567,8 +567,8 @@
         title: (번역중) Wav2Vec2Phoneme
       - local: in_translation
         title: (번역중) WavLM
-      - local: in_translation
-        title: (번역중) Whisper
+      - local: model_doc/whisper
+        title: Whisper
       - local: in_translation
         title: (번역중) XLS-R
       - local: in_translation

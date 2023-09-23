@@ -71,6 +71,7 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_flash_attn_available = _is_package_available("flash_attn")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -570,6 +571,16 @@ def is_bitsandbytes_available():
     return _bitsandbytes_available and torch.cuda.is_available()
 
 
+def is_flash_attn_available():
+    if not is_torch_available():
+        return False
+
+    # Let's add an extra check to see if cuda is available
+    import torch
+
+    return _flash_attn_available and torch.cuda.is_available()
+
+
 def is_torchdistx_available():
     return _torchdistx_available
 
@@ -604,6 +615,10 @@ def is_accelerate_available(min_version: str = None):
     if min_version is not None:
         return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
     return _accelerate_available
+
+
+def is_fsdp_available(min_version: str = "1.12.0"):
+    return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
 
 
 def is_optimum_available():
