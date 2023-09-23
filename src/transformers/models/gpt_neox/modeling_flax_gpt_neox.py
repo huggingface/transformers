@@ -17,7 +17,6 @@
 from typing import Optional, Tuple
 
 import flax.linen as nn
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -26,12 +25,12 @@ from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
-from jax.sharding import PartitionSpec as PS
 
 from transformers.modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from transformers.modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
-from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from transformers.models.gpt_neox.configuration_gpt_neox import GPTNeoXConfig
+from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+
 
 logger = logging.get_logger(__name__)
 
