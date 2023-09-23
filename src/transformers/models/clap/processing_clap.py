@@ -88,21 +88,23 @@ class ClapProcessor(ProcessorMixin):
         if text is None and audios is None:
             raise ValueError("You have to specify either text or audios. Both cannot be none.")
 
-        tokenizer_kwargs = {k[len("tokenizer_") :]: v for k, v in kwargs.items() if k.startswith("tokenizer_")}
+        tokenizer_kwargs = {}
+        feature_extractor_kwargs = {"sampling_rate": sampling_rate}
 
-        feature_extractor_kwargs = {
-            k[len("feature_extractor_") :]: v for k, v in kwargs.items() if k.startswith("feature_extractor_")
-        }
-
-        # remove tokenizer kwargs and feature_extractor kwargs from kwargs
-        for key in tokenizer_kwargs.keys():
-            del kwargs["tokenizer_" + key]
-        for key in feature_extractor_kwargs.keys():
-            del kwargs["feature_extractor_" + key]
-
-        # collect all tokenizer kwargs and feature_extractor kwargs
-        tokenizer_kwargs = {**kwargs, **tokenizer_kwargs}
-        feature_extractor_kwargs = {"sampling_rate": sampling_rate, **kwargs, **feature_extractor_kwargs}
+        for key, value in kwargs.items():
+            if key.startswith("tokenizer_"):
+                key = key[len("tokenizer_") :]
+                tokenizer_kwargs[key] = value
+            elif key.startswith("feature_extractor_"):
+                key = key[len("feature_extractor_") :]
+                feature_extractor_kwargs[key] = value
+            else:
+                # If the key is already in a specific config, then it's been set with a
+                # submodules specific value and we don't override
+                if key not in tokenizer_kwargs:
+                    tokenizer_kwargs[key] = value
+                if key not in feature_extractor_kwargs:
+                    feature_extractor_kwargs[key] = value
 
         if text is not None:
             encoding = self.tokenizer(text, return_tensors=return_tensors, **tokenizer_kwargs)
