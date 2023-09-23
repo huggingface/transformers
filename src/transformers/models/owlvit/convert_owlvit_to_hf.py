@@ -1,0 +1,260 @@
+# coding=utf-8
+# Copyright 2023 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Convert OWL-ViT checkpoints from the original repository.
+
+URL: https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit"""
+
+import argparse
+import collections
+import os
+
+import jax
+import jax.numpy as jnp
+from flax.training import checkpoints
+
+import requests
+import torch
+from huggingface_hub import hf_hub_download
+from PIL import Image
+
+from transformers import OwlViTConfig, OwlViTForObjectDetection, OwlViTProcessor
+from transformers.utils import logging
+
+
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
+
+
+def get_owlvit_config(model_name):
+    config = OwlViTConfig()
+
+    if "patch16" in model_name:
+        config.vision_config.patch_size = 16
+        config.vision_config.image_size = 768
+
+    return config
+
+
+def flatten_nested_dict(params, parent_key="", sep="/"):
+    items = []
+
+    for k, v in params.items():
+        new_key = parent_key + sep + k if parent_key else k
+
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten_nested_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+# here we list all keys to be renamed (original name on the left, our name on the right)
+def create_rename_keys(config):
+    rename_keys = []
+
+    # fmt: off
+    # CLIP vision encoder
+    rename_keys.append(("backbone/clip/visual/class_embedding", "owlvit.vision_model.embeddings.class_embedding"))
+    rename_keys.append(("backbone/clip/visual/conv1/kernel", "owlvit.vision_model.embeddings.patch_embedding.weight"))
+    rename_keys.append(("backbone/clip/visual/positional_embedding", "owlvit.vision_model.embeddings.position_embedding.weight"))
+    rename_keys.append(("backbone/clip/visual/ln_pre/scale", "owlvit.vision_model.pre_layernorm.weight"))
+    rename_keys.append(("backbone/clip/visual/ln_pre/bias", "owlvit.vision_model.pre_layernorm.bias"))
+
+    for i in range(config.vision_config.num_hidden_layers):
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_fc/kernel", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc1.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_fc/bias", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc1.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_proj/kernel", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc2.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_proj/bias", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc2.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/query/kernel", f"owlvit.vision_model.encoder.layers.{i}.self_attn.q_proj.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/query/bias", f"owlvit.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/key/kernel", f"owlvit.vision_model.encoder.layers.{i}.self_attn.k_proj.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/key/bias", f"owlvit.vision_model.encoder.layers.{i}.self_attn.k_proj.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/value/kernel", f"owlvit.vision_model.encoder.layers.{i}.self_attn.v_proj.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/value/bias", f"owlvit.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/out/kernel", f"owlvit.vision_model.encoder.layers.{i}.self_attn.out_proj.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/out/bias", f"owlvit.vision_model.encoder.layers.{i}.self_attn.out_proj.bias"))
+
+    rename_keys.append((f"backbone/clip/visual/ln_post/scale", f"owlvit.vision_model.post_layernorm.weight"))
+    rename_keys.append((f"backbone/clip/visual/ln_post/bias", f"owlvit.vision_model.post_layernorm.bias"))
+
+    # CLIP text encoder
+    rename_keys.append(("backbone/clip/text/token_embedding/embedding", "owlvit.text_model.embeddings.token_embedding.weight"))
+    rename_keys.append(("backbone/clip/text/positional_embedding", "owlvit.text_model.embeddings.position_embedding.weight"))
+
+    for i in range(config.text_config.num_hidden_layers):
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_fc/kernel", f"owlvit.text_model.encoder.layers.{i}.mlp.fc1.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_fc/bias", f"owlvit.text_model.encoder.layers.{i}.mlp.fc1.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_proj/kernel", f"owlvit.text_model.encoder.layers.{i}.mlp.fc2.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_proj/bias", f"owlvit.text_model.encoder.layers.{i}.mlp.fc2.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/query/kernel", f"owlvit.text_model.encoder.layers.{i}.self_attn.q_proj.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/query/bias", f"owlvit.text_model.encoder.layers.{i}.self_attn.q_proj.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/key/kernel", f"owlvit.text_model.encoder.layers.{i}.self_attn.k_proj.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/key/bias", f"owlvit.text_model.encoder.layers.{i}.self_attn.k_proj.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/value/kernel", f"owlvit.text_model.encoder.layers.{i}.self_attn.v_proj.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/value/bias", f"owlvit.text_model.encoder.layers.{i}.self_attn.v_proj.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/out/kernel", f"owlvit.text_model.encoder.layers.{i}.self_attn.out_proj.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/out/bias", f"owlvit.text_model.encoder.layers.{i}.self_attn.out_proj.bias"))
+
+    rename_keys.append(("backbone/clip/text/ln_final/scale", "owlvit.text_model.final_layer_norm.weight"))
+    rename_keys.append(("backbone/clip/text/ln_final/bias", "owlvit.text_model.final_layer_norm.bias"))
+
+    # logit scale
+    rename_keys.append(("backbone/clip/logit_scale", "owlvit.logit_scale"))
+
+    # projection heads
+    # rename_keys.append(("", "owlvit.visual_projection.weight"))
+    rename_keys.append(("backbone/clip/text/text_projection/kernel", "owlvit.text_projection.weight"))
+
+    # class and box heads
+    rename_keys.append(("backbone/merged_class_token/scale", "layer_norm.weight"))
+    rename_keys.append(("backbone/merged_class_token/bias", "layer_norm.bias"))
+    rename_keys.append(("class_head/Dense_0/kernel", "class_head.dense0.weight"))
+    rename_keys.append(("class_head/Dense_0/bias", "class_head.dense0.bias"))
+    rename_keys.append(("class_head/logit_shift/kernel", "class_head.logit_shift.weight"))
+    rename_keys.append(("class_head/logit_scale/kernel", "class_head.logit_scale.weight"))
+    rename_keys.append(("class_head/logit_scale/bias", "class_head.logit_scale.bias"))
+    rename_keys.append(("class_head/logit_shift/bias", "class_head.logit_shift.bias"))
+    rename_keys.append(("obj_box_head/Dense_0/kernel", "box_head.dense0.weight"))
+    rename_keys.append(("obj_box_head/Dense_0/bias", "box_head.dense0.bias"))
+    rename_keys.append(("obj_box_head/Dense_1/kernel", "box_head.dense1.weight"))
+    rename_keys.append(("obj_box_head/Dense_1/bias", "box_head.dense1.bias"))
+    rename_keys.append(("obj_box_head/Dense_2/kernel", "box_head.dense2.weight"))
+    rename_keys.append(("obj_box_head/Dense_2/bias", "box_head.dense2.bias"))
+
+    # fmt: on
+
+    return rename_keys
+
+
+def rename_and_reshape_key(dct, old, new, config):
+    val = dct.pop(old)
+
+    if ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "vision" in new:
+        # TODO check whether we need to reshape and transpose for these parameters
+        val = val.reshape(-1, config.vision_config.hidden_size)
+
+    if ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "text" in new:
+        # TODO check whether we need to reshape and transpose for these parameters
+        val = val.reshape(-1, config.text_config.hidden_size)
+
+    if new.endswith("weight") and "position_embedding" not in new and "token_embedding" not in new:
+        val = val.T
+
+    if new.endswith("bias"):
+        val = val.reshape(-1)
+
+    dct[new] = torch.from_numpy(val)
+
+
+# We will verify our results on an image of cute cats
+def prepare_img():
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    im = Image.open(requests.get(url, stream=True).raw)
+    return im
+
+
+@torch.no_grad()
+def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, save_model, push_to_hub):
+    """
+    Copy/paste/tweak model's weights to our OWL-ViT structure.
+    """
+    config = get_owlvit_config(model_name)
+    
+    # Load original state dict based on model name
+    model_name_to_checkpoint_path = {
+        "owlvit-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/clip_vit_b16_6171dab",
+    }
+    checkpoint_path = model_name_to_checkpoint_path[model_name]
+    variables = checkpoints.restore_checkpoint(checkpoint_path, target=None)["optimizer"]["target"]
+    flax_params = jax.tree_util.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
+    state_dict = flatten_nested_dict(flax_params)
+
+    for name, param in state_dict.items():
+        print(name, param.shape)
+
+    # Rename keys
+    rename_keys = create_rename_keys(config)
+    for src, dest in rename_keys:
+        rename_and_reshape_key(state_dict, src, dest, config)
+
+    # load HuggingFace model
+    model = OwlViTForObjectDetection(config)
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    for name, param in model.named_parameters():
+        print(name, param.shape)
+
+    # # TODO Check outputs on an image, prepared by the processor
+    # processor = OwlViTProcessor()
+    # inputs = processor(images=prepare_img(), return_tensors="pt")
+    # logits = model(**inputs).logits
+
+    # # note: the logits below were obtained without center cropping
+    # if checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/owlvit/im1k/owlvit_atto_1k_224_ema.pt":
+    #     expected_logits = torch.tensor([-0.3930, 0.1747, -0.5246, 0.4177, 0.4295])
+    # else:
+    #     raise ValueError(f"Unknown URL: {checkpoint_url}")
+
+    # assert torch.allclose(logits[0, :5], expected_logits, atol=1e-3)
+    # assert logits.shape == expected_shape
+    # print("Model outputs match the original results!")
+
+    if save_model:
+        print("Saving model to local...")
+        # Create folder to save model
+        if not os.path.isdir(pytorch_dump_folder_path):
+            os.mkdir(pytorch_dump_folder_path)
+
+        model.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        print(f"Pushing {model_name} to the hub...")
+        model.push_to_hub(model_name)
+        processor.push_to_hub(model_name)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # Required parameters
+    parser.add_argument(
+        "--model_name",
+        default="owlvit-base-patch16",
+        choices=["owlvit-base-patch16"],
+        type=str,
+        help="Name of the OWL-ViT model you'd like to convert from FLAX to PyTorch.",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default="model",
+        type=str,
+        help="Path to the output PyTorch model directory.",
+    )
+    parser.add_argument("--save_model", action="store_true", help="Save model to local")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
+
+    args = parser.parse_args()
+    convert_owlvit_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub
+    )
