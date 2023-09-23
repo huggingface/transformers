@@ -16,6 +16,7 @@ if is_torch_available():
         SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
         SuperPointModel,
         SuperPointModelForInterestPointDescription,
+        AutoModelForInterestPointDescription,
     )
 
 if is_vision_available():
@@ -209,10 +210,7 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         return AutoImageProcessor.from_pretrained("stevenbucaille/superpoint") if is_vision_available() else None
 
-    @slow
-    def test_inference(self):
-        model = SuperPointModel.from_pretrained("stevenbucaille/superpoint").to(torch_device)
-
+    def infer_on_model(self, model):
         preprocessor = self.default_image_processor
         image = prepare_img()
         inputs = preprocessor(images=image, return_tensors="pt").to(torch_device)
@@ -237,3 +235,13 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.keypoints[:3], expected_keypoints_values, atol=1e-4))
         self.assertTrue(torch.allclose(outputs.scores[:9], expected_scores_values, atol=1e-4))
         self.assertTrue(torch.allclose(outputs.descriptors[0, 0], expected_descriptors_value, atol=1e-4))
+
+    @slow
+    def test_inference(self):
+        model = SuperPointModel.from_pretrained("stevenbucaille/superpoint").to(torch_device)
+        self.infer_on_model(model)
+
+    @slow
+    def test_auto_model_class(self):
+        model = AutoModelForInterestPointDescription.from_pretrained("stevenbucaille/superpoint").to(torch_device)
+        self.infer_on_model(model)
