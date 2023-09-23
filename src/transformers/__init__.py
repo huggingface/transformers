@@ -128,6 +128,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.aug_vit": ["AUG_VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AugViTConfig", "AugViTTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -815,6 +816,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.aug_vit"].append("AugViTTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -3206,6 +3208,21 @@ else:
         "shape_list",
     ]
     # TensorFlow models structure
+
+    _import_structure["models.aug_vit"].extend(
+        [
+            "TF_AUG_VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFAugViTForMaskedLM",
+            "TFAugViTForCausalLM",
+            "TFAugViTForMultipleChoice",
+            "TFAugViTForQuestionAnswering",
+            "TFAugViTForSequenceClassification",
+            "TFAugViTForTokenClassification",
+            "TFAugViTLayer",
+            "TFAugViTModel",
+            "TFAugViTPreTrainedModel",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4261,6 +4278,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.aug_vit import AUG_VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, AugViTConfig, AugViTTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -4902,6 +4920,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.aug_vit import AugViTTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -6865,6 +6884,19 @@ if TYPE_CHECKING:
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
 
         # TensorFlow model imports
+
+        from .models.aug_vit import (
+            TF_AUG_VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFAugViTForMaskedLM,
+            TFAugViTForCausalLM,
+            TFAugViTForMultipleChoice,
+            TFAugViTForQuestionAnswering,
+            TFAugViTForSequenceClassification,
+            TFAugViTForTokenClassification,
+            TFAugViTLayer,
+            TFAugViTModel,
+            TFAugViTPreTrainedModel,
+        )
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFAlbertForMaskedLM,

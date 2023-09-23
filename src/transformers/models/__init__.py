@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    aug_vit,
     albert,
     align,
     altclip,
