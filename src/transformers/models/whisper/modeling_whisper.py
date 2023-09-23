@@ -61,7 +61,7 @@ def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> torch
     log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
     inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
     scaled_time = torch.arange(length).view(-1, 1) * inv_timescales.view(1, -1)
-    return torch.cat([scaled_time.sin(), scaled_time.cos()], dim=1)
+    return torch.concatenate([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
