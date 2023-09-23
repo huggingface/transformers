@@ -22,7 +22,6 @@ from ...utils import (
     is_torch_available,
 )
 
-
 _import_structure = {
     "auto_factory": ["get_values"],
     "configuration_auto": ["ALL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"],
@@ -116,6 +115,7 @@ else:
         "AutoModelWithLMHead",
         "AutoModelForZeroShotImageClassification",
         "AutoModelForZeroShotObjectDetection",
+        "AutoModelForInterestPointDescription",
     ]
 
 try:
