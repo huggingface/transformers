@@ -95,7 +95,8 @@ class GPTNeoXModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            # input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
 
         token_labels = None
         if self.use_labels:

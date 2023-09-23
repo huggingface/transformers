@@ -92,10 +92,10 @@ class FlaxGPTNeoXModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
+            
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).numpy()
+            input_mask = np.tril(np.ones((self.batch_size, self.seq_length)))
 
         config = GPTNeoXConfig(
             vocab_size=self.vocab_size,
