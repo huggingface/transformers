@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Flax whisper model."""
 
+import math
 import random
 from functools import partial
 from typing import Optional, Tuple
@@ -56,6 +57,15 @@ _CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
 _CONFIG_FOR_DOC = "WhisperConfig"
 
 remat = nn_partitioning.remat
+
+
+def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> jnp.ndarray:
+    """Returns sinusoids for positional embedding"""
+    assert channels % 2 == 0
+    log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
+    inv_timescales = jnp.exp(-log_timescale_increment * jnp.arange(channels // 2))
+    scaled_time = jnp.arange(length).view(-1, 1) * inv_timescales.view(1, -1)
+    return jnp.concatenate([jnp.sin(scaled_time), jnp.cos(scaled_time)], dim=1)
 
 
 WHISPER_START_DOCSTRING = r"""
@@ -649,7 +659,13 @@ class FlaxWhisperEncoder(nn.Module):
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
         )
-        self.embed_positions = nn.Embed(self.config.max_source_positions, self.config.d_model, dtype=self.dtype)
+
+        def embedding_init(key, shape, dtype):
+            return sinusoids(*shape)
+
+        self.embed_positions = nn.Embed(
+            self.config.max_source_positions, self.config.d_model, dtype=self.dtype, embedding_init=embedding_init
+        )
 
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
