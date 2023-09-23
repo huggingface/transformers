@@ -127,16 +127,25 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
 
 
 class TFWhisperPositionalEmbedding(tf.keras.layers.Layer):
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None, **kwargs):
+    def __init__(
+        self,
+        num_positions: int,
+        embedding_dim: int,
+        padding_idx: Optional[int] = None,
+        embedding_initializer=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
+        self.embedding_initializer = tf.keras.initializers.get(embedding_initializer)
 
     def build(self, input_shape):
         self.weight = self.add_weight(
             name="weight",
             shape=[self.num_positions, self.embedding_dim],
+            initializer=self.embedding_initializer,
             trainable=True,
         )
         super().build(input_shape)
@@ -629,16 +638,13 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
         self.conv1 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=1, padding="valid", name="conv1")
         self.conv2 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=2, padding="valid", name="conv2")
 
-        # self.embed_positions = TFWhisperPositionalEmbedding(
-        #     self.max_source_positions, self.embed_dim, name="embed_positions"
-        # )
         def embedding_init(shape, dtype=None):
             return tf.convert_to_tensor(sinusoids(*shape), dtype=dtype)
 
-        self.embed_positions = tf.keras.layers.Embedding(
-            input_dim=self.max_source_positions,
-            output_dim=self.embed_dim,
-            embeddings_initializer=embedding_init,
+        self.embed_positions = TFWhisperPositionalEmbedding(
+            num_positions=self.max_source_positions,
+            embedding_dim=self.embed_dim,
+            embedding_initializer=embedding_init,
             name="embed_positions",
         )
         self.embed_positions.trainable = False
@@ -696,7 +702,7 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
         inputs_embeds = tf.keras.activations.gelu(self.conv2(inputs_embeds))
         inputs_embeds = tf.transpose(inputs_embeds, perm=(0, 1, 2))
 
-        embed_pos = self.embed_positions(tf.zeros((1, self.max_source_positions), dtype=tf.int32))
+        embed_pos = self.embed_positions(input_ids=tf.zeros((1, self.max_source_positions), dtype=tf.int32))
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.dropout(hidden_states, training=training)
