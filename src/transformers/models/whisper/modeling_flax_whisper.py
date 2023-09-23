@@ -22,6 +22,7 @@ from typing import Optional, Tuple
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
@@ -59,13 +60,14 @@ _CONFIG_FOR_DOC = "WhisperConfig"
 remat = nn_partitioning.remat
 
 
-def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> jnp.ndarray:
+# Copied from transformers.models.whisper.modeling_whisper.sinusoids
+def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> np.ndarray:
     """Returns sinusoids for positional embedding"""
     assert channels % 2 == 0
     log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
-    inv_timescales = jnp.exp(-log_timescale_increment * jnp.arange(channels // 2))
-    scaled_time = jnp.arange(length).view(-1, 1) * inv_timescales.view(1, -1)
-    return jnp.concatenate([jnp.sin(scaled_time), jnp.cos(scaled_time)], dim=1)
+    inv_timescales = np.exp(-log_timescale_increment * np.arange(channels // 2))
+    scaled_time = np.arange(length).reshape(-1, 1) * inv_timescales.reshape(1, -1)
+    return np.concatenate([np.sin(scaled_time), np.cos(scaled_time)], axis=1)
 
 
 WHISPER_START_DOCSTRING = r"""
@@ -660,8 +662,8 @@ class FlaxWhisperEncoder(nn.Module):
             gradient_checkpointing=self.gradient_checkpointing,
         )
 
-        def embedding_init(key, shape, dtype = jnp.float_):
-            return sinusoids(*shape).astype(dtype)
+        def embedding_init(key, shape, dtype=jnp.float_):
+            return jnp.asarray(sinusoids(*shape), dtype=dtype)
 
         self.embed_positions = nn.Embed(
             self.config.max_source_positions, self.config.d_model, dtype=self.dtype, embedding_init=embedding_init

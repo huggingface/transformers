@@ -55,13 +55,13 @@ WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> torch.Tensor:
+def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> np.ndarray:
     """Returns sinusoids for positional embedding"""
     assert channels % 2 == 0
     log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
-    inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
-    scaled_time = torch.arange(length).view(-1, 1) * inv_timescales.view(1, -1)
-    return torch.concatenate([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
+    inv_timescales = np.exp(-log_timescale_increment * np.arange(channels // 2))
+    scaled_time = np.arange(length).reshape(-1, 1) * inv_timescales.reshape(1, -1)
+    return np.concatenate([np.sin(scaled_time), np.cos(scaled_time)], axis=1)
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -677,7 +677,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
             if not module.weight.requires_grad:
                 # sinusoidal positional encodings used in WhisperEncoder
                 with torch.no_grad():
-                    module.weight.copy_(sinusoids(*module.weight.shape))
+                    module.weight.copy_(torch.from_numpy(sinusoids(*module.weight.shape)))
             else:
                 module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
