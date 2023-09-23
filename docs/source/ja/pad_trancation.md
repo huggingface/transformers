@@ -16,36 +16,28 @@ rendered properly in your Markdown viewer.
 
 # Padding and truncation
 
-Batched inputs are often different lengths, so they can't be converted to fixed-size tensors. Padding and truncation are strategies for dealing with this problem, to create rectangular tensors from batches of varying lengths. Padding adds a special **padding token** to ensure shorter sequences will have the same length as either the longest sequence in a batch or the maximum length accepted by the model. Truncation works in the other direction by truncating long sequences.
+バッチ入力はしばしば異なる長さであり、固定サイズのテンソルに変換できないため、変動する長さのバッチから長方形のテンソルを作成するための戦略として、パディングと切り詰めがあります。パディングは、短いシーケンスがバッチ内の最長シーケンスまたはモデルが受け入れる最大長と同じ長さになるように、特別な**パディングトークン**を追加します。切り詰めは、長いシーケンスを切り詰めることで逆方向に機能します。
 
-In most cases, padding your batch to the length of the longest sequence and truncating to the maximum length a model can accept works pretty well. However, the API supports more strategies if you need them. The three arguments you need to are: `padding`, `truncation` and `max_length`.
+ほとんどの場合、バッチを最長シーケンスの長さにパディングし、モデルが受け入れる最大長に切り詰めることで、うまく動作します。ただし、APIはそれ以上の戦略もサポートしています。必要な3つの引数は次のとおりです：`padding`、`truncation`、および `max_length`。
 
-The `padding` argument controls padding. It can be a boolean or a string:
+`padding`引数はパディングを制御します。ブール値または文字列であることができます：
 
-  - `True` or `'longest'`: pad to the longest sequence in the batch (no padding is applied if you only provide
-    a single sequence).
-  - `'max_length'`: pad to a length specified by the `max_length` argument or the maximum length accepted
-    by the model if no `max_length` is provided (`max_length=None`). Padding will still be applied if you only provide a single sequence.
-  - `False` or `'do_not_pad'`: no padding is applied. This is the default behavior.
+  - `True`または`'longest'`：バッチ内の最長シーケンスにパディングを追加します（シーケンスが1つしか提供されない場合、パディングは適用されません）。
+  - `max_length'`：`max_length`引数で指定された長さまでパディングを追加します。または`max_length`が提供されていない場合はモデルが受け入れる最大長（`max_length=None`）。シーケンスが1つしか提供されている場合でも、パディングは適用されます。
+  - `False`または`'do_not_pad'`：パディングは適用されません。これがデフォルトの動作です。
 
-The `truncation` argument controls truncation. It can be a boolean or a string:
+`truncation`引数は切り詰めを制御します。ブール値または文字列であることができます：
 
-  - `True` or `'longest_first'`: truncate to a maximum length specified by the `max_length` argument or
-    the maximum length accepted by the model if no `max_length` is provided (`max_length=None`). This will
-    truncate token by token, removing a token from the longest sequence in the pair until the proper length is
-    reached.
-  - `'only_second'`: truncate to a maximum length specified by the `max_length` argument or the maximum
-    length accepted by the model if no `max_length` is provided (`max_length=None`). This will only truncate
-    the second sentence of a pair if a pair of sequences (or a batch of pairs of sequences) is provided.
-  - `'only_first'`: truncate to a maximum length specified by the `max_length` argument or the maximum
-    length accepted by the model if no `max_length` is provided (`max_length=None`). This will only truncate
-    the first sentence of a pair if a pair of sequences (or a batch of pairs of sequences) is provided.
-  - `False` or `'do_not_truncate'`: no truncation is applied. This is the default behavior.
+  - `True`または`'longest_first'`：最大長を`max_length`引数で指定するか、モデルが受け入れる最大長（`max_length=None`）まで切り詰めます。これはトークンごとに切り詰め、適切な長さに達するまでペア内の最長シーケンスからトークンを削除します。
+  - `'only_second'`：最大長を`max_length`引数で指定するか、モデルが受け入れる最大長（`max_length=None`）まで切り詰めます。これはペアの2番目の文だけを切り詰めます（シーケンスのペアまたはシーケンスのバッチのペアが提供された場合）。
+  - `'only_first'`：最大長を`max_length`引数で指定するか、モデルが受け入れる最大長（`max_length=None`）まで切り詰めます。これはペアの最初の文だけを切り詰めます（シーケンスのペアまたはシーケンスのバッチのペアが提供された場合）。
+  - `False`または`'do_not_truncate'`：切り詰めは適用されません。これがデフォルトの動作です。
 
-The `max_length` argument controls the length of the padding and truncation. It can be an integer or `None`, in which case it will default to the maximum length the model can accept. If the model has no specific maximum input length, truncation or padding to `max_length` is deactivated.
+`max_length`引数はパディングと切り詰めの長さを制御します。整数または`None`であり、この場合、モデルが受け入れる最大入力長にデフォルトで設定されます。モデルに特定の最大入力長がない場合、`max_length`への切り詰めまたはパディングは無効になります。
 
-The following table summarizes the recommended way to setup padding and truncation. If you use pairs of input sequences in any of the following examples, you can replace `truncation=True` by a `STRATEGY` selected in
-`['only_first', 'only_second', 'longest_first']`, i.e. `truncation='only_second'` or `truncation='longest_first'` to control how both sequences in the pair are truncated as detailed before.
+以下の表は、パディングと切り詰めを設定する推奨方法を要約しています。以下の例のいずれかで入力シーケンスのペアを使用する場合、`truncation=True`を`['only_first', 'only_second', 'longest_first']`で選択した`STRATEGY`に置き換えることができます。つまり、`truncation='only_second'`または`truncation='longest_first'`を使用して、ペア内の両方のシーケンスを前述のように切り詰める方法を制御できます。
+
+
 
 | Truncation                           | Padding                           | Instruction                                                                                 |
 |--------------------------------------|-----------------------------------|---------------------------------------------------------------------------------------------|
