@@ -433,7 +433,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
         descriptors = self.descriptor_decoder(last_hidden_state, keypoints)
 
         if not return_dict:
-            return (keypoints, scores, descriptors) + encoder_outputs[1:]
+            return (keypoints, scores, descriptors, last_hidden_state) + encoder_outputs[1:]
 
         return ImagePointDescriptionOutput(
             keypoints=keypoints,
