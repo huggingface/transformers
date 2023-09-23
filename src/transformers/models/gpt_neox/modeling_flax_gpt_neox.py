@@ -118,20 +118,47 @@ def create_sinusoidal_positions(num_pos, dim):
 
     return jnp.array(out)
 
+def rotate_halfNP(x):
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return jnp.concatenate((-x2, x1), axis=-1)
 
-# Copied from transformers.models.gptj.modeling_flax_gptj.rotate_every_two
-def rotate_every_two(tensor):
-    rotate_half_tensor = jnp.stack((-tensor[:, :, :, 1::2], tensor[:, :, :, ::2]), axis=-1)
-    rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
-    return rotate_half_tensor
+# positional embedding
+class RotaryEmbeddingNP(nn.Module):
+    dim: int
+    max_seq_len_cached: int
+    base: int = 10000
+
+    def setup(self):
+        self.inv_freq = 1.0 / (
+            self.base ** (jnp.arange(0, self.dim, 2).astype(jnp.float32) / self.dim)
+        )  # dim
+
+    def __call__(self, x=None, seq_len=None):
+        t = jnp.arange(self.max_seq_len_cached, dtype=self.inv_freq.dtype)
+        freqs = jnp.outer(t, self.inv_freq)
+        emb = jnp.concatenate((freqs, freqs), axis=-1)
+        cos_cached = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
+        sin_cached = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
+        return cos_cached[:seq_len, ...], sin_cached[:seq_len, ...]
 
 
-# Copied from transformers.models.gptj.modeling_flax_gptj.apply_rotary_pos_emb
-def apply_rotary_pos_emb(tensor, sincos):
-    sin_pos, cos_pos = sincos
-    sin_pos = sin_pos[:, :, None, :].repeat(2, 3)
-    cos_pos = cos_pos[:, :, None, :].repeat(2, 3)
-    return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
+# q,k are of shape [bs, n_heads, seq_len, head_dim]
+# cos, sin are of shape #[1, 1, seq_len, dim]
+# position_ids is of shape [bs, seq_len]
+def apply_rotary_pos_embNP(q, k, cos, sin, position_ids):
+    gather_indices = position_ids[:, :, None, None]  # [bs, seq_len, 1, 1]
+    gather_indices = jnp.repeat(gather_indices, cos.shape[1], axis=1)
+    gather_indices = jnp.repeat(gather_indices, cos.shape[3], axis=3)
+    cos = jnp.take_along_axis(
+        cos.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=2
+    )
+    sin = jnp.take_along_axis(
+        sin.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=2
+    )
+    q_embed = (q * cos) + (rotate_halfNP(q) * sin)
+    k_embed = (k * cos) + (rotate_halfNP(k) * sin)
+    return q_embed, k_embed
 
 
 class FlaxGPTNeoXAttention(nn.Module):
@@ -158,6 +185,12 @@ class FlaxGPTNeoXAttention(nn.Module):
         )
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
+
+        self.rotary_emb = RotaryEmbeddingNP(
+            dim=self.rotary_ndims,
+            max_seq_len_cached=config.max_position_embeddings,
+            base=config.rotary_emb_base,
+        )
 
     # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
     @nn.compact
@@ -207,28 +240,28 @@ class FlaxGPTNeoXAttention(nn.Module):
         qkv = self.query_key_value(hidden_states)
         batch, seq_len, _ = qkv.shape
 
-        qkv = qkv.reshape([batch, seq_len, self.num_attention_heads, 3, self.head_size])
+        new_qkv_shape = qkv.shape[:-1] + (self.num_attention_heads, 3 * self.head_size)
+        qkv = qkv.reshape(*new_qkv_shape)
 
-        qkv = jnp.moveaxis(qkv, source=-2, destination=0)
-        query, key, value = qkv
+        # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
+        query = qkv[..., : self.head_size]# .permute(0, 2, 1, 3)
+        key = qkv[..., self.head_size : 2 * self.head_size]# .permute(0, 2, 1, 3)
+        value = qkv[..., 2 * self.head_size :]#.permute(0, 2, 1, 3)
 
-        sincos = jnp.take(self.embed_positions, position_ids, axis=0)
-        sincos = jnp.split(sincos, 2, axis=-1)
         if self.rotary_ndims is not None:
-            k_rot = key[:, :, :, : self.rotary_ndims]
-            k_pass = key[:, :, :, self.rotary_ndims :]
+            k_rot = key[..., : self.rotary_ndims]
+            k_pass = key[..., self.rotary_ndims :]
 
-            q_rot = query[:, :, :, : self.rotary_ndims]
-            q_pass = query[:, :, :, self.rotary_ndims :]
+            q_rot = query[..., : self.rotary_ndims]
+            q_pass = query[..., self.rotary_ndims :]
 
-            k_rot = apply_rotary_pos_emb(k_rot, sincos)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos)
+            cos, sin = self.rotary_emb(value, seq_len=seq_len)
+            q_rot, k_rot = apply_rotary_pos_embNP(q_rot, k_rot, cos, sin, position_ids)
 
             key = jnp.concatenate([k_rot, k_pass], axis=-1)
             query = jnp.concatenate([q_rot, q_pass], axis=-1)
         else:
-            key = apply_rotary_pos_emb(key, sincos)
-            query = apply_rotary_pos_emb(query, sincos)
+            query, key = apply_rotary_pos_embNP(query, key, cos, sin, position_ids)
 
         query_length, key_length = query.shape[1], key.shape[1]
 
@@ -261,6 +294,7 @@ class FlaxGPTNeoXAttention(nn.Module):
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
             jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
         )
+        
         attn_weights = dot_product_attention_weights(
             query,
             key,
@@ -271,7 +305,6 @@ class FlaxGPTNeoXAttention(nn.Module):
             dtype=jnp.promote_types(self.dtype, jnp.float32),
             precision=None,
         )
-
         attn_output = jnp.einsum("bhqk,bkhd->bqhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.dense(attn_output)
