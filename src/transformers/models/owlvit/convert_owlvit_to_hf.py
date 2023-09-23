@@ -22,14 +22,11 @@ import os
 
 import jax
 import jax.numpy as jnp
-from flax.training import checkpoints
-
-import requests
 import torch
+from flax.training import checkpoints
 from huggingface_hub import hf_hub_download
-from PIL import Image
 
-from transformers import OwlViTConfig, OwlViTForObjectDetection, OwlViTProcessor
+from transformers import OwlViTConfig, OwlViTForObjectDetection
 from transformers.utils import logging
 
 
@@ -90,8 +87,8 @@ def create_rename_keys(config):
         rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/out/kernel", f"owlvit.vision_model.encoder.layers.{i}.self_attn.out_proj.weight"))
         rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/out/bias", f"owlvit.vision_model.encoder.layers.{i}.self_attn.out_proj.bias"))
 
-    rename_keys.append((f"backbone/clip/visual/ln_post/scale", f"owlvit.vision_model.post_layernorm.weight"))
-    rename_keys.append((f"backbone/clip/visual/ln_post/bias", f"owlvit.vision_model.post_layernorm.bias"))
+    rename_keys.append(("backbone/clip/visual/ln_post/scale", "owlvit.vision_model.post_layernorm.weight"))
+    rename_keys.append(("backbone/clip/visual/ln_post/bias", "owlvit.vision_model.post_layernorm.bias"))
 
     # CLIP text encoder
     rename_keys.append(("backbone/clip/text/token_embedding/embedding", "owlvit.text_model.embeddings.token_embedding.weight"))
@@ -152,12 +149,12 @@ def rename_and_reshape_key(dct, old, new, config):
     if ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "vision" in new:
         # TODO check whether we need to reshape and transpose for these parameters
         val = val.reshape(-1, config.vision_config.hidden_size)
-
-    if ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "text" in new:
+    elif ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "text" in new:
         # TODO check whether we need to reshape and transpose for these parameters
         val = val.reshape(-1, config.text_config.hidden_size)
-
-    if new.endswith("weight") and "position_embedding" not in new and "token_embedding" not in new:
+    elif "patch_embedding" in new:
+        val = val.transpose(3, 2, 0, 1)
+    elif new.endswith("weight") and "position_embedding" not in new and "token_embedding" not in new:
         val = val.T
 
     if new.endswith("bias"):
@@ -166,20 +163,13 @@ def rename_and_reshape_key(dct, old, new, config):
     dct[new] = torch.from_numpy(val)
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
-
-
 @torch.no_grad()
 def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, save_model, push_to_hub):
     """
     Copy/paste/tweak model's weights to our OWL-ViT structure.
     """
     config = get_owlvit_config(model_name)
-    
+
     # Load original state dict based on model name
     model_name_to_checkpoint_path = {
         "owlvit-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/clip_vit_b16_6171dab",
@@ -189,8 +179,8 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, save_model, 
     flax_params = jax.tree_util.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
     state_dict = flatten_nested_dict(flax_params)
 
-    for name, param in state_dict.items():
-        print(name, param.shape)
+    # for name, param in state_dict.items():
+    #     print(name, param.shape)
 
     # Rename keys
     rename_keys = create_rename_keys(config)
@@ -199,16 +189,25 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, save_model, 
 
     # load HuggingFace model
     model = OwlViTForObjectDetection(config)
-    model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
     model.eval()
 
-    for name, param in model.named_parameters():
-        print(name, param.shape)
+    # for name, param in model.named_parameters():
+    #     print(name, param.shape)
 
     # # TODO Check outputs on an image, prepared by the processor
     # processor = OwlViTProcessor()
     # inputs = processor(images=prepare_img(), return_tensors="pt")
-    # logits = model(**inputs).logits
+
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlvit_pixel_values.pt", repo_type="dataset")
+    pixel_values = torch.load(filepath).permute(0, 3, 1, 2)
+    print("Shape of pixel values:", pixel_values.shape)
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlvit_input_ids.pt", repo_type="dataset")
+    input_ids = torch.load(filepath)
+    print("Shape of input ids:", input_ids.shape)
+    model(input_ids=input_ids, pixel_values=pixel_values).logits
 
     # # note: the logits below were obtained without center cropping
     # if checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/owlvit/im1k/owlvit_atto_1k_224_ema.pt":
@@ -255,6 +254,4 @@ if __name__ == "__main__":
     parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
 
     args = parser.parse_args()
-    convert_owlvit_checkpoint(
-        args.model_name, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub
-    )
+    convert_owlvit_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)

@@ -311,8 +311,11 @@ class OwlViTVisionEmbeddings(nn.Module):
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
+        print("First values of patch embeddings:", patch_embeds[0, :3, :3])
+
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+        print("First values of patch embeddings after adding CLS token:", embeddings[0, :3, :3])
         embeddings = embeddings + self.position_embedding(self.position_ids)
 
         return embeddings
@@ -856,6 +859,8 @@ class OwlViTTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
+        print("Shape of text last hidden states: ", last_hidden_state.shape)
+
         # take features from the end of tokens embedding (end of token is the highest number in each sequence)
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
         pooled_output = last_hidden_state[
@@ -958,7 +963,11 @@ class OwlViTVisionTransformer(nn.Module):
         expected_input_dtype = self.embeddings.patch_embedding.weight.dtype
         pixel_values = pixel_values.to(expected_input_dtype)
 
+        print("First values of pixel values:", pixel_values[0, 0, :3, :3])
+
         hidden_states = self.embeddings(pixel_values)
+        print("Shape of final patch embeddings:", hidden_states.shape)
+        print("First values of final patch embeddings:", hidden_states[0, :3, :3])
         hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -970,8 +979,10 @@ class OwlViTVisionTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
-
         pooled_output = self.post_layernorm(pooled_output)
+
+        print("Shape of vision features after final layernorm:", last_hidden_state.shape)
+        print("First values of vision features after final layernorm:", last_hidden_state[0, :3, :3])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
