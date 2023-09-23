@@ -661,7 +661,7 @@ class FlaxWhisperEncoder(nn.Module):
         )
 
         def embedding_init(key, shape, dtype):
-            return sinusoids(*shape)
+            return sinusoids(*shape).astype(dtype)
 
         self.embed_positions = nn.Embed(
             self.config.max_source_positions, self.config.d_model, dtype=self.dtype, embedding_init=embedding_init
