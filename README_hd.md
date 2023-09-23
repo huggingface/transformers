@@ -43,7 +43,7 @@ checkpoint: जाँच बिंदु
     <br>
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo_name.png" width="400"/>
     <br>
-<p>
+</p>
 <p align="center">
     <a href="https://circleci.com/gh/huggingface/transformers">
         <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/main">
@@ -72,7 +72,7 @@ checkpoint: जाँच बिंदु
         <a href="https://github.com/huggingface/transformers/blob/main/README_es.md">Español</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a> |
         <b>हिन्दी</b> |
-    <p>
+    </p>
 </h4>
 
 <h3 align="center">

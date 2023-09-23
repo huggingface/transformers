@@ -710,6 +710,7 @@ src/transformers/models/pegasus_x/modeling_pegasus_x.py
 src/transformers/models/perceiver/configuration_perceiver.py
 src/transformers/models/perceiver/convert_perceiver_haiku_to_pytorch.py
 src/transformers/models/persimmon/convert_persimmon_weights_to_hf.py
+src/transformers/models/persimmon/modeling_persimmon.py
 src/transformers/models/pix2struct/configuration_pix2struct.py
 src/transformers/models/pix2struct/convert_pix2struct_original_pytorch_to_hf.py
 src/transformers/models/pix2struct/image_processing_pix2struct.py
