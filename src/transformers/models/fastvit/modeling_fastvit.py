@@ -784,7 +784,7 @@ class FastViTLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_attentions: torch.Tensor,
+        output_attentions: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         if self.pos_emb:
             hidden_states = self.pos_emb(hidden_states)
