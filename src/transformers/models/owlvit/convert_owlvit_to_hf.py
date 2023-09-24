@@ -35,17 +35,20 @@ logger = logging.get_logger(__name__)
 
 
 def get_owlvit_config(model_name):
+    add_objectness_head = False
+
     if "patch16" in model_name:
         patch_size = 16
         image_size = 768
 
     if "v2" in model_name:
         image_size = 960
+        add_objectness_head = True
 
     vision_config = OwlViTVisionConfig(patch_size=patch_size, image_size=image_size)
     text_config = OwlViTTextConfig()
 
-    return OwlViTConfig(text_config=text_config.to_dict(), vision_config=vision_config.to_dict())
+    return OwlViTConfig(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), add_objectness_head=add_objectness_head)
 
 
 def flatten_nested_dict(params, parent_key="", sep="/"):
@@ -135,7 +138,6 @@ def create_rename_keys(config, model_name):
     rename_keys.append(("backbone/clip/logit_scale", "owlvit.logit_scale"))
 
     # projection heads
-    # rename_keys.append(("", "owlvit.visual_projection.weight"))
     rename_keys.append(("backbone/clip/text/text_projection/kernel", "owlvit.text_projection.weight"))
 
     # class and box heads
@@ -177,6 +179,7 @@ def rename_and_reshape_key(dct, old, new, config):
         val = val.reshape(-1, config.text_config.hidden_size)
 
     if "patch_embedding" in new:
+        print("Reshaping patch embedding... for", new)
         val = val.transpose(3, 2, 0, 1)
     elif new.endswith("weight") and "position_embedding" not in new and "token_embedding" not in new:
         val = val.T
@@ -229,7 +232,8 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
     # processor = OwlViTProcessor()
     # inputs = processor(images=prepare_img(), return_tensors="pt")
 
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlvit_pixel_values.pt", repo_type="dataset")
+    filename = "owlvit_pixel_values_960.pt" if "v2" in model_name else "owlvit_pixel_values.pt"
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
     pixel_values = torch.load(filepath).permute(0, 3, 1, 2)
     print("Shape of pixel values:", pixel_values.shape)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlvit_input_ids.pt", repo_type="dataset")
