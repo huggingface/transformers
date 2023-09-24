@@ -132,14 +132,18 @@ def create_sinusoidal_positions(num_pos, dim):
 
     emb = np.concatenate((freqs, freqs), axis=-1)
     out = np.concatenate((np.sin(emb)[:, None, :], np.cos(emb)[:, None, :]), axis=-1)
-    return jnp.array(out[:, :, :num_pos])  # TODO: don't think slice is needed
+    return jnp.array(out[:, :, :num_pos])
 
 
 def rotate_half(tensor):
     """Rotates half the hidden dims of the input."""
-    rotate_half_tensor = jnp.concatenate((-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1)
+    rotate_half_tensor = jnp.concatenate(
+        (-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1
+    )
     """Rotates half the hidden dims of the input."""
-    rotate_half_tensor = jnp.concatenate((-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1)
+    rotate_half_tensor = jnp.concatenate(
+        (-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1
+    )
     return rotate_half_tensor
 
 

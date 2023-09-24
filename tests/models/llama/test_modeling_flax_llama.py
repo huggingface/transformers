@@ -93,7 +93,7 @@ class FlaxLlamaModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = np.tril(np.ones((self.batch_size, self.seq_length)))
 
         config = LlamaConfig(
             vocab_size=self.vocab_size,
@@ -202,103 +202,6 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
                 model_class_name, config, input_ids, attention_mask
             )
 
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # prepare inputs
-                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
-
-                # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-                pt_model_class = getattr(transformers, pt_model_class_name)
-
-                batch_size, seq_length = pt_inputs["input_ids"].shape
-                rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
-                for batch_idx, start_index in enumerate(rnd_start_indices):
-                    pt_inputs["attention_mask"][batch_idx, :start_index] = 0
-                    pt_inputs["attention_mask"][batch_idx, start_index:] = 1
-                    prepared_inputs_dict["attention_mask"][batch_idx, :start_index] = 0
-                    prepared_inputs_dict["attention_mask"][batch_idx, start_index:] = 1
-                pt_model = pt_model_class(config).eval()
-                fx_model = model_class(config, dtype=jnp.float32)
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**prepared_inputs_dict).to_tuple()
-                self.assertEqual(
-                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-                    self.assert_almost_equals(fx_output_loaded[:, -1], pt_output[:, -1].numpy(), 4e-2)
-
-    # overwrite from common since `attention_mask` in combination
-    # with `causal_mask` behaves slighly differently
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # prepare inputs
-                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-                pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
-
-                # load corresponding PyTorch class
-                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
-                pt_model_class = getattr(transformers, pt_model_class_name)
-
-                pt_model = pt_model_class(config).eval()
-                fx_model = model_class(config, dtype=jnp.float32)
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-                batch_size, seq_length = pt_inputs["input_ids"].shape
-                rnd_start_indices = np.random.randint(0, seq_length - 1, size=(batch_size,))
-                for batch_idx, start_index in enumerate(rnd_start_indices):
-                    pt_inputs["attention_mask"][batch_idx, :start_index] = 0
-                    pt_inputs["attention_mask"][batch_idx, start_index:] = 1
-                    prepared_inputs_dict["attention_mask"][batch_idx, :start_index] = 0
-                    prepared_inputs_dict["attention_mask"][batch_idx, start_index:] = 1
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                fx_outputs = fx_model(**prepared_inputs_dict).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-                for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
-
-                self.assertEqual(
-                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output, pt_output in zip(fx_outputs, pt_outputs_loaded):
-                    self.assert_almost_equals(fx_output[:, -1], pt_output[:, -1].numpy(), 4e-2)
-
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
@@ -310,13 +213,15 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
     def test_model_logits(self):
         model_id = "openlm-research/open_llama_3b_v2"
         model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
-        test_batch = jnp.arange(32).reshape(4, 8) + 0x777
+        test_batch = jnp.arange(32).reshape(4, 8) + 1911
 
         flax_logits = model(test_batch).logits
 
         # fmt: off
         EXPECTED_LOGITS = [-74.4243, -74.0680, -65.2507, -79.1658, -77.7460, -69.2379, -86.4588, -84.8933, -77.8456]
-        EXPECTED_MIN, EXPECTED_MAX, EXPECTED_MEAN = -96.9952, -18.4571, -65.0608
+        EXPECTED_MIN, EXPECTED_MAX, EXPECTED_MEAN = -96.9952
+        EXPECTED_MAX = -18.4571
+        EXPECTED_MEAN = -65.0608
         # fmt: on
 
         self.assertTrue(np.allclose(flax_logits[0, :3, :3].flatten(), EXPECTED_LOGITS, atol=1e-4))

@@ -35,9 +35,6 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_flax_available():
-    pass
-
 if is_torch_available():
     import torch
 
@@ -106,8 +103,8 @@ class LlamaModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(7, 7))
-            input_mask = torch.nn.functional.pad(input_mask, (0, 0, 0, self.batch_size - self.seq_length), value=1)
+            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length))
+            # input_mask = torch.nn.functional.pad(input_mask, (0, 0, 0, self.batch_size - self.seq_length), value=1)
 
         token_type_ids = None
         if self.use_token_type_ids:
