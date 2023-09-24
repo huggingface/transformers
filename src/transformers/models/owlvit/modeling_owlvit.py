@@ -491,7 +491,6 @@ class OwlViTEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-        print_values=False,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -512,19 +511,12 @@ class OwlViTEncoderLayer(nn.Module):
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
-
-        if print_values:
-            print("First values of attention output:", hidden_states[0, :3, :3])
-
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-
-        if print_values:
-            print("First values of encoder layer output:", hidden_states[0, :3, :3])
 
         outputs = (hidden_states,)
 
@@ -778,7 +770,6 @@ class OwlViTEncoder(nn.Module):
                     attention_mask,
                     causal_attention_mask,
                     output_attentions=output_attentions,
-                    print_values=i in [0, 11],
                 )
 
             hidden_states = layer_outputs[0]

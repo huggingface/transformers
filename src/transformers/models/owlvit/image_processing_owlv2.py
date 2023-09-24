@@ -15,13 +15,14 @@
 """Image processor class for OWLv2."""
 
 import warnings
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from scipy import ndimage as ndi
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
+    center_to_corners_format,
     pad,
     to_channel_dimension_format,
 )
@@ -38,7 +39,11 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 if is_vision_available():
@@ -58,7 +63,7 @@ def _preprocess_resize_output_shape(image, output_shape):
             Size of the generated output image `(rows, cols[, ...][, dim])`. If `dim` is not provided, the number of
             channels is preserved.
 
-    Returns 
+    Returns
         image (`np.ndarray):
             The input image, but with additional singleton dimensions appended in the case where ``len(output_shape) >
             input.ndim``.
@@ -409,3 +414,59 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_object_detection
+    def post_process_object_detection(
+        self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
+    ):
+        """
+        Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format.
+
+        Args:
+            outputs ([`OwlViTObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        # TODO: (amy) add support for other frameworks
+        logits, boxes = outputs.logits, outputs.pred_boxes
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+        probs = torch.max(logits, dim=-1)
+        scores = torch.sigmoid(probs.values)
+        labels = probs.indices
+
+        # Convert to [x0, y0, x1, y1] format
+        boxes = center_to_corners_format(boxes)
+
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            if isinstance(target_sizes, List):
+                img_h = torch.Tensor([i[0] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+            boxes = boxes * scale_fct[:, None, :]
+
+        results = []
+        for s, l, b in zip(scores, labels, boxes):
+            score = s[s > threshold]
+            label = l[s > threshold]
+            box = b[s > threshold]
+            results.append({"scores": score, "labels": label, "boxes": box})
+
+        return results

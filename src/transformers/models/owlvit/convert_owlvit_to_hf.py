@@ -29,9 +29,9 @@ from huggingface_hub import hf_hub_download
 
 from transformers import (
     CLIPTokenizer,
+    Owlv2ImageProcessor,
     OwlViTConfig,
     OwlViTForObjectDetection,
-    Owlv2ImageProcessor,
     OwlViTProcessor,
     OwlViTTextConfig,
     OwlViTVisionConfig,
