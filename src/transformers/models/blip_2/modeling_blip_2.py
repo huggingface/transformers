@@ -2401,18 +2401,23 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, Blip2ForImageTextRetrieval
 
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
         >>> model = Blip2ForImageTextRetrieval.from_pretrained("jpizarrom/blip2-itm-vit-g")
         >>> processor = AutoProcessor.from_pretrained("jpizarrom/blip2-itm-vit-g")
+
+        >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "an image of a cat"
 
-        >>> inputs = processor(images=image, text=text, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt").to(device)
         >>> outputs = model(**inputs)
         ```
         """
