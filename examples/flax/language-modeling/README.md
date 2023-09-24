@@ -51,7 +51,7 @@ from datasets import load_dataset
 from tokenizers import trainers, Tokenizer, normalizers, ByteLevelBPETokenizer
 
 # load dataset
-dataset = load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
+dataset = load_dataset("oscar", "unshuffled_deduplicated_vi", split="train")
 
 # Instantiate tokenizer
 tokenizer = ByteLevelBPETokenizer()
@@ -100,7 +100,7 @@ python run_mlm_flax.py \
     --config_name="./norwegian-roberta-base" \
     --tokenizer_name="./norwegian-roberta-base" \
     --dataset_name="oscar" \
-    --dataset_config_name="unshuffled_deduplicated_no" \
+    --dataset_config_name="unshuffled_deduplicated_vi" \
     --max_seq_length="128" \
     --weight_decay="0.01" \
     --per_device_train_batch_size="128" \
@@ -154,7 +154,7 @@ from datasets import load_dataset
 from tokenizers import trainers, Tokenizer, normalizers, ByteLevelBPETokenizer
 
 # load dataset
-dataset = load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
+dataset = load_dataset("oscar", "unshuffled_deduplicated_vi", split="train")
 
 # Instantiate tokenizer
 tokenizer = ByteLevelBPETokenizer()
@@ -203,7 +203,7 @@ python run_clm_flax.py \
     --config_name="./norwegian-gpt2" \
     --tokenizer_name="./norwegian-gpt2" \
     --dataset_name="oscar" \
-    --dataset_config_name="unshuffled_deduplicated_no" \
+    --dataset_config_name="unshuffled_deduplicated_vi" \
     --do_train --do_eval \
     --block_size="512" \
     --per_device_train_batch_size="64" \
@@ -266,7 +266,7 @@ vocab_size = 32_000
 input_sentence_size = None
 
 # Initialize a dataset
-dataset = datasets.load_dataset("oscar", name="unshuffled_deduplicated_no", split="train")
+dataset = datasets.load_dataset("oscar", name="unshuffled_deduplicated_vi", split="train")
 
 tokenizer = SentencePieceUnigramTokenizer(unk_token="<unk>", eos_token="</s>", pad_token="<pad>")
 
@@ -318,7 +318,7 @@ python run_t5_mlm_flax.py \
 	--config_name="./norwegian-t5-base" \
 	--tokenizer_name="./norwegian-t5-base" \
 	--dataset_name="oscar" \
-	--dataset_config_name="unshuffled_deduplicated_no" \
+	--dataset_config_name="unshuffled_deduplicated_vi" \
 	--max_seq_length="512" \
 	--per_device_train_batch_size="32" \
 	--per_device_eval_batch_size="32" \
@@ -365,7 +365,7 @@ from datasets import load_dataset
 from tokenizers import trainers, Tokenizer, normalizers, ByteLevelBPETokenizer
 
 # load dataset
-dataset = load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
+dataset = load_dataset("oscar", "unshuffled_deduplicated_vi", split="train")
 
 # Instantiate tokenizer
 tokenizer = ByteLevelBPETokenizer()
@@ -412,7 +412,7 @@ python run_bart_dlm_flax.py \
     --config_name="./norwegian-bart-base" \
     --tokenizer_name="./norwegian-bart-base" \
     --dataset_name="oscar" \
-    --dataset_config_name="unshuffled_deduplicated_no" \
+    --dataset_config_name="unshuffled_deduplicated_vi" \
     --max_seq_length="1024" \
     --per_device_train_batch_size="32" \
     --per_device_eval_batch_size="32" \
@@ -476,7 +476,7 @@ python3 xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
     --config_name="${MODEL_DIR}" \
     --tokenizer_name="${MODEL_DIR}" \
     --dataset_name="oscar" \
-    --dataset_config_name="unshuffled_deduplicated_no" \
+    --dataset_config_name="unshuffled_deduplicated_vi" \
     --max_seq_length="128" \
     --weight_decay="0.01" \
     --per_device_train_batch_size="128" \
@@ -523,7 +523,7 @@ python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
     --config_name="${MODEL_DIR}" \
     --tokenizer_name="${MODEL_DIR}" \
     --dataset_name="oscar" \
-    --dataset_config_name="unshuffled_deduplicated_no" \
+    --dataset_config_name="unshuffled_deduplicated_vi" \
     --max_seq_length="128" \
     --weight_decay="0.01" \
     --per_device_train_batch_size="32" \
