@@ -40,13 +40,11 @@ from ...file_utils import (
     requires_backends,
 )
 from ...modeling_outputs import (
-    BaseModelOutput, 
-    BaseModelOutputWithPoolingAndCrossAttentions, 
-    BaseModelOutputWithPastAndCrossAttentions
+    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...pytorch_utils import meshgrid
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import is_ninja_available, logging
 from ..auto import AutoBackbone
 from .configuration_grounding_dino import GroundingDINOConfig
@@ -135,7 +133,6 @@ GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 class GroundingDINODecoderOutput(ModelOutput):
     """
@@ -177,11 +174,11 @@ class GroundingDINODecoderOutput(ModelOutput):
     vision_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     text_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
+
 @dataclass
 class GroundingDINOEncoderOutput(ModelOutput):
     """
-    Base class for outputs of the GroundingDINOEncoder. This class extends
-    BaseModelOutput, due to:
+    Base class for outputs of the GroundingDINOEncoder. This class extends BaseModelOutput, due to:
     - vision and text last hidden states
     - vision and text intermediate hidden states
     - vision and text attentions
@@ -193,30 +190,31 @@ class GroundingDINOEncoderOutput(ModelOutput):
         last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the text encoder.
         hidden_states_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the output of each layer
-            plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+            layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
+            output of each layer plus the initial embedding outputs.
         hidden_states_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of each layer
-            plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
+            each layer plus the initial embedding outputs.
         attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the vision encoder, after the attention softmax, used to compute the weighted average in
-            the multi-scale deformable attention heads.
+            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the vision encoder, after the attention softmax,
+            used to compute the weighted average in the multi-scale deformable attention heads.
         attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the text encoder, after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the text encoder, after the attention softmax,
+            used to compute the weighted average in the self-attention heads.
         cross_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the attention softmax,
-            used to compute the weighted average in the bi-attention heads.
+            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the
+            attention softmax, used to compute the weighted average in the bi-attention heads.
         cross_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the text encoder's fusion layer, after the attention softmax,
-            used to compute the weighted average in the bi-attention heads.
+            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the text encoder's fusion layer, after the
+            attention softmax, used to compute the weighted average in the bi-attention heads.
     """
+
     last_hidden_state_vision: torch.FloatTensor = None
     last_hidden_state_text: torch.FloatTensor = None
     hidden_states_vision: Optional[Tuple[torch.FloatTensor]] = None
@@ -262,29 +260,29 @@ class GroundingDINOModelOutput(ModelOutput):
         encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the output of each
-            layer plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+            layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
+            output of each layer plus the initial embedding outputs.
         encoder_hidden_states_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of each
-            layer plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
+            each layer plus the initial embedding outputs.
         encoder_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the vision encoder, after the attention softmax, used to compute the weighted average in
-            the multi-scale deformable attention heads.
+            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the vision encoder, after the attention softmax,
+            used to compute the weighted average in the multi-scale deformable attention heads.
         encoder_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the text encoder, after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the text encoder, after the attention softmax,
+            used to compute the weighted average in the self-attention heads.
         encoder_cross_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the attention softmax,
-            used to compute the weighted average in the bi-attention heads.
+            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the
+            attention softmax, used to compute the weighted average in the bi-attention heads.
         encoder_cross_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the text encoder's fusion layer, after the attention softmax,
-            used to compute the weighted average in the bi-attention heads.
+            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the text encoder's fusion layer, after the
+            attention softmax, used to compute the weighted average in the bi-attention heads.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
             picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
@@ -359,29 +357,29 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
         encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the output of each
-            layer plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+            layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
+            output of each layer plus the initial embedding outputs.
         encoder_hidden_states_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of each
-            layer plus the initial embedding outputs.
+            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+            of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
+            each layer plus the initial embedding outputs.
         encoder_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the vision encoder, after the attention softmax, used to compute the weighted average in
-            the multi-scale deformable attention heads.
+            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the vision encoder, after the attention softmax,
+            used to compute the weighted average in the multi-scale deformable attention heads.
         encoder_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the text encoder, after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
+            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the text encoder, after the attention softmax,
+            used to compute the weighted average in the self-attention heads.
         encoder_cross_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the attention softmax,
-            used to compute the weighted average in the bi-attention heads.
+            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the
+            attention softmax, used to compute the weighted average in the bi-attention heads.
         encoder_cross_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the text encoder's fusion layer, after the attention softmax,
-            used to compute the weighted average in the bi-attention heads.
+            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights of the text encoder's fusion layer, after the
+            attention softmax, used to compute the weighted average in the bi-attention heads.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
             Stacked intermediate hidden states (output of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
@@ -618,8 +616,8 @@ class GroundingDINOSinePositionEmbedding(nn.Module):
         x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
             eps = 1e-6
-            y_embed = y_embed  / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed  / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
         dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
@@ -660,7 +658,9 @@ def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
         # TODO find a better way of exposing other arguments
-        position_embedding = GroundingDINOSinePositionEmbedding(n_steps, config.positional_embedding_temperature, normalize=True)
+        position_embedding = GroundingDINOSinePositionEmbedding(
+            n_steps, config.positional_embedding_temperature, normalize=True
+        )
     elif config.position_embedding_type == "learned":
         position_embedding = GroundingDINOLearnedPositionEmbedding(n_steps)
     else:
@@ -841,17 +841,19 @@ class GroundingDINOMultiscaleDeformableAttention(nn.Module):
 
         return output, attention_weights
 
-#TODO is this an approriate way to name this?
+
+# TODO is this an approriate way to name this?
 class GroundingDINOTextEnhancerLayer(nn.Module):
     """Vanilla Transformer with text embeddings as input"""
+
     def __init__(self, config):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(
-            embed_dim=config.d_model, 
-            num_heads=config.encoder_attention_heads // 2, 
+            embed_dim=config.d_model,
+            num_heads=config.encoder_attention_heads // 2,
             dropout=config.text_enhancer_dropout,
             batch_first=True,
-            )
+        )
         # Implementation of Feedforward model
         self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
         self.fc2 = nn.Linear(config.encoder_ffn_dim // 2, config.d_model)
@@ -871,18 +873,14 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         hidden_states: Tensor,
         attention_masks: Optional[Tensor] = None,
         position_embeddings: Optional[Tensor] = None,
-    ):    # repeat attn mask
+    ):  # repeat attn mask
         if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[0]:
             # bs, num_q, num_k
             attention_masks = attention_masks.repeat(self.num_heads, 1, 1)
 
         q = k = self.with_pos_embed(hidden_states, position_embeddings)
         attention_output, attention_weights = self.self_attn(
-            query=q, 
-            key=k, 
-            value=hidden_states, 
-            attn_mask=attention_masks,
-            average_attn_weights=False
+            query=q, key=k, value=hidden_states, attn_mask=attention_masks, average_attn_weights=False
         )
         attention_output = nn.functional.dropout(attention_output, p=self.dropout, training=self.training)
         hidden_states = hidden_states + attention_output
@@ -897,16 +895,10 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         hidden_states = self.layer_norm_after(hidden_states)
 
         return hidden_states, attention_weights
-    
+
+
 class GroundingDINOBiMultiHeadAttention(nn.Module):
-    def __init__(
-            self,
-            vision_dim: int,
-            text_dim: int,
-            embed_dim: int,
-            num_heads: int,
-            dropout:float = 0.1
-        ):
+    def __init__(self, vision_dim: int, text_dim: int, embed_dim: int, num_heads: int, dropout: float = 0.1):
         super().__init__()
 
         self.embed_dim = embed_dim
@@ -949,12 +941,12 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         self.out_text_proj.bias.data.fill_(0)
 
     def forward(
-            self, 
-            vision_features: Tensor, 
-            text_features: Tensor, 
-            vision_attention_mask: Optional[Tensor] = None, 
-            text_attention_mask: Optional[Tensor] = None
-        ):
+        self,
+        vision_features: Tensor,
+        text_features: Tensor,
+        vision_attention_mask: Optional[Tensor] = None,
+        text_attention_mask: Optional[Tensor] = None,
+    ):
         """_summary_
 
         Args:
@@ -1000,21 +992,21 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         attn_weights = attn_weights - attn_weights.max()
 
         attn_weights = torch.clamp(
-                attn_weights, min=-50000
-            )  # Do not increase -50000, data type half has quite limited range
+            attn_weights, min=-50000
+        )  # Do not increase -50000, data type half has quite limited range
         attn_weights = torch.clamp(
-                attn_weights, max=50000
-            )  # Do not increase 50000, data type half has quite limited range
+            attn_weights, max=50000
+        )  # Do not increase 50000, data type half has quite limited range
 
         attn_weights_T = attn_weights.transpose(1, 2)
         text_attn_weights = attn_weights_T - torch.max(attn_weights_T, dim=-1, keepdim=True)[0]
-        
+
         text_attn_weights = torch.clamp(
-                text_attn_weights, min=-50000
-            )  # Do not increase -50000, data type half has quite limited range
+            text_attn_weights, min=-50000
+        )  # Do not increase -50000, data type half has quite limited range
         text_attn_weights = torch.clamp(
-                text_attn_weights, max=50000
-            )  # Do not increase 50000, data type half has quite limited range
+            text_attn_weights, max=50000
+        )  # Do not increase 50000, data type half has quite limited range
 
         # mask vison for language
         if vision_attention_mask is not None:
@@ -1027,9 +1019,7 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
 
         # mask language for vision
         if text_attention_mask is not None:
-            text_attention_mask = (
-                text_attention_mask[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
-            )
+            text_attention_mask = text_attention_mask[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
             attn_weights.masked_fill_(text_attention_mask, float("-inf"))
         vision_attn_weights = attn_weights.softmax(dim=-1)
 
@@ -1062,6 +1052,7 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
 
         return (vision_attn_output, vision_attn_weights), (text_attn_output, text_attn_weights)
 
+
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
@@ -1082,6 +1073,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     output = input.div(keep_prob) * random_tensor
     return output
 
+
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->GroundingDINO
 class GroundingDINODropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
@@ -1095,6 +1087,8 @@ class GroundingDINODropPath(nn.Module):
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
+
+
 class GroundingDINOFusionLayer(nn.Module):
     def __init__(self, config, init_values=1e-4):
         super().__init__()
@@ -1104,11 +1098,11 @@ class GroundingDINOFusionLayer(nn.Module):
         self.layer_norm_vision = nn.LayerNorm(config.d_model)
         self.layer_norm_text = nn.LayerNorm(config.d_model)
         self.attn = GroundingDINOBiMultiHeadAttention(
-            vision_dim=config.d_model, 
-            text_dim=config.d_model, 
-            embed_dim=config.encoder_ffn_dim // 2, 
-            num_heads=config.encoder_attention_heads // 2, 
-            dropout=config.fusion_dropout
+            vision_dim=config.d_model,
+            text_dim=config.d_model,
+            embed_dim=config.encoder_ffn_dim // 2,
+            num_heads=config.encoder_attention_heads // 2,
+            dropout=config.fusion_dropout,
         )
 
         # add layer scale for training stability
@@ -1120,17 +1114,18 @@ class GroundingDINOFusionLayer(nn.Module):
         vision_features = self.layer_norm_vision(vision_features)
         text_features = self.layer_norm_text(text_features)
         (delta_v, vision_attn), (delta_t, text_attn) = self.attn(
-            vision_features, 
-            text_features, 
-            vision_attention_mask=attention_mask_vision, 
-            text_attention_mask=attention_mask_text
+            vision_features,
+            text_features,
+            vision_attention_mask=attention_mask_vision,
+            text_attention_mask=attention_mask_text,
         )
         vision_features = vision_features + self.drop_path(self.gamma_v * delta_v)
         text_features = text_features + self.drop_path(self.gamma_l * delta_t)
 
         return (vision_features, vision_attn), (text_features, text_attn)
 
-#NOTE just renamed the class
+
+# NOTE just renamed the class
 class GroundingDINODeformableLayer(nn.Module):
     def __init__(self, config: GroundingDINOConfig):
         super().__init__()
@@ -1210,12 +1205,13 @@ class GroundingDINODeformableLayer(nn.Module):
 
         return hidden_states, attn_weights
 
+
 def get_sine_pos_embed(
     pos_tensor: torch.Tensor,
     num_pos_feats: int = 128,
     temperature: int = 10000,
     exchange_xy: bool = True,
-    ) -> Tensor:
+) -> Tensor:
     """generate sine position embedding from a position tensor
     Args:
         pos_tensor (torch.Tensor): shape: [..., n].
@@ -1250,26 +1246,19 @@ class GroundingDINOEncoderLayer(nn.Module):
         self.deformable_layer = GroundingDINODeformableLayer(config)
 
     def get_text_position_embeddings(
-            self, 
-            text_features: Tensor, 
-            text_position_embedding: Tensor, 
-            text_position_ids: Tensor
-        ) -> Tensor:
+        self, text_features: Tensor, text_position_embedding: Tensor, text_position_ids: Tensor
+    ) -> Tensor:
         bs, n_text, text_dim = text_features.shape
         if text_position_embedding is None and text_position_ids is None:
             text_position_embedding = (
-                torch.arange(n_text, device=text_features.device)
-                .float()
-                .unsqueeze(0)
-                .unsqueeze(-1)
-                .repeat(bs, 1, 1)
+                torch.arange(n_text, device=text_features.device).float().unsqueeze(0).unsqueeze(-1).repeat(bs, 1, 1)
             )
             text_position_embedding = get_sine_pos_embed(text_position_embedding, num_pos_feats=256, exchange_xy=False)
         if text_position_ids is not None:
             text_position_embedding = get_sine_pos_embed(
                 text_position_ids[..., None], num_pos_feats=256, exchange_xy=False
             )
-        
+
         return text_position_embedding
 
     def forward(
@@ -1284,12 +1273,10 @@ class GroundingDINOEncoderLayer(nn.Module):
         text_attention_mask: Optional[Tensor] = None,
         text_position_embedding: Optional[Tensor] = None,
         text_self_attention_masks: Optional[Tensor] = None,
-        text_position_ids: Optional[Tensor] = None
+        text_position_ids: Optional[Tensor] = None,
     ):
         text_position_embedding = self.get_text_position_embeddings(
-            text_features, 
-            text_position_embedding, 
-            text_position_ids
+            text_features, text_position_embedding, text_position_ids
         )
 
         (vision_features, vision_fused_attn), (text_features, text_fused_attn) = self.fusion_layer(
@@ -1302,7 +1289,7 @@ class GroundingDINOEncoderLayer(nn.Module):
         (text_features, text_enhanced_attn) = self.text_enhancer_layer(
             hidden_states=text_features,
             attention_masks=~text_self_attention_masks,  # note we use ~ for mask here
-            position_embeddings=(text_position_embedding if text_position_embedding is not None else None)
+            position_embeddings=(text_position_embedding if text_position_embedding is not None else None),
         )
 
         (vision_features, vision_deformable_attn) = self.deformable_layer(
@@ -1315,8 +1302,8 @@ class GroundingDINOEncoderLayer(nn.Module):
         )
 
         return (
-            (vision_features, text_features), 
-            (vision_fused_attn, text_fused_attn, text_enhanced_attn, vision_deformable_attn)
+            (vision_features, text_features),
+            (vision_fused_attn, text_fused_attn, text_enhanced_attn, vision_deformable_attn),
         )
 
 
@@ -1330,7 +1317,7 @@ class GroundingDINODecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
-            batch_first=True
+            batch_first=True,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1342,7 +1329,7 @@ class GroundingDINODecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
-            batch_first=True
+            batch_first=True,
         )
         self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim)
         # cross-attention
@@ -1400,11 +1387,7 @@ class GroundingDINODecoderLayer(nn.Module):
         # Self Attention
         q = k = self.with_pos_embed(hidden_states, position_embeddings)
         hidden_states, self_attn_weights = self.self_attn(
-            query=q,
-            key=k,
-            value=hidden_states,
-            attn_mask=self_attn_mask,
-            average_attn_weights=False
+            query=q, key=k, value=hidden_states, attn_mask=self_attn_mask, average_attn_weights=False
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1419,7 +1402,7 @@ class GroundingDINODecoderLayer(nn.Module):
             key=text_encoder_hidden_states,
             value=text_encoder_hidden_states,
             key_padding_mask=text_encoder_attention_mask,
-            average_attn_weights=False
+            average_attn_weights=False,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1462,19 +1445,18 @@ class GroundingDINODecoderLayer(nn.Module):
 
         return outputs
 
+
 class GroundingDINOContrastiveEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.max_text_len = config.max_text_len
 
     def forward(
-            self, 
-            vision_hidden_state: torch.FloatTensor, 
-            text_hidden_state: torch.FloatTensor, 
-            text_token_mask: torch.BoolTensor
-        ) -> torch.FloatTensor:
-
-
+        self,
+        vision_hidden_state: torch.FloatTensor,
+        text_hidden_state: torch.FloatTensor,
+        text_token_mask: torch.BoolTensor,
+    ) -> torch.FloatTensor:
         output = vision_hidden_state @ text_hidden_state.transpose(-1, -2)
         output.masked_fill_(~text_token_mask[:, None, :], float("-inf"))
 
@@ -1483,6 +1465,7 @@ class GroundingDINOContrastiveEmbedding(nn.Module):
         new_output[..., : output.shape[-1]] = output
 
         return new_output
+
 
 # Copied from transformers.models.detr.modeling_detr.DetrClassificationHead
 class GroundingDINOClassificationHead(nn.Module):
@@ -1503,30 +1486,29 @@ class GroundingDINOClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel with DeformableDetr->GroundingDINO
 class GroundingDINOPreTrainedModel(PreTrainedModel):
     config_class = GroundingDINOConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
-        std = self.config.init_std
-
         if isinstance(module, GroundingDINOLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, GroundingDINOMultiscaleDeformableAttention):
             module._reset_parameters()
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, GroundingDINOBiMultiHeadAttention):
+            module._reset_parameters()
+        elif isinstance(module, (GroundingDINOEncoderLayer, GroundingDINODecoderLayer)):
+            for p in module.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p)
+        elif isinstance(module, GroundingDINOModel):
+            nn.init.constant_(module.input_proj_text.bias.data, 0)
+            nn.init.xavier_uniform_(module.input_proj_text.weight.data)
+            for proj in module.input_proj_vision:
+                nn.init.xavier_uniform_(proj[0].weight, gain=1)
+                nn.init.constant_(proj[0].bias, 0)
         if hasattr(module, "reference_points") and not self.config.two_stage:
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
@@ -1743,9 +1725,8 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
                 text_attention_mask=text_attention_mask,
                 text_position_embedding=text_position_embedding,
                 text_self_attention_masks=text_self_attention_masks,
-                text_position_ids=text_position_ids
-            )   
-
+                text_position_ids=text_position_ids,
+            )
 
             if output_attentions:
                 all_attn_fused_vision += (attentions[0],)
@@ -1759,9 +1740,12 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
 
         if not return_dict:
             enc_outputs = [
-                vision_features, text_features,
-                all_attn_fused_vision, all_attn_fused_text, 
-                all_attn_enhanced_text, all_attn_deformable
+                vision_features,
+                text_features,
+                all_attn_fused_vision,
+                all_attn_fused_text,
+                all_attn_enhanced_text,
+                all_attn_deformable,
             ]
             return tuple(v for v in enc_outputs if v is not None)
         return GroundingDINOEncoderOutput(
@@ -1772,8 +1756,9 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
             cross_attentions_vision=all_attn_fused_vision,
             cross_attentions_text=all_attn_fused_text,
             attentions_vision=all_attn_deformable,
-            attentions_text=all_attn_enhanced_text
+            attentions_text=all_attn_enhanced_text,
         )
+
 
 class GroundingDINODecoder(GroundingDINOPreTrainedModel):
     """
@@ -1797,10 +1782,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         self.layer_norm = nn.LayerNorm(config.d_model)
         self.layers = nn.ModuleList([GroundingDINODecoderLayer(config) for _ in range(config.decoder_layers)])
         self.reference_points_head = GroundingDINOMLPPredictionHead(
-            config.query_dim // 2 * config.d_model,
-            config.d_model,
-            config.d_model,
-            2
+            config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
         )
         self.gradient_checkpointing = False
 
@@ -1826,7 +1808,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         # batch_size, num_queries, num_pos_feats
         pos_x = pos_x[:, :, None] / dim_t
         pos_y = pos_y[:, :, None] / dim_t
-        # batch_size, num_queries, num_pos_feats 
+        # batch_size, num_queries, num_pos_feats
         pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
         pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
 
@@ -1848,8 +1830,6 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         else:
             raise ValueError("Unknown proposals shape(-1):{}".format(proposals.size(-1)))
         return pos
-
-
 
     def forward(
         self,
@@ -1959,7 +1939,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                     text_encoder_hidden_states=text_encoder_hidden_states,
                     text_encoder_attention_mask=text_encoder_attention_mask,
                     self_attn_mask=self_attn_mask,
-                    output_attentions=output_attentions
+                    output_attentions=output_attentions,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1992,7 +1972,6 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                 if vision_encoder_hidden_states is not None:
                     all_cross_attns_vision += (layer_outputs[3],)
 
-
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
         intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
@@ -2012,7 +1991,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                     all_hidden_states,
                     all_self_attns,
                     all_cross_attns_vision,
-                    all_cross_attns_text
+                    all_cross_attns_text,
                 ]
                 if v is not None
             )
@@ -2023,7 +2002,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             vision_cross_attentions=all_cross_attns_vision,
-            text_cross_attentions=all_cross_attns_text
+            text_cross_attentions=all_cross_attns_text,
         )
 
 
@@ -2075,7 +2054,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             )
 
         # Create text backbone
-        self.text_backbone = GroundingDINOTextModel(config.text_backbone_config)
+        self.text_backbone = GroundingDINOTextPrenet(config.text_backbone_config)
         self.input_proj_text = nn.Linear(config.text_backbone_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
@@ -2199,7 +2178,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         text_token_mask: Tensor,
         text_self_attention_masks: Tensor,
         position_ids: Tensor,
-        pixel_mask: Optional[Tensor]=None,
+        pixel_mask: Optional[Tensor] = None,
         encoder_outputs=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -2236,7 +2215,9 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Extract text features from text backbone
-        text_features = self.text_backbone(input_ids, attention_mask, token_type_ids, position_ids)["last_hidden_state"]
+        text_features = self.text_backbone(input_ids, attention_mask, token_type_ids, position_ids)[
+            "last_hidden_state"
+        ]
         text_features = self.input_proj_text(text_features)
 
         batch_size, num_channels, height, width = pixel_values.shape
@@ -2319,7 +2300,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
                 text_position_ids=position_ids,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict
+                return_dict=return_dict,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a GroundingDINOEncoderOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, GroundingDINOEncoderOutput):
@@ -2346,9 +2327,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             # apply a detection head to each pixel (A.4 in paper)
             # linear projection for bounding box binary classification (i.e. foreground and background)
             enc_outputs_class = self.encoder_output_class_embed(
-                object_query_embedding, 
-                encoder_outputs[1], 
-                text_token_mask
+                object_query_embedding, encoder_outputs[1], text_token_mask
             )
             # 3-layer FFN to predict bounding boxes coordinates (bbox regression branch)
             delta_bbox = self.encoder_output_bbox_embed(object_query_embedding)
@@ -2389,7 +2368,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             self_attn_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
         if not return_dict:
@@ -2422,8 +2401,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
-    top, for tasks such as COCO detection.
+    Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top,
+    for tasks such as COCO detection.
     """,
     GROUNDING_DINO_START_DOCSTRING,
 )
@@ -2446,13 +2425,12 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         nn.init.constant_(_bbox_embed.layers[-1].weight.data, 0)
         nn.init.constant_(_bbox_embed.layers[-1].bias.data, 0)
 
-
         if config.decoder_bbox_embed_share:
             self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         else:
             self.bbox_embed = _get_clones(_bbox_embed, config.decoder_layers)
         self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
-        # hack implementation for two-stage 
+        # hack implementation for two-stage
         self.model.decoder.bbox_embed = self.bbox_embed
         self.model.decoder.class_embed = self.class_embed
 
@@ -2461,8 +2439,8 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
                 self.model.encoder_output_bbox_embed = _bbox_embed
             else:
                 self.model.encoder_output_bbox_embed = copy.deepcopy(_bbox_embed)
-            
-            #TODO don't believe this is necessary since class_embed has no parameters
+
+            # TODO don't believe this is necessary since class_embed has no parameters
             if config.two_stage_class_embed_share:
                 self.model.encoder_output_class_embed = _class_embed
             else:
@@ -2490,12 +2468,12 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         text_token_mask: torch.BoolTensor,
         text_self_attention_masks: torch.BoolTensor,
         position_ids: torch.LongTensor,
-        pixel_mask: Optional[torch.BoolTensor]=None,
-        encoder_outputs: Optional[Union[GroundingDINOEncoderOutput, Tuple]]=None,
-        labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]]=None,
-        output_attentions: Optional[bool]=None,
-        output_hidden_states: Optional[bool]=None,
-        return_dict: Optional[bool]=None,
+        pixel_mask: Optional[torch.BoolTensor] = None,
+        encoder_outputs: Optional[Union[GroundingDINOEncoderOutput, Tuple]] = None,
+        labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -2541,14 +2519,14 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
 
         # First, sent images through Grounding DINO base model to obtain encoder + decoder outputs
         outputs = self.model(
-            pixel_values=pixel_values ,
-            input_ids=input_ids ,
-            attention_mask=attention_mask ,
-            token_type_ids=token_type_ids ,
-            text_token_mask=text_token_mask ,
-            text_self_attention_masks=text_self_attention_masks ,
-            position_ids=position_ids ,
-            pixel_mask=pixel_mask ,
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            text_token_mask=text_token_mask,
+            text_self_attention_masks=text_self_attention_masks,
+            position_ids=position_ids,
+            pixel_mask=pixel_mask,
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2573,8 +2551,8 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
             outputs_class = self.class_embed[level](
                 vision_hidden_state=hidden_states[:, level],
                 text_hidden_state=enc_text_hidden_state,
-                text_token_mask=text_token_mask
-                )
+                text_token_mask=text_token_mask,
+            )
             delta_bbox = self.bbox_embed[level](hidden_states[:, level])
             if reference.shape[-1] == 4:
                 outputs_coord_logits = delta_bbox + reference
@@ -3117,6 +3095,7 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
 
+
 # Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->GroundingDINOText
 class GroundingDINOTextEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -3181,7 +3160,9 @@ class GroundingDINOTextEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
+
 # Classes for Text Backbone (It's just a BERT model)
+
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->GroundingDINOText
 class GroundingDINOTextSelfAttention(nn.Module):
@@ -3317,6 +3298,7 @@ class GroundingDINOTextSelfAttention(nn.Module):
             outputs = outputs + (past_key_value,)
         return outputs
 
+
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->GroundingDINOText
 class GroundingDINOTextSelfOutput(nn.Module):
     def __init__(self, config):
@@ -3330,6 +3312,7 @@ class GroundingDINOTextSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->GroundingDINOText
 class GroundingDINOTextAttention(nn.Module):
@@ -3380,6 +3363,7 @@ class GroundingDINOTextAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->GroundingDINOText
 class GroundingDINOTextIntermediate(nn.Module):
     def __init__(self, config):
@@ -3395,6 +3379,7 @@ class GroundingDINOTextIntermediate(nn.Module):
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
+
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->GroundingDINOText
 class GroundingDINOTextOutput(nn.Module):
     def __init__(self, config):
@@ -3408,6 +3393,7 @@ class GroundingDINOTextOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->GroundingDINOText
 class GroundingDINOTextLayer(nn.Module):
@@ -3494,6 +3480,7 @@ class GroundingDINOTextLayer(nn.Module):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
+
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->GroundingDINOText
 class GroundingDINOTextEncoder(nn.Module):
@@ -3593,6 +3580,7 @@ class GroundingDINOTextEncoder(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
+
 # Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->GroundingDINOText
 class GroundingDINOTextPooler(nn.Module):
     def __init__(self, config):
@@ -3608,7 +3596,8 @@ class GroundingDINOTextPooler(nn.Module):
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
-class GroundingDINOTextModel(PreTrainedModel):
+
+class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
