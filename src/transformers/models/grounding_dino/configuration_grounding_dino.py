@@ -26,11 +26,10 @@ GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class GroundingDINOConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroundingDINOModel`]. It is used to instantiate
-    a Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of a [`GroundingDINOModel`]. It is used to instantiate a
+    Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Grounding DINO
     [SenseTime/deformable-detr](https://huggingface.co/SenseTime/deformable-detr) architecture.
 
@@ -147,9 +146,11 @@ class GroundingDINOConfig(PretrainedConfig):
         decoder_bbox_embed_share (`bool`, *optional*, defaults to `True`):
             Whether to share the bbox embedding between the decoder and the two-stage bbox generator.
         two_stage_bbox_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the bbox embedding between the two-stage bbox generator and the region proposal generation.
+            Whether to share the bbox embedding between the two-stage bbox generator and the region proposal
+            generation.
         two_stage_class_embed_share (`bool`, *optional*, defaults to `False`):
-            Whether to share the class embedding between the two-stage bbox generator and the region proposal generation.
+            Whether to share the class embedding between the two-stage bbox generator and the region proposal
+            generation.
         positional_embedding_temperature (`float`, *optional*, defaults to 20):
             The temperature for Sine Positional Embedding that is used together with vision backbone.
     Examples:
@@ -217,18 +218,18 @@ class GroundingDINOConfig(PretrainedConfig):
         eos_coefficient=0.1,
         focal_alpha=0.25,
         disable_custom_kernels=False,
-        #other parameters
-        max_text_len = 256,
-        sub_sentence_present = True,
-        text_enhancer_dropout = 0.0,
-        fusion_droppath = 0.1,
-        fusion_dropout = 0.0,
-        embedding_init_target = True,
-        query_dim = 4,
-        decoder_bbox_embed_share = True,
-        two_stage_bbox_embed_share = False,
-        two_stage_class_embed_share = False,
-        positional_embedding_temperature = 20,
+        # other parameters
+        max_text_len=256,
+        sub_sentence_present=True,
+        text_enhancer_dropout=0.0,
+        fusion_droppath=0.1,
+        fusion_dropout=0.0,
+        embedding_init_target=True,
+        query_dim=4,
+        decoder_bbox_embed_share=True,
+        two_stage_bbox_embed_share=False,
+        two_stage_class_embed_share=False,
+        positional_embedding_temperature=20,
         **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
