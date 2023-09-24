@@ -308,14 +308,14 @@ class OwlViTVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
+
+        print("Mean value of pixel values:", pixel_values.mean())
+
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
-        print("First values of patch embeddings:", patch_embeds[0, :3, :3])
-
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        print("First values of patch embeddings after adding CLS token:", embeddings[0, :3, :3])
         embeddings = embeddings + self.position_embedding(self.position_ids)
 
         return embeddings
@@ -980,6 +980,7 @@ class OwlViTVisionTransformer(nn.Module):
         hidden_states = self.pre_layernorm(hidden_states)
 
         print("First values of final patch embedding after prelayernorm:", hidden_states[0, :3, :3])
+        print("Dtype of final patch embedding after prelayernorm:", hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1492,8 +1493,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_embeds = image_embeds.reshape(new_size)
         text_embeds = outputs[-4]
 
-        print("Shape of final image_embeds:", image_embeds.shape)
-
         return (text_embeds, image_embeds, outputs)
 
     def image_embedder(
@@ -1736,6 +1735,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
         max_text_queries = input_ids.shape[0] // batch_size
         query_embeds = query_embeds.reshape(batch_size, max_text_queries, query_embeds.shape[-1])
+
+        print("Shape of query embeds:", query_embeds.shape)
+        print("First values of query embeds:", query_embeds[0, :3, :3])
 
         # If first token is 0, then this is a padded query [batch_size, num_queries].
         input_ids = input_ids.reshape(batch_size, max_text_queries, input_ids.shape[-1])

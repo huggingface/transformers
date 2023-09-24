@@ -22,6 +22,7 @@ import os
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import torch
 from flax.training import checkpoints
 from huggingface_hub import hf_hub_download
@@ -48,7 +49,11 @@ def get_owlvit_config(model_name):
     vision_config = OwlViTVisionConfig(patch_size=patch_size, image_size=image_size)
     text_config = OwlViTTextConfig()
 
-    return OwlViTConfig(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), add_objectness_head=add_objectness_head)
+    return OwlViTConfig(
+        text_config=text_config.to_dict(),
+        vision_config=vision_config.to_dict(),
+        add_objectness_head=add_objectness_head,
+    )
 
 
 def flatten_nested_dict(params, parent_key="", sep="/"):
@@ -187,7 +192,7 @@ def rename_and_reshape_key(dct, old, new, config):
     if new.endswith("bias"):
         val = val.reshape(-1)
 
-    dct[new] = torch.from_numpy(val)
+    dct[new] = torch.from_numpy(np.array(val))
 
 
 @torch.no_grad()
@@ -201,6 +206,7 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
     model_name_to_checkpoint_path = {
         "owlvit-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/clip_vit_b16_6171dab",
         "owlv2-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams_c7e1b9a",
+        "owlv2-base-patch16-ensemble": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams-curated-ft-lvisbase-ens-cold-weight-05_209b65b",
     }
     checkpoint_path = model_name_to_checkpoint_path[model_name]
     variables = checkpoints.restore_checkpoint(checkpoint_path, target=None)
@@ -209,7 +215,7 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
     state_dict = flatten_nested_dict(flax_params)
 
     for name, param in state_dict.items():
-        print(name, param.shape)
+        print(name, param.shape, param.dtype)
 
     # Rename keys
     rename_keys = create_rename_keys(config, model_name)
@@ -236,8 +242,9 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
     pixel_values = torch.load(filepath).permute(0, 3, 1, 2)
     print("Shape of pixel values:", pixel_values.shape)
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlvit_input_ids.pt", repo_type="dataset")
-    input_ids = torch.load(filepath)
+    filename = "owlv2_input_ids.pt" if "v2" in model_name else "owlvit_input_ids.pt"
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
+    input_ids = torch.load(filepath).squeeze()
     print("Shape of input ids:", input_ids.shape)
 
     with torch.no_grad():
@@ -257,10 +264,12 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
         )
         expected_boxes = torch.tensor([[0.0206, 0.0355, 0.0400], [0.0711, 0.3572, 0.1431], [0.0811, 0.4575, 0.1718]])
     elif model_name == "owlv2-base-patch16":
+        raise NotImplementedError("To do")
+    elif model_name == "owlv2-base-patch16-ensemble":
         expected_logits = torch.tensor(
-            [[-9.6403, -9.6249, -9.1869], [-12.4517, -11.8114, -12.3912], [-12.2289, -11.3871, -12.0908]]
+            [[-8.6353, -9.5409, -6.6154], [-7.9442, -9.6151, -6.7117], [-12.4593, -15.3332, -12.1048]]
         )
-        expected_boxes = torch.tensor([[0.0206, 0.0355, 0.0400], [0.0711, 0.3572, 0.1431], [0.0811, 0.4575, 0.1718]])
+        expected_boxes = torch.tensor([[0.0126, 0.0090, 0.0238], [0.0387, 0.0227, 0.0754], [0.0582, 0.1058, 0.1139]])
 
     print("Logits:", logits[0, :3, :3])
     print("Pred boxes:", pred_boxes[0, :3, :3])
@@ -291,7 +300,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         default="owlvit-base-patch16",
-        choices=["owlvit-base-patch16", "owlv2-base-patch16"],
+        choices=["owlvit-base-patch16", "owlv2-base-patch16", "owlv2-base-patch16-ensemble"],
         type=str,
         help="Name of the OWL-ViT model you'd like to convert from FLAX to PyTorch.",
     )
