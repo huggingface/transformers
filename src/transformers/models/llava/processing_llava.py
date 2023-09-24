@@ -129,6 +129,7 @@ class LlavaProcessor(ProcessorMixin):
 
             if return_tensors == "pt":
                 input_ids = torch.tensor(input_ids, dtype=torch.long)
+
             dummy["input_ids"] = input_ids.unsqueeze(0)
             encoding.update(dummy)
 

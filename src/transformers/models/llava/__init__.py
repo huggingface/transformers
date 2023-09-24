@@ -18,7 +18,7 @@ from ...utils import (
     _LazyModule,
     is_sentencepiece_available,
     is_tokenizers_available,
-    is_torch_available,
+    is_torch_cuda_available,
 )
 
 
@@ -29,7 +29,7 @@ _import_structure = {
 
 
 try:
-    if not is_torch_available():
+    if not is_torch_cuda_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from .processing_llava import LlavaProcessor
 
     try:
-        if not is_torch_available():
+        if not is_torch_cuda_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
