@@ -713,6 +713,11 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
 
         self.speaker_embeds_layer = nn.Linear(config.speaker_embedding_dim + config.hidden_size, config.hidden_size)
 
+    def _consistent_dropout(self, inputs_embeds, p):
+        mask = torch.bernoulli(inputs_embeds[0], p=p)
+        all_masks = mask.unsqueeze(0).repeat(inputs_embeds.size(0), 1, 1)
+        return torch.where(all_masks == 1, inputs_embeds, 0) * 1 / (1 - p)
+
     def forward(
         self,
         input_values: torch.Tensor,
@@ -723,9 +728,7 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         inputs_embeds = input_values
         for layer in self.layers:
             inputs_embeds = nn.functional.relu(layer(inputs_embeds))
-            inputs_embeds = nn.functional.dropout(
-                inputs_embeds, self.config.speech_decoder_prenet_dropout, training=True
-            )
+            inputs_embeds = self._consistent_dropout(inputs_embeds, self.config.speech_decoder_prenet_dropout)
 
         inputs_embeds = self.final_layer(inputs_embeds)
         inputs_embeds = self.encode_positions(inputs_embeds)

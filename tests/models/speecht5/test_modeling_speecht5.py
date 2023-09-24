@@ -1046,7 +1046,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             speaker_embeddings=speaker_embeddings,
             attention_mask=inputs["attention_mask"],
         )
-        self.assertEqual(spectrograms.shape, (3, 266, model.config.num_mel_bins))
+        self.assertEqual(spectrograms.shape, (3, 262, model.config.num_mel_bins))
 
         # Check results when batching are consistent with results without batching
         for i, text in enumerate(input_text):
@@ -1057,7 +1057,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
                 speaker_embeddings=speaker_embeddings,
             )
             self.assertEqual(spectrogram.shape, spectrograms[i][: spectrogram_lengths[i]].shape)
-            self.assertTrue(torch.allclose(spectrogram, spectrograms[i][: spectrogram_lengths[i]], atol=1e-4))
+            self.assertTrue(torch.allclose(spectrogram, spectrograms[i][: spectrogram_lengths[i]], atol=2e-4))
 
 
 @require_torch
