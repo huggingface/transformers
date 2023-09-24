@@ -916,20 +916,28 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
     test_torchscript = False
 
-    # TODO add or skip tests
-    test_model_outputs_equivalence = False
-    test_tied_weights_keys = False
-    test_hidden_states_output = False
-    test_inputs_embeds = False
-    test_model_common_attributes = False
-    test_retain_grad_hidden_states_attentions = False
-
     def setUp(self):
         self.model_tester = Blip2TextRetrievalModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(reason="Hidden_states is tested in individual model tests")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="Blip2Model does not have input/output embeddings")
+    def test_model_common_attributes(self):
+        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -971,7 +979,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in ["jpizarrom/blip2-itm-vit-g"]:
-            for model_class in self.all_model_classes + (Blip2Model,):
+            for model_class in self.all_model_classes:
                 model = model_class.from_pretrained(model_name)
                 self.assertIsNotNone(model)
 
