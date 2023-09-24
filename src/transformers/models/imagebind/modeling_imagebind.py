@@ -549,7 +549,7 @@ class ImageBindImuEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->ImageBind
+# CLIPAttention + key/value biases
 class ImageBindAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -572,6 +572,14 @@ class ImageBindAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
+        # Create bias parameters for key and value sequences.
+        if config.add_kv_bias:
+            self.k_bias = nn.Parameter(torch.empty((1, 1, self.embed_dim)))
+            self.v_bias = nn.Parameter(torch.empty((1, 1, self.embed_dim)))
+        else:
+            self.k_bias = None
+            self.v_bias = None
+
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
@@ -588,8 +596,17 @@ class ImageBindAttention(nn.Module):
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        # Add key/value biases if necessary
+        if self.k_bias is not None and self.v_bias is not None:
+            # Repeat bias along batch dimension (first)
+            key_states = torch.cat([key_states, self.k_bias.repeat(bsz, 1, 1)])
+            value_states = torch.cat([value_states, self.v_bias.repeat(bsz, 1, 1)])
+        
+        key_states = self._shape(key_states, -1, bsz)
+        value_states = self._shape(value_states, -1, bsz)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -762,6 +779,10 @@ class ImageBindPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
+            if module.k_bias is not None:
+                nn.init.normal_(module.k_bias.weight, std=in_proj_std)
+            if module.v_bias is not None:
+                nn.init.normal_(module.v_bias.weight, std=in_proj_std)
         elif isinstance(module, ImageBindMLP):
             factor = self.config.initializer_factor
             in_proj_std = (

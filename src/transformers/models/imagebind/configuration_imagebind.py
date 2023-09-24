@@ -69,6 +69,9 @@ class ImageBindTextConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
+        add_kv_bias(`bool`, *optional*, defaults to `False`):
+            Whether to add an extra learnable bias token to the attention key and value sequences. This is based on the
+            `add_kv_bias` argument to [`torch.nn.MultiHeadAttention`](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
@@ -106,6 +109,7 @@ class ImageBindTextConfig(PretrainedConfig):
         max_position_embeddings=77,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-6,
+        add_kv_bias=False,
         attention_dropout=0.0,
         drop_path_rate=0.0,
         initializer_range=0.02,
@@ -126,6 +130,7 @@ class ImageBindTextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
+        self.add_kv_bias = add_kv_bias
         self.attention_dropout = attention_dropout
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
@@ -189,6 +194,9 @@ class ImageBindVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
+        add_kv_bias(`bool`, *optional*, defaults to `False`):
+            Whether to add an extra learnable bias token to the attention key and value sequences. This is based on the
+            `add_kv_bias` argument to [`torch.nn.MultiHeadAttention`](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
@@ -230,6 +238,7 @@ class ImageBindVisionConfig(PretrainedConfig):
         stride=(2, 14, 14),
         hidden_act="quick_gelu",
         layer_norm_eps=1e-6,
+        add_kv_bias=False,
         attention_dropout=0.0,
         drop_path_rate=0.0,
         initializer_range=0.02,
@@ -250,6 +259,7 @@ class ImageBindVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
+        self.add_kv_bias = add_kv_bias
         self.attention_dropout = attention_dropout
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
@@ -311,6 +321,9 @@ class ImageBindAudioConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
+        add_kv_bias(`bool`, *optional*, defaults to `True`):
+            Whether to add an extra learnable bias token to the attention key and value sequences. This is based on the
+            `add_kv_bias` argument to [`torch.nn.MultiHeadAttention`](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
@@ -349,6 +362,7 @@ class ImageBindAudioConfig(PretrainedConfig):
         stride=10,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-6,
+        add_kv_bias=True,
         attention_dropout=0.0,
         drop_path_rate=0.1,
         initializer_range=0.02,
@@ -370,6 +384,7 @@ class ImageBindAudioConfig(PretrainedConfig):
         self.stride = stride
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
+        self.add_kv_bias = add_kv_bias
         self.attention_dropout = attention_dropout
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
@@ -427,6 +442,9 @@ class ImageBindDepthConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
+        add_kv_bias(`bool`, *optional*, defaults to `True`):
+            Whether to add an extra learnable bias token to the attention key and value sequences. This is based on the
+            `add_kv_bias` argument to [`torch.nn.MultiHeadAttention`](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
@@ -463,6 +481,7 @@ class ImageBindDepthConfig(PretrainedConfig):
         stride=16,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-6,
+        add_kv_bias=True,
         attention_dropout=0.0,
         drop_path_rate=0.0,
         initializer_range=0.02,
@@ -482,6 +501,7 @@ class ImageBindDepthConfig(PretrainedConfig):
         self.stride = stride
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
+        self.add_kv_bias = add_kv_bias
         self.attention_dropout = attention_dropout
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
@@ -539,6 +559,9 @@ class ImageBindThermalConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
+        add_kv_bias(`bool`, *optional*, defaults to `True`):
+            Whether to add an extra learnable bias token to the attention key and value sequences. This is based on the
+            `add_kv_bias` argument to [`torch.nn.MultiHeadAttention`](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
@@ -575,6 +598,7 @@ class ImageBindThermalConfig(PretrainedConfig):
         stride=16,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-6,
+        add_kv_bias=True,
         attention_dropout=0.0,
         drop_path_rate=0.0,
         initializer_range=0.02,
@@ -594,6 +618,7 @@ class ImageBindThermalConfig(PretrainedConfig):
         self.stride = stride
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
+        self.add_kv_bias = add_kv_bias
         self.attention_dropout = attention_dropout
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
@@ -647,6 +672,9 @@ class ImageBindImuConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
+        add_kv_bias(`bool`, *optional*, defaults to `True`):
+            Whether to add an extra learnable bias token to the attention key and value sequences. This is based on the
+            `add_kv_bias` argument to [`torch.nn.MultiHeadAttention`](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.7):
@@ -681,6 +709,7 @@ class ImageBindImuConfig(PretrainedConfig):
         kernel_size=8,
         hidden_act="quick_gelu",
         layer_norm_eps=1e-6,
+        add_kv_bias=True,
         attention_dropout=0.0,
         drop_path_rate=0.7,
         initializer_range=0.02,
@@ -698,6 +727,7 @@ class ImageBindImuConfig(PretrainedConfig):
         self.kernel_size = kernel_size
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
+        self.add_kv_bias = add_kv_bias
         self.attention_dropout = attention_dropout
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
