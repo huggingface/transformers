@@ -2365,6 +2365,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     config_class = Blip2Config
+    _keep_in_fp32_modules = []
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -2413,7 +2414,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        >>> model = Blip2ForImageTextRetrieval.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        >>> model = Blip2ForImageTextRetrieval.from_pretrained("jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16)
         >>> processor = AutoProcessor.from_pretrained("jpizarrom/blip2-itm-vit-g")
 
         >>> model.to(device)  # doctest: +IGNORE_RESULT
@@ -2422,7 +2423,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> text = "an image of a cat"
 
-        >>> inputs = processor(images=image, text=text, return_tensors="pt").to(device)
+        >>> inputs = processor(images=image, text=text, return_tensors="pt").to(device, torch.float16)
         >>> outputs = model(**inputs)
         ```
         """
