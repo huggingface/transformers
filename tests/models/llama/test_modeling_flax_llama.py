@@ -209,13 +209,16 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
-    @slow
-    def test_model_logits(self):
-        model_id = "openlm-research/open_llama_3b_v2"
-        model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
-        test_batch = jnp.arange(32).reshape(4, 8) + 1911
+@slow
+@require_flax
+class FlaxLlamaIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.model_id = "openlm-research/open_llama_3b_v2"
+        self.model = FlaxLlamaForCausalLM.from_pretrained(self.model_id, from_pt=True)
+        self.test_batch = jnp.arange(32).reshape(4, 8) + 1911
 
-        flax_logits = model(test_batch).logits
+    def test_model_logits(self):
+        flax_logits = self.model(self.test_batch).logits
 
         # fmt: off
         EXPECTED_LOGITS = [-74.4243, -74.0680, -65.2507, -79.1658, -77.7460, -69.2379, -86.4588, -84.8933, -77.8456]
@@ -229,13 +232,8 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
         self.assertAlmostEqual(flax_logits.max(), EXPECTED_MAX, places=3)
         self.assertAlmostEqual(flax_logits.mean(), EXPECTED_MEAN, places=3)
 
-    @slow
     def test_model_hidden_states(self):
-        model_id = "openlm-research/open_llama_3b_v2"
-        model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
-        test_batch = jnp.arange(32).reshape(4, 8) + 0x777
-
-        flax_hidden_states = model(test_batch, output_hidden_states=True).hidden_states
+        flax_hidden_states = self.model(self.test_batch, output_hidden_states=True).hidden_states
         flax_hidden_means = [h.mean() for h in flax_hidden_states]
 
         # fmt: off
@@ -250,17 +248,13 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
 
         self.assertTrue(np.allclose(flax_hidden_means, EXPECTED_HIDDEN_MEANS, atol=1e-4))
 
-    @slow
     def test_generated_text(self):
-        model_id = "openlm-research/open_llama_3b_v2"
-        model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
-
-        tokenizer = LlamaTokenizerFast.from_pretrained(model_id)
+        tokenizer = LlamaTokenizerFast.from_pretrained(self.model_id)
         tokenizer.pad_token_id = 2
         test_batch = ["Aloha, World! ", "2 + 2 = ", "Paris is the capital of ", "我很高興認識"]
 
         inputs = tokenizer(test_batch, return_tensors="np", truncation=True, padding=True)
-        generated_ids = model.generate(**inputs, max_length=15).sequences
+        generated_ids = self.model.generate(**inputs, max_length=15).sequences
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
         # fmt: off
