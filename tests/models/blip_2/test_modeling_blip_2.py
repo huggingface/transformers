@@ -48,7 +48,13 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Blip2ForConditionalGeneration, Blip2ForImageTextRetrieval, Blip2Model, Blip2VisionModel
+    from transformers import (
+        Blip2ForConditionalGeneration,
+        Blip2ForImageTextRetrieval,
+        Blip2Model,
+        Blip2ModelWithProjection,
+        Blip2VisionModel,
+    )
     from transformers.models.blip_2.modeling_blip_2 import BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -895,7 +901,14 @@ class Blip2TextRetrievalModelTester:
 
 @require_torch
 class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Blip2ForImageTextRetrieval,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Blip2ForImageTextRetrieval,
+            Blip2ModelWithProjection,
+        )
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -934,7 +947,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
                     "attention_mask",
                 ]
 
-                expected_arg_names.extend(["use_itm_head"] if "use_itm_head" in arg_names else ["decoder_input_ids"])
+                expected_arg_names.extend(["use_itm_head"] if "use_itm_head" in arg_names else [])
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 # TODO
@@ -970,7 +983,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             "attention_mask": torch.LongTensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).to(torch_device),
         }
 
-        model = Blip2Model(config).to(torch_device)
+        model = Blip2ModelWithProjection(config).to(torch_device)
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
         self.assertEqual(text_features[0].shape, (10, config.image_text_hidden_size))
@@ -983,7 +996,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         for key in keys_to_pop:
             inputs_dict.pop(key)
 
-        model = Blip2Model(config).to(torch_device)
+        model = Blip2ModelWithProjection(config).to(torch_device)
         model.eval()
         image_features = model.get_image_features(**inputs_dict)
         self.assertEqual(
@@ -1212,7 +1225,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_inference_itm_features(self):
         processor = Blip2Processor.from_pretrained("jpizarrom/blip2-itm-vit-g")
-        model = Blip2Model.from_pretrained(
+        model = Blip2ModelWithProjection.from_pretrained(
             "jpizarrom/blip2-itm-vit-g",
         ).to(torch_device)
 
@@ -1257,7 +1270,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_inference_itm_features_fp16(self):
         processor = Blip2Processor.from_pretrained("jpizarrom/blip2-itm-vit-g")
-        model = Blip2Model.from_pretrained("jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16).to(torch_device)
+        model = Blip2ModelWithProjection.from_pretrained("jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16).to(
+            torch_device
+        )
 
         # image features
         image = prepare_img()

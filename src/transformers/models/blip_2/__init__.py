@@ -35,6 +35,7 @@ else:
     _import_structure["modeling_blip_2"] = [
         "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Blip2Model",
+        "Blip2ModelWithProjection",
         "Blip2QFormerModel",
         "Blip2PreTrainedModel",
         "Blip2ForConditionalGeneration",
@@ -62,6 +63,7 @@ if TYPE_CHECKING:
             Blip2ForConditionalGeneration,
             Blip2ForImageTextRetrieval,
             Blip2Model,
+            Blip2ModelWithProjection,
             Blip2PreTrainedModel,
             Blip2QFormerModel,
             Blip2VisionModel,
