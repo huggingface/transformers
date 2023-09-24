@@ -154,13 +154,13 @@ def apply_rotary_pos_emb(tensor, sincos):
 
 class FlaxLlamaRMSNorm(nn.Module):
     config: LlamaConfig
+    dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         self.epsilon = self.config.rms_norm_eps
         self.weight = self.param("weight", lambda _, shape: jnp.ones(shape), self.config.hidden_size)
 
     def __call__(self, hidden_states):
-        input_dtype = hidden_states.dtype
         variance = jnp.asarray(hidden_states, dtype=jnp.float32)
         variance = jnp.power(variance, 2)
         variance = variance.mean(-1, keepdims=True)
@@ -168,7 +168,7 @@ class FlaxLlamaRMSNorm(nn.Module):
         # hidden_states = hidden_states * jax.lax.rsqrt(variance + self.epsilon)
         hidden_states = hidden_states / jnp.sqrt(variance + self.epsilon)
 
-        return self.weight * jnp.asarray(hidden_states, dtype=input_dtype)
+        return self.weight * jnp.asarray(hidden_states, dtype=self.dtype)
 
 
 class FlaxLlamaRotaryEmbedding(nn.Module):
@@ -216,7 +216,7 @@ class FlaxLlamaAttention(nn.Module):
         self.o_proj = dense()
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
-        self.rotary_emb = FlaxLlamaRotaryEmbedding(config)
+        self.rotary_emb = FlaxLlamaRotaryEmbedding(config, dtype=self.dtype)
 
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
@@ -348,9 +348,9 @@ class FlaxLlamaDecoderLayer(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.input_layernorm = FlaxLlamaRMSNorm(self.config)
+        self.input_layernorm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
         self.self_attn = FlaxLlamaAttention(self.config, dtype=self.dtype)
-        self.post_attention_layernorm = FlaxLlamaRMSNorm(self.config)
+        self.post_attention_layernorm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
         self.mlp = FlaxLlamaMLP(self.config, dtype=self.dtype)
 
     def __call__(
