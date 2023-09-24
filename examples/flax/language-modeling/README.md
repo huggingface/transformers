@@ -42,7 +42,7 @@ The example script uses the 🤗 Datasets library. You can easily customize them
 To setup all relevant files for training, let's create a directory.
 
 ```bash
-mkdir ./norwegian-roberta-base
+mkdir ./vietnam-roberta-base
 ```
 
 ### Train tokenizer
@@ -76,7 +76,7 @@ tokenizer.train_from_iterator(batch_iterator(), vocab_size=50265, min_frequency=
 ])
 
 # Save files to disk
-tokenizer.save("./norwegian-roberta-base/tokenizer.json")
+tokenizer.save("./vietnam-roberta-base/tokenizer.json")
 ```
 
 ### Create configuration
@@ -89,7 +89,7 @@ in the local model folder:
 from transformers import RobertaConfig
 
 config = RobertaConfig.from_pretrained("roberta-base", vocab_size=50265)
-config.save_pretrained("./norwegian-roberta-base")
+config.save_pretrained("./vietnam-roberta-base")
 ```
 
 Great, we have set up our model repository. During training, we will automatically
@@ -101,10 +101,10 @@ Next we can run the example script to pretrain the model:
 
 ```bash
 python run_mlm_flax.py \
-    --output_dir="./norwegian-roberta-base" \
+    --output_dir="./vietnam-roberta-base" \
     --model_type="roberta" \
-    --config_name="./norwegian-roberta-base" \
-    --tokenizer_name="./norwegian-roberta-base" \
+    --config_name="./vietnam-roberta-base" \
+    --tokenizer_name="./vietnam-roberta-base" \
     --dataset_name="oscar" \
     --dataset_config_name="unshuffled_deduplicated_vi" \
     --max_seq_length="128" \
@@ -455,7 +455,7 @@ are 8 TPU cores on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chi
 
 For comparison one can run the same pre-training with PyTorch/XLA on TPU. To set up PyTorch/XLA on Cloud TPU VMs, please 
 refer to [this](https://cloud.google.com/tpu/docs/pytorch-xla-ug-tpu-vm) guide.
-Having created the tokenzier and configuration in `norwegian-roberta-base`, we create the following symbolic links:
+Having created the tokenzier and configuration in `vietnam-roberta-base`, we create the following symbolic links:
 
 ```bash
 ln -s ~/transformers/examples/pytorch/language-modeling/run_mlm.py ./
@@ -470,7 +470,7 @@ unset LD_PRELOAD
 
 export NUM_TPUS=8
 export TOKENIZERS_PARALLELISM=0
-export MODEL_DIR="./norwegian-roberta-base"
+export MODEL_DIR="./vietnam-roberta-base"
 mkdir -p ${MODEL_DIR}
 ```
 
@@ -505,7 +505,7 @@ python3 xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
 
 For comparison you can run the same pre-training with PyTorch on GPU. Note that we have to make use of `gradient_accumulation` 
 because the maximum batch size that fits on a single V100 GPU is 32 instead of 128.
-Having created the tokenzier and configuration in `norwegian-roberta-base`, we create the following symbolic links:
+Having created the tokenzier and configuration in `vietnam-roberta-base`, we create the following symbolic links:
 
 ```bash
 ln -s ~/transformers/examples/pytorch/language-modeling/run_mlm.py ./
@@ -516,7 +516,7 @@ ln -s ~/transformers/examples/pytorch/language-modeling/run_mlm.py ./
 ```bash
 export NUM_GPUS=8
 export TOKENIZERS_PARALLELISM=0
-export MODEL_DIR="./norwegian-roberta-base"
+export MODEL_DIR="./vietnam-roberta-base"
 mkdir -p ${MODEL_DIR}
 ```
 
