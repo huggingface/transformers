@@ -26,7 +26,7 @@ import torch
 from flax.training import checkpoints
 from huggingface_hub import hf_hub_download
 
-from transformers import OwlViTConfig, OwlViTForObjectDetection
+from transformers import OwlViTConfig, OwlViTVisionConfig, OwlViTTextConfig, OwlViTForObjectDetection
 from transformers.utils import logging
 
 
@@ -35,13 +35,17 @@ logger = logging.get_logger(__name__)
 
 
 def get_owlvit_config(model_name):
-    config = OwlViTConfig()
-
     if "patch16" in model_name:
-        config.vision_config.patch_size = 16
-        config.vision_config.image_size = 768
+        patch_size = 16
+        image_size = 768
 
-    return config
+    if "v2" in model_name:
+       image_size = 960
+    
+    vision_config = OwlViTVisionConfig(patch_size=patch_size, image_size=image_size)
+    text_config = OwlViTTextConfig()
+
+    return OwlViTConfig(text_config=text_config.to_dict(), vision_config=vision_config.to_dict())
 
 
 def flatten_nested_dict(params, parent_key="", sep="/"):
@@ -58,7 +62,7 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config):
+def create_rename_keys(config, model_name):
     rename_keys = []
 
     # fmt: off
@@ -70,10 +74,16 @@ def create_rename_keys(config):
     rename_keys.append(("backbone/clip/visual/ln_pre/bias", "owlvit.vision_model.pre_layernorm.bias"))
 
     for i in range(config.vision_config.num_hidden_layers):
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.weight"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.bias"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.weight"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.bias"))
+        if "v2" in model_name:
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_0/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.weight"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_0/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.bias"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.weight"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.bias"))
+        else:
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.weight"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.bias"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.weight"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.bias"))
         rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_fc/kernel", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc1.weight"))
         rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_fc/bias", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc1.bias"))
         rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_proj/kernel", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc2.weight"))
@@ -95,10 +105,16 @@ def create_rename_keys(config):
     rename_keys.append(("backbone/clip/text/positional_embedding", "owlvit.text_model.embeddings.position_embedding.weight"))
 
     for i in range(config.text_config.num_hidden_layers):
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.weight"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.bias"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.weight"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.bias"))
+        if "v2" in model_name:
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_0/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.weight"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_0/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.bias"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.weight"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.bias"))
+        else:
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.weight"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.bias"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.weight"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.bias"))
         rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_fc/kernel", f"owlvit.text_model.encoder.layers.{i}.mlp.fc1.weight"))
         rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_fc/bias", f"owlvit.text_model.encoder.layers.{i}.mlp.fc1.bias"))
         rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_proj/kernel", f"owlvit.text_model.encoder.layers.{i}.mlp.fc2.weight"))
@@ -138,6 +154,15 @@ def create_rename_keys(config):
     rename_keys.append(("obj_box_head/Dense_2/kernel", "box_head.dense2.weight"))
     rename_keys.append(("obj_box_head/Dense_2/bias", "box_head.dense2.bias"))
 
+    # objectness head (only for v2)
+    if "v2" in model_name:
+        rename_keys.append(("objectness_head/Dense_0/kernel", "objectness_head.dense0.weight"))
+        rename_keys.append(("objectness_head/Dense_0/bias", "objectness_head.dense0.bias"))
+        rename_keys.append(("objectness_head/Dense_1/kernel", "objectness_head.dense1.weight"))
+        rename_keys.append(("objectness_head/Dense_1/bias", "objectness_head.dense1.bias"))
+        rename_keys.append(("objectness_head/Dense_2/kernel", "objectness_head.dense2.weight"))
+        rename_keys.append(("objectness_head/Dense_2/bias", "objectness_head.dense2.bias"))
+
     # fmt: on
 
     return rename_keys
@@ -172,25 +197,29 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
     # Load original state dict based on model name
     model_name_to_checkpoint_path = {
         "owlvit-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/clip_vit_b16_6171dab",
+        "owlv2-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams_c7e1b9a",
     }
     checkpoint_path = model_name_to_checkpoint_path[model_name]
-    variables = checkpoints.restore_checkpoint(checkpoint_path, target=None)["optimizer"]["target"]
+    variables = checkpoints.restore_checkpoint(checkpoint_path, target=None)
+    variables = variables["params"] if "v2" in model_name else variables["optimizer"]["target"]
     flax_params = jax.tree_util.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
     state_dict = flatten_nested_dict(flax_params)
 
-    # for name, param in state_dict.items():
-    #     print(name, param.shape)
+    for name, param in state_dict.items():
+        print(name, param.shape)
 
     # Rename keys
-    rename_keys = create_rename_keys(config)
+    rename_keys = create_rename_keys(config, model_name)
     for src, dest in rename_keys:
         rename_and_reshape_key(state_dict, src, dest, config)
 
     # load HuggingFace model
     model = OwlViTForObjectDetection(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
     assert missing_keys == ["owlvit.visual_projection.weight"]
-    assert unexpected_keys == ["class_head/padding", "class_head/padding_bias"]
+    assert unexpected_keys == [] if "v2" in model_name else ["class_head/padding", "class_head/padding_bias"]
     model.eval()
 
     # for name, param in model.named_parameters():
@@ -218,11 +247,21 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
     # else:
     #     raise ValueError(f"Unknown URL: {checkpoint_url}")
 
-    expected_logits = torch.tensor(
-        [[-9.6403, -9.6249, -9.1869], [-12.4517, -11.8114, -12.3912], [-12.2289, -11.3871, -12.0908]]
-    )
+    if model_name == "owlvit-base-patch16":
+        expected_logits = torch.tensor(
+            [[-9.6403, -9.6249, -9.1869], [-12.4517, -11.8114, -12.3912], [-12.2289, -11.3871, -12.0908]]
+        )
+        expected_boxes = torch.tensor([[0.0206, 0.0355, 0.0400], [0.0711, 0.3572, 0.1431], [0.0811, 0.4575, 0.1718]])
+    elif model_name == "owlv2-base-patch16":
+        expected_logits = torch.tensor(
+            [[-9.6403, -9.6249, -9.1869], [-12.4517, -11.8114, -12.3912], [-12.2289, -11.3871, -12.0908]]
+        )
+        expected_boxes = torch.tensor([[0.0206, 0.0355, 0.0400], [0.0711, 0.3572, 0.1431], [0.0811, 0.4575, 0.1718]])
+
+    print("Logits:", logits[0, :3, :3])
+    print("Pred boxes:", pred_boxes[0, :3, :3])
+    
     assert torch.allclose(logits[0, :3, :3], expected_logits, atol=1e-3)
-    expected_boxes = torch.tensor([[0.0206, 0.0355, 0.0400], [0.0711, 0.3572, 0.1431], [0.0811, 0.4575, 0.1718]])
     assert torch.allclose(pred_boxes[0, :3, :3], expected_boxes, atol=1e-3)
     print("Looks ok!")
 
@@ -248,7 +287,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         default="owlvit-base-patch16",
-        choices=["owlvit-base-patch16"],
+        choices=["owlvit-base-patch16", "owlv2-base-patch16"],
         type=str,
         help="Name of the OWL-ViT model you'd like to convert from FLAX to PyTorch.",
     )

@@ -268,6 +268,8 @@ class OwlViTConfig(PretrainedConfig):
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* parameter. Default is used as per the original OWL-ViT
             implementation.
+        add_objectness_head (`bool`, *optional*, defaults to `False`):
+            Whether to add an objectness head to the object detection model.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
@@ -280,6 +282,7 @@ class OwlViTConfig(PretrainedConfig):
         vision_config=None,
         projection_dim=512,
         logit_scale_init_value=2.6592,
+        add_objectness_head=False,
         return_dict=True,
         **kwargs,
     ):
@@ -298,6 +301,7 @@ class OwlViTConfig(PretrainedConfig):
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
+        self.add_objectness_head = add_objectness_head
         self.return_dict = return_dict
         self.initializer_factor = 1.0
 
