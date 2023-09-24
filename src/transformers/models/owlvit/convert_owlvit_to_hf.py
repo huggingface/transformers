@@ -26,7 +26,7 @@ import torch
 from flax.training import checkpoints
 from huggingface_hub import hf_hub_download
 
-from transformers import OwlViTConfig, OwlViTVisionConfig, OwlViTTextConfig, OwlViTForObjectDetection
+from transformers import OwlViTConfig, OwlViTForObjectDetection, OwlViTTextConfig, OwlViTVisionConfig
 from transformers.utils import logging
 
 
@@ -40,8 +40,8 @@ def get_owlvit_config(model_name):
         image_size = 768
 
     if "v2" in model_name:
-       image_size = 960
-    
+        image_size = 960
+
     vision_config = OwlViTVisionConfig(patch_size=patch_size, image_size=image_size)
     text_config = OwlViTTextConfig()
 
@@ -260,7 +260,7 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
 
     print("Logits:", logits[0, :3, :3])
     print("Pred boxes:", pred_boxes[0, :3, :3])
-    
+
     assert torch.allclose(logits[0, :3, :3], expected_logits, atol=1e-3)
     assert torch.allclose(pred_boxes[0, :3, :3], expected_boxes, atol=1e-3)
     print("Looks ok!")
@@ -282,7 +282,7 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    
+
     # Required parameters
     parser.add_argument(
         "--model_name",

@@ -1370,14 +1370,14 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         box_coordinates = torch.from_numpy(box_coordinates).to(device)
 
         return box_coordinates
-    
+
     def objectness_predictor(self, image_features: torch.FloatTensor) -> torch.FloatTensor:
         """Predicts the probability that each image feature token is an object.
-        
+
         Args:
             image_features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_dim)`)):
                 Features extracted from the image.
-        
+
         Returns:
             Objectness scores.
         """
@@ -1746,7 +1746,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Predict objectness
         if self.objectness_head is not None:
-            objectness_logits = self.objectness_predictor(image_feats)
+            self.objectness_predictor(image_feats)
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
