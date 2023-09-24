@@ -1008,6 +1008,9 @@ class FlaxRobertaForMaskedLMModule(nn.Module):
         )
         self.lm_head = FlaxRobertaLMHead(config=self.config, dtype=self.dtype)
 
+    def enable_gradient_checkpointing(self):
+        self.roberta.gradient_checkpointing = True
+
     def __call__(
         self,
         input_ids,
