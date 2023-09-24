@@ -150,7 +150,7 @@ def rename_and_reshape_key(dct, old, new, config):
         val = val.reshape(-1, config.vision_config.hidden_size)
     if ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "text" in new:
         val = val.reshape(-1, config.text_config.hidden_size)
-    
+
     if "patch_embedding" in new:
         val = val.transpose(3, 2, 0, 1)
     elif new.endswith("weight") and "position_embedding" not in new and "token_embedding" not in new:
@@ -163,7 +163,7 @@ def rename_and_reshape_key(dct, old, new, config):
 
 
 @torch.no_grad()
-def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, save_model, push_to_hub):
+def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our OWL-ViT structure.
     """
@@ -190,7 +190,7 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, save_model, 
     model = OwlViTForObjectDetection(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     assert missing_keys == ["owlvit.visual_projection.weight"]
-    assert unexpected_keys == ['class_head/padding', 'class_head/padding_bias']
+    assert unexpected_keys == ["class_head/padding", "class_head/padding_bias"]
     model.eval()
 
     # for name, param in model.named_parameters():
@@ -206,7 +206,11 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, save_model, 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlvit_input_ids.pt", repo_type="dataset")
     input_ids = torch.load(filepath)
     print("Shape of input ids:", input_ids.shape)
-    model(input_ids=input_ids, pixel_values=pixel_values).logits
+
+    with torch.no_grad():
+        outputs = model(input_ids=input_ids, pixel_values=pixel_values)
+        logits = outputs.logits
+        pred_boxes = outputs.pred_boxes
 
     # # note: the logits below were obtained without center cropping
     # if checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/owlvit/im1k/owlvit_atto_1k_224_ema.pt":
@@ -214,27 +218,32 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, save_model, 
     # else:
     #     raise ValueError(f"Unknown URL: {checkpoint_url}")
 
-    # assert torch.allclose(logits[0, :5], expected_logits, atol=1e-3)
-    # assert logits.shape == expected_shape
-    # print("Model outputs match the original results!")
+    expected_logits = torch.tensor(
+        [[-9.6403, -9.6249, -9.1869], [-12.4517, -11.8114, -12.3912], [-12.2289, -11.3871, -12.0908]]
+    )
+    assert torch.allclose(logits[0, :3, :3], expected_logits, atol=1e-3)
+    expected_boxes = torch.tensor([[0.0206, 0.0355, 0.0400], [0.0711, 0.3572, 0.1431], [0.0811, 0.4575, 0.1718]])
+    assert torch.allclose(pred_boxes[0, :3, :3], expected_boxes, atol=1e-3)
+    print("Looks ok!")
 
-    if save_model:
-        print("Saving model to local...")
+    if pytorch_dump_folder_path is not None:
+        print("Saving model and processor locally...")
         # Create folder to save model
         if not os.path.isdir(pytorch_dump_folder_path):
             os.mkdir(pytorch_dump_folder_path)
 
         model.save_pretrained(pytorch_dump_folder_path)
-        processor.save_pretrained(pytorch_dump_folder_path)
+        # processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print(f"Pushing {model_name} to the hub...")
         model.push_to_hub(model_name)
-        processor.push_to_hub(model_name)
+        # processor.push_to_hub(model_name)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    
     # Required parameters
     parser.add_argument(
         "--model_name",
@@ -245,12 +254,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="model",
+        default=None,
         type=str,
+        required=False,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument("--save_model", action="store_true", help="Save model to local")
     parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
 
     args = parser.parse_args()
-    convert_owlvit_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)
+    convert_owlvit_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

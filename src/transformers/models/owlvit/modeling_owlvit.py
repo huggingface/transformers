@@ -778,7 +778,7 @@ class OwlViTEncoder(nn.Module):
                     attention_mask,
                     causal_attention_mask,
                     output_attentions=output_attentions,
-                    print_values=i in [0,11],
+                    print_values=i in [0, 11],
                 )
 
             hidden_states = layer_outputs[0]
