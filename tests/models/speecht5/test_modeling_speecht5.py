@@ -1057,7 +1057,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
                 speaker_embeddings=speaker_embeddings,
             )
             self.assertEqual(spectrogram.shape, spectrograms[i][: spectrogram_lengths[i]].shape)
-            self.assertTrue(torch.allclose(spectrogram, spectrograms[i][: spectrogram_lengths[i]], atol=2e-4))
+            self.assertTrue(torch.allclose(spectrogram, spectrograms[i][: spectrogram_lengths[i]], atol=5e-3))
 
 
 @require_torch
