@@ -2387,6 +2387,8 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         # image text matching head
         self.itm_head = nn.Linear(config.qformer_config.hidden_size, 2)
 
+        self.temp = nn.Parameter(0.07 * torch.ones([]))
+
         # Initialize weights and apply final processing
         self.post_init()
 
