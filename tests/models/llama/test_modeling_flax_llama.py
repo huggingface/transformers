@@ -13,32 +13,26 @@
 # limitations under the License.
 
 
-import tempfile
 import unittest
 
 import numpy as np
 
-import transformers
 from transformers import LlamaConfig, is_flax_available, is_torch_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
+from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
-from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
 if is_flax_available():
     import jax.numpy as jnp
 
     from transformers import LlamaTokenizerFast
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
     from transformers.models.llama.modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel
 
 
 if is_torch_available():
-    import torch
+    pass
 
 
 class FlaxLlamaModelTester:
@@ -208,6 +202,7 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
             model = model_class_name.from_pretrained("openlm-research/open_llama_3b_v2", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
+
 
 @slow
 @require_flax
