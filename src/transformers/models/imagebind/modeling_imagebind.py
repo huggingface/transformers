@@ -1823,7 +1823,6 @@ class ImageBindImuModel(ImageBindPreTrainedModel):
         )
 
 
-# TODO: add support for remaining modalities
 @add_start_docstrings(IMAGEBIND_START_DOCSTRING)
 class ImageBindModel(ImageBindPreTrainedModel):
     config_class = ImageBindConfig
@@ -2208,13 +2207,13 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         return imu_features
 
-    # TODO: add remaining modalities
     @add_start_docstrings_to_model_forward(IMAGEBIND_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageBindOutput, config_class=ImageBindConfig)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_features: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        modality: Optional[str] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
@@ -2253,6 +2252,8 @@ class ImageBindModel(ImageBindPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        other_model, other_projection, other_postprocessor = self._resolve_modality_models(modality)
+
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -2260,47 +2261,99 @@ class ImageBindModel(ImageBindPreTrainedModel):
             return_dict=return_dict,
         )
 
-        text_outputs = self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        if modality == "text":
+            other_outputs = other_model(
+                input_ids=input_features,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        else:
+            other_outputs = other_model(
+                input_ids=input_features,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
 
         image_embeds = vision_outputs[1]
         image_embeds = self.visual_projection(image_embeds)
 
-        text_embeds = text_outputs[1]
-        text_embeds = self.text_projection(text_embeds)
+        other_embeds = other_outputs[1]
+        other_embeds = other_projection(other_embeds)
 
-        # normalized features
-        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
-        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+        # normalized features: postprocessor performs normalization and logit scaling
+        image_embeds = self.vision_postprocessor(image_embeds)
+        other_embeds = other_postprocessor(other_embeds)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
-        logits_per_image = logits_per_text.t()
+        logits_per_other = torch.matmul(other_embeds, image_embeds.t())
+        logits_per_image = logits_per_other.t()
 
         loss = None
         if return_loss:
-            loss = imagebind_loss(logits_per_text)
+            loss = imagebind_loss(logits_per_other)
 
         if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            output = (logits_per_image, logits_per_other, other_embeds, image_embeds, other_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
+        
+        output_kwargs = self._resolve_output_keys(modality, logits_per_other, other_embeds, other_outputs)
 
         return ImageBindOutput(
             loss=loss,
             logits_per_image=logits_per_image,
-            logits_per_text=logits_per_text,
-            text_embeds=text_embeds,
             image_embeds=image_embeds,
-            text_model_output=text_outputs,
             vision_model_output=vision_outputs,
+            **output_kwargs,
         )
+    
+    def _resolve_modality_models(self, modality: str):
+        if modality == "text":
+            model = self.text_model
+            projection = self.text_projection
+            postprocessor = self.text_postprocessor
+        elif modality == "vision":
+            model = self.vision_model
+            projection = self.visual_projection
+            postprocessor = self.vision_postprocessor
+        elif modality == "audio":
+            model = self.audio_model
+            projection = self.audio_projection
+            postprocessor = self.audio_postprocessor
+        elif modality == "depth":
+            model = self.depth_model
+            projection = self.depth_projection
+            postprocessor = self.depth_postprocessor
+        elif modality == "thermal":
+            model = self.thermal_model
+            projection = self.thermal_projection
+            postprocessor = self.thermal_postprocessor
+        elif modality == "imu":
+            model = self.imu_model
+            projection = self.imu_projection
+            postprocessor = self.imu_postprocessor
+        else:
+            raise ValueError(
+                f"`modality` is expected to be in `['text', 'vision', 'audio', 'depth', 'thermal', 'imu']` but got"
+                f" {modality}"
+            )
+        return model, projection, postprocessor
+    
+    def _resolve_output_keys(self, modality: str, logits, embeds, model_outputs):
+        output_kwargs = {}
+        if modality == "vision":
+            # Different naming pattern
+            output_kwargs["logits_per_image"] = logits
+            output_kwargs["image_embeds"] = embeds
+            output_kwargs["vision_model_output"] = model_outputs
+        else:
+            output_kwargs[f"logits_per_{modality}"] = logits
+            output_kwargs[f"{modality}_embeds"] = embeds
+            output_kwargs[f"{modality}_model_output"] = model_outputs
+        return output_kwargs
 
 
 @add_start_docstrings(
