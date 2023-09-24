@@ -491,6 +491,7 @@ class OwlViTEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
+        print_values=False,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -511,12 +512,19 @@ class OwlViTEncoderLayer(nn.Module):
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
+
+        if print_values:
+            print("First values of attention output:", hidden_states[0, :3, :3])
+
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
+
+        if print_values:
+            print("First values of encoder layer output:", hidden_states[0, :3, :3])
 
         outputs = (hidden_states,)
 
@@ -747,7 +755,7 @@ class OwlViTEncoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
+        for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
@@ -770,6 +778,7 @@ class OwlViTEncoder(nn.Module):
                     attention_mask,
                     causal_attention_mask,
                     output_attentions=output_attentions,
+                    print_values=i in [0,11],
                 )
 
             hidden_states = layer_outputs[0]
@@ -970,6 +979,8 @@ class OwlViTVisionTransformer(nn.Module):
         print("First values of final patch embeddings:", hidden_states[0, :3, :3])
         hidden_states = self.pre_layernorm(hidden_states)
 
+        print("First values of final patch embedding after prelayernorm:", hidden_states[0, :3, :3])
+
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
@@ -979,10 +990,7 @@ class OwlViTVisionTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
-        print("Shape of vision features after final layernorm:", last_hidden_state.shape)
-        print("First values of vision features after final layernorm:", last_hidden_state[0, :3, :3])
+        pooled_output = self.pre_layernorm(pooled_output)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -1442,6 +1450,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         last_hidden_state = outputs.vision_model_output[0]
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
+        print("Shape of image_embeds after post_layernorm:", image_embeds.shape)
+        print("First values of image_embeds after post_layernorm:", image_embeds[0, :3, :3])
+
         # Resize class token
         new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
         class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
@@ -1449,6 +1460,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
         image_embeds = self.layer_norm(image_embeds)
+
+        print("Shape of image embeds after merge_class_token:", image_embeds.shape)
+        print("First values of image embeds after merge_class_token:", image_embeds[0, :3, :3])
 
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
@@ -1459,6 +1473,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         )
         image_embeds = image_embeds.reshape(new_size)
         text_embeds = outputs[-4]
+
+        print("Shape of final image_embeds:", image_embeds.shape)
 
         return (text_embeds, image_embeds, outputs)
 
@@ -1712,6 +1728,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
+
+        print("Predicted logits:", pred_logits.shape)
+        print("First values of predicted logits:", pred_logits[0, :3, :3])
+        print("Predicted boxes:", pred_boxes.shape)
+        print("First values of predicted boxes:", pred_boxes[0, :3, :3])
 
         if not return_dict:
             output = (

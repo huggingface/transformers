@@ -147,12 +147,11 @@ def rename_and_reshape_key(dct, old, new, config):
     val = dct.pop(old)
 
     if ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "vision" in new:
-        # TODO check whether we need to reshape and transpose for these parameters
         val = val.reshape(-1, config.vision_config.hidden_size)
-    elif ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "text" in new:
-        # TODO check whether we need to reshape and transpose for these parameters
+    if ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "text" in new:
         val = val.reshape(-1, config.text_config.hidden_size)
-    elif "patch_embedding" in new:
+    
+    if "patch_embedding" in new:
         val = val.transpose(3, 2, 0, 1)
     elif new.endswith("weight") and "position_embedding" not in new and "token_embedding" not in new:
         val = val.T
@@ -190,8 +189,8 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, save_model, 
     # load HuggingFace model
     model = OwlViTForObjectDetection(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
+    assert missing_keys == ["owlvit.visual_projection.weight"]
+    assert unexpected_keys == ['class_head/padding', 'class_head/padding_bias']
     model.eval()
 
     # for name, param in model.named_parameters():
