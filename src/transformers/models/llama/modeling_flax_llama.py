@@ -173,6 +173,7 @@ class FlaxLlamaRMSNorm(nn.Module):
 
 class FlaxLlamaRotaryEmbedding(nn.Module):
     config: LlamaConfig
+    dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         head_dim = self.config.hidden_size // self.config.num_attention_heads
@@ -184,6 +185,9 @@ class FlaxLlamaRotaryEmbedding(nn.Module):
 
         key = apply_rotary_pos_emb(key, sincos)
         query = apply_rotary_pos_emb(query, sincos)
+
+        key = jnp.asarray(key, dtype=self.dtype)
+        query = jnp.asarray(query, dtype=self.dtype)
 
         return key, query
 
