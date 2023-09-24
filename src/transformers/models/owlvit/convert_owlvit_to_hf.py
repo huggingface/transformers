@@ -27,7 +27,15 @@ import torch
 from flax.training import checkpoints
 from huggingface_hub import hf_hub_download
 
-from transformers import OwlViTConfig, OwlViTForObjectDetection, OwlViTTextConfig, OwlViTVisionConfig
+from transformers import (
+    CLIPTokenizer,
+    OwlViTConfig,
+    OwlViTForObjectDetection,
+    OwlViTImageProcessor,
+    OwlViTProcessor,
+    OwlViTTextConfig,
+    OwlViTVisionConfig,
+)
 from transformers.utils import logging
 
 
@@ -49,11 +57,13 @@ def get_owlvit_config(model_name):
     vision_config = OwlViTVisionConfig(patch_size=patch_size, image_size=image_size)
     text_config = OwlViTTextConfig()
 
-    return OwlViTConfig(
+    config = OwlViTConfig(
         text_config=text_config.to_dict(),
         vision_config=vision_config.to_dict(),
         add_objectness_head=add_objectness_head,
     )
+
+    return config
 
 
 def flatten_nested_dict(params, parent_key="", sep="/"):
@@ -234,9 +244,15 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
     # for name, param in model.named_parameters():
     #     print(name, param.shape)
 
-    # # TODO Check outputs on an image, prepared by the processor
-    # processor = OwlViTProcessor()
-    # inputs = processor(images=prepare_img(), return_tensors="pt")
+    # Initialize image processor
+    image_processor = OwlViTImageProcessor(
+        size=config.vision_config.image_size, crop_size=config.vision_config.image_size
+    )
+    # Initialize tokenizer
+    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token="!", model_max_length=16)
+
+    # Initialize processor
+    processor = OwlViTProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     filename = "owlvit_pixel_values_960.pt" if "v2" in model_name else "owlvit_pixel_values.pt"
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
@@ -265,13 +281,9 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
         expected_boxes = torch.tensor([[0.0206, 0.0355, 0.0400], [0.0711, 0.3572, 0.1431], [0.0811, 0.4575, 0.1718]])
     elif model_name == "owlv2-base-patch16":
         expected_logits = torch.tensor(
-            [[-10.0043,  -9.0226,  -8.0433],
-        [-12.4569, -14.0380, -12.6153],
-        [-21.0731, -22.2705, -21.8850]]
+            [[-10.0043, -9.0226, -8.0433], [-12.4569, -14.0380, -12.6153], [-21.0731, -22.2705, -21.8850]]
         )
-        expected_boxes = torch.tensor([[0.0136, 0.0223, 0.0269],
-        [0.0406, 0.0327, 0.0797],
-        [0.0638, 0.1539, 0.1255]])
+        expected_boxes = torch.tensor([[0.0136, 0.0223, 0.0269], [0.0406, 0.0327, 0.0797], [0.0638, 0.1539, 0.1255]])
     elif model_name == "owlv2-base-patch16-ensemble":
         expected_logits = torch.tensor(
             [[-8.6353, -9.5409, -6.6154], [-7.9442, -9.6151, -6.7117], [-12.4593, -15.3332, -12.1048]]
@@ -292,12 +304,12 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
             os.mkdir(pytorch_dump_folder_path)
 
         model.save_pretrained(pytorch_dump_folder_path)
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print(f"Pushing {model_name} to the hub...")
-        model.push_to_hub(model_name)
-        # processor.push_to_hub(model_name)
+        model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
