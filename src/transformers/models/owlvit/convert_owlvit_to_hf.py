@@ -31,7 +31,7 @@ from transformers import (
     CLIPTokenizer,
     OwlViTConfig,
     OwlViTForObjectDetection,
-    OwlViTImageProcessor,
+    Owlv2ImageProcessor,
     OwlViTProcessor,
     OwlViTTextConfig,
     OwlViTVisionConfig,
@@ -245,9 +245,8 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
     #     print(name, param.shape)
 
     # Initialize image processor
-    image_processor = OwlViTImageProcessor(
-        size=config.vision_config.image_size, crop_size=config.vision_config.image_size
-    )
+    size = {"height": config.vision_config.image_size, "width": config.vision_config.image_size}
+    image_processor = Owlv2ImageProcessor(size=size)
     # Initialize tokenizer
     tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token="!", model_max_length=16)
 

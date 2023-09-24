@@ -28,18 +28,18 @@ from ...utils import is_flax_available, is_tf_available, is_torch_available
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs an OWL-ViT processor which wraps [`OwlViTImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
+    Constructs an OWL-ViT processor which wraps [`OwlViTImageProcessor`]/[`Owlv2ImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
     into a single processor that interits both the image processor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`OwlViTImageProcessor`]):
+        image_processor ([`OwlViTImageProcessor`]/[`Owlv2ImageProcessor`]):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "OwlViTImageProcessor"
+    image_processor_class = ("OwlViTImageProcessor", "Owlv2ImageProcessor")
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):

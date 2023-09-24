@@ -51,32 +51,24 @@ logger = logging.get_logger(__name__)
 def _preprocess_resize_output_shape(image, output_shape):
     """Validate resize output shape according to input image.
 
-    Parameters
-    ----------
-    image: ndarray
-        Image to be resized.
-    output_shape: iterable
-        Size of the generated output image `(rows, cols[, ...][, dim])`. If
-        `dim` is not provided, the number of channels is preserved.
+    Args:
+        image (`np.ndarray`):
+         Image to be resized.
+        output_shape (`iterable`):
+            Size of the generated output image `(rows, cols[, ...][, dim])`. If `dim` is not provided, the number of
+            channels is preserved.
 
-    Returns
-    -------
-    image: ndarray
-        The input image, but with additional singleton dimensions appended in
-        the case where ``len(output_shape) > input.ndim``.
-    output_shape: tuple
-        The output image converted to tuple.
+    Returns 
+        image (`np.ndarray):
+            The input image, but with additional singleton dimensions appended in the case where ``len(output_shape) >
+            input.ndim``.
+        output_shape (`Tuple`):
+            The output shape converted to tuple.
 
-    Raises
-    ------
-    ValueError:
-        If output_shape length is smaller than the image number of
-        dimensions
+    Raises ------ ValueError:
+        If output_shape length is smaller than the image number of dimensions.
 
-    Notes
-    -----
-    The input image is reshaped if its number of dimensions is not
-    equal to output_shape_length.
+    Notes ----- The input image is reshaped if its number of dimensions is not equal to output_shape_length.
 
     """
     output_shape = tuple(output_shape)
@@ -84,14 +76,13 @@ def _preprocess_resize_output_shape(image, output_shape):
     input_shape = image.shape
     if output_ndim > image.ndim:
         # append dimensions to input_shape
-        input_shape += (1, ) * (output_ndim - image.ndim)
+        input_shape += (1,) * (output_ndim - image.ndim)
         image = np.reshape(image, input_shape)
     elif output_ndim == image.ndim - 1:
         # multichannel case: append shape of last axis
-        output_shape = output_shape + (image.shape[-1], )
+        output_shape = output_shape + (image.shape[-1],)
     elif output_ndim < image.ndim:
-        raise ValueError("output_shape length cannot be smaller than the "
-                         "image number of dimensions")
+        raise ValueError("output_shape length cannot be smaller than the " "image number of dimensions")
 
     return image, output_shape
 
@@ -149,26 +140,27 @@ class Owlv2ImageProcessor(BaseImageProcessor):
     Constructs an OWLv2 image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
-            by `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
-            ...
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
             the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
             method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Whether to pad the image to a square with gray pixels on the bottom and the right. Can be overriden by
+            `do_pad` in the `preprocess` method.
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
+            by `do_resize` in the `preprocess` method.
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 960, "width": 960}`):
+            Size to resize the image to. Can be overriden by `size` in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -262,7 +254,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
         # Translate modes used by np.pad to those used by scipy.ndimage
         mode = "reflect"
-        ndi_mode = 'mirror'
+        ndi_mode = "mirror"
         cval = 0
         order = 1
         if anti_aliasing:
@@ -285,7 +277,8 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
         _clip_warp_output(image, out, mode, cval)
 
-        return out
+        image = to_channel_dimension_format(out, data_format, input_data_format) if data_format is not None else out
+        return image
 
     def preprocess(
         self,
@@ -310,14 +303,16 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                ...
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_pad (`bool`, *optional*, defaults to `self.do_pad`):
+                Whether to pad the image to a square with gray pixels on the bottom and the right.
+            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+                Size to resize the image to.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
@@ -389,14 +384,8 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        print("Shape of image after rescaling:", images[0].shape)
-
         if do_pad:
-            images = [
-                self.pad(image=image, input_data_format=input_data_format) for image in images
-            ]
-
-        print("Shape of image after padding:", images[0].shape)
+            images = [self.pad(image=image, input_data_format=input_data_format) for image in images]
 
         if do_resize:
             images = [
@@ -404,12 +393,9 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                     image=image,
                     size=size,
                     input_data_format=input_data_format,
-                    data_format=data_format,
                 )
                 for image in images
             ]
-
-        print(images[0].shape)
 
         if do_normalize:
             images = [

@@ -1,6 +1,8 @@
-from transformers import Owlv2ImageProcessor
-from PIL import Image
 from huggingface_hub import hf_hub_download
+from PIL import Image
+
+from transformers import Owlv2ImageProcessor
+
 
 processor = Owlv2ImageProcessor()
 
