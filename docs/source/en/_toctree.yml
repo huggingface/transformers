@@ -424,6 +424,8 @@
         title: PEGASUS-X
       - local: model_doc/persimmon
         title: Persimmon
+      - local: model_doc/phi
+        title: Phi
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
