@@ -20,6 +20,7 @@ from typing import Any, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from timm.layers import DropPath
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -379,8 +380,10 @@ class ImageBindTextEmbeddings(nn.Module):
 
 class Image2Video(nn.Module):
     """
-    Maps 4-dim image tensors of shape (B, C, H, W) to 5-dim. video tensors, possibly repeating the image along the
-    time dimension.
+    Maps 4-dim image tensors of shape (B, C, H, W) to 5-dim video tensors, possibly repeating the image along the
+    time dimension. For example, if time_dim == 2 (the default), images of shape (B, C, H, W) will be transformed to
+    video of shape (B, C, 1, H, W), and then the image will be repeated along the time dimension ntimes to get shape
+    (B, C, N, H, W).
     """
     def __init__(self, time_dim: int = 2, ntimes: int = 2, pad_type: str = "repeat"):
         if ntimes <= 0:
@@ -667,15 +670,19 @@ class ImageBindMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->ImageBind
+# CLIPEncoderLayer with DropPath layer after each residual subblock (attention, feedforward)
 class ImageBindEncoderLayer(nn.Module):
-    def __init__(self, config: ImageBindConfig):
+    def __init__(self, config: ImageBindConfig, drop_path_rate: float = 0.0):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = ImageBindAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = ImageBindMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        if drop_path_rate > 0.0:
+            self.drop_path = DropPath(drop_path_rate)
+        else:
+            self.drop_path = nn.Identity()
 
     def forward(
         self,
@@ -703,11 +710,13 @@ class ImageBindEncoderLayer(nn.Module):
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
+        hidden_states = self.drop_path(hidden_states)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        hidden_states = self.drop_path(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -717,8 +726,7 @@ class ImageBindEncoderLayer(nn.Module):
 
         return outputs
 
-# TODO: weight initialization (and possibly other stuff) for remaining modalities
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->ImageBind,clip->imagebind
+
 class ImageBindPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -736,7 +744,12 @@ class ImageBindPreTrainedModel(PreTrainedModel):
         if isinstance(module, ImageBindTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, ImageBindVisionEmbeddings):
+        elif isinstance(module, RGBDTPatchEmbedding):
+            factor = self.config.initializer_factor
+            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+        elif isinstance(module, ImageBindImuEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
@@ -910,7 +923,7 @@ IMAGEBIND_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->ImageBind
+# CLIPEncoder with DropPath support
 class ImageBindEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -920,11 +933,22 @@ class ImageBindEncoder(nn.Module):
         config: ImageBindConfig
     """
 
-    def __init__(self, config: ImageBindConfig):
+    def __init__(self, config: ImageBindConfig, drop_path_type: str = "progressive"):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([ImageBindEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
+
+        if drop_path_type == "progressive":
+            drop_path_rates = [prob.item() for prob in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        elif drop_path_type == "uniform":
+            drop_path_rates = [config.drop_path_rate for _ in range(config.num_hidden_layers)]
+        else:
+            raise ValueError(
+                f"`drop_path_type` is expected to be in `['uniform', 'progressive']` but got {drop_path_type}"
+            )
+        
+        self.layers = nn.ModuleList(
+            [ImageBindEncoderLayer(config, drop_path_rate) for drop_path_rate in drop_path_rates]
+        )
 
     def forward(
         self,
@@ -1054,8 +1078,8 @@ class ImageBindTextTransformer(nn.Module):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         bsz, seq_len = input_shape
-        # IMAGEBIND's text model uses causal mask, prepare it here.
-        # https://github.com/openai/IMAGEBIND/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/imagebind/model.py#L324
+        # ImageBind's text model uses causal mask, prepare it here.
+        # https://github.com/facebookresearch/ImageBind/blob/95d27c7fd5a8362f3527e176c3a80ae5a4d880c0/imagebind/models/imagebind_model.py#L172
         causal_attention_mask = self._build_causal_attention_mask(
             bsz, seq_len, hidden_states.dtype, device=hidden_states.device
         )
@@ -1174,7 +1198,7 @@ class ImageBindVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = ImageBindVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = ImageBindEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
@@ -1201,7 +1225,7 @@ class ImageBindVisionTransformer(nn.Module):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
+        hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1284,7 +1308,65 @@ class ImageBindVisionModel(ImageBindPreTrainedModel):
         )
 
 
-# TODO: add base model classes for remaining modalities (audio, depth, thermal, IMU)
+# TODO: copied from CLIP?
+class ImageBindAudioTransformer(nn.Module):
+    def __init__(self, config: ImageBindAudioConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = ImageBindAudioEmbeddings(config)
+        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.encoder = ImageBindEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+    @add_start_docstrings_to_model_forward(IMAGEBIND_AUDIO_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ImageBindAudioConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.pre_layernorm(hidden_states)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        if not return_dict:
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
 @add_start_docstrings(
     """The vision model from ImageBind without any head or projection on top.""",
     IMAGEBIND_START_DOCSTRING,
@@ -1295,13 +1377,69 @@ class ImageBindAudioModel(ImageBindPreTrainedModel):
 
     def __init__(self, config: ImageBindAudioConfig):
         super().__init__(config)
-        self.audio_model = None  # ImageBindVisionTransformer(config)
+        self.audio_model = ImageBindAudioTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
     
     def get_input_embeddings(self) -> nn.Module:
-        # return self.vision_model.embeddings.patch_embedding
-        pass
+        return self.audio_model.embeddings.patch_embedding
+
+
+# TODO: copied from CLIP?
+class ImageBindDepthTransformer(nn.Module):
+    def __init__(self, config: ImageBindDepthConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = ImageBindDepthEmbeddings(config)
+        self.encoder = ImageBindEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+    @add_start_docstrings_to_model_forward(IMAGEBIND_DEPTH_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ImageBindDepthConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        if not return_dict:
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -1314,13 +1452,69 @@ class ImageBindDepthModel(ImageBindPreTrainedModel):
 
     def __init__(self, config: ImageBindDepthConfig):
         super().__init__(config)
-        self.depth_model = None  # ImageBindVisionTransformer(config)
+        self.depth_model = ImageBindDepthTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
     
     def get_input_embeddings(self) -> nn.Module:
-        # return self.vision_model.embeddings.patch_embedding
-        pass
+        return self.depth_model.embeddings.patch_embedding
+
+
+# TODO: copied from CLIP?
+class ImageBindThermalTransformer(nn.Module):
+    def __init__(self, config: ImageBindThermalConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = ImageBindThermalEmbeddings(config)
+        self.encoder = ImageBindEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+    @add_start_docstrings_to_model_forward(IMAGEBIND_THERMAL_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ImageBindThermalConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        if not return_dict:
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -1333,13 +1527,69 @@ class ImageBindThermalModel(ImageBindPreTrainedModel):
 
     def __init__(self, config: ImageBindThermalConfig):
         super().__init__(config)
-        self.thermal_model = None  # ImageBindVisionTransformer(config)
+        self.thermal_model = ImageBindThermalTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
     
     def get_input_embeddings(self) -> nn.Module:
-        # return self.vision_model.embeddings.patch_embedding
-        pass
+        return self.thermal_model.embeddings.patch_embedding
+
+
+# TODO: copied from CLIP?
+class ImageBindImuTransformer(nn.Module):
+    def __init__(self, config: ImageBindImuConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = ImageBindImuEmbeddings(config)
+        self.encoder = ImageBindEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+    @add_start_docstrings_to_model_forward(IMAGEBIND_IMU_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ImageBindImuConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = encoder_outputs[0]
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        if not return_dict:
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -1352,13 +1602,12 @@ class ImageBindImuModel(ImageBindPreTrainedModel):
 
     def __init__(self, config: ImageBindImuConfig):
         super().__init__(config)
-        self.imu_model = None  # ImageBindVisionTransformer(config)
+        self.imu_model = ImageBindImuTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
     
     def get_input_embeddings(self) -> nn.Module:
-        # return self.vision_model.embeddings.patch_embedding
-        pass
+        return self.imu_model.embeddings.patch_embedding
 
 
 # TODO: add support for remaining modalities
@@ -1380,17 +1629,54 @@ class ImageBindModel(ImageBindPreTrainedModel):
                 "config.vision_config is expected to be of type ImageBindVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
+        
+        if not isinstance(config.audio_config, ImageBindAudioConfig):
+            raise ValueError(
+                "config.audio_config is expected to be of type ImageBindAudioConfig but is of type"
+                f" {type(config.audio_config)}."
+            )
+        
+        if not isinstance(config.depth_config, ImageBindDepthConfig):
+            raise ValueError(
+                "config.depth_config is expected to be of type ImageBindDepthConfig but is of type"
+                f" {type(config.depth_config)}."
+            )
+        
+        if not isinstance(config.thermal_config, ImageBindThermalConfig):
+            raise ValueError(
+                "config.thermal_config is expected to be of type ImageBindThermalConfig but is of type"
+                f" {type(config.thermal_config)}."
+            )
+        
+        if not isinstance(config.imu_config, ImageBindImuConfig):
+            raise ValueError(
+                "config.imu_config is expected to be of type ImageBindImuConfig but is of type"
+                f" {type(config.imu_config)}."
+            )
 
         text_config = config.text_config
         vision_config = config.vision_config
+        audio_config = config.audio_config
+        depth_config = config.depth_config
+        thermal_config = config.thermal_config
+        imu_config = config.imu_config
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
+        self.audio_embed_dim = audio_config.hidden_size
+        self.depth_embed_dim = depth_config.hidden_size
+        self.thermal_embed_dim = thermal_config.hidden_size
+        self.imu_embed_dim = imu_config.hidden_size
 
         self.text_model = ImageBindTextTransformer(text_config)
         self.vision_model = ImageBindVisionTransformer(vision_config)
+        self.audio_model = ImageBindAudioTransformer(audio_config)
+        self.depth_model = ImageBindDepthTransformer(depth_config)
+        self.thermal_model = ImageBindThermalTransformer(thermal_config)
+        self.imu_model = ImageBindImuTransformer(imu_config)
 
+        # TODO: add projections + postprocessing for modalities
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
@@ -1777,7 +2063,7 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
     def __init__(self, config: ImageBindAudioConfig):
         super().__init__(config)
 
-        self.audio_model = None  # ImageBindVisionTransformer(config)
+        self.audio_model = ImageBindAudioTransformer(config)
 
         self.audio_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
@@ -1785,8 +2071,7 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        # return self.vision_model.embeddings.patch_embedding
-        pass
+        return self.audio_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(IMAGEBIND_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageBindAudioModelOutput, config_class=ImageBindAudioConfig)
@@ -1835,7 +2120,7 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
             outputs = (audio_embeds, audio_outputs[0]) + audio_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        return ImageBindVisionModelOutput(
+        return ImageBindAudioModelOutput(
             audio_embeds=audio_embeds,
             last_hidden_state=audio_outputs.last_hidden_state,
             hidden_states=audio_outputs.hidden_states,
@@ -1856,7 +2141,7 @@ class ImageBindDepthModelWithProjection(ImageBindPreTrainedModel):
     def __init__(self, config: ImageBindDepthConfig):
         super().__init__(config)
 
-        self.depth_model = None  # ImageBindVisionTransformer(config)
+        self.depth_model = ImageBindDepthTransformer(config)
 
         self.depth_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
@@ -1864,8 +2149,7 @@ class ImageBindDepthModelWithProjection(ImageBindPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        # return self.vision_model.embeddings.patch_embedding
-        pass
+        return self.depth_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(IMAGEBIND_DEPTH_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageBindDepthModelOutput, config_class=ImageBindDepthConfig)
@@ -1935,7 +2219,7 @@ class ImageBindThermalModelWithProjection(ImageBindPreTrainedModel):
     def __init__(self, config: ImageBindThermalConfig):
         super().__init__(config)
 
-        self.thermal_model = None  # ImageBindVisionTransformer(config)
+        self.thermal_model = ImageBindThermalTransformer(config)
 
         self.thermal_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
@@ -1943,8 +2227,7 @@ class ImageBindThermalModelWithProjection(ImageBindPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        # return self.vision_model.embeddings.patch_embedding
-        pass
+        return self.thermal_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(IMAGEBIND_THERMAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageBindThermalModelOutput, config_class=ImageBindThermalConfig)
@@ -2014,7 +2297,7 @@ class ImageBindImuModelWithProjection(ImageBindPreTrainedModel):
     def __init__(self, config: ImageBindImuConfig):
         super().__init__(config)
 
-        self.imu_model = None  # ImageBindVisionTransformer(config)
+        self.imu_model = ImageBindImuTransformer(config)
 
         self.imu_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
@@ -2022,8 +2305,7 @@ class ImageBindImuModelWithProjection(ImageBindPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        # return self.vision_model.embeddings.patch_embedding
-        pass
+        return self.imu_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(IMAGEBIND_IMU_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageBindImuModelOutput, config_class=ImageBindImuConfig)

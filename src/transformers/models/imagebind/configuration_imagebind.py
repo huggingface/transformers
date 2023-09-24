@@ -67,10 +67,12 @@ class ImageBindTextConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the DropPath (stochastic) regularization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -103,8 +105,9 @@ class ImageBindTextConfig(PretrainedConfig):
         num_attention_heads=16,
         max_position_embeddings=77,
         hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
+        layer_norm_eps=1e-6,
         attention_dropout=0.0,
+        drop_path_rate=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         pad_token_id=1,
@@ -121,11 +124,12 @@ class ImageBindTextConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.max_position_embeddings = max_position_embeddings
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.drop_path_rate = drop_path_rate
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -183,10 +187,12 @@ class ImageBindVisionConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the DropPath (stochastic) regularization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -223,8 +229,9 @@ class ImageBindVisionConfig(PretrainedConfig):
         patch_size=(2, 14, 14),
         stride=(2, 14, 14),
         hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
+        layer_norm_eps=1e-6,
         attention_dropout=0.0,
+        drop_path_rate=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         **kwargs,
@@ -244,6 +251,7 @@ class ImageBindVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
@@ -264,7 +272,6 @@ class ImageBindVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-# TODO: add config classes for remaining modalities (audio, depth, thermal, IMU)
 class ImageBindAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ImageBindAudioModel`]. It is used to instantiate a
@@ -302,10 +309,12 @@ class ImageBindAudioConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
+        attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        drop_path_rate (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the DropPath (stochastic) regularization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -339,8 +348,9 @@ class ImageBindAudioConfig(PretrainedConfig):
         patch_size=16,
         stride=10,
         hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.1,
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        drop_path_rate=0.1,
         initializer_range=0.02,
         initializer_factor=1.0,
         **kwargs,
@@ -361,6 +371,7 @@ class ImageBindAudioConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
     
@@ -414,10 +425,12 @@ class ImageBindDepthConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the DropPath (stochastic) regularization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -449,8 +462,9 @@ class ImageBindDepthConfig(PretrainedConfig):
         patch_size=16,
         stride=16,
         hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
+        layer_norm_eps=1e-6,
         attention_dropout=0.0,
+        drop_path_rate=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         **kwargs,
@@ -469,6 +483,7 @@ class ImageBindDepthConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
     
@@ -522,10 +537,12 @@ class ImageBindThermalConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the DropPath (stochastic) regularization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -557,8 +574,9 @@ class ImageBindThermalConfig(PretrainedConfig):
         patch_size=16,
         stride=16,
         hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
+        layer_norm_eps=1e-6,
         attention_dropout=0.0,
+        drop_path_rate=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         **kwargs,
@@ -577,6 +595,7 @@ class ImageBindThermalConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
     
@@ -626,10 +645,12 @@ class ImageBindImuConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.7):
+        attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        drop_path_rate (`float`, *optional*, defaults to 0.7):
+            The dropout probability for the DropPath (stochastic) regularization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -659,8 +680,9 @@ class ImageBindImuConfig(PretrainedConfig):
         input_shape=(6, 2000),
         kernel_size=8,
         hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.7,
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        drop_path_rate=0.7,
         initializer_range=0.02,
         initializer_factor=1.0,
         **kwargs,
@@ -677,6 +699,7 @@ class ImageBindImuConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+        self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
     
