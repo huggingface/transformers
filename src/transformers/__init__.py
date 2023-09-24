@@ -460,6 +460,7 @@ _import_structure = {
     "models.oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig", "OneFormerProcessor"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
+    "models.owlv2": [],
     "models.owlvit": [
         "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OwlViTConfig",
@@ -974,9 +975,8 @@ else:
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
-    _import_structure["models.owlvit"].extend(
-        ["Owlv2ImageProcessor", "OwlViTFeatureExtractor", "OwlViTImageProcessor"]
-    )
+    _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
+    _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
@@ -5032,7 +5032,8 @@ if TYPE_CHECKING:
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.oneformer import OneFormerImageProcessor
-        from .models.owlvit import Owlv2ImageProcessor, OwlViTFeatureExtractor, OwlViTImageProcessor
+        from .models.owlv2 import Owlv2mageProcessor
+        from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor

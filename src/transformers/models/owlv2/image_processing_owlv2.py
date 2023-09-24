@@ -65,8 +65,8 @@ def _preprocess_resize_output_shape(image, output_shape):
 
     Returns
         image (`np.ndarray):
-            The input image, but with additional singleton dimensions appended in the case where ``len(output_shape) >
-            input.ndim``.
+            The input image, but with additional singleton dimensions appended in the case where `len(output_shape) >
+            input.ndim`.
         output_shape (`Tuple`):
             The output shape converted to tuple.
 
@@ -95,7 +95,7 @@ def _preprocess_resize_output_shape(image, output_shape):
 def _clip_warp_output(input_image, output_image, mode, cval):
     """Clip output image to range of values of input image.
 
-    Note that this function modifies the values of `output_image` in-place and it is only modified if ``clip=True``.
+    Note that this function modifies the values of *output_image* in-place and it is only modified if `clip=True`.
 
     Taken from:
     https://github.com/scikit-image/scikit-image/blob/b4b521d6f0a105aabeaa31699949f78453ca3511/skimage/transform/_warps.py#L640.
@@ -107,7 +107,7 @@ def _clip_warp_output(input_image, output_image, mode, cval):
             Output image, which is modified in-place.
         mode : {'constant', 'edge', 'symmetric', 'reflect', 'wrap'}
             Points outside the boundaries of the input are filled according to the given mode. Modes match the
-            behaviour of `numpy.pad`.
+            behaviour of *numpy.pad*.
         cval : float
             Used in conjunction with mode 'constant', the value outside the image boundaries.
     """
@@ -253,8 +253,11 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                 image.
         """
         output_shape = (size["height"], size["width"])
+        image = to_channel_dimension_format(image, ChannelDimension.LAST)
         image, output_shape = _preprocess_resize_output_shape(image, output_shape)
         input_shape = image.shape
+        print("Input shape:", input_shape)
+        print("Output shape:", output_shape)
         factors = np.divide(input_shape, output_shape)
 
         # Translate modes used by np.pad to those used by scipy.ndimage
@@ -282,6 +285,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
 
         _clip_warp_output(image, out, mode, cval)
 
+        out = to_channel_dimension_format(out, input_data_format, ChannelDimension.LAST)
         image = to_channel_dimension_format(out, data_format, input_data_format) if data_format is not None else out
         return image
 
@@ -392,6 +396,8 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         if do_pad:
             images = [self.pad(image=image, input_data_format=input_data_format) for image in images]
 
+        print("Shape of image after padding:", images[0].shape)
+
         if do_resize:
             images = [
                 self.resize(
@@ -401,6 +407,8 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                 )
                 for image in images
             ]
+
+        print(images[0].shape)
 
         if do_normalize:
             images = [

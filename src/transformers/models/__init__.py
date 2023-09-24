@@ -151,6 +151,7 @@ from . import (
     oneformer,
     openai,
     opt,
+    owlv2,
     owlvit,
     pegasus,
     pegasus_x,

@@ -43,7 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_owlvit"] = ["OwlViTFeatureExtractor"]
-    _import_structure["image_processing_owlv2"] = ["Owlv2ImageProcessor"]
     _import_structure["image_processing_owlvit"] = ["OwlViTImageProcessor"]
 
 try:
@@ -78,7 +77,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_owlvit import OwlViTFeatureExtractor
-        from .image_processing_owlv2 import Owlv2ImageProcessor
         from .image_processing_owlvit import OwlViTImageProcessor
 
     try:
