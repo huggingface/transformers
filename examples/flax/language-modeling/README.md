@@ -23,6 +23,12 @@ JAX/Flax allows you to trace pure functions and compile them into efficient, fus
 Models written in JAX/Flax are **immutable** and updated in a purely functional
 way which enables simple and efficient model parallelism.
 
+## Table of contents
+- [Masked language modeling](#masked-language-modeling)
+- [Causal language modeling](#causal-language-modeling)
+- [BART: Denoising language modeling](#bart-denoising-language-modeling)
+- [Runtime evaluation](runtime-evaluation)
+
 ## Masked language modeling
 
 In the following, we demonstrate how to train a bi-directional transformer model 
