@@ -81,6 +81,11 @@ class ImageBindTextConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        logit_scale_init_value (`float`, *optional*, defaults to `14.2857`):
+            The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
+            be scaled.
+        learnable_logit_scale (`bool`, *optional*, defaults to `True`):
+            Whether the `logit_scale` is learnable or fixed.
 
     Example:
 
@@ -114,6 +119,8 @@ class ImageBindTextConfig(PretrainedConfig):
         drop_path_rate=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        logit_scale_init_value=14.2857,
+        learnable_logit_scale=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -135,6 +142,8 @@ class ImageBindTextConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -206,6 +215,11 @@ class ImageBindVisionConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        logit_scale_init_value (`float`, *optional*, defaults to `None`):
+            The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
+            be scaled.
+        learnable_logit_scale (`bool`, *optional*, defaults to `False`):
+            Whether the `logit_scale` is learnable or fixed.
 
     Example:
 
@@ -243,6 +257,8 @@ class ImageBindVisionConfig(PretrainedConfig):
         drop_path_rate=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        logit_scale_init_value=None,
+        learnable_logit_scale=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -264,6 +280,8 @@ class ImageBindVisionConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -333,6 +351,11 @@ class ImageBindAudioConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        logit_scale_init_value (`float`, *optional*, defaults to `20.0`):
+            The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
+            be scaled.
+        learnable_logit_scale (`bool`, *optional*, defaults to `False`):
+            Whether the `logit_scale` is learnable or fixed.
     
     Example:
     ```python
@@ -367,6 +390,8 @@ class ImageBindAudioConfig(PretrainedConfig):
         drop_path_rate=0.1,
         initializer_range=0.02,
         initializer_factor=1.0,
+        logit_scale_init_value=20.0,
+        learnable_logit_scale=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -389,6 +414,8 @@ class ImageBindAudioConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -454,6 +481,11 @@ class ImageBindDepthConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        logit_scale_init_value (`float`, *optional*, defaults to `5.0`):
+            The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
+            be scaled.
+        learnable_logit_scale (`bool`, *optional*, defaults to `False`):
+            Whether the `logit_scale` is learnable or fixed.
     
     Example:
     ```python
@@ -486,6 +518,8 @@ class ImageBindDepthConfig(PretrainedConfig):
         drop_path_rate=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        logit_scale_init_value=5.0,
+        learnable_logit_scale=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -506,6 +540,8 @@ class ImageBindDepthConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -571,6 +607,11 @@ class ImageBindThermalConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        logit_scale_init_value (`float`, *optional*, defaults to `10.0`):
+            The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
+            be scaled.
+        learnable_logit_scale (`bool`, *optional*, defaults to `False`):
+            Whether the `logit_scale` is learnable or fixed.
     
     Example:
     ```python
@@ -603,6 +644,8 @@ class ImageBindThermalConfig(PretrainedConfig):
         drop_path_rate=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        logit_scale_init_value=10.0,
+        learnable_logit_scale=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -623,6 +666,8 @@ class ImageBindThermalConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -684,6 +729,11 @@ class ImageBindImuConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        logit_scale_init_value (`float`, *optional*, defaults to `5.0`):
+            The initial value of the `logit_scale` parameter for the vision component. If `None`, the logits will not
+            be scaled.
+        learnable_logit_scale (`bool`, *optional*, defaults to `False`):
+            Whether the `logit_scale` is learnable or fixed.
     
     Example:
     ```python
@@ -714,6 +764,8 @@ class ImageBindImuConfig(PretrainedConfig):
         drop_path_rate=0.7,
         initializer_range=0.02,
         initializer_factor=1.0,
+        logit_scale_init_value=5.0,
+        learnable_logit_scale=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -732,6 +784,8 @@ class ImageBindImuConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -809,7 +863,6 @@ class ImageBindConfig(PretrainedConfig):
         thermal_config=None,
         imu_config=None,
         projection_dim=1024,
-        logit_scale_init_value=2.6592,
         **kwargs,
     ):
         # If `_config_dict` exist, we use them for the backward compatibility.
@@ -1046,7 +1099,6 @@ class ImageBindConfig(PretrainedConfig):
         self.imu_config = ImageBindImuConfig(**imu_config)
 
         self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
 
     @classmethod

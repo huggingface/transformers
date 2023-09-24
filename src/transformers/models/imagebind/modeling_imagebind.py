@@ -17,6 +17,7 @@
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -744,6 +745,37 @@ class ImageBindEncoderLayer(nn.Module):
         return outputs
 
 
+class ImageBindPostProcessor(nn.Module):
+    """
+    Post-processes ImageBind embeddings by using a normalize layer followed by an optional logit scaling layer.
+    """
+    def __init__(
+        self,
+        config,
+        dim: int = -1,
+        max_logit_scale: float = 100,
+    ):
+        self.dim = dim
+        self.scale_logits = config.logit_scale_init_value is not None
+
+        if self.scale_logits:
+            self.logit_scale_init = config.logit_scale_init_value
+            self.max_logit_scale = max_logit_scale
+            self.learnable = config.learnable_logit_scale
+
+            log_logit_scale = torch.ones([]) * np.log(self.logit_scale_init)
+            if self.learnable:
+                self.log_logit_scale = nn.Parameter(log_logit_scale)
+            else:
+                self.register_buffer("log_logit_scale", log_logit_scale)
+    
+    def forward(self, logits: torch.FloatTensor) -> torch.FloatTensor:
+        logits = nn.functional.normalize(logits, dim=self.dim, p=2)
+        if self.scale_logits:
+            logits = torch.clip(self.log_logit_scale.exp(), max=self.max_logit_scale) * logits
+        return logits
+
+
 class ImageBindPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1394,7 +1426,7 @@ class ImageBindAudioTransformer(nn.Module):
 )
 class ImageBindAudioModel(ImageBindPreTrainedModel):
     config = ImageBindAudioConfig
-    main_input_name = "TODO"
+    main_input_name = "pixel_values"  # TODO: rename to something better?
 
     def __init__(self, config: ImageBindAudioConfig):
         super().__init__(config)
@@ -1404,6 +1436,46 @@ class ImageBindAudioModel(ImageBindPreTrainedModel):
     
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_model.embeddings.patch_embedding
+    
+    @add_start_docstrings_to_model_forward(IMAGEBIND_AUDIO_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ImageBindAudioConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, ImageBindAudioModel
+
+        >>> model = ImageBindAudioModel.from_pretrained("facebook/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        return self.audio_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 # TODO: copied from CLIP?
@@ -1469,7 +1541,7 @@ class ImageBindDepthTransformer(nn.Module):
 )
 class ImageBindDepthModel(ImageBindPreTrainedModel):
     config = ImageBindDepthConfig
-    main_input_name = "TODO"
+    main_input_name = "pixel_values"  # TODO: rename to something better?
 
     def __init__(self, config: ImageBindDepthConfig):
         super().__init__(config)
@@ -1479,6 +1551,46 @@ class ImageBindDepthModel(ImageBindPreTrainedModel):
     
     def get_input_embeddings(self) -> nn.Module:
         return self.depth_model.embeddings.patch_embedding
+    
+    @add_start_docstrings_to_model_forward(IMAGEBIND_DEPTH_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ImageBindDepthConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, ImageBindDepthModel
+
+        >>> model = ImageBindDepthModel.from_pretrained("facebook/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        return self.depth_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 # TODO: copied from CLIP?
@@ -1544,7 +1656,7 @@ class ImageBindThermalTransformer(nn.Module):
 )
 class ImageBindThermalModel(ImageBindPreTrainedModel):
     config = ImageBindThermalConfig
-    main_input_name = "TODO"
+    main_input_name = "pixel_values"  # TODO: rename to something better?
 
     def __init__(self, config: ImageBindThermalConfig):
         super().__init__(config)
@@ -1554,6 +1666,46 @@ class ImageBindThermalModel(ImageBindPreTrainedModel):
     
     def get_input_embeddings(self) -> nn.Module:
         return self.thermal_model.embeddings.patch_embedding
+    
+    @add_start_docstrings_to_model_forward(IMAGEBIND_THERMAL_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ImageBindThermalConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, ImageBindThermalModel
+
+        >>> model = ImageBindThermalModel.from_pretrained("facebook/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        return self.thermal_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 # TODO: copied from CLIP?
@@ -1619,7 +1771,7 @@ class ImageBindImuTransformer(nn.Module):
 )
 class ImageBindImuModel(ImageBindPreTrainedModel):
     config = ImageBindImuConfig
-    main_input_name = "TODO"
+    main_input_name = "pixel_values"  # TODO: rename to something better?
 
     def __init__(self, config: ImageBindImuConfig):
         super().__init__(config)
@@ -1629,6 +1781,46 @@ class ImageBindImuModel(ImageBindPreTrainedModel):
     
     def get_input_embeddings(self) -> nn.Module:
         return self.imu_model.embeddings.patch_embedding
+    
+    @add_start_docstrings_to_model_forward(IMAGEBIND_IMU_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ImageBindImuConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, ImageBindImuModel
+
+        >>> model = ImageBindImuModel.from_pretrained("facebook/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        return self.imu_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
 
 # TODO: add support for remaining modalities
@@ -1697,10 +1889,19 @@ class ImageBindModel(ImageBindPreTrainedModel):
         self.thermal_model = ImageBindThermalTransformer(thermal_config)
         self.imu_model = ImageBindImuTransformer(imu_config)
 
-        # TODO: add projections + postprocessing for modalities
-        self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
-        self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
+        self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
+        self.audio_projection = nn.Linear(self.audio_embed_dim, self.projection_dim, bias=False)
+        self.depth_projection = nn.Linear(self.depth_embed_dim, self.projection_dim, bias=False)
+        self.thermal_projection = nn.Linear(self.thermal_embed_dim, self.projection_dim, bias=False)
+        self.imu_projection = nn.Linear(self.imu_embed_dim, self.projection_dim, bias=False)
+
+        self.text_postprocessor = ImageBindPostProcessor(text_config)
+        self.vision_postprocessor = ImageBindPostProcessor(vision_config)
+        self.audio_postprocessor = ImageBindPostProcessor(audio_config)
+        self.depth_postprocessor = ImageBindPostProcessor(depth_config)
+        self.thermal_postprocessor = ImageBindPostProcessor(thermal_config)
+        self.imu_postprocessor = ImageBindPostProcessor(imu_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1731,7 +1932,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use IMAGEBIND model's config for some fields (if specified) instead of those of vision & text components.
+        # Use ImageBind model's config for some fields (if specified) instead of those in the text component.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1749,6 +1950,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         pooled_output = text_outputs[1]
         text_features = self.text_projection(pooled_output)
+        text_features = self.text_postprocessor(text_features)
 
         return text_features
 
@@ -1782,7 +1984,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
-        # Use IMAGEBIND model's config for some fields (if specified) instead of those of vision & text components.
+        # Use ImageBind model's config for some fields (if specified) instead of those in the vision components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1798,25 +2000,215 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         pooled_output = vision_outputs[1]  # pooled_output
         image_features = self.visual_projection(pooled_output)
+        image_features = self.vision_postprocessor(image_features)
 
         return image_features
     
+    # TODO: make sure inputs match with ImageBindAudioModel
     @add_start_docstrings_to_model_forward(IMAGEBIND_AUDIO_INPUTS_DOCSTRING)
-    def get_audio_features(self):
-        pass
+    def get_audio_features(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            audio_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The audio embeddings obtained by
+            applying the projection layer to the pooled output of [`ImageBindAudioModel`].
 
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, ImageBindModel
+
+        >>> model = ImageBindModel.from_pretrained("facebook/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> audio_features = model.get_audio_features(**inputs)
+        ```"""
+        # Use ImageBind model's config for some fields (if specified) instead of those in the audio component.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        audio_outputs = self.audio_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = audio_outputs[1]  # pooled_output
+        audio_features = self.audio_projection(pooled_output)
+        audio_features = self.audio_postprocessor(audio_features)
+
+        return audio_features
+
+    # TODO: make sure inputs match with ImageBindDepthModel
     @add_start_docstrings_to_model_forward(IMAGEBIND_DEPTH_INPUTS_DOCSTRING)
-    def get_depth_features(self):
-        pass
+    def get_depth_features(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            depth_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The depth embeddings obtained by
+            applying the projection layer to the pooled output of [`ImageBindDepthModel`].
 
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, ImageBindModel
+
+        >>> model = ImageBindModel.from_pretrained("facebook/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> depth_features = model.get_depth_features(**inputs)
+        ```"""
+        # Use ImageBind model's config for some fields (if specified) instead of those in the depth component.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        depth_outputs = self.depth_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = depth_outputs[1]  # pooled_output
+        depth_features = self.depth_projection(pooled_output)
+        depth_features = self.depth_postprocessor(depth_features)
+
+        return depth_features
+
+    # TODO: make sure inputs match with ImageBindThermalModel
     @add_start_docstrings_to_model_forward(IMAGEBIND_THERMAL_INPUTS_DOCSTRING)
-    def get_thermal_features(self):
-        pass
+    def get_thermal_features(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            thermal_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The thermal embeddings obtained by
+            applying the projection layer to the pooled output of [`ImageBindThermalModel`].
 
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, ImageBindModel
+
+        >>> model = ImageBindModel.from_pretrained("facebook/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> thermal_features = model.get_thermal_features(**inputs)
+        ```"""
+        # Use ImageBind model's config for some fields (if specified) instead of those in the thermal component.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        thermal_outputs = self.thermal_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = thermal_outputs[1]  # pooled_output
+        thermal_features = self.thermal_projection(pooled_output)
+        thermal_features = self.thermal_postprocessor(thermal_features)
+
+        return thermal_features
+
+    # TODO: make sure inputs match with ImageBindImuModel
     @add_start_docstrings_to_model_forward(IMAGEBIND_IMU_INPUTS_DOCSTRING)
-    def get_imu_features(self):
-        pass
+    def get_imu_features(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            imu_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The IMU embeddings obtained by
+            applying the projection layer to the pooled output of [`ImageBindImuModel`].
 
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, ImageBindModel
+
+        >>> model = ImageBindModel.from_pretrained("facebook/imagebind-huge")
+        >>> processor = AutoProcessor.from_pretrained("facebook/imagebind-huge")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> imu_features = model.get_imu_features(**inputs)
+        ```"""
+        # Use ImageBind model's config for some fields (if specified) instead of those in the IMU component.
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        imu_outputs = self.imu_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = imu_outputs[1]  # pooled_output
+        imu_features = self.imu_projection(pooled_output)
+        imu_features = self.imu_postprocessor(imu_features)
+
+        return imu_features
+
+    # TODO: add remaining modalities
     @add_start_docstrings_to_model_forward(IMAGEBIND_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageBindOutput, config_class=ImageBindConfig)
     def forward(
@@ -1854,7 +2246,7 @@ class ImageBindModel(ImageBindPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use IMAGEBIND model's config for some fields (if specified) instead of those of vision & text components.
+        # Use ImageBind model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1929,6 +2321,8 @@ class ImageBindTextModelWithProjection(ImageBindPreTrainedModel):
 
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
+        self.text_postprocessor = ImageBindPostProcessor(config)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1979,6 +2373,7 @@ class ImageBindTextModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = text_outputs[1]
 
         text_embeds = self.text_projection(pooled_output)
+        text_embeds = self.text_postprocessor(text_embeds)
 
         if not return_dict:
             outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
@@ -2008,6 +2403,8 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
         self.vision_model = ImageBindVisionTransformer(config)
 
         self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+
+        self.vision_postprocessor = ImageBindPostProcessor(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2057,6 +2454,7 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = vision_outputs[1]  # pooled_output
 
         image_embeds = self.visual_projection(pooled_output)
+        image_embeds = self.vision_postprocessor(image_embeds)
 
         if not return_dict:
             outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]
@@ -2070,7 +2468,6 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
         )
 
 
-# TODO Add model with projection classes for remaining modalities (audio, depth, thermal, IMU)
 @add_start_docstrings(
     """
     ImageBind Audio Model with a projection layer on top (a linear layer on top of the pooled output).
@@ -2079,7 +2476,7 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
 )
 class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
     config_class = ImageBindAudioConfig
-    main_input_name = "TODO"
+    main_input_name = "pixel_values"  # TODO: rename to something better?
 
     def __init__(self, config: ImageBindAudioConfig):
         super().__init__(config)
@@ -2087,6 +2484,8 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
         self.audio_model = ImageBindAudioTransformer(config)
 
         self.audio_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+
+        self.audio_postprocessor = ImageBindPostProcessor(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2136,6 +2535,7 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = audio_outputs[1]  # pooled_output
 
         audio_embeds = self.audio_projection(pooled_output)
+        audio_embeds = self.audio_postprocessor(audio_embeds)
 
         if not return_dict:
             outputs = (audio_embeds, audio_outputs[0]) + audio_outputs[2:]
@@ -2157,7 +2557,7 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
 )
 class ImageBindDepthModelWithProjection(ImageBindPreTrainedModel):
     config_class = ImageBindDepthConfig
-    main_input_name = "TODO"
+    main_input_name = "pixel_values"  # TODO: rename to something better?
 
     def __init__(self, config: ImageBindDepthConfig):
         super().__init__(config)
@@ -2165,6 +2565,8 @@ class ImageBindDepthModelWithProjection(ImageBindPreTrainedModel):
         self.depth_model = ImageBindDepthTransformer(config)
 
         self.depth_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+
+        self.depth_postprocessor = ImageBindPostProcessor(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2214,6 +2616,7 @@ class ImageBindDepthModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = depth_outputs[1]  # pooled_output
 
         depth_embeds = self.depth_projection(pooled_output)
+        depth_embeds = self.depth_postprocessor(depth_embeds)
 
         if not return_dict:
             outputs = (depth_embeds, depth_outputs[0]) + depth_outputs[2:]
@@ -2235,7 +2638,7 @@ class ImageBindDepthModelWithProjection(ImageBindPreTrainedModel):
 )
 class ImageBindThermalModelWithProjection(ImageBindPreTrainedModel):
     config_class = ImageBindThermalConfig
-    main_input_name = "TODO"
+    main_input_name = "pixel_values"  # TODO: rename to something better?
 
     def __init__(self, config: ImageBindThermalConfig):
         super().__init__(config)
@@ -2243,6 +2646,8 @@ class ImageBindThermalModelWithProjection(ImageBindPreTrainedModel):
         self.thermal_model = ImageBindThermalTransformer(config)
 
         self.thermal_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+
+        self.thermal_postprocessor = ImageBindPostProcessor(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2292,6 +2697,7 @@ class ImageBindThermalModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = thermal_outputs[1]  # pooled_output
 
         thermal_embeds = self.thermal_projection(pooled_output)
+        thermal_embeds = self.thermal_postprocessor(thermal_embeds)
 
         if not return_dict:
             outputs = (thermal_embeds, thermal_outputs[0]) + thermal_outputs[2:]
@@ -2313,7 +2719,7 @@ class ImageBindThermalModelWithProjection(ImageBindPreTrainedModel):
 )
 class ImageBindImuModelWithProjection(ImageBindPreTrainedModel):
     config_class = ImageBindImuConfig
-    main_input_name = "TODO"
+    main_input_name = "pixel_values"  # TODO: rename to something better?
 
     def __init__(self, config: ImageBindImuConfig):
         super().__init__(config)
@@ -2321,6 +2727,8 @@ class ImageBindImuModelWithProjection(ImageBindPreTrainedModel):
         self.imu_model = ImageBindImuTransformer(config)
 
         self.imu_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+
+        self.imu_postprocessor = ImageBindPostProcessor(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2370,6 +2778,7 @@ class ImageBindImuModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = imu_outputs[1]  # pooled_output
 
         imu_embeds = self.imu_projection(pooled_output)
+        imu_embeds = self.imu_postprocessor(imu_embeds)
 
         if not return_dict:
             outputs = (imu_embeds, imu_outputs[0]) + imu_outputs[2:]
