@@ -1928,19 +1928,24 @@ class Blip2ModelWithProjection(Blip2PreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, Blip2ModelWithProjection
 
-        >>> model = Blip2ModelWithProjection.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        >>> model = Blip2ModelWithProjection.from_pretrained("jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16)
         >>> processor = AutoProcessor.from_pretrained("jpizarrom/blip2-itm-vit-g")
+
+        >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
-        ... )
+        ... ).to(device, torch.float16)
 
         >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
