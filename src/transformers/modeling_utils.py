@@ -2379,7 +2379,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
-        adapter_kwargs = kwargs.pop("adapter_kwargs", None)
+        adapter_kwargs = kwargs.pop("adapter_kwargs",{})
         adapter_name = kwargs.pop("adapter_name", "default")
 
         if is_fsdp_enabled():
