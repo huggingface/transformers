@@ -463,7 +463,7 @@ class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
     >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
-    >>> model = AutoBackbone.from_pretrained("stevenbucaille/superpoint")
+    >>> model = AutoModelForInterestPointDescription.from_pretrained("stevenbucaille/superpoint")
 
     >>> inputs = processor(image, return_tensors="pt")
     >>> outputs = model(**inputs)
