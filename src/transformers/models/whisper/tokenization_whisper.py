@@ -272,18 +272,25 @@ class WhisperTokenizer(PreTrainedTokenizer):
         predict_timestamps=False,
         **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        super().__init__(
-            errors=errors,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(pad_token, str)
+            else pad_token
         )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -309,17 +316,27 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
         self.language = language
+        super().__init__(
+            errors=errors,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
+
         self.task = task
         self.predict_timestamps = predict_timestamps
+
+    @property
+    def vocab_size(self) -> int:
+        return len(self.encoder)
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
-
-    @property
-    def vocab_size(self) -> int:
-        return len(self.encoder)
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe with GPT2 -> Whisper
     def bpe(self, token):
@@ -390,11 +407,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     @property
     def prefix_tokens(self) -> List[int]:
-        all_special_ids = self.all_special_ids
-        bos_token_id = all_special_ids[-106]
-        translate_token_id = all_special_ids[-6]
-        transcribe_token_id = all_special_ids[-5]
-        notimestamps_token_id = all_special_ids[-1]
+        bos_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
+        translate_token_id = self.convert_tokens_to_ids("<|translate|>")
+        transcribe_token_id = self.convert_tokens_to_ids("<|transcribe|>")
+        notimestamps_token_id = self.convert_tokens_to_ids("<|notimestamps|>")
         langs = tuple(LANGUAGES.keys())
 
         if self.language is not None:
