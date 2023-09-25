@@ -19,11 +19,14 @@ import numpy as np
 import pytest
 
 from transformers.testing_utils import require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_openai_available, is_torch_available, is_vision_available
 
 
 if is_torch_available():
     pass
+
+if is_openai_available():
+    from transformers import CLIPVisionModel
 
 if is_vision_available():
     from PIL import Image
@@ -32,7 +35,6 @@ if is_vision_available():
         AutoProcessor,
         AutoTokenizer,
         CLIPImageProcessor,
-        CLIPVisionModel,
         LlavaProcessor,
         PreTrainedTokenizerFast,
     )
