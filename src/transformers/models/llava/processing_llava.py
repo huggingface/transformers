@@ -24,9 +24,13 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import (
     TensorType,
+    is_openai_available,
     is_torch_available,
 )
-from ..clip import CLIPVisionModel
+
+
+if is_openai_available():
+    from ..clip import CLIPVisionModel
 
 
 if is_torch_available():
