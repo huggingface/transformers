@@ -151,7 +151,7 @@ class PeftAdapterMixin:
         if revision is not None and "revision" not in adapter_hub_kwargs:
             adapter_hub_kwargs["revision"] = revision
         elif revision is not None and "revision" in adapter_hub_kwargs and revision != adapter_hub_kwargs["revision"]:
-            logger.warning(
+            logger.error(
                 "You passed a `revision` argument both in `adapter_hub_kwargs` and as a standalone argument. "
                 "The one in `adapter_hub_kwargs` will be used."
             )
