@@ -426,7 +426,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
             in the batch as predicted by the model.
         """
         # TODO: (amy) add support for other frameworks
-        warnings.warn(
+        logging.warning(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
             FutureWarning,

@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class GLPNFeatureExtractor(GLPNImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logging.warning(
             "The class GLPNFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
             " use GLPNImageProcessor instead.",
             FutureWarning,

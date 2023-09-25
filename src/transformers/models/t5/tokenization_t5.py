@@ -234,7 +234,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             if init_max_model_length is not None and init_max_model_length != max_model_length:
                 return init_max_model_length
             elif init_max_model_length is None:
-                warnings.warn(
+                logging.warning(
                     "This tokenizer was incorrectly instantiated with a model max length of"
                     f" {deprecated_max_model_length} which will be corrected in Transformers v5.\nFor now, this"
                     " behavior is kept to avoid breaking backwards compatibility when padding/encoding with"
@@ -297,7 +297,7 @@ class T5Tokenizer(PreTrainedTokenizer):
     def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
         """Do not add eos again if user already added it."""
         if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
-            warnings.warn(
+            logging.warning(
                 f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated"
                 " eos tokens being added."
             )

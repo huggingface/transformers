@@ -471,7 +471,7 @@ class Wav2Vec2FeatureEncoder(nn.Module):
 class Wav2Vec2FeatureExtractor(Wav2Vec2FeatureEncoder):
     def __init__(self, config):
         super().__init__(config)
-        warnings.warn(
+        logging.warning(
             f"The class `{self.__class__.__name__}` has been depreciated "
             "and will be removed in Transformers v5. "
             f"Use `{self.__class__.__bases__[0].__name__}` instead.",
@@ -1287,7 +1287,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logging.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:
@@ -1479,7 +1479,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
@@ -1626,7 +1626,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
@@ -1827,7 +1827,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        warnings.warn(
+        logging.warning(
             "The class `Wav2Vec2ForMaskedLM` is deprecated. Please use `Wav2Vec2ForCTC` instead.", FutureWarning
         )
 
@@ -1922,7 +1922,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
@@ -2054,7 +2054,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
@@ -2175,7 +2175,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
@@ -2339,7 +2339,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,

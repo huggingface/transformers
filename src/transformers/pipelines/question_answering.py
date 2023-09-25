@@ -323,7 +323,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
         postprocess_params = {}
         if topk is not None and top_k is None:
-            warnings.warn("topk parameter is deprecated, use top_k instead", UserWarning)
+            logging.warning("topk parameter is deprecated, use top_k instead", UserWarning)
             top_k = topk
         if top_k is not None:
             if top_k < 1:

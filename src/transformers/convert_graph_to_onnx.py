@@ -376,7 +376,7 @@ def convert(
     Returns:
 
     """
-    warnings.warn(
+    logging.warning(
         "The `transformers.convert_graph_to_onnx` package is deprecated and will be removed in version 5 of"
         " Transformers",
         FutureWarning,

@@ -20,7 +20,7 @@ Check: https://github.com/huggingface/transformers/pull/25599
 import warnings
 
 
-warnings.warn(
+logging.warning(
     "transformers.deepspeed module is deprecated and will be removed in a future version. Please import deepspeed modules directly from transformers.integrations",
     FutureWarning,
 )

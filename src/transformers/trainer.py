@@ -365,7 +365,7 @@ class Trainer:
                 raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
         else:
             if model_init is not None:
-                warnings.warn(
+                logging.warning(
                     "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
                     " overwrite your model when calling the `train` method. This will become a fatal error in the next"
                     " release.",
@@ -1529,7 +1529,7 @@ class Trainer:
 
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
-            warnings.warn(
+            logging.warning(
                 "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
                 "instead.",
                 FutureWarning,
@@ -3548,7 +3548,7 @@ class Trainer:
                 `True` and `at_init` is `True`, the path to the repo (which is `self.args.output_dir`) might be wiped
                 out.
         """
-        warnings.warn(
+        logging.warning(
             "`Trainer.init_git_repo` is deprecated and will be removed in v4.34.0 of Transformers. Use "
             "`Trainer.init_hf_repo` instead."
         )

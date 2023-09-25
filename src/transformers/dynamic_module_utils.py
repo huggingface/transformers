@@ -264,7 +264,7 @@ def get_cached_module_file(
     """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
-        warnings.warn(
+        logging.warning(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
@@ -465,7 +465,7 @@ def get_class_from_dynamic_module(
     ```"""
     use_auth_token = kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
-        warnings.warn(
+        logging.warning(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:

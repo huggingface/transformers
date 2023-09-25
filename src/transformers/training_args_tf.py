@@ -288,7 +288,7 @@ class TFTrainingArguments(TrainingArguments):
         The number of replicas (CPUs, GPUs or TPU cores) used in this training.
         """
         requires_backends(self, ["tf"])
-        warnings.warn(
+        logging.warning(
             "The n_gpu argument is deprecated and will be removed in a future version, use n_replicas instead.",
             FutureWarning,
         )

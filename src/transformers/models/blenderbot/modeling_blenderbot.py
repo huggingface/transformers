@@ -1120,7 +1120,7 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         if pretrained_model_name_or_path == "facebook/blenderbot-90M":
-            warnings.warn(
+            logging.warning(
                 "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical"
                 " checkpoint `facebook/small_blenderbot-90M` with"
                 " `BlenderbotSmallModel.from_pretrained('facebook/small_blenderbot-90M')` instead.",
@@ -1259,7 +1259,7 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         if pretrained_model_name_or_path == "facebook/blenderbot-90M":
-            warnings.warn(
+            logging.warning(
                 "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical"
                 " checkpoint `facebook/small_blenderbot-90M` with"
                 " `BlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",

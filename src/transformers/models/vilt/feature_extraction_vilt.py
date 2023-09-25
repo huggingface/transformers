@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class ViltFeatureExtractor(ViltImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logging.warning(
             "The class ViltFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
             " use ViltImageProcessor instead.",
             FutureWarning,

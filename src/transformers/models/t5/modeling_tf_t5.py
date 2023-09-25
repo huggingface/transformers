@@ -1165,7 +1165,7 @@ class TFT5Model(TFT5PreTrainedModel):
         ```"""
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
-            warnings.warn(_HEAD_MASK_WARNING_MSG, FutureWarning)
+            logging.warning(_HEAD_MASK_WARNING_MSG, FutureWarning)
             decoder_head_mask = head_mask
 
         # Encode if needed (training, first prediction pass)
@@ -1332,7 +1332,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         ```"""
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
-            warnings.warn(_HEAD_MASK_WARNING_MSG, FutureWarning)
+            logging.warning(_HEAD_MASK_WARNING_MSG, FutureWarning)
             decoder_head_mask = head_mask
 
         # Encode if needed (training, first prediction pass)

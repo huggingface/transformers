@@ -377,7 +377,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # Deal with gradient checkpointing
         if kwargs.get("gradient_checkpointing", False):
-            warnings.warn(
+            logging.warning(
                 "Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 "
                 "Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the "
                 "`Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`."
@@ -482,7 +482,7 @@ class PretrainedConfig(PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logging.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:

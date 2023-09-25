@@ -115,7 +115,7 @@ _default_endpoint = "https://hub-ci.huggingface.co" if _staging_mode else "https
 
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = _default_endpoint
 if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
-    warnings.warn(
+    logging.warning(
         "Using the environment variable `HUGGINGFACE_CO_RESOLVE_ENDPOINT` is deprecated and will be removed in "
         "Transformers v5. Use `HF_ENDPOINT` instead.",
         FutureWarning,
@@ -371,7 +371,7 @@ def cached_file(
     ```"""
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
-        warnings.warn(
+        logging.warning(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
@@ -562,7 +562,7 @@ def get_file_from_repo(
     ```"""
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
-        warnings.warn(
+        logging.warning(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
@@ -599,7 +599,7 @@ def download_url(url, proxies=None):
     Returns:
         `str`: The location of the temporary file where the url was downloaded.
     """
-    warnings.warn(
+    logging.warning(
         f"Using `from_pretrained` with the url of a file (here {url}) is deprecated and won't be possible anymore in"
         " v5 of Transformers. You should host your file on the Hub (hf.co) instead and use the repository ID. Note"
         " that this is not compatible with the caching system (your file will be downloaded at each execution) or"
@@ -631,7 +631,7 @@ def has_file(
     """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
-        warnings.warn(
+        logging.warning(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
@@ -687,7 +687,7 @@ class PushToHubMixin:
         the token.
         """
         if repo_url is not None:
-            warnings.warn(
+            logging.warning(
                 "The `repo_url` argument is deprecated and will be removed in v5 of Transformers. Use `repo_id` "
                 "instead."
             )
@@ -697,7 +697,7 @@ class PushToHubMixin:
                 )
             repo_id = repo_url.replace(f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/", "")
         if organization is not None:
-            warnings.warn(
+            logging.warning(
                 "The `organization` argument is deprecated and will be removed in v5 of Transformers. Set your "
                 "organization directly in the `repo_id` passed instead (`repo_id={organization}/{model_id}`)."
             )
@@ -841,7 +841,7 @@ class PushToHubMixin:
         """
         use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
-            warnings.warn(
+            logging.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:
@@ -854,7 +854,7 @@ class PushToHubMixin:
         if repo_path_or_name is not None:
             # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
             # repo_id from the folder path, if it exists.
-            warnings.warn(
+            logging.warning(
                 "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
                 "`repo_id` instead.",
                 FutureWarning,
@@ -1003,7 +1003,7 @@ def get_checkpoint_shard_files(
 
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
-        warnings.warn(
+        logging.warning(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:

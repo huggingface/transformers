@@ -612,7 +612,7 @@ class Benchmark(ABC):
         else:
             self.config_dict = dict(zip(self.args.model_names, configs))
 
-        warnings.warn(
+        logging.warning(
             f"The class {self.__class__} is deprecated. Hugging Face Benchmarking utils"
             " are deprecated in general and it is advised to use external Benchmarking libraries "
             " to benchmark Transformer models.",

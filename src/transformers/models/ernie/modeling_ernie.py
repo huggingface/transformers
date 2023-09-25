@@ -1417,7 +1417,7 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
         """
 
         if "next_sentence_label" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
                 " `labels` instead.",
                 FutureWarning,

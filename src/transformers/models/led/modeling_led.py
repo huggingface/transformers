@@ -2526,7 +2526,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
     _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
     def __init__(self, config: LEDConfig, **kwargs):
-        warnings.warn(
+        logging.warning(
             "The `transformers.LEDForSequenceClassification` class is deprecated and will be removed in version 5 of"
             " Transformers. No actual method were provided in the original paper on how to perfom"
             " sequence classification.",

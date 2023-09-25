@@ -218,7 +218,7 @@ class XLNetConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         if "use_cache" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems_eval`"
                 " instead.",
                 FutureWarning,

@@ -424,7 +424,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, max_size=self._max_size, default_to_square=False)
 
         if "reduce_labels" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `reduce_labels` argument is deprecated and will be removed in v4.27. "
                 "Please use `do_reduce_labels` instead.",
                 FutureWarning,
@@ -461,7 +461,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         int, smaller edge of the image will be matched to this number.
         """
         if "max_size" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `max_size` parameter is deprecated and will be removed in v4.27. "
                 "Please specify in `size['longest_edge'] instead`.",
                 FutureWarning,
@@ -655,12 +655,12 @@ class OneFormerImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27",
                 FutureWarning,
             )
         if "reduce_labels" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `reduce_labels` argument is deprecated and will be removed in a v4.27. Please use"
                 " `do_reduce_labels` instead.",
                 FutureWarning,

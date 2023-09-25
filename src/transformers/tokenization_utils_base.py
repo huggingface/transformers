@@ -354,7 +354,7 @@ class BatchEncoding(UserDict):
                 "words() is not available when using non-fast tokenizers (e.g. instance of a `XxxTokenizerFast`"
                 " class)."
             )
-        warnings.warn(
+        logging.warning(
             "`BatchEncoding.words()` property is deprecated and should be replaced with the identical, "
             "but more self-explanatory `BatchEncoding.word_ids()` property.",
             FutureWarning,
@@ -1908,7 +1908,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         commit_hash = kwargs.pop("_commit_hash", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logging.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:
@@ -1937,7 +1937,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
                     "supported for this tokenizer. Use a model identifier or the path to a directory instead."
                 )
-            warnings.warn(
+            logging.warning(
                 f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is deprecated and "
                 "won't be possible anymore in v5. Use a model identifier or the path to a directory instead.",
                 FutureWarning,
@@ -2362,7 +2362,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logging.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if kwargs.get("token", None) is not None:
@@ -2624,7 +2624,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Get padding strategy
         if padding is False and old_pad_to_max_length:
             if verbose:
-                warnings.warn(
+                logging.warning(
                     "The `pad_to_max_length` argument is deprecated and will be removed in a future version, "
                     "use `padding=True` or `padding='longest'` to pad to the longest sequence in the batch, or "
                     "use `padding='max_length'` to pad to a max length. In this case, you can give a specific "
@@ -2642,12 +2642,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     if max_length is not None and (
                         truncation is None or truncation is False or truncation == "do_not_truncate"
                     ):
-                        warnings.warn(
+                        logging.warning(
                             "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
                             "To pad to max length, use `padding='max_length'`."
                         )
                     if old_pad_to_max_length is not False:
-                        warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
+                        logging.warning("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
             elif not isinstance(padding, PaddingStrategy):
                 padding_strategy = PaddingStrategy(padding)
@@ -2659,7 +2659,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Get truncation strategy
         if truncation is None and old_truncation_strategy != "do_not_truncate":
             if verbose:
-                warnings.warn(
+                logging.warning(
                     "The `truncation_strategy` argument is deprecated and will be removed in a future version, use"
                     " `truncation=True` to truncate examples to a max length. You can give a specific length with"
                     " `max_length` (e.g. `max_length=45`) or leave max_length to None to truncate to the maximal input"
@@ -3866,7 +3866,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
         sequence-to-sequence models that need a slightly different processing for the labels.
         """
-        warnings.warn(
+        logging.warning(
             "`as_target_tokenizer` is deprecated and will be removed in v5 of Transformers. You can tokenize your "
             "labels by using the argument `text_target` of the regular `__call__` method (either in the same call as "
             "your input texts if you use the same keyword arguments, or in a separate call."
@@ -3992,7 +3992,7 @@ model_inputs["labels"] = labels["input_ids"]
 See the documentation of your specific tokenizer for more details on the specific arguments to the tokenizer of choice.
 For a more complete example, see the implementation of `prepare_seq2seq_batch`.
 """
-        warnings.warn(formatted_warning, FutureWarning)
+        logging.warning(formatted_warning, FutureWarning)
         # mBART-specific kwargs that should be ignored by other models.
         kwargs.pop("src_lang", None)
         kwargs.pop("tgt_lang", None)

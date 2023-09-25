@@ -124,7 +124,7 @@ def run_generate(verbose=True):
         examples = examples[: args.n_obs]
     Path(args.save_path).parent.mkdir(exist_ok=True)
     if args.reference_path is None and Path(args.score_path).exists():
-        warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
+        logging.warning(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
     runtime_metrics = generate_summaries_or_translations(
         examples,
         args.save_path,

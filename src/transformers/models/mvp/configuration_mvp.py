@@ -176,7 +176,7 @@ class MvpConfig(PretrainedConfig):
 
         if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
             self.forced_bos_token_id = self.bos_token_id
-            warnings.warn(
+            logging.warning(
                 f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions. "
                 "The config can simply be saved and uploaded again to be fixed."
             )

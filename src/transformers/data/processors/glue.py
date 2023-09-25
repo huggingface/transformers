@@ -63,7 +63,7 @@ def glue_convert_examples_to_features(
         can be fed to the model.
 
     """
-    warnings.warn(DEPRECATION_WARNING.format("function"), FutureWarning)
+    logging.warning(DEPRECATION_WARNING.format("function"), FutureWarning)
     if is_tf_available() and isinstance(examples, tf.data.Dataset):
         if task is None:
             raise ValueError("When calling glue_convert_examples_to_features from TF, the task parameter is required.")
@@ -171,7 +171,7 @@ class MrpcProcessor(DataProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -218,7 +218,7 @@ class MnliProcessor(DataProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -264,7 +264,7 @@ class MnliMismatchedProcessor(MnliProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_dev_examples(self, data_dir):
         """See base class."""
@@ -280,7 +280,7 @@ class ColaProcessor(DataProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -327,7 +327,7 @@ class Sst2Processor(DataProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -373,7 +373,7 @@ class StsbProcessor(DataProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -419,7 +419,7 @@ class QqpProcessor(DataProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -471,7 +471,7 @@ class QnliProcessor(DataProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -517,7 +517,7 @@ class RteProcessor(DataProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""
@@ -563,7 +563,7 @@ class WnliProcessor(DataProcessor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+        logging.warning(DEPRECATION_WARNING.format("processor"), FutureWarning)
 
     def get_example_from_tensor_dict(self, tensor_dict):
         """See base class."""

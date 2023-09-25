@@ -624,7 +624,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         commit_hash = kwargs.pop("_commit_hash", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logging.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:
@@ -1059,7 +1059,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logging.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:

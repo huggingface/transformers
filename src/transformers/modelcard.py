@@ -89,7 +89,7 @@ class ModelCard:
     """
 
     def __init__(self, **kwargs):
-        warnings.warn(
+        logging.warning(
             "The class `ModelCard` is deprecated and will be removed in version 5 of Transformers", FutureWarning
         )
         # Recommended attributes from https://arxiv.org/abs/1810.03993 (see papers)

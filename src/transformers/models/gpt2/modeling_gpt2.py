@@ -690,7 +690,7 @@ class GPT2Model(GPT2PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         # Check validity of device_map
-        warnings.warn(
+        logging.warning(
             "`GPT2Model.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your"
             " model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
             " `device_map` but it needs to be a dictionary module_name to device, so for instance {'h.0': 0, 'h.1': 1,"
@@ -716,7 +716,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        warnings.warn(
+        logging.warning(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
@@ -970,7 +970,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
-        warnings.warn(
+        logging.warning(
             "`GPT2LMHeadModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
             " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
             " `device_map` but it needs to be a dictionary module_name to device, so for instance {'transformer.h.0':"
@@ -989,7 +989,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        warnings.warn(
+        logging.warning(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
@@ -1164,7 +1164,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
-        warnings.warn(
+        logging.warning(
             "`GPT2DoubleHeadsModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should"
             " load your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your"
             " own `device_map` but it needs to be a dictionary module_name to device, so for instance"
@@ -1184,7 +1184,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        warnings.warn(
+        logging.warning(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )

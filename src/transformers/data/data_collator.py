@@ -948,7 +948,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         Get 0/1 labels for masked tokens with whole word mask proxy
         """
         if not isinstance(self.tokenizer, (BertTokenizer, BertTokenizerFast)):
-            warnings.warn(
+            logging.warning(
                 "DataCollatorForWholeWordMask is only suitable for BertTokenizer-like tokenizers. "
                 "Please refer to the documentation for more information."
             )
@@ -1123,7 +1123,7 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
     """
 
     def __init__(self, *args, **kwargs):
-        warnings.warn(
+        logging.warning(
             "DataCollatorForSOP is deprecated and will be removed in a future version, you can now use "
             "DataCollatorForLanguageModeling instead.",
             FutureWarning,

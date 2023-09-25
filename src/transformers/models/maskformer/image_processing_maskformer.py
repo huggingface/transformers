@@ -408,14 +408,14 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         **kwargs,
     ):
         if "size_divisibility" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `size_divisibility` argument is deprecated and will be removed in v4.27. Please use "
                 "`size_divisor` instead.",
                 FutureWarning,
             )
             size_divisor = kwargs.pop("size_divisibility")
         if "max_size" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `max_size` argument is deprecated and will be removed in v4.27. Please use size['longest_edge']"
                 " instead.",
                 FutureWarning,
@@ -426,7 +426,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         else:
             self._max_size = 1333
         if "reduce_labels" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use "
                 "`do_reduce_labels` instead.",
                 FutureWarning,
@@ -492,7 +492,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         if "max_size" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `max_size` parameter is deprecated and will be removed in v4.27. "
                 "Please specify in `size['longest_edge'] instead`.",
                 FutureWarning,
@@ -697,12 +697,12 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.27",
                 FutureWarning,
             )
         if "reduce_labels" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `reduce_labels` argument is deprecated and will be removed in v4.27. Please use"
                 " `do_reduce_labels` instead.",
                 FutureWarning,

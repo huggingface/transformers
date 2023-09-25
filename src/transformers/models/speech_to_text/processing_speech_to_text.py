@@ -57,7 +57,7 @@ class Speech2TextProcessor(ProcessorMixin):
             return self.current_processor(*args, **kwargs)
 
         if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
+            logging.warning("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")
         else:
             audio = kwargs.pop("audio", None)
@@ -103,7 +103,7 @@ class Speech2TextProcessor(ProcessorMixin):
         Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
         Speech2Text.
         """
-        warnings.warn(
+        logging.warning(
             "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
             "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
             "your audio inputs, or in a separate call."

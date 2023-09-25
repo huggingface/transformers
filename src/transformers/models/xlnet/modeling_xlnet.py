@@ -1086,7 +1086,7 @@ class XLNetModel(XLNetPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if "use_cache" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems`"
                 " instead.",
                 FutureWarning,

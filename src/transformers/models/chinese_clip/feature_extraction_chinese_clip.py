@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class ChineseCLIPFeatureExtractor(ChineseCLIPImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logging.warning(
             "The class ChineseCLIPFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
             " Please use ChineseCLIPImageProcessor instead.",
             FutureWarning,

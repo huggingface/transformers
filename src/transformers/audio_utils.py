@@ -195,7 +195,7 @@ def mel_filter_bank(
         mel_filters *= np.expand_dims(enorm, 0)
 
     if (mel_filters.max(axis=0) == 0.0).any():
-        warnings.warn(
+        logging.warning(
             "At least one mel filter has all zero values. "
             f"The value for `num_mel_filters` ({num_mel_filters}) may be set too high. "
             f"Or, the value for `num_frequency_bins` ({num_frequency_bins}) may be set too low."
@@ -588,7 +588,7 @@ def get_mel_filter_banks(
     norm: Optional[str] = None,
     mel_scale: str = "htk",
 ) -> np.array:
-    warnings.warn(
+    logging.warning(
         "The function `get_mel_filter_banks` is deprecated and will be removed in version 4.31.0 of Transformers",
         FutureWarning,
     )
@@ -627,7 +627,7 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
         framed_waveform (`np.array` of shape `(waveform.shape // hop_length , fft_window_size)`):
             The framed waveforms that can be fed to `np.fft`.
     """
-    warnings.warn(
+    logging.warning(
         "The function `fram_wave` is deprecated and will be removed in version 4.31.0 of Transformers",
         FutureWarning,
     )
@@ -695,7 +695,7 @@ def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = 
         spectrogram (`np.ndarray`):
             A spectrogram of shape `(num_frames, nb_frequency_bins)` obtained using the STFT algorithm
     """
-    warnings.warn(
+    logging.warning(
         "The function `stft` is deprecated and will be removed in version 4.31.0 of Transformers",
         FutureWarning,
     )

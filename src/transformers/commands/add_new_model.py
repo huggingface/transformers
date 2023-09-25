@@ -55,7 +55,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         self._path = path
 
     def run(self):
-        warnings.warn(
+        logging.warning(
             "The command `transformers-cli add-new-model` is deprecated and will be removed in v5 of Transformers. "
             "It is not actively maintained anymore, so might give a result that won't pass all tests and quality "
             "checks, you should use `transformers-cli add-new-model-like` instead."

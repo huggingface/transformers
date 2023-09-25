@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class MaskFormerFeatureExtractor(MaskFormerImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logging.warning(
             "The class MaskFormerFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
             " Please use MaskFormerImageProcessor instead.",
             FutureWarning,

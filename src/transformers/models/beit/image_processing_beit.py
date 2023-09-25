@@ -107,7 +107,7 @@ class BeitImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         if "reduce_labels" in kwargs:
-            warnings.warn(
+            logging.warning(
                 "The `reduce_labels` parameter is deprecated and will be removed in a future version. Please use"
                 " `do_reduce_labels` instead.",
                 FutureWarning,

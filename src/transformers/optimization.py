@@ -408,7 +408,7 @@ class AdamW(Optimizer):
         no_deprecation_warning: bool = False,
     ):
         if not no_deprecation_warning:
-            warnings.warn(
+            logging.warning(
                 "This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch"
                 " implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this"
                 " warning",

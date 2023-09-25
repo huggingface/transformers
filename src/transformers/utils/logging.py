@@ -148,7 +148,7 @@ def get_verbosity() -> int:
 
     - 50: `transformers.logging.CRITICAL` or `transformers.logging.FATAL`
     - 40: `transformers.logging.ERROR`
-    - 30: `transformers.logging.WARNING` or `transformers.logging.WARN`
+    - 30: `logging.warning` or `transformers.logging.WARN`
     - 20: `transformers.logging.INFO`
     - 10: `transformers.logging.DEBUG`
 
@@ -168,7 +168,7 @@ def set_verbosity(verbosity: int) -> None:
 
             - `transformers.logging.CRITICAL` or `transformers.logging.FATAL`
             - `transformers.logging.ERROR`
-            - `transformers.logging.WARNING` or `transformers.logging.WARN`
+            - `logging.warning` or `transformers.logging.WARN`
             - `transformers.logging.INFO`
             - `transformers.logging.DEBUG`
     """

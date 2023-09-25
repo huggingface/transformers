@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class DonutFeatureExtractor(DonutImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logging.warning(
             "The class DonutFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
             " use DonutImageProcessor instead.",
             FutureWarning,

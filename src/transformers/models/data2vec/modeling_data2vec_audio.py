@@ -990,7 +990,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
@@ -1115,7 +1115,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
@@ -1236,7 +1236,7 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
@@ -1402,7 +1402,7 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        warnings.warn(
+        logging.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,

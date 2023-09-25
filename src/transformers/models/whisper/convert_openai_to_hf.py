@@ -105,7 +105,7 @@ def _download(url: str, root: str) -> bytes:
         if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
             return model_bytes
         else:
-            warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
+            logging.warning(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
     with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
         with tqdm(

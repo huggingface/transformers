@@ -77,7 +77,7 @@ class LfsEnableCommand:
         self.args = args
 
     def run(self):
-        warnings.warn(
+        logging.warning(
             "Managing repositories through transformers-cli is deprecated. Please use `huggingface-cli` instead."
         )
         local_path = os.path.abspath(self.args.path)

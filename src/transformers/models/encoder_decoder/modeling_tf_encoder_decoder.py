@@ -600,7 +600,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         # Compute loss independent from decoder (as some shift the logits inside them)
         loss = None
         if labels is not None:
-            warnings.warn(DEPRECATION_WARNING, FutureWarning)
+            logging.warning(DEPRECATION_WARNING, FutureWarning)
             loss = self.hf_compute_loss(labels, logits)
 
         if not return_dict:

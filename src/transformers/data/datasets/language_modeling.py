@@ -50,7 +50,7 @@ class TextDataset(Dataset):
         overwrite_cache=False,
         cache_dir: Optional[str] = None,
     ):
-        warnings.warn(
+        logging.warning(
             DEPRECATION_WARNING.format(
                 "https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_mlm.py"
             ),
@@ -116,7 +116,7 @@ class LineByLineTextDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
-        warnings.warn(
+        logging.warning(
             DEPRECATION_WARNING.format(
                 "https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_mlm.py"
             ),
@@ -149,7 +149,7 @@ class LineByLineWithRefDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, ref_path: str):
-        warnings.warn(
+        logging.warning(
             DEPRECATION_WARNING.format(
                 "https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_mlm_wwm.py"
             ),
@@ -197,7 +197,7 @@ class LineByLineWithSOPTextDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_dir: str, block_size: int):
-        warnings.warn(
+        logging.warning(
             DEPRECATION_WARNING.format(
                 "https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_mlm.py"
             ),
@@ -357,7 +357,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
         short_seq_probability=0.1,
         nsp_probability=0.5,
     ):
-        warnings.warn(
+        logging.warning(
             DEPRECATION_WARNING.format(
                 "https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_mlm.py"
             ),

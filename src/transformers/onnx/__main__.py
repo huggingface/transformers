@@ -177,7 +177,7 @@ def export_with_transformers(args):
 
         validate_model_outputs(onnx_config, preprocessor, model, args.output, onnx_outputs, args.atol)
         logger.info(f"All good, model saved at: {args.output.as_posix()}")
-        warnings.warn(
+        logging.warning(
             "The export was done by transformers.onnx which is deprecated and will be removed in v5. We recommend"
             " using optimum.exporters.onnx in future. You can find more information here:"
             " https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model.",

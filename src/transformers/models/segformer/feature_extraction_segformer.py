@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class SegformerFeatureExtractor(SegformerImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logging.warning(
             "The class SegformerFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
             " Please use SegformerImageProcessor instead.",
             FutureWarning,

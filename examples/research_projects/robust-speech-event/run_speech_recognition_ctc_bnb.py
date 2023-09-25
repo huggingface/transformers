@@ -668,7 +668,7 @@ def main():
     try:
         processor = AutoProcessor.from_pretrained(training_args.output_dir)
     except (OSError, KeyError):
-        warnings.warn(
+        logging.warning(
             "Loading a processor from a feature extractor config that does not"
             " include a `processor_class` attribute is deprecated and will be removed in v5. Please add the following "
             " attribute to your `preprocessor_config.json` file to suppress this warning: "

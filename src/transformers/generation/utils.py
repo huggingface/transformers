@@ -1257,7 +1257,7 @@ class GenerationMixin:
         # 1. Max length warnings related to poor parameterization
         if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
             # 20 is the default max_length of the generation config
-            warnings.warn(
+            logging.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) to control the "
                 "generation length. We recommend setting `max_new_tokens` to control the maximum length of the "
                 "generation.",
@@ -1265,7 +1265,7 @@ class GenerationMixin:
             )
         if input_ids_length >= generation_config.max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-            warnings.warn(
+            logging.warning(
                 f"Input length of {input_ids_string} is {input_ids_length}, but `max_length` is set to"
                 f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
                 " increasing `max_new_tokens`.",
@@ -1282,7 +1282,7 @@ class GenerationMixin:
                 f" Note that `max_length` is set to {generation_config.max_length}, its default value."
             )
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
-            warnings.warn(
+            logging.warning(
                 f"Unfeasible length constraints: `min_length` ({generation_config.min_length}) is larger than"
                 f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix,
                 UserWarning,
@@ -1290,7 +1290,7 @@ class GenerationMixin:
         if generation_config.min_new_tokens is not None:
             min_length = generation_config.min_new_tokens + input_ids_length
             if min_length > generation_config.max_length:
-                warnings.warn(
+                logging.warning(
                     f"Unfeasible length constraints: `min_new_tokens` ({generation_config.min_new_tokens}), when "
                     f"added to the prompt length ({input_ids_length}), is larger than"
                     f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix,
@@ -1418,7 +1418,7 @@ class GenerationMixin:
             ):
                 new_generation_config = GenerationConfig.from_model_config(self.config)
                 if new_generation_config != self.generation_config:
-                    warnings.warn(
+                    logging.warning(
                         "You have modified the pretrained model configuration to control generation. This is a"
                         " deprecated strategy to control generation and will be removed soon, in a future version."
                         " Please use and modify the model generation configuration (see"
@@ -1536,7 +1536,7 @@ class GenerationMixin:
             )
 
         if self.device.type != input_ids.device.type:
-            warnings.warn(
+            logging.warning(
                 "You are calling .generate() with the `input_ids` being on a device type different"
                 f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"
                 f" is on {self.device.type}. You may experience unexpected behaviors or slower generation."
@@ -2395,7 +2395,7 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
-            warnings.warn(
+            logging.warning(
                 "`max_length` is deprecated in this function, use"
                 " `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
                 UserWarning,
@@ -2673,7 +2673,7 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
-            warnings.warn(
+            logging.warning(
                 "`max_length` is deprecated in this function, use"
                 " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
@@ -2950,14 +2950,14 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
-            warnings.warn(
+            logging.warning(
                 "`max_length` is deprecated in this function, use"
                 " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         if len(stopping_criteria) == 0:
-            warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
+            logging.warning("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):
@@ -3286,7 +3286,7 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
-            warnings.warn(
+            logging.warning(
                 "`max_length` is deprecated in this function, use"
                 " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
@@ -3611,7 +3611,7 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
-            warnings.warn(
+            logging.warning(
                 "`max_length` is deprecated in this function, use"
                 " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
@@ -3995,14 +3995,14 @@ class GenerationMixin:
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
         if max_length is not None:
-            warnings.warn(
+            logging.warning(
                 "`max_length` is deprecated in this function, use"
                 " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
         if len(stopping_criteria) == 0:
-            warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
+            logging.warning("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):

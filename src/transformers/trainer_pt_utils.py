@@ -236,7 +236,7 @@ def reissue_pt_warnings(caught_warnings):
     if len(caught_warnings) > 1:
         for w in caught_warnings:
             if w.category != UserWarning or w.message != SAVE_STATE_WARNING:
-                warnings.warn(w.message, w.category)
+                logging.warning(w.message, w.category)
 
 
 @contextmanager
@@ -293,7 +293,7 @@ class SequentialDistributedSampler(Sampler):
     """
 
     def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
-        warnings.warn(
+        logging.warning(
             "SequentialDistributedSampler is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
@@ -415,7 +415,7 @@ class DistributedTensorGatherer:
     """
 
     def __init__(self, world_size, num_samples, make_multiple_of=None, padding_index=-100):
-        warnings.warn(
+        logging.warning(
             "DistributedTensorGatherer is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )

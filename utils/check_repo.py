@@ -330,7 +330,7 @@ def check_missing_backends():
                 f"Transformers repo, the following are missing: {missing}."
             )
         else:
-            warnings.warn(
+            logging.warning(
                 "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
                 f"Transformers repo, the following are missing: {missing}. While it's probably fine as long as you "
                 "didn't make any change in one of those backends modeling files, you should probably execute the "

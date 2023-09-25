@@ -1483,7 +1483,7 @@ AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModel
 class AutoModelWithLMHead(_AutoModelWithLMHead):
     @classmethod
     def from_config(cls, config):
-        warnings.warn(
+        logging.warning(
             "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
             "`AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and "
             "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
@@ -1493,7 +1493,7 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        warnings.warn(
+        logging.warning(
             "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use "
             "`AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and "
             "`AutoModelForSeq2SeqLM` for encoder-decoder models.",
