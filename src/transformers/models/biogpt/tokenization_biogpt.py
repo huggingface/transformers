@@ -112,15 +112,6 @@ class BioGptTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         **kwargs,
     ):
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            **kwargs,
-        )
-
         try:
             import sacremoses
         except ImportError:
@@ -144,6 +135,15 @@ class BioGptTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self):
