@@ -312,7 +312,6 @@ class OwlViTVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
-
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
@@ -975,7 +974,7 @@ class OwlViTVisionTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.pre_layernorm(pooled_output)
+        pooled_output = self.post_layernorm(pooled_output)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
