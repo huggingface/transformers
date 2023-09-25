@@ -674,6 +674,8 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING = None
 
 MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING = None
 
+MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING = None
+
 
 MODEL_MAPPING = None
 
@@ -927,6 +929,13 @@ class AutoModelForZeroShotImageClassification(metaclass=DummyObject):
 
 
 class AutoModelForZeroShotObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForInterestPointDescription(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -7778,6 +7787,23 @@ class SqueezeBertModule(metaclass=DummyObject):
 
 
 class SqueezeBertPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SuperPointModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SuperPointModelForInterestPointDescription(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -306,7 +306,6 @@ class SuperPointDescriptorDecoder(nn.Module):
         return descriptors
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNextV2->SuperPoint, convnextv2->superpoint
 class SuperPointPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
