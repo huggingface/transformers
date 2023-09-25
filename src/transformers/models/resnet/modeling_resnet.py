@@ -200,17 +200,24 @@ class ResNetStage(nn.Module):
 
         layer = ResNetBottleNeckLayer if config.layer_type == "bottleneck" else ResNetBasicLayer
 
-        self.layers = nn.Sequential(
-            # downsampling is done in the first layer with stride of 2
-            layer(
-                in_channels,
-                out_channels,
-                stride=stride,
-                activation=config.hidden_act,
-                reduce_first=config.reduce_first,
-            ),
-            *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
-        )
+        if config.layer_type == "bottleneck":
+            self.layers = nn.Sequential(
+                # downsampling is done in the first layer with stride of 2
+                layer(
+                    in_channels,
+                    out_channels,
+                    stride=stride,
+                    activation=config.hidden_act,
+                    reduce_first=config.reduce_first,
+                ),
+                *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
+            )
+        else:
+            self.layers = nn.Sequential(
+                # downsampling is done in the first layer with stride of 2
+                layer(in_channels, out_channels, stride=stride, activation=config.hidden_act),
+                *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
+            )
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = input
