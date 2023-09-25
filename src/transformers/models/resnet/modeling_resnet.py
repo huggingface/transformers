@@ -153,7 +153,13 @@ class ResNetBottleNeckLayer(nn.Module):
     """
 
     def __init__(
-        self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", reduction: int = 4
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 1,
+        activation: str = "relu",
+        reduction: int = 4,
+        reduce_first: bool = False,
     ):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
@@ -162,8 +168,8 @@ class ResNetBottleNeckLayer(nn.Module):
             ResNetShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
         )
         self.layer = nn.Sequential(
-            ResNetConvLayer(in_channels, reduces_channels, kernel_size=1),
-            ResNetConvLayer(reduces_channels, reduces_channels, stride=stride),
+            ResNetConvLayer(in_channels, reduces_channels, kernel_size=1, stride=stride if reduce_first else 1),
+            ResNetConvLayer(reduces_channels, reduces_channels, stride=stride if not reduce_first else 1),
             ResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
         )
         self.activation = ACT2FN[activation]
@@ -196,7 +202,13 @@ class ResNetStage(nn.Module):
 
         self.layers = nn.Sequential(
             # downsampling is done in the first layer with stride of 2
-            layer(in_channels, out_channels, stride=stride, activation=config.hidden_act),
+            layer(
+                in_channels,
+                out_channels,
+                stride=stride,
+                activation=config.hidden_act,
+                reduce_first=config.reduce_first,
+            ),
             *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
         )
 
