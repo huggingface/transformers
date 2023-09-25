@@ -1534,8 +1534,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return model_embeds
 
         # Update base model and current model config
-        self.config.vocab_size = model_embeds.weight.shape[0]
-        self.vocab_size = model_embeds.weight.shape[0]
+        # get the actual size (considering both zero stage 3 and pad_to_multiple_of)
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(model_embeds.weight, modifier_rank=None):
+                new_num_tokens = model_embeds.weight.shape[0]
+        else:
+            new_num_tokens = model_embeds.weight.shape[0]
+        self.config.vocab_size = new_num_tokens
+        self.vocab_size = new_num_tokens
 
         # Tie weights again if needed
         self.tie_weights()
