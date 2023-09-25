@@ -454,7 +454,7 @@ class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
     Examples:
 
     ```python
-    >>> from transformers import AutoImageProcessor, AutoBackbone
+    >>> from transformers import AutoImageProcessor, AutoModelForInterestPointDescription
     >>> import torch
     >>> from PIL import Image
     >>> import requests
