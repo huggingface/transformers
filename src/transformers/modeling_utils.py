@@ -3294,7 +3294,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 _adapter_model_path,
                 adapter_name=adapter_name,
                 token=token,
-                adapter_hub_kwargs=adapter_kwargs,
+                adapter_kwargs=adapter_kwargs,
             )
 
         if output_loading_info:
