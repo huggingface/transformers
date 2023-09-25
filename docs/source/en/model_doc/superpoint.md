@@ -41,19 +41,21 @@ Tips:
 This model was contributed by [stevenbucaille](https://huggingface.co/stevenbucaille).
 The original code can be found [here](https://github.com/magicleap/SuperPointPretrainedNetwork).
 
-## SuperGlueConfig
+## SuperPointConfig
 
-[[autodoc]] SuperGlueConfig
+[[autodoc]] SuperPointConfig
 
-## SuperGlueModel
+## SuperPointImageProcessor
 
-[[autodoc]] SuperGlueModel
+[[autodoc]] SuperPointImageProcessor - preprocess
 
-- forward
+## SuperPointConfigModel
+
+[[autodoc]] SuperPointModel
+    - forward
 
 ## SuperGlueForImageClassification
 
-[[autodoc]] SuperGlueForImageClassification
-
-- forward
+[[autodoc]] SuperPointModelForInterestPointDescription
+    - forward
 

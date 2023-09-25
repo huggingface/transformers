@@ -202,6 +202,7 @@ from . import (
     speecht5,
     splinter,
     squeezebert,
+    superpoint,
     swiftformer,
     swin,
     swin2sr,

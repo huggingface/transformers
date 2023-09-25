@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_superpoint": [
-        "SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SuperPointConfig",
     ]
 }
@@ -51,6 +51,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_superpoint import (
+        SUPERPOINT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SuperPointConfig,
     )
 

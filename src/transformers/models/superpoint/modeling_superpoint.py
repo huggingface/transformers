@@ -153,7 +153,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         self.keypoint_threshold = config.keypoint_threshold
         self.max_keypoints = config.max_keypoints
         self.nms_radius = config.nms_radius
-        self.border_removal_distance = config.remove_borders
+        self.border_removal_distance = config.border_removal_distance
 
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -256,7 +256,7 @@ class SuperPointDescriptorDecoder(nn.Module):
         self.keypoint_threshold = config.keypoint_threshold
         self.max_keypoints = config.max_keypoints
         self.nms_radius = config.nms_radius
-        self.border_removal_distance = config.remove_borders
+        self.border_removal_distance = config.border_removal_distance
 
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -443,6 +443,10 @@ class SuperPointModel(SuperPointPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "SuperPoint model outputting keypoints and descriptors.",
+    SUPERPOINT_START_DOCSTRING,
+)
 class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
     """
         Returns:
