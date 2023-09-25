@@ -499,11 +499,7 @@ class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
         )
 
         if not return_dict:
-            return (
-                outputs.keypoints,
-                outputs.scores,
-                outputs.descriptors,
-            ) + outputs.hidden_states
+            return (outputs[0], outputs[1], outputs[2], outputs[3])
 
         return ImagePointDescriptionOutput(
             keypoints=outputs.keypoints,
