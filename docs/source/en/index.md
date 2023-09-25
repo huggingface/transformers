@@ -228,6 +228,7 @@ The documentation is organized into five sections:
 1. **[SpeechToTextTransformer2](model_doc/speech_to_text_2)** (from Facebook), released together with the paper [Large-Scale Self- and Semi-Supervised Learning for Speech Translation](https://arxiv.org/abs/2104.06678) by Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli, Alexis Conneau.
 1. **[Splinter](model_doc/splinter)** (from Tel Aviv University), released together with the paper [Few-Shot Question Answering by Pretraining Span Selection](https://arxiv.org/abs/2101.00438) by Ori Ram, Yuval Kirstain, Jonathan Berant, Amir Globerson, Omer Levy.
 1. **[SqueezeBERT](model_doc/squeezebert)** (from Berkeley) released with the paper [SqueezeBERT: What can computer vision teach NLP about efficient neural networks?](https://arxiv.org/abs/2006.11316) by Forrest N. Iandola, Albert E. Shaw, Ravi Krishna, and Kurt W. Keutzer.
+1. **[SuperPoint](model_doc/superpoint)** (from MagicLeap) released with the paper [SuperPoint: Self-Supervised Interest Point Detection and Description](https://arxiv.org/abs/1712.07629) by Daniel DeTone, Tomasz Malisiewicz and Andrew Rabinovich.
 1. **[SwiftFormer](model_doc/swiftformer)** (from MBZUAI) released with the paper [SwiftFormer: Efficient Additive Attention for Transformer-based Real-time Mobile Vision Applications](https://arxiv.org/abs/2303.15446) by Abdelrahman Shaker, Muhammad Maaz, Hanoona Rasheed, Salman Khan, Ming-Hsuan Yang, Fahad Shahbaz Khan.
 1. **[Swin Transformer](model_doc/swin)** (from Microsoft) released with the paper [Swin Transformer: Hierarchical Vision Transformer using Shifted Windows](https://arxiv.org/abs/2103.14030) by Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo.
 1. **[Swin Transformer V2](model_doc/swinv2)** (from Microsoft) released with the paper [Swin Transformer V2: Scaling Up Capacity and Resolution](https://arxiv.org/abs/2111.09883) by Ze Liu, Han Hu, Yutong Lin, Zhuliang Yao, Zhenda Xie, Yixuan Wei, Jia Ning, Yue Cao, Zheng Zhang, Li Dong, Furu Wei, Baining Guo.
@@ -291,213 +292,214 @@ Flax), PyTorch, and/or TensorFlow.
 
 |             Model             | PyTorch support | TensorFlow support | Flax Support |
 |:-----------------------------:|:---------------:|:------------------:|:------------:|
-|            ALBERT             |       ✅        |         ✅         |      ✅      |
-|             ALIGN             |       ✅        |         ❌         |      ❌      |
-|            AltCLIP            |       ✅        |         ❌         |      ❌      |
-| Audio Spectrogram Transformer |       ✅        |         ❌         |      ❌      |
-|          Autoformer           |       ✅        |         ❌         |      ❌      |
-|             Bark              |       ✅        |         ❌         |      ❌      |
-|             BART              |       ✅        |         ✅         |      ✅      |
-|             BEiT              |       ✅        |         ❌         |      ✅      |
-|             BERT              |       ✅        |         ✅         |      ✅      |
-|        Bert Generation        |       ✅        |         ❌         |      ❌      |
-|            BigBird            |       ✅        |         ❌         |      ✅      |
-|        BigBird-Pegasus        |       ✅        |         ❌         |      ❌      |
-|            BioGpt             |       ✅        |         ❌         |      ❌      |
-|              BiT              |       ✅        |         ❌         |      ❌      |
-|          Blenderbot           |       ✅        |         ✅         |      ✅      |
-|        BlenderbotSmall        |       ✅        |         ✅         |      ✅      |
-|             BLIP              |       ✅        |         ✅         |      ❌      |
-|            BLIP-2             |       ✅        |         ❌         |      ❌      |
-|             BLOOM             |       ✅        |         ❌         |      ✅      |
-|          BridgeTower          |       ✅        |         ❌         |      ❌      |
-|             BROS              |       ✅        |         ❌         |      ❌      |
-|           CamemBERT           |       ✅        |         ✅         |      ❌      |
-|            CANINE             |       ✅        |         ❌         |      ❌      |
-|         Chinese-CLIP          |       ✅        |         ❌         |      ❌      |
-|             CLAP              |       ✅        |         ❌         |      ❌      |
-|             CLIP              |       ✅        |         ✅         |      ✅      |
-|            CLIPSeg            |       ✅        |         ❌         |      ❌      |
-|            CodeGen            |       ✅        |         ❌         |      ❌      |
-|           CodeLlama           |       ✅        |         ❌         |      ❌      |
-|       Conditional DETR        |       ✅        |         ❌         |      ❌      |
-|           ConvBERT            |       ✅        |         ✅         |      ❌      |
-|           ConvNeXT            |       ✅        |         ✅         |      ❌      |
-|          ConvNeXTV2           |       ✅        |         ❌         |      ❌      |
-|            CPM-Ant            |       ✅        |         ❌         |      ❌      |
-|             CTRL              |       ✅        |         ✅         |      ❌      |
-|              CvT              |       ✅        |         ✅         |      ❌      |
-|         Data2VecAudio         |       ✅        |         ❌         |      ❌      |
-|         Data2VecText          |       ✅        |         ❌         |      ❌      |
-|        Data2VecVision         |       ✅        |         ✅         |      ❌      |
-|            DeBERTa            |       ✅        |         ✅         |      ❌      |
-|          DeBERTa-v2           |       ✅        |         ✅         |      ❌      |
-|     Decision Transformer      |       ✅        |         ❌         |      ❌      |
-|        Deformable DETR        |       ✅        |         ❌         |      ❌      |
-|             DeiT              |       ✅        |         ✅         |      ❌      |
-|             DETA              |       ✅        |         ❌         |      ❌      |
-|             DETR              |       ✅        |         ❌         |      ❌      |
-|             DiNAT             |       ✅        |         ❌         |      ❌      |
-|            DINOv2             |       ✅        |         ❌         |      ❌      |
-|          DistilBERT           |       ✅        |         ✅         |      ✅      |
-|           DonutSwin           |       ✅        |         ❌         |      ❌      |
-|              DPR              |       ✅        |         ✅         |      ❌      |
-|              DPT              |       ✅        |         ❌         |      ❌      |
-|        EfficientFormer        |       ✅        |         ✅         |      ❌      |
-|         EfficientNet          |       ✅        |         ❌         |      ❌      |
-|            ELECTRA            |       ✅        |         ✅         |      ✅      |
-|            EnCodec            |       ✅        |         ❌         |      ❌      |
-|        Encoder decoder        |       ✅        |         ✅         |      ✅      |
-|             ERNIE             |       ✅        |         ❌         |      ❌      |
-|            ErnieM             |       ✅        |         ❌         |      ❌      |
-|              ESM              |       ✅        |         ✅         |      ❌      |
-|  FairSeq Machine-Translation  |       ✅        |         ❌         |      ❌      |
-|            Falcon             |       ✅        |         ❌         |      ❌      |
-|           FlauBERT            |       ✅        |         ✅         |      ❌      |
-|             FLAVA             |       ✅        |         ❌         |      ❌      |
-|             FNet              |       ✅        |         ❌         |      ❌      |
-|           FocalNet            |       ✅        |         ❌         |      ❌      |
-|      Funnel Transformer       |       ✅        |         ✅         |      ❌      |
-|              GIT              |       ✅        |         ❌         |      ❌      |
-|             GLPN              |       ✅        |         ❌         |      ❌      |
-|            GPT Neo            |       ✅        |         ❌         |      ✅      |
-|           GPT NeoX            |       ✅        |         ❌         |      ❌      |
-|       GPT NeoX Japanese       |       ✅        |         ❌         |      ❌      |
-|             GPT-J             |       ✅        |         ✅         |      ✅      |
-|            GPT-Sw3            |       ✅        |         ✅         |      ✅      |
-|          GPTBigCode           |       ✅        |         ❌         |      ❌      |
-|        GPTSAN-japanese        |       ✅        |         ❌         |      ❌      |
-|          Graphormer           |       ✅        |         ❌         |      ❌      |
-|           GroupViT            |       ✅        |         ✅         |      ❌      |
-|            Hubert             |       ✅        |         ✅         |      ❌      |
-|            I-BERT             |       ✅        |         ❌         |      ❌      |
-|            IDEFICS            |       ✅        |         ❌         |      ❌      |
-|           ImageGPT            |       ✅        |         ❌         |      ❌      |
-|           Informer            |       ✅        |         ❌         |      ❌      |
-|         InstructBLIP          |       ✅        |         ❌         |      ❌      |
-|            Jukebox            |       ✅        |         ❌         |      ❌      |
-|           LayoutLM            |       ✅        |         ✅         |      ❌      |
-|          LayoutLMv2           |       ✅        |         ❌         |      ❌      |
-|          LayoutLMv3           |       ✅        |         ✅         |      ❌      |
-|              LED              |       ✅        |         ✅         |      ❌      |
-|             LeViT             |       ✅        |         ❌         |      ❌      |
-|             LiLT              |       ✅        |         ❌         |      ❌      |
-|             LLaMA             |       ✅        |         ❌         |      ❌      |
-|          Longformer           |       ✅        |         ✅         |      ❌      |
-|            LongT5             |       ✅        |         ❌         |      ✅      |
-|             LUKE              |       ✅        |         ❌         |      ❌      |
-|            LXMERT             |       ✅        |         ✅         |      ❌      |
-|            M-CTC-T            |       ✅        |         ❌         |      ❌      |
-|            M2M100             |       ✅        |         ❌         |      ❌      |
-|            Marian             |       ✅        |         ✅         |      ✅      |
-|           MarkupLM            |       ✅        |         ❌         |      ❌      |
-|          Mask2Former          |       ✅        |         ❌         |      ❌      |
-|          MaskFormer           |       ✅        |         ❌         |      ❌      |
-|        MaskFormerSwin         |       ❌        |         ❌         |      ❌      |
-|             mBART             |       ✅        |         ✅         |      ✅      |
-|             MEGA              |       ✅        |         ❌         |      ❌      |
-|         Megatron-BERT         |       ✅        |         ❌         |      ❌      |
-|            MGP-STR            |       ✅        |         ❌         |      ❌      |
-|          MobileBERT           |       ✅        |         ✅         |      ❌      |
-|          MobileNetV1          |       ✅        |         ❌         |      ❌      |
-|          MobileNetV2          |       ✅        |         ❌         |      ❌      |
-|           MobileViT           |       ✅        |         ✅         |      ❌      |
-|          MobileViTV2          |       ✅        |         ❌         |      ❌      |
-|             MPNet             |       ✅        |         ✅         |      ❌      |
-|              MPT              |       ✅        |         ❌         |      ❌      |
-|              MRA              |       ✅        |         ❌         |      ❌      |
-|              MT5              |       ✅        |         ✅         |      ✅      |
-|           MusicGen            |       ✅        |         ❌         |      ❌      |
-|              MVP              |       ✅        |         ❌         |      ❌      |
-|              NAT              |       ✅        |         ❌         |      ❌      |
-|             Nezha             |       ✅        |         ❌         |      ❌      |
-|           NLLB-MOE            |       ✅        |         ❌         |      ❌      |
-|         Nyströmformer         |       ✅        |         ❌         |      ❌      |
-|           OneFormer           |       ✅        |         ❌         |      ❌      |
-|          OpenAI GPT           |       ✅        |         ✅         |      ❌      |
-|         OpenAI GPT-2          |       ✅        |         ✅         |      ✅      |
-|           OpenLlama           |       ✅        |         ❌         |      ❌      |
-|              OPT              |       ✅        |         ✅         |      ✅      |
-|            OWL-ViT            |       ✅        |         ❌         |      ❌      |
-|            Pegasus            |       ✅        |         ✅         |      ✅      |
-|           PEGASUS-X           |       ✅        |         ❌         |      ❌      |
-|           Perceiver           |       ✅        |         ❌         |      ❌      |
-|           Persimmon           |       ✅        |         ❌         |      ❌      |
-|          Pix2Struct           |       ✅        |         ❌         |      ❌      |
-|            PLBart             |       ✅        |         ❌         |      ❌      |
-|          PoolFormer           |       ✅        |         ❌         |      ❌      |
-|           Pop2Piano           |       ✅        |         ❌         |      ❌      |
-|          ProphetNet           |       ✅        |         ❌         |      ❌      |
-|              PVT              |       ✅        |         ❌         |      ❌      |
-|            QDQBert            |       ✅        |         ❌         |      ❌      |
-|              RAG              |       ✅        |         ✅         |      ❌      |
-|             REALM             |       ✅        |         ❌         |      ❌      |
-|           Reformer            |       ✅        |         ❌         |      ❌      |
-|            RegNet             |       ✅        |         ✅         |      ✅      |
-|            RemBERT            |       ✅        |         ✅         |      ❌      |
-|            ResNet             |       ✅        |         ✅         |      ✅      |
-|           RetriBERT           |       ✅        |         ❌         |      ❌      |
-|            RoBERTa            |       ✅        |         ✅         |      ✅      |
-|     RoBERTa-PreLayerNorm      |       ✅        |         ✅         |      ✅      |
-|            RoCBert            |       ✅        |         ❌         |      ❌      |
-|           RoFormer            |       ✅        |         ✅         |      ✅      |
-|             RWKV              |       ✅        |         ❌         |      ❌      |
-|              SAM              |       ✅        |         ✅         |      ❌      |
-|           SegFormer           |       ✅        |         ✅         |      ❌      |
-|              SEW              |       ✅        |         ❌         |      ❌      |
-|             SEW-D             |       ✅        |         ❌         |      ❌      |
-|    Speech Encoder decoder     |       ✅        |         ❌         |      ✅      |
-|          Speech2Text          |       ✅        |         ✅         |      ❌      |
-|         Speech2Text2          |       ❌        |         ❌         |      ❌      |
-|           SpeechT5            |       ✅        |         ❌         |      ❌      |
-|           Splinter            |       ✅        |         ❌         |      ❌      |
-|          SqueezeBERT          |       ✅        |         ❌         |      ❌      |
-|          SwiftFormer          |       ✅        |         ❌         |      ❌      |
-|       Swin Transformer        |       ✅        |         ✅         |      ❌      |
-|      Swin Transformer V2      |       ✅        |         ❌         |      ❌      |
-|            Swin2SR            |       ✅        |         ❌         |      ❌      |
-|      SwitchTransformers       |       ✅        |         ❌         |      ❌      |
-|              T5               |       ✅        |         ✅         |      ✅      |
-|       Table Transformer       |       ✅        |         ❌         |      ❌      |
-|             TAPAS             |       ✅        |         ✅         |      ❌      |
-|    Time Series Transformer    |       ✅        |         ❌         |      ❌      |
-|          TimeSformer          |       ✅        |         ❌         |      ❌      |
-|         TimmBackbone          |       ❌        |         ❌         |      ❌      |
-|    Trajectory Transformer     |       ✅        |         ❌         |      ❌      |
-|        Transformer-XL         |       ✅        |         ✅         |      ❌      |
-|             TrOCR             |       ✅        |         ❌         |      ❌      |
-|             TVLT              |       ✅        |         ❌         |      ❌      |
-|             UMT5              |       ✅        |         ❌         |      ❌      |
-|           UniSpeech           |       ✅        |         ❌         |      ❌      |
-|         UniSpeechSat          |       ✅        |         ❌         |      ❌      |
-|            UPerNet            |       ✅        |         ❌         |      ❌      |
-|              VAN              |       ✅        |         ❌         |      ❌      |
-|           VideoMAE            |       ✅        |         ❌         |      ❌      |
-|             ViLT              |       ✅        |         ❌         |      ❌      |
-|    Vision Encoder decoder     |       ✅        |         ✅         |      ✅      |
-|     VisionTextDualEncoder     |       ✅        |         ✅         |      ✅      |
-|          VisualBERT           |       ✅        |         ❌         |      ❌      |
-|              ViT              |       ✅        |         ✅         |      ✅      |
-|          ViT Hybrid           |       ✅        |         ❌         |      ❌      |
-|            VitDet             |       ✅        |         ❌         |      ❌      |
-|            ViTMAE             |       ✅        |         ✅         |      ❌      |
-|           ViTMatte            |       ✅        |         ❌         |      ❌      |
-|            ViTMSN             |       ✅        |         ❌         |      ❌      |
-|             VITS              |       ✅        |         ❌         |      ❌      |
-|             ViViT             |       ✅        |         ❌         |      ❌      |
-|           Wav2Vec2            |       ✅        |         ✅         |      ✅      |
-|      Wav2Vec2-Conformer       |       ✅        |         ❌         |      ❌      |
-|             WavLM             |       ✅        |         ❌         |      ❌      |
-|            Whisper            |       ✅        |         ✅         |      ✅      |
-|            X-CLIP             |       ✅        |         ❌         |      ❌      |
-|             X-MOD             |       ✅        |         ❌         |      ❌      |
-|             XGLM              |       ✅        |         ✅         |      ✅      |
-|              XLM              |       ✅        |         ✅         |      ❌      |
-|        XLM-ProphetNet         |       ✅        |         ❌         |      ❌      |
-|          XLM-RoBERTa          |       ✅        |         ✅         |      ✅      |
-|        XLM-RoBERTa-XL         |       ✅        |         ❌         |      ❌      |
-|             XLNet             |       ✅        |         ✅         |      ❌      |
-|             YOLOS             |       ✅        |         ❌         |      ❌      |
-|             YOSO              |       ✅        |         ❌         |      ❌      |
+|            ALBERT             |        ✅        |         ✅          |      ✅       |
+|             ALIGN             |        ✅        |         ❌          |      ❌       |
+|            AltCLIP            |        ✅        |         ❌          |      ❌       |
+| Audio Spectrogram Transformer |        ✅        |         ❌          |      ❌       |
+|          Autoformer           |        ✅        |         ❌          |      ❌       |
+|             Bark              |        ✅        |         ❌          |      ❌       |
+|             BART              |        ✅        |         ✅          |      ✅       |
+|             BEiT              |        ✅        |         ❌          |      ✅       |
+|             BERT              |        ✅        |         ✅          |      ✅       |
+|        Bert Generation        |        ✅        |         ❌          |      ❌       |
+|            BigBird            |        ✅        |         ❌          |      ✅       |
+|        BigBird-Pegasus        |        ✅        |         ❌          |      ❌       |
+|            BioGpt             |        ✅        |         ❌          |      ❌       |
+|              BiT              |        ✅        |         ❌          |      ❌       |
+|          Blenderbot           |        ✅        |         ✅          |      ✅       |
+|        BlenderbotSmall        |        ✅        |         ✅          |      ✅       |
+|             BLIP              |        ✅        |         ✅          |      ❌       |
+|            BLIP-2             |        ✅        |         ❌          |      ❌       |
+|             BLOOM             |        ✅        |         ❌          |      ✅       |
+|          BridgeTower          |        ✅        |         ❌          |      ❌       |
+|             BROS              |        ✅        |         ❌          |      ❌       |
+|           CamemBERT           |        ✅        |         ✅          |      ❌       |
+|            CANINE             |        ✅        |         ❌          |      ❌       |
+|         Chinese-CLIP          |        ✅        |         ❌          |      ❌       |
+|             CLAP              |        ✅        |         ❌          |      ❌       |
+|             CLIP              |        ✅        |         ✅          |      ✅       |
+|            CLIPSeg            |        ✅        |         ❌          |      ❌       |
+|            CodeGen            |        ✅        |         ❌          |      ❌       |
+|           CodeLlama           |        ✅        |         ❌          |      ❌       |
+|       Conditional DETR        |        ✅        |         ❌          |      ❌       |
+|           ConvBERT            |        ✅        |         ✅          |      ❌       |
+|           ConvNeXT            |        ✅        |         ✅          |      ❌       |
+|          ConvNeXTV2           |        ✅        |         ❌          |      ❌       |
+|            CPM-Ant            |        ✅        |         ❌          |      ❌       |
+|             CTRL              |        ✅        |         ✅          |      ❌       |
+|              CvT              |        ✅        |         ✅          |      ❌       |
+|         Data2VecAudio         |        ✅        |         ❌          |      ❌       |
+|         Data2VecText          |        ✅        |         ❌          |      ❌       |
+|        Data2VecVision         |        ✅        |         ✅          |      ❌       |
+|            DeBERTa            |        ✅        |         ✅          |      ❌       |
+|          DeBERTa-v2           |        ✅        |         ✅          |      ❌       |
+|     Decision Transformer      |        ✅        |         ❌          |      ❌       |
+|        Deformable DETR        |        ✅        |         ❌          |      ❌       |
+|             DeiT              |        ✅        |         ✅          |      ❌       |
+|             DETA              |        ✅        |         ❌          |      ❌       |
+|             DETR              |        ✅        |         ❌          |      ❌       |
+|             DiNAT             |        ✅        |         ❌          |      ❌       |
+|            DINOv2             |        ✅        |         ❌          |      ❌       |
+|          DistilBERT           |        ✅        |         ✅          |      ✅       |
+|           DonutSwin           |        ✅        |         ❌          |      ❌       |
+|              DPR              |        ✅        |         ✅          |      ❌       |
+|              DPT              |        ✅        |         ❌          |      ❌       |
+|        EfficientFormer        |        ✅        |         ✅          |      ❌       |
+|         EfficientNet          |        ✅        |         ❌          |      ❌       |
+|            ELECTRA            |        ✅        |         ✅          |      ✅       |
+|            EnCodec            |        ✅        |         ❌          |      ❌       |
+|        Encoder decoder        |        ✅        |         ✅          |      ✅       |
+|             ERNIE             |        ✅        |         ❌          |      ❌       |
+|            ErnieM             |        ✅        |         ❌          |      ❌       |
+|              ESM              |        ✅        |         ✅          |      ❌       |
+|  FairSeq Machine-Translation  |        ✅        |         ❌          |      ❌       |
+|            Falcon             |        ✅        |         ❌          |      ❌       |
+|           FlauBERT            |        ✅        |         ✅          |      ❌       |
+|             FLAVA             |        ✅        |         ❌          |      ❌       |
+|             FNet              |        ✅        |         ❌          |      ❌       |
+|           FocalNet            |        ✅        |         ❌          |      ❌       |
+|      Funnel Transformer       |        ✅        |         ✅          |      ❌       |
+|              GIT              |        ✅        |         ❌          |      ❌       |
+|             GLPN              |        ✅        |         ❌          |      ❌       |
+|            GPT Neo            |        ✅        |         ❌          |      ✅       |
+|           GPT NeoX            |        ✅        |         ❌          |      ❌       |
+|       GPT NeoX Japanese       |        ✅        |         ❌          |      ❌       |
+|             GPT-J             |        ✅        |         ✅          |      ✅       |
+|            GPT-Sw3            |        ✅        |         ✅          |      ✅       |
+|          GPTBigCode           |        ✅        |         ❌          |      ❌       |
+|        GPTSAN-japanese        |        ✅        |         ❌          |      ❌       |
+|          Graphormer           |        ✅        |         ❌          |      ❌       |
+|           GroupViT            |        ✅        |         ✅          |      ❌       |
+|            Hubert             |        ✅        |         ✅          |      ❌       |
+|            I-BERT             |        ✅        |         ❌          |      ❌       |
+|            IDEFICS            |        ✅        |         ❌          |      ❌       |
+|           ImageGPT            |        ✅        |         ❌          |      ❌       |
+|           Informer            |        ✅        |         ❌          |      ❌       |
+|         InstructBLIP          |        ✅        |         ❌          |      ❌       |
+|            Jukebox            |        ✅        |         ❌          |      ❌       |
+|           LayoutLM            |        ✅        |         ✅          |      ❌       |
+|          LayoutLMv2           |        ✅        |         ❌          |      ❌       |
+|          LayoutLMv3           |        ✅        |         ✅          |      ❌       |
+|              LED              |        ✅        |         ✅          |      ❌       |
+|             LeViT             |        ✅        |         ❌          |      ❌       |
+|             LiLT              |        ✅        |         ❌          |      ❌       |
+|             LLaMA             |        ✅        |         ❌          |      ❌       |
+|          Longformer           |        ✅        |         ✅          |      ❌       |
+|            LongT5             |        ✅        |         ❌          |      ✅       |
+|             LUKE              |        ✅        |         ❌          |      ❌       |
+|            LXMERT             |        ✅        |         ✅          |      ❌       |
+|            M-CTC-T            |        ✅        |         ❌          |      ❌       |
+|            M2M100             |        ✅        |         ❌          |      ❌       |
+|            Marian             |        ✅        |         ✅          |      ✅       |
+|           MarkupLM            |        ✅        |         ❌          |      ❌       |
+|          Mask2Former          |        ✅        |         ❌          |      ❌       |
+|          MaskFormer           |        ✅        |         ❌          |      ❌       |
+|        MaskFormerSwin         |        ❌        |         ❌          |      ❌       |
+|             mBART             |        ✅        |         ✅          |      ✅       |
+|             MEGA              |        ✅        |         ❌          |      ❌       |
+|         Megatron-BERT         |        ✅        |         ❌          |      ❌       |
+|            MGP-STR            |        ✅        |         ❌          |      ❌       |
+|          MobileBERT           |        ✅        |         ✅          |      ❌       |
+|          MobileNetV1          |        ✅        |         ❌          |      ❌       |
+|          MobileNetV2          |        ✅        |         ❌          |      ❌       |
+|           MobileViT           |        ✅        |         ✅          |      ❌       |
+|          MobileViTV2          |        ✅        |         ❌          |      ❌       |
+|             MPNet             |        ✅        |         ✅          |      ❌       |
+|              MPT              |        ✅        |         ❌          |      ❌       |
+|              MRA              |        ✅        |         ❌          |      ❌       |
+|              MT5              |        ✅        |         ✅          |      ✅       |
+|           MusicGen            |        ✅        |         ❌          |      ❌       |
+|              MVP              |        ✅        |         ❌          |      ❌       |
+|              NAT              |        ✅        |         ❌          |      ❌       |
+|             Nezha             |        ✅        |         ❌          |      ❌       |
+|           NLLB-MOE            |        ✅        |         ❌          |      ❌       |
+|         Nyströmformer         |        ✅        |         ❌          |      ❌       |
+|           OneFormer           |        ✅        |         ❌          |      ❌       |
+|          OpenAI GPT           |        ✅        |         ✅          |      ❌       |
+|         OpenAI GPT-2          |        ✅        |         ✅          |      ✅       |
+|           OpenLlama           |        ✅        |         ❌          |      ❌       |
+|              OPT              |        ✅        |         ✅          |      ✅       |
+|            OWL-ViT            |        ✅        |         ❌          |      ❌       |
+|            Pegasus            |        ✅        |         ✅          |      ✅       |
+|           PEGASUS-X           |        ✅        |         ❌          |      ❌       |
+|           Perceiver           |        ✅        |         ❌          |      ❌       |
+|           Persimmon           |        ✅        |         ❌          |      ❌       |
+|          Pix2Struct           |        ✅        |         ❌          |      ❌       |
+|            PLBart             |        ✅        |         ❌          |      ❌       |
+|          PoolFormer           |        ✅        |         ❌          |      ❌       |
+|           Pop2Piano           |        ✅        |         ❌          |      ❌       |
+|          ProphetNet           |        ✅        |         ❌          |      ❌       |
+|              PVT              |        ✅        |         ❌          |      ❌       |
+|            QDQBert            |        ✅        |         ❌          |      ❌       |
+|              RAG              |        ✅        |         ✅          |      ❌       |
+|             REALM             |        ✅        |         ❌          |      ❌       |
+|           Reformer            |        ✅        |         ❌          |      ❌       |
+|            RegNet             |        ✅        |         ✅          |      ✅       |
+|            RemBERT            |        ✅        |         ✅          |      ❌       |
+|            ResNet             |        ✅        |         ✅          |      ✅       |
+|           RetriBERT           |        ✅        |         ❌          |      ❌       |
+|            RoBERTa            |        ✅        |         ✅          |      ✅       |
+|     RoBERTa-PreLayerNorm      |        ✅        |         ✅          |      ✅       |
+|            RoCBert            |        ✅        |         ❌          |      ❌       |
+|           RoFormer            |        ✅        |         ✅          |      ✅       |
+|             RWKV              |        ✅        |         ❌          |      ❌       |
+|              SAM              |        ✅        |         ✅          |      ❌       |
+|           SegFormer           |        ✅        |         ✅          |      ❌       |
+|              SEW              |        ✅        |         ❌          |      ❌       |
+|             SEW-D             |        ✅        |         ❌          |      ❌       |
+|    Speech Encoder decoder     |        ✅        |         ❌          |      ✅       |
+|          Speech2Text          |        ✅        |         ✅          |      ❌       |
+|         Speech2Text2          |        ❌        |         ❌          |      ❌       |
+|           SpeechT5            |        ✅        |         ❌          |      ❌       |
+|           Splinter            |        ✅        |         ❌          |      ❌       |
+|          SqueezeBERT          |        ✅        |         ❌          |      ❌       |
+|          SuperPoint           |        ✅        |         ❌          |      ❌       |
+|          SwiftFormer          |        ✅        |         ❌          |      ❌       |
+|       Swin Transformer        |        ✅        |         ✅          |      ❌       |
+|      Swin Transformer V2      |        ✅        |         ❌          |      ❌       |
+|            Swin2SR            |        ✅        |         ❌          |      ❌       |
+|      SwitchTransformers       |        ✅        |         ❌          |      ❌       |
+|              T5               |        ✅        |         ✅          |      ✅       |
+|       Table Transformer       |        ✅        |         ❌          |      ❌       |
+|             TAPAS             |        ✅        |         ✅          |      ❌       |
+|    Time Series Transformer    |        ✅        |         ❌          |      ❌       |
+|          TimeSformer          |        ✅        |         ❌          |      ❌       |
+|         TimmBackbone          |        ❌        |         ❌          |      ❌       |
+|    Trajectory Transformer     |        ✅        |         ❌          |      ❌       |
+|        Transformer-XL         |        ✅        |         ✅          |      ❌       |
+|             TrOCR             |        ✅        |         ❌          |      ❌       |
+|             TVLT              |        ✅        |         ❌          |      ❌       |
+|             UMT5              |        ✅        |         ❌          |      ❌       |
+|           UniSpeech           |        ✅        |         ❌          |      ❌       |
+|         UniSpeechSat          |        ✅        |         ❌          |      ❌       |
+|            UPerNet            |        ✅        |         ❌          |      ❌       |
+|              VAN              |        ✅        |         ❌          |      ❌       |
+|           VideoMAE            |        ✅        |         ❌          |      ❌       |
+|             ViLT              |        ✅        |         ❌          |      ❌       |
+|    Vision Encoder decoder     |        ✅        |         ✅          |      ✅       |
+|     VisionTextDualEncoder     |        ✅        |         ✅          |      ✅       |
+|          VisualBERT           |        ✅        |         ❌          |      ❌       |
+|              ViT              |        ✅        |         ✅          |      ✅       |
+|          ViT Hybrid           |        ✅        |         ❌          |      ❌       |
+|            VitDet             |        ✅        |         ❌          |      ❌       |
+|            ViTMAE             |        ✅        |         ✅          |      ❌       |
+|           ViTMatte            |        ✅        |         ❌          |      ❌       |
+|            ViTMSN             |        ✅        |         ❌          |      ❌       |
+|             VITS              |        ✅        |         ❌          |      ❌       |
+|             ViViT             |        ✅        |         ❌          |      ❌       |
+|           Wav2Vec2            |        ✅        |         ✅          |      ✅       |
+|      Wav2Vec2-Conformer       |        ✅        |         ❌          |      ❌       |
+|             WavLM             |        ✅        |         ❌          |      ❌       |
+|            Whisper            |        ✅        |         ✅          |      ✅       |
+|            X-CLIP             |        ✅        |         ❌          |      ❌       |
+|             X-MOD             |        ✅        |         ❌          |      ❌       |
+|             XGLM              |        ✅        |         ✅          |      ✅       |
+|              XLM              |        ✅        |         ✅          |      ❌       |
+|        XLM-ProphetNet         |        ✅        |         ❌          |      ❌       |
+|          XLM-RoBERTa          |        ✅        |         ✅          |      ✅       |
+|        XLM-RoBERTa-XL         |        ✅        |         ❌          |      ❌       |
+|             XLNet             |        ✅        |         ✅          |      ❌       |
+|             YOLOS             |        ✅        |         ❌          |      ❌       |
+|             YOSO              |        ✅        |         ❌          |      ❌       |
 
 <!-- End table-->
