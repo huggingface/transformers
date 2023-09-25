@@ -1774,6 +1774,7 @@ class ImagePointDescriptionOutput(ModelOutput):
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
     """
+
     keypoints: Optional[torch.IntTensor] = None
     scores: Optional[torch.FloatTensor] = None
     descriptors: Optional[torch.FloatTensor] = None
