@@ -29,7 +29,7 @@
     title: モデル共有
 - sections:
   - local: pipeline_tutorial
-     title: パイプライン共有
+     title: パイプラインチュートリアル
 - sections:
   - local: add_new_model
      title: 新しいモデルを追加する
