@@ -14,7 +14,7 @@
 - sections:
   - sections:
     - local: multilingual
-      title: 推論のための多言語モデル
+      title: 多言語モデル
 - sections:
   - local: autoclass_tutorial
     title: AutoClassを使用してポータブルなコードを書く
