@@ -640,14 +640,14 @@ class ViTEncoder(nn.Module):
         )
 
 
-class ViTPreTrainedModel(PreTrainedModel):
+class PropainterPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
     config_class = ViTConfig
-    base_model_prefix = "vit"
+    base_model_prefix = "propainter"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViTEmbeddings", "ViTLayer"]
