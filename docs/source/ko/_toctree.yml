@@ -49,11 +49,11 @@
     title: 자연어처리
     isExpanded: false
   - sections:
-      - local: in_translation
-        title: (번역중) Audio classification
+      - local: tasks/audio_classification
+        title: 오디오 분류
       - local: tasks/asr
         title: 자동 음성 인식
-    title: (번역중) 오디오
+    title: 오디오
     isExpanded: false
   - sections:
       - local: tasks/image_classification
@@ -152,7 +152,7 @@
     - local: contributing
       title: 🤗 Transformers에 기여하는 방법
     - local: add_new_model
-      title: 🤗 Transformers에 새로운 모델을 추가하는 방법 
+      title: 🤗 Transformers에 새로운 모델을 추가하는 방법
     - local: add_tensorflow_model
       title: 어떻게 🤗 Transformers 모델을 TensorFlow로 변환하나요?
     - local: add_new_pipeline
