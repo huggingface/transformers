@@ -600,6 +600,9 @@ MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = None
 MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = None
 
 
+MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING = None
+
+
 MODEL_FOR_MASK_GENERATION_MAPPING = None
 
 
@@ -673,9 +676,6 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING = None
 
 
 MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING = None
-
-
-MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING = None
 
 
 MODEL_MAPPING = None
@@ -769,6 +769,13 @@ class AutoModelForImageToImage(metaclass=DummyObject):
 
 
 class AutoModelForInstanceSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForInterestPointDescription(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -930,13 +937,6 @@ class AutoModelForZeroShotImageClassification(metaclass=DummyObject):
 
 
 class AutoModelForZeroShotObjectDetection(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class AutoModelForInterestPointDescription(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
