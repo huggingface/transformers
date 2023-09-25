@@ -18,7 +18,6 @@ import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-from scipy import ndimage as ndi
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
@@ -39,7 +38,14 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    is_scipy_available,
+    is_torch_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_torch_available():
@@ -48,6 +54,9 @@ if is_torch_available():
 
 if is_vision_available():
     import PIL
+
+if is_scipy_available():
+    from scipy import ndimage as ndi
 
 
 logger = logging.get_logger(__name__)
@@ -252,12 +261,12 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred from the input
                 image.
         """
+        requires_backends(self, "scipy")
+
         output_shape = (size["height"], size["width"])
         image = to_channel_dimension_format(image, ChannelDimension.LAST)
         image, output_shape = _preprocess_resize_output_shape(image, output_shape)
         input_shape = image.shape
-        print("Input shape:", input_shape)
-        print("Output shape:", output_shape)
         factors = np.divide(input_shape, output_shape)
 
         # Translate modes used by np.pad to those used by scipy.ndimage
@@ -396,8 +405,6 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         if do_pad:
             images = [self.pad(image=image, input_data_format=input_data_format) for image in images]
 
-        print("Shape of image after padding:", images[0].shape)
-
         if do_resize:
             images = [
                 self.resize(
@@ -407,8 +414,6 @@ class Owlv2ImageProcessor(BaseImageProcessor):
                 )
                 for image in images
             ]
-
-        print(images[0].shape)
 
         if do_normalize:
             images = [
