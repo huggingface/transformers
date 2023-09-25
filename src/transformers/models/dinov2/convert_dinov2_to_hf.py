@@ -242,10 +242,10 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
 
     if push_to_hub:
         model_name_to_hf_name = {
-            # "dinov2_vits14": "dinov2-small",
-            # "dinov2_vitb14": "dinov2-base",
-            # "dinov2_vitl14": "dinov2-large",
-            # "dinov2_vitg14": "dinov2-giant",
+            "dinov2_vits14": "dinov2-small",
+            "dinov2_vitb14": "dinov2-base",
+            "dinov2_vitl14": "dinov2-large",
+            "dinov2_vitg14": "dinov2-giant",
             "dinov2_vits14_1layer": "dinov2-small-imagenet1k-1-layer",
             "dinov2_vitb14_1layer": "dinov2-base-imagenet1k-1-layer",
             "dinov2_vitl14_1layer": "dinov2-large-imagenet1k-1-layer",
