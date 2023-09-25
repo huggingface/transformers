@@ -1118,11 +1118,10 @@ MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING_NAMES = OrderedDict(
         ("superpoint", "SuperPointModelForInterestPointDescription"),
     ]
 )
-  
+
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         ("swin2sr", "Swin2SRForImageSuperResolution"),
-
     ]
 )
 
@@ -1216,7 +1215,6 @@ MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING = _LazyAutoMapping(
 )
 
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
-
 
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
