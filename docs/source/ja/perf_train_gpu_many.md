@@ -246,3 +246,284 @@ Implementations:
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
 
+## Naive Model Parallelism (Vertical) and Pipeline Parallelism
+
+ナイーブモデルパラレリズム（MP）は、モデルの層を複数のGPUに分散させる方法です。このメカニズムは比較的単純で、希望する層を`.to()`メソッドを使用して特定のデバイスに切り替えるだけです。これにより、データがこれらの層を通過するたびに、データも層と同じデバイスに切り替えられ、残りの部分は変更されません。
+
+私たちはこれを「垂直MP」と呼びます。なぜなら、ほとんどのモデルがどのように描かれるかを思い出すと、層を垂直にスライスするからです。たとえば、以下の図は8層のモデルを示しています：
+
+
+```
+===================  ===================
+|  0 | 1 | 2 | 3  |  |  4 | 5 | 6 | 7  |
+===================  ===================
+        gpu0                 gpu1
+```
+
+我々は、モデルを垂直に2つに分割し、レイヤー0から3をGPU0に配置し、レイヤー4から7をGPU1に配置しました。
+
+データがレイヤー0から1、1から2、2から3に移動する間は通常のモデルと同じです。しかし、データがレイヤー3からレイヤー4に移動する必要がある場合、GPU0からGPU1への移動が発生し、通信のオーバーヘッドが発生します。参加しているGPUが同じコンピュートノード（例：同じ物理マシン）にある場合、このコピーは非常に高速ですが、異なるコンピュートノード（例：複数のマシン）にある場合、通信のオーバーヘッドは大幅に増加する可能性があります。
+
+その後、レイヤー4から5、6から7までは通常のモデルと同様に動作し、7番目のレイヤーが完了すると、データをしばしばレイヤー0に戻す必要があります（またはラベルを最後のレイヤーに送信します）。これで損失を計算し、オプティマイザが作業を開始できます。
+
+問題点：
+- 主な欠点、およびなぜこれを「単純な」MPと呼ぶのかは、1つを除いてすべてのGPUがどんな瞬間でもアイドル状態であることです。したがって、4つのGPUを使用する場合、単純なMPは、1つのGPUのメモリ容量を4倍にするのとほぼ同じであり、ハードウェアの残りを無視します。さらに、データのコピーのオーバーヘッドがあることを忘れてはいけません。したがって、4枚の6GBのカードは、データのコピーのオーバーヘッドがない1枚の24GBのカードと同じサイズを収容できるでしょうが、後者はトレーニングをより迅速に完了します。ただし、たとえば40GBのカードがあり、45GBのモデルを収める必要がある場合、勾配とオプティマイザの状態のためにほとんど収めることができません。
+- 共有の埋め込みは、GPU間でコピーする必要があるかもしれません。
+
+パイプライン並列処理（PP）は、ほぼ単純なMPと同じですが、GPUがアイドル状態になる問題を解決し、入力バッチをマイクロバッチに分割し、パイプラインを人工的に作成することにより、異なるGPUが計算プロセスに同時に参加できるようにします。
+
+以下は、[GPipe論文](https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.html)からの図で、上部には単純なMP、下部にはPPが示されています：
+
+![mp-pp](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-gpipe-bubble.png)
+
+この図から、PPがGPUがアイドル状態の領域である「バブル」を少なく持つことがわかります。アイドル状態の部分は「バブル」と呼ばれます。
+
+図の両方の部分は、4つのGPUがパイプラインに参加している4の次元の並列性を示しています。つまり、4つのパイプステージF0、F1、F2、F3のフォワードパスがあり、逆順のバックワードパスB3、B2、B1、B0があります。
+
+PPは調整する新しいハイパーパラメータを導入します。それは `chunks` で、同じパイプステージを通じて連続して送信されるデータのチャンクの数を定義します。たとえば、下の図では `chunks=4` が表示されています。GPU0はチャンク0、1、2、3（F0,0、F0,1、F0,2、F0,3）で同じフォワードパスを実行し、他のGPUが作業を開始し始めるのを待ってから、GPU0はチャンク3、2、1、0（B0,3、B0,2、B0,1、B0,0）で逆順パスを実行します。
+
+注意すべきは、概念的にはこれが勾配蓄積ステップ（GAS）と同じコンセプトであることです。PyTorchは `chunks` を使用し、DeepSpeedは同じハイパーパラメータをGASと呼びます。
+
+`chunks` の導入により、PPはマイクロバッチ（MBS）の概念を導入します。DPはグローバルデータバッチサイズをミニバッチに分割します。したがって、DPの次数が4で、グローバルバッチサイズが1024の場合、4つのミニバッチ（それぞれ256）に分割されます（1024/4）。そして、`chunks`（またはGAS）の数が32である場合、マイクロバッチサイズは8になります（256/32）。各パイプラインステージは1つのマイクロバッチで作業します。
+
+DP + PPセットアップのグローバルバッチサイズを計算するには、`mbs*chunks*dp_degree`（`8*32*4=1024`）を行います。
+
+図に戻りましょう。
+
+`chunks=1` であれば、非効率な単純なMPになります。非常に大きな `chunks` 値を使用すると、非常に小さなマイクロバッチサイズになり、効率があまり高くないかもしれません。したがって、GPUの効率的な利用を最大化する値を見つけるために実験する必要があります。これは、バブルのサイズを最小限にすることに対応する、すべての参加GPUにわたる高い並行GPU利用を可能にするためです。
+
+2つのソリューショングループがあります。従来のパイプラインAPIソリューションと、ユーザーのモデルを大幅に変更する必要があるより現代的なソリューションです。
+
+従来のパイプラインAPIソリューション：
+- PyTorch
+- DeepSpeed
+- Megatron-LM
+
+現代的なソリューション：
+- Varuna
+- Sagemaker
+
+従来のパイプラインAPIソリューションの問題点：
+- モデルをかなり変更する必要があるため、Pipelineはモジュールの通常のフローを`nn.Sequential`シーケンスに再書き込む必要があり、モデルの設計を変更することが必要です。
+- 現在、Pipeline APIは非常に制限的です。最初のパイプラインステージに渡されるPython変数のセットがある場合、回避策を見つける必要があります。現在、パイプラインインターフェースでは、唯一のテンソルまたはテンソルのタプルを入力と出力として要求しています。これらのテンソルはバッチサイズを最初の次元として持っている必要があります。パイプラインはミニバッチをマイクロバッチに分割します。可能な改善点については、こちらの議論が行われています：https://github.com/pytorch/pytorch/pull/50693
+- パイプステージのレベルでの条件付き制御フローは不可能です。例えば、T5のようなエンコーダーデコーダーモデルは、条件付きエンコーダーステージを処理するために特別な回避策が必要です。
+- 各レイヤーを配置する必要があるため、1つのモデルの出力が他のモデルの入力になるようにします。
+
+VarunaとSageMakerとの実験はまだ行っていませんが、彼らの論文によれば、上記で述べた問題のリストを克服し、ユーザーのモデルにははるかに小さな変更しか必要としないと報告されています。
+
+実装：
+
+- [Pytorch](https://pytorch.org/docs/stable/pipeline.html) (initial support in pytorch-1.8, and progressively getting improved in 1.9 and more so in 1.10). Some [examples](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py)
+- [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
+- [OSLO](https://github.com/tunib-ai/oslo) - この実装は、Hugging Face Transformersに基づいています。
+
+🤗 Transformersのステータス: この執筆時点では、いずれのモデルも完全なPP（パイプライン並列処理）をサポートしていません。GPT2モデルとT5モデルは単純なMP（モデル並列処理）サポートを持っています。主な障害は、モデルを`nn.Sequential`に変換できず、すべての入力がテンソルである必要があることです。現在のモデルには、変換を非常に複雑にする多くの機能が含まれており、これらを削除する必要があります。
+
+他のアプローチ：
+
+DeepSpeed、Varuna、およびSageMakerは、[交互にパイプラインを実行](https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.html)するコンセプトを使用しています。ここでは、バックワードパスを優先させてバブル（アイドル時間）をさらに最小限に抑えます。
+
+Varunaは、最適なスケジュールを発見するためにシミュレーションを使用してスケジュールをさらに改善しようとします。
+
+OSLOは、`nn.Sequential`の変換なしでTransformersに基づくパイプライン並列処理を実装しています。
+
+## Tensor Parallelism
+
+テンソル並列処理では、各GPUがテンソルのスライスのみを処理し、全体が必要な操作のためにのみ完全なテンソルを集約します。
+
+このセクションでは、[Megatron-LM](https://github.com/NVIDIA/Megatron-LM)論文からのコンセプトと図を使用します：[GPUクラスタでの効率的な大規模言語モデルトレーニング](https://arxiv.org/abs/2104.04473)。
+
+どのトランスフォーマの主要な構築要素は、完全に接続された`nn.Linear`に続く非線形アクティベーション`GeLU`です。
+
+Megatronの論文の表記法に従って、行列の乗算部分を`Y = GeLU(XA)`と書くことができます。ここで、`X`と`Y`は入力ベクトルと出力ベクトルで、`A`は重み行列です。
+
+行列の計算を行列形式で見ると、行列乗算を複数のGPUで分割できる方法が簡単に理解できます：
+![Parallel GEMM](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-parallel_gemm.png)
+
+重み行列`A`を`N`個のGPUに対して列ごとに分割し、並列で行列乗算`XA_1`から`XA_n`を実行すると、`N`個の出力ベクトル`Y_1、Y_2、...、Y_n`が得られ、それらを独立して`GeLU`に供給できます：
+![独立したGeLU](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-independent-gelu.png)
+
+この原理を使用して、最後まで同期が必要ないまま、任意の深さのMLPを更新できます。Megatron-LMの著者はそのための有用なイラストを提供しています：
+![並列シャード処理](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-parallel_shard_processing.png)
+
+マルチヘッドアテンションレイヤーを並列化することはさらに簡単です。それらは既に複数の独立したヘッドを持っているため、本質的に並列です！
+![並列セルフアテンション](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-tp-parallel_self_attention.png)
+
+特別な考慮事項：TPには非常に高速なネットワークが必要であり、したがって1つのノードを超えてTPを実行しないことがお勧めされません。実際には、1つのノードに4つのGPUがある場合、最大のTP度数は4です。TP度数8が必要な場合は、少なくとも8つのGPUを持つノードを使用する必要があります。
+
+このセクションは、元のより詳細な[TPの概要](https://github.com/huggingface/transformers/issues/10321#issuecomment-783543530)に基づいています。
+by [@anton-l](https://github.com/anton-l)。
+
+SageMakerは、より効率的な処理のためにTPとDPを組み合わせて使用します。
+
+代替名：
+- [DeepSpeed](https://github.com/microsoft/DeepSpeed)はこれを「テンソルスライシング」と呼びます。詳細は[DeepSpeedの特徴](https://www.deepspeed.ai/features/#model-parallelism)をご覧ください。
+
+実装例:
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)には、モデル固有の内部実装があります。
+- [parallelformers](https://github.com/tunib-ai/parallelformers)（現時点では推論のみ）。
+- [SageMaker](https://arxiv.org/abs/2111.05972) - これはAWSでのみ使用できるプロプライエタリなソリューションです。
+- [OSLO](https://github.com/tunib-ai/oslo)には、Transformersに基づいたテンソル並列実装があります。
+
+🤗 Transformersの状況:
+- コア: まだコアには実装されていません。
+- ただし、推論が必要な場合、[parallelformers](https://github.com/tunib-ai/parallelformers)はほとんどのモデルに対してサポートを提供します。これがコアに実装されるまで、これを使用できます。そして、トレーニングモードもサポートされることを期待しています。
+- Deepspeed-Inferenceでは、BERT、GPT-2、およびGPT-NeoモデルをCUDAカーネルベースの高速推論モードでサポートしています。詳細は[こちら](https://www.deepspeed.ai/tutorials/inference-tutorial/)をご覧ください。
+
+## DP+PP
+
+DeepSpeedの[パイプラインチュートリアル](https://www.deepspeed.ai/tutorials/pipeline/)からの次の図は、DPをPPと組み合わせる方法を示しています。
+
+![dp-pp-2d](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero-dp-pp.png)
+
+ここで重要なのは、DPランク0がGPU2を見えなくし、DPランク1がGPU3を見えなくすることです。DPにとって、存在するのはGPU 0 と 1 のみで、それらの2つのGPUのようにデータを供給します。GPU0はPPを使用してGPU2に一部の負荷を「秘密裏に」オフロードし、GPU1も同様にGPU3を支援に引き入れます。
+
+各次元には少なくとも2つのGPUが必要ですので、ここでは少なくとも4つのGPUが必要です。
+
+実装例:
+- [DeepSpeed](https://github.com/microsoft/DeepSpeed)
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [OSLO](https://github.com/tunib-ai/oslo)
+
+🤗 Transformersの状況: まだ実装されていません
+
+## DP+PP+TP
+
+さらに効率的なトレーニングを行うために、3Dパラレリズムを使用し、PPをTPとDPと組み合わせます。これは次の図で示されています。
+
+![dp-pp-tp-3d](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-deepspeed-3d.png)
+
+この図は[3Dパラレリズム：兆パラメータモデルへのスケーリング](https://www.microsoft.com/en-us/research/blog/deepspeed-extreme-scale-model-training-for-everyone/)というブログ投稿から取得されたもので、おすすめの読み物です。
+
+各次元には少なくとも2つのGPUが必要ですので、ここでは少なくとも8つのGPUが必要です。
+
+実装例:
+- [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeedには、さらに効率的なDPであるZeRO-DPと呼ばれるものも含まれています。
+- [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
+- [Varuna](https://github.com/microsoft/varuna)
+- [SageMaker](https://arxiv.org/abs/2111.05972)
+- [OSLO](https://github.com/tunib-ai/oslo)
+
+🤗 Transformersの状況: まだ実装されていません。PPとTPがないため。
+
+## ZeRO DP+PP+TP
+
+DeepSpeedの主要な機能の1つはZeROで、これはDPの拡張機能です。これについてはすでに「ZeROデータ並列化」で説明されています。通常、これは単独で動作する機能で、PPやTPは必要ありません。しかし、PPとTPと組み合わせることもできます。
+
+ZeRO-DPがPPと組み合わされる場合、通常はZeROステージ1（オプティマイザーシャーディング）のみが有効になります。
+
+ZeROステージ2（勾配シャーディング）をパイプライン並列化と組み合わせて使用する理論的な可能性はありますが、性能に悪影響を及ぼします。各マイクロバッチごとに勾配をシャーディングする前に、勾配を集約するための追加のリダクションスキャッター集計が必要で、通信オーバーヘッドが発生する可能性があります。パイプライン並列化の性質上、小さなマイクロバッチが使用され、計算の集中度（マイクロバッチサイズ）をバランスにかけ、パイプラインバブル（マイクロバッチ数）を最小限に抑えることに焦点が当てられています。したがって、これらの通信コストは影響を及ぼすでしょう。
+
+さらに、PPには通常よりも少ない層が含まれており、メモリの節約はそれほど大きくありません。PPは既に勾配サイズを「1/PP」に削減するため、勾配シャーディングの節約は純粋なDPよりもはるかに重要ではありません。
+
+ZeROステージ3も同様の理由で適していません - より多くのノード間通信が必要です。
+
+そして、ZeROを持っているので、もう一つの利点はZeRO-Offloadです。これはステージ1オプティマイザーステートをCPUにオフロードできます。
+
+実装例:
+- [Megatron-DeepSpeed](https://github.com/microsoft/Megatron-DeepSpeed)と[BigScienceからのMegatron-Deepspeed](https://github.com/bigscience-workshop/Megatron-DeepSpeed)は、前者のリポジトリのフォークです。
+- [OSLO](https://github.com/tunib-ai/oslo)
+
+重要な論文:
+
+- [DeepSpeedとMegatronを使用したMegatron-Turing NLG 530Bのトレーニング](https://arxiv.org/abs/2201.11990)
+
+🤗 Transformersの状況: まだ実装されていません。PPとTPがないため。
+
+
+## FlexFlow
+
+[FlexFlow](https://github.com/flexflow/FlexFlow)は、わずかに異なるアプローチで並列化の問題を解決します。
+
+論文: [Zhihao Jia、Matei Zaharia、Alex Aikenによる "Deep Neural Networksのデータとモデルの並列化を超えて"](https://arxiv.org/abs/1807.05358)
+
+FlexFlowは、サンプル-オペレータ-属性-パラメータの4D並列化を行います。
+
+1. サンプル = データ並列化（サンプル単位の並列化）
+2. オペレータ = 単一の操作をいくつかのサブ操作に並列化
+3. 属性 = データ並列化（長さ方向の並列化）
+4. パラメータ = モデル並列化（次元に関係なく、水平または垂直）
+
+例:
+* サンプル
+
+シーケンス長512の10バッチを考えてみましょう。これらをサンプル次元で2つのデバイスに並列化すると、10 x 512が5 x 2 x 512になります。
+
+* オペレータ
+
+層正規化を行う場合、まずstdを計算し、次にmeanを計算し、データを正規化できます。オペレータの並列化により、stdとmeanを並列に計算できます。したがって、オペレータ次元で2つのデバイス（cuda:0、cuda:1）に並列化すると、最初に入力データを両方のデバイスにコピーし、cuda:0でstdを計算し、cuda:1でmeanを同時に計算します。
+
+* 属性
+
+10バッチの512長があります。これらを属性次元で2つのデバイスに並列化すると、10 x 512が10 x 2 x 256になります。
+
+* パラメータ
+
+これはテンソルモデルの並列化または単純な層ごとのモデルの並列化と似ています。
+
+このフレームワークの重要性は、（1）GPU/TPU/CPU対（2）RAM/DRAM対（3）高速内部接続/低速外部接続などのリソースを取り、これらすべてをアルゴリズムによって自動的に最適化することです。どの並列化をどこで使用するかをアルゴリズム的に決定します。
+
+非常に重要な側面の1つは、FlexFlowは静的で固定のワークロードを持つモデルのために設計されており、動的な動作を持つモデルはイテレーションごとに異なる並列化戦略を好む場合があることです。
+
+したがって、このフレームワークの約束は非常に魅力的です。選択したクラスタで30分間のシミュレーションを実行し、この特定の環境を最適に利用するための最良の戦略を提供します。部分を追加/削除/置換すると、それに対して実行して再最適化プランを作成します。その後、トレーニングできます。異なるセットアップには独自の最適化があります。
+
+🤗 Transformersの現在の状況: まだ統合されていません。すでに[transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py)を使用してモデルがFXトレース可能であるため、FlexFlowを動作させるために必要な手順を誰かが見つける必要があります。
+
+## Which Strategy To Use When
+
+ここでは、どの並列化戦略をいつ使用するかの非常におおまかなアウトラインを示します。各リストの最初が通常よりも速いことが一般的です。
+
+**⇨ 単一GPU**
+
+* モデルが単一GPUに収まる場合：
+
+    1. 通常の使用
+
+* モデルが単一GPUに収まらない場合：
+
+    1. ZeRO + CPUをオフロードし、オプションでNVMeをオフロード
+    2. 上記に加えて、最大のレイヤーが単一GPUに収まらない場合、[Memory Centric Tiling](https://deepspeed.readthedocs.io/en/latest/zero3.html#memory-centric-tiling)（詳細は以下参照）を有効化
+
+* 最大のレイヤーが単一GPUに収まらない場合：
+
+    1. ZeROを使用しない場合 - TPを有効化する必要があります。なぜなら、PPだけでは収めることができないからです。
+    2. ZeROを使用する場合は、上記の「単一GPU」のエントリと同じものを参照してください
+
+**⇨ 単一ノード/マルチGPU**
+
+* モデルが単一GPUに収まる場合：
+
+    1. DDP - 分散データ並列
+    2. ZeRO - 状況と使用される構成に依存して速いかどうかが異なることがあります
+
+* モデルが単一GPUに収まらない場合：
+
+    1. PP
+    2. ZeRO
+    3. TP
+
+    非常に高速なノード内接続がNVLINKまたはNVSwitchである場合、これらのすべてはほとんど同等の性能です。これらがない場合、PPはTPまたはZeROよりも速くなります。TPの度合いも違いを生じるかもしれません。特定のセットアップで勝者を見つけるために実験するのが最善です。
+
+    TPはほとんど常に単一ノード内で使用されます。つまり、TPサイズ <= ノードあたりのGPUです。
+
+* 最大のレイヤーが単一GPUに収まらない場合：
+
+    1. ZeROを使用しない場合 - TPを使用する必要があります。なぜなら、PPだけでは収めることができないからです。
+    2. ZeROを使用する場合は、上記の「単一GPU」のエントリと同じものを参照してください
+
+**⇨ マルチノード/マルチGPU**
+
+* 高速なノード間接続がある場合：
+
+    1. ZeRO - モデルへのほとんどの変更が不要です
+    2. PP+TP+DP - 通信が少なく、モデルに大規模な変更が必要です
+
+* 遅いノード間接続があり、GPUメモリが少ない場合：
+
+    1. DP+PP+TP+ZeRO-1
+
