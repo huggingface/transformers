@@ -1049,11 +1049,11 @@ class MaskPretrainHead(nn.Module):
 @dataclass
 class PatchTSTOutput(ModelOutput):
     """
-    Output type of [`PatchTSTForPredictiontion`].
+    Output type of [`PatchTSTForPrediction`].
 
     Args:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            MSE loss.
+            MSE loss or nll loss.
         prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction outputs of the time series modeling heads.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -1302,7 +1302,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
 @dataclass
 class PatchTSTForForecastingOutput(ModelOutput):
     """
-    Output type of [`PatchTSTForPredictiontion`].
+    Output type of [`PatchTSTForForecasting`].
 
     Args:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
