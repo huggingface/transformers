@@ -218,6 +218,9 @@ class OwlViTObjectDetectionOutput(ModelOutput):
             The output of the [`OwlViTTextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
             The output of the [`OwlViTVisionModel`].
+        objectness_logits (`torch.FloatTensor` of shape `(batch_size, num_patches, 1)`):
+            The objectness logits of all image patches. OWL-ViT represents images as a set of image patches where the
+            total number of patches is (image_size / patch_size)**2.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -229,6 +232,7 @@ class OwlViTObjectDetectionOutput(ModelOutput):
     class_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
+    objectness_logits: Optional[torch.FloatTensor] = None
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
@@ -1718,8 +1722,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
 
         # Predict objectness
+        objectness_logits = None
         if self.objectness_head is not None:
-            self.objectness_predictor(image_feats)
+            objectness_logits = self.objectness_predictor(image_feats)
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
@@ -1733,6 +1738,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
                 class_embeds,
                 text_outputs.to_tuple(),
                 vision_outputs.to_tuple(),
+                objectness_logits,
             )
             output = tuple(x for x in output if x is not None)
             return output
@@ -1745,4 +1751,5 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             class_embeds=class_embeds,
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
+            objectness_logits=objectness_logits,
         )
