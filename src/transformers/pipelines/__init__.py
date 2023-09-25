@@ -756,7 +756,9 @@ def pipeline(
     # Config is the primordial information item.
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs)
+        config = AutoConfig.from_pretrained(
+            config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
+        )
         hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
         # Check for an adapter file in the model path if PEFT is available
@@ -768,7 +770,9 @@ def pipeline(
                     adapter_config = json.load(f)
                     model = adapter_config["base_model_name_or_path"]
 
-        config = AutoConfig.from_pretrained(model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs)
+        config = AutoConfig.from_pretrained(
+            model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
+        )
         hub_kwargs["_commit_hash"] = config._commit_hash
 
     custom_tasks = {}
@@ -804,7 +808,11 @@ def pipeline(
                 )
             class_ref = targeted_task["impl"]
             pipeline_class = get_class_from_dynamic_module(
-                class_ref, model, revision=revision, code_revision=code_revision, **hub_kwargs,
+                class_ref,
+                model,
+                revision=revision,
+                code_revision=code_revision,
+                **hub_kwargs,
             )
     else:
         normalized_task, targeted_task, task_options = check_task(task)
