@@ -646,7 +646,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -1008,7 +1008,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
                 )
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logging.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

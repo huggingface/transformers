@@ -352,7 +352,7 @@ def main():
     elif args.model_name_or_path:
         config = LukeConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels)
     else:
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     tokenizer_name_or_path = args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
     if not tokenizer_name_or_path:

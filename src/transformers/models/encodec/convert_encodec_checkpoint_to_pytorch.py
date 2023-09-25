@@ -272,7 +272,7 @@ def recursively_load_weights(orig_dict, hf_model, model_name):
         if not is_used:
             unused_weights.append(name)
 
-    logger.warning(f"Unused weights: {unused_weights}")
+    logging.warning(f"Unused weights: {unused_weights}")
 
 
 @torch.no_grad()

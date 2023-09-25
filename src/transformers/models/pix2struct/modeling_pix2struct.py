@@ -108,7 +108,7 @@ except ImportError:
     # using the normal Pix2StructLayerNorm
     pass
 except Exception:
-    logger.warning("Discovered apex but it failed to load, falling back to Pix2StructLayerNorm")
+    logging.warning("Discovered apex but it failed to load, falling back to Pix2StructLayerNorm")
     pass
 
 ALL_LAYERNORM_LAYERS.append(Pix2StructLayerNorm)
@@ -1345,7 +1345,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
         if past_key_values is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
+            logging.warning("You might want to consider setting `use_cache=True` to speed up decoding")
             return past_key_values
 
         reordered_decoder_past = ()
@@ -1491,7 +1491,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
-                    logger.warning(
+                    logging.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False

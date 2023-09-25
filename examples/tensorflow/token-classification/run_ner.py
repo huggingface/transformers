@@ -329,7 +329,7 @@ def main():
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     tokenizer_name_or_path = model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path
     if not tokenizer_name_or_path:

@@ -387,7 +387,7 @@ def main():
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -424,14 +424,14 @@ def main():
     if data_args.block_size is None:
         block_size = tokenizer.model_max_length
         if block_size > 1024:
-            logger.warning(
+            logging.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
                 "Picking 1024 instead. You can change that default value by passing --block_size xxx."
             )
             block_size = 1024
     else:
         if data_args.block_size > tokenizer.model_max_length:
-            logger.warning(
+            logging.warning(
                 f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
                 f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )

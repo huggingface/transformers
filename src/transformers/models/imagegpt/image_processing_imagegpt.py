@@ -253,7 +253,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if is_scaled_image(images[0]) and do_normalize:
-            logger.warning_once(
+            logging.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If you wish to do this, "
                 "make sure to set `do_normalize` to `False` and that pixel values are between [-1, 1].",
             )

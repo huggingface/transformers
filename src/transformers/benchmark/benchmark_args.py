@@ -52,7 +52,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
             if deprecated_arg in kwargs:
                 positive_arg = deprecated_arg[3:]
                 setattr(self, positive_arg, not kwargs.pop(deprecated_arg))
-                logger.warning(
+                logging.warning(
                     f"{deprecated_arg} is depreciated. Please use --no_{positive_arg} or"
                     f" {positive_arg}={kwargs[positive_arg]}"
                 )

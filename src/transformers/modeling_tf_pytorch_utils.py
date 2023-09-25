@@ -360,7 +360,7 @@ def load_pytorch_state_dict_in_tf2_model(
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:
-        logger.warning(
+        logging.warning(
             "Some weights of the PyTorch model were not used when initializing the TF 2.0 model"
             f" {tf_model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are initializing"
             f" {tf_model.__class__.__name__} from a PyTorch model trained on another task or with another architecture"
@@ -370,15 +370,15 @@ def load_pytorch_state_dict_in_tf2_model(
             " BertForSequenceClassification model)."
         )
     else:
-        logger.warning(f"All PyTorch model weights were used when initializing {tf_model.__class__.__name__}.\n")
+        logging.warning(f"All PyTorch model weights were used when initializing {tf_model.__class__.__name__}.\n")
     if len(missing_keys) > 0:
-        logger.warning(
+        logging.warning(
             f"Some weights or buffers of the TF 2.0 model {tf_model.__class__.__name__} were not initialized from the"
             f" PyTorch model and are newly initialized: {missing_keys}\nYou should probably TRAIN this model on a"
             " down-stream task to be able to use it for predictions and inference."
         )
     else:
-        logger.warning(
+        logging.warning(
             f"All the weights of {tf_model.__class__.__name__} were initialized from the PyTorch model.\n"
             "If your task is similar to the task the model of the checkpoint was trained on, "
             f"you can already use {tf_model.__class__.__name__} for predictions without further training."
@@ -391,7 +391,7 @@ def load_pytorch_state_dict_in_tf2_model(
                 for key, shape1, shape2 in mismatched_keys
             ]
         )
-        logger.warning(
+        logging.warning(
             f"Some weights of {tf_model.__class__.__name__} were not initialized from the model checkpoint"
             f" are newly initialized because the shapes did not"
             f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
@@ -561,7 +561,7 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:
-        logger.warning(
+        logging.warning(
             "Some weights of the TF 2.0 model were not used when initializing the PyTorch model"
             f" {pt_model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are initializing"
             f" {pt_model.__class__.__name__} from a TF 2.0 model trained on another task or with another architecture"
@@ -571,15 +571,15 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
             " TFBertForSequenceClassification model)."
         )
     else:
-        logger.warning(f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n")
+        logging.warning(f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n")
     if len(missing_keys) > 0:
-        logger.warning(
+        logging.warning(
             f"Some weights of {pt_model.__class__.__name__} were not initialized from the TF 2.0 model and are newly"
             f" initialized: {missing_keys}\nYou should probably TRAIN this model on a down-stream task to be able to"
             " use it for predictions and inference."
         )
     else:
-        logger.warning(
+        logging.warning(
             f"All the weights of {pt_model.__class__.__name__} were initialized from the TF 2.0 model.\n"
             "If your task is similar to the task the model of the checkpoint was trained on, "
             f"you can already use {pt_model.__class__.__name__} for predictions without further training."

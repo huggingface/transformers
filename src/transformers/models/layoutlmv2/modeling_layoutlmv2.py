@@ -575,7 +575,7 @@ class LayoutLMv2VisualBackbone(nn.Module):
         )
         self.out_feature_key = "p2"
         if torch.are_deterministic_algorithms_enabled():
-            logger.warning("using `AvgPool2d` instead of `AdaptiveAvgPool2d`")
+            logging.warning("using `AvgPool2d` instead of `AdaptiveAvgPool2d`")
             input_shape = (224, 224)
             backbone_stride = self.backbone.output_shape()[self.out_feature_key].stride
             self.pool = nn.AvgPool2d(

@@ -1655,7 +1655,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `MegaForCausalLM` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `MegaForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.mega = MegaModel(config, add_pooling_layer=False)
 
@@ -1816,7 +1816,7 @@ class MegaForMaskedLM(MegaPreTrainedModel):
         super().__init__(config)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `MegaForMaskedLM`, set `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )

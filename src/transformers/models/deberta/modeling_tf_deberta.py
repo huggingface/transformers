@@ -1131,7 +1131,7 @@ class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLos
         super().__init__(config, *inputs, **kwargs)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `TFDebertaForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )

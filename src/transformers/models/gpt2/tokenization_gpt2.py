@@ -337,7 +337,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             writer.write("#version: 0.2\n")
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning(
+                    logging.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
                         " Please check that the tokenizer is not corrupted!"
                     )

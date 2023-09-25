@@ -314,7 +314,7 @@ def main():
     transformers.utils.logging.enable_explicit_format()
 
     # Log on each process the small summary:
-    logger.warning(
+    logging.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
@@ -440,7 +440,7 @@ def main():
         # regession requires float as label type, let's cast it if needed
         for split in raw_datasets.keys():
             if raw_datasets[split].features["label"].dtype not in ["float32", "float64"]:
-                logger.warning(
+                logging.warning(
                     f"Label type for {split} set to float32, was {raw_datasets[split].features['label'].dtype}"
                 )
                 features = raw_datasets[split].features
@@ -467,14 +467,14 @@ def main():
                 diff = set(val_or_test_labels).difference(set(label_list))
                 if len(diff) > 0:
                     # add the labels that appear in val/test but not in train, throw a warning
-                    logger.warning(
+                    logging.warning(
                         f"Labels {diff} in {split} set but not in training set, adding them to the label list"
                     )
                     label_list += list(diff)
         # if label is -1, we throw a warning and remove it from the label list
         for label in label_list:
             if label == -1:
-                logger.warning("Label -1 found in label list, removing it.")
+                logging.warning("Label -1 found in label list, removing it.")
                 label_list.remove(label)
 
         label_list.sort()
@@ -537,7 +537,7 @@ def main():
         label_to_id = {v: i for i, v in enumerate(label_list)}
         # update config with label infos
         if model.config.label2id != label_to_id:
-            logger.warning(
+            logging.warning(
                 "The label2id key in the model config.json is not equal to the label2id key of this "
                 "run. You can ignore this if you are doing finetuning."
             )
@@ -551,7 +551,7 @@ def main():
         label_to_id = None
 
     if data_args.max_seq_length > tokenizer.model_max_length:
-        logger.warning(
+        logging.warning(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )
@@ -605,7 +605,7 @@ def main():
             if "test" not in raw_datasets and "test_matched" not in raw_datasets:
                 raise ValueError("--do_eval requires a validation or test dataset if validation is not defined.")
             else:
-                logger.warning("Validation dataset not found. Falling back to test dataset for validation.")
+                logging.warning("Validation dataset not found. Falling back to test dataset for validation.")
                 eval_dataset = raw_datasets["test"]
         else:
             eval_dataset = raw_datasets["validation"]

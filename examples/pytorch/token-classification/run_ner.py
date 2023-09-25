@@ -263,7 +263,7 @@ def main():
     transformers.utils.logging.enable_explicit_format()
 
     # Log on each process the small summary:
-    logger.warning(
+    logging.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
@@ -426,7 +426,7 @@ def main():
                 label_list = [model.config.id2label[i] for i in range(num_labels)]
                 label_to_id = {l: i for i, l in enumerate(label_list)}
         else:
-            logger.warning(
+            logging.warning(
                 "Your model seems to have been trained with labels, but they don't match the dataset: ",
                 f"model labels: {sorted(model.config.label2id.keys())}, dataset labels:"
                 f" {sorted(label_list)}.\nIgnoring the model labels as a result.",

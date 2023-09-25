@@ -269,7 +269,7 @@ def main():
         os.makedirs(training_args.output_dir, exist_ok=True)
 
     if isinstance(training_args.strategy, tf.distribute.TPUStrategy) and not data_args.pad_to_max_length:
-        logger.warning("We are training on TPU - forcing pad_to_max_length")
+        logging.warning("We are training on TPU - forcing pad_to_max_length")
         data_args.pad_to_max_length = True
     # endregion
 
@@ -281,7 +281,7 @@ def main():
         weights_path = training_args.output_dir / TF2_WEIGHTS_NAME
         if config_path.is_file() and weights_path.is_file():
             checkpoint = training_args.output_dir
-            logger.warning(
+            logging.warning(
                 f"Checkpoint detected, resuming training from checkpoint in {training_args.output_dir}. To avoid this"
                 " behavior, change the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
@@ -371,7 +371,7 @@ def main():
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -396,14 +396,14 @@ def main():
     if data_args.max_seq_length is None:
         max_seq_length = tokenizer.model_max_length
         if max_seq_length > 1024:
-            logger.warning(
+            logging.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
                 "Picking 1024 instead. You can reduce that default value by passing --max_seq_length xxx."
             )
             max_seq_length = 1024
     else:
         if data_args.max_seq_length > tokenizer.model_max_length:
-            logger.warning(
+            logging.warning(
                 f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
                 f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
             )

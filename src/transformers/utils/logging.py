@@ -281,7 +281,7 @@ def reset_format() -> None:
 
 def warning_advice(self, *args, **kwargs):
     """
-    This method is identical to `logger.warning()`, but if env var TRANSFORMERS_NO_ADVISORY_WARNINGS=1 is set, this
+    This method is identical to `logging.warning()`, but if env var TRANSFORMERS_NO_ADVISORY_WARNINGS=1 is set, this
     warning will not be printed
     """
     no_advisory_warnings = os.getenv("TRANSFORMERS_NO_ADVISORY_WARNINGS", False)
@@ -290,13 +290,13 @@ def warning_advice(self, *args, **kwargs):
     self.warning(*args, **kwargs)
 
 
-logging.Logger.warning_advice = warning_advice
+logging.logging.warning_advice = warning_advice
 
 
 @functools.lru_cache(None)
 def warning_once(self, *args, **kwargs):
     """
-    This method is identical to `logger.warning()`, but will emit the warning with the same message only once
+    This method is identical to `logging.warning()`, but will emit the warning with the same message only once
 
     Note: The cache is for the function arguments, so 2 different callers using the same arguments will hit the cache.
     The assumption here is that all warning messages are unique across the code. If they aren't then need to switch to
@@ -305,7 +305,7 @@ def warning_once(self, *args, **kwargs):
     self.warning(*args, **kwargs)
 
 
-logging.Logger.warning_once = warning_once
+logging.logging.warning_once = warning_once
 
 
 class EmptyTqdm:

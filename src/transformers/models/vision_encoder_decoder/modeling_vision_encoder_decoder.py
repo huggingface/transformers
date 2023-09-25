@@ -198,12 +198,12 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         self.decoder = decoder
 
         if self.encoder.config.to_dict() != self.config.encoder.to_dict():
-            logger.warning(
+            logging.warning(
                 f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
                 f" {self.config.encoder}"
             )
         if self.decoder.config.to_dict() != self.config.decoder.to_dict():
-            logger.warning(
+            logging.warning(
                 f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
                 f" {self.config.decoder}"
             )
@@ -354,7 +354,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
         # At the moment fast initialization is not supported for composite models
         if kwargs.get("_fast_init", False):
-            logger.warning(
+            logging.warning(
                 "Fast initialization is currently not supported for VisionEncoderDecoderModel. "
                 "Falling back to slow initialization..."
             )
@@ -499,7 +499,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 kwargs_decoder["config"] = decoder_config
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
-                logger.warning(
+                logging.warning(
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
                     "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "

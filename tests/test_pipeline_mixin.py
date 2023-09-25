@@ -202,7 +202,7 @@ class PipelineTesterMixin:
                     tokenizer_name,
                     processor_name,
                 ):
-                    logger.warning(
+                    logging.warning(
                         f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: test is "
                         f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
                         f"`{tokenizer_name}` | processor `{processor_name}`."
@@ -244,7 +244,7 @@ class PipelineTesterMixin:
             try:
                 processor = processor_class.from_pretrained(repo_id, revision=commit)
             except Exception:
-                logger.warning(
+                logging.warning(
                     f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not load the "
                     f"processor from `{repo_id}` with `{processor_name}`."
                 )
@@ -252,7 +252,7 @@ class PipelineTesterMixin:
 
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and processor is None:
-            logger.warning(
+            logging.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
                 f"any tokenizer / processor from `{repo_id}`."
             )
@@ -262,7 +262,7 @@ class PipelineTesterMixin:
         try:
             model = model_architecture.from_pretrained(repo_id, revision=commit)
         except Exception:
-            logger.warning(
+            logging.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
                 f"the model from `{repo_id}` with `{model_architecture}`."
             )
@@ -270,7 +270,7 @@ class PipelineTesterMixin:
 
         pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
         if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, processor):
-            logger.warning(
+            logging.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: test is "
                 f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
                 f"`{tokenizer_name}` | processor `{processor_name}`."
@@ -291,7 +291,7 @@ class PipelineTesterMixin:
         if pipeline is None:
             # The test can disable itself, but it should be very marginal
             # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
-            logger.warning(
+            logging.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not get the "
                 "pipeline for testing."
             )

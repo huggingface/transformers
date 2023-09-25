@@ -477,7 +477,7 @@ class LlamaFlashAttention2(LlamaAttention):
         # in fp32. (LlamaRMSNorm handles it correctly)
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
-            logger.warning_once(
+            logging.warning_once(
                 "The input hidden states seems to be silently casted in float32, this might be related to"
                 " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
                 " float16."
@@ -890,7 +890,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False

@@ -403,7 +403,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             if default_context == "fork":
                 cm = pool = get_context().Pool(num_processes)
             else:
-                logger.warning(
+                logging.warning(
                     "Parallel batch decoding is not currently supported in this platform. "
                     "Falling back to sequential decoding."
                 )
@@ -413,7 +413,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             cm = nullcontext()
 
             if num_processes is not None:
-                logger.warning(
+                logging.warning(
                     "Parameter `num_process` was passed, but it will be ignored since `pool` was also specified."
                 )
 

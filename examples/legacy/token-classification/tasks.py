@@ -53,7 +53,7 @@ class NER(TokenClassificationTask):
                 output_line = line.split()[0] + " " + preds_list[example_id].pop(0) + "\n"
                 writer.write(output_line)
             else:
-                logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
+                logging.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
 
     def get_labels(self, path: str) -> List[str]:
         if path:

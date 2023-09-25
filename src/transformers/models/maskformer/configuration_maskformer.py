@@ -136,7 +136,7 @@ class MaskFormerConfig(PretrainedConfig):
 
         # verify that the backbone is supported
         if backbone_config.model_type not in self.backbones_supported:
-            logger.warning_once(
+            logging.warning_once(
                 f"Backbone {backbone_config.model_type} is not a supported model and may not be compatible with MaskFormer. "
                 f"Supported model types: {','.join(self.backbones_supported)}"
             )

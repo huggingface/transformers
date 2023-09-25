@@ -888,11 +888,11 @@ def main():
             summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
         except ImportError as ie:
             has_tensorboard = False
-            logger.warning(
+            logging.warning(
                 f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
             )
     else:
-        logger.warning(
+        logging.warning(
             "Unable to display metrics through TensorBoard because the package is not installed: "
             "Please run pip install tensorboard to enable."
         )

@@ -1128,7 +1128,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
                 )
                 use_cache = False
@@ -1756,7 +1756,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             kwargs["return_dict_in_generate"] = True
 
             if getattr(generation_config, "task", None) == "translate":
-                logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
+                logging.warning("Token-level timestamps may not be reliable for task 'translate'.")
             if not hasattr(generation_config, "alignment_heads"):
                 raise ValueError(
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "

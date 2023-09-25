@@ -1040,7 +1040,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         super().__init__(config, *inputs, **kwargs)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `TFTapasForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )

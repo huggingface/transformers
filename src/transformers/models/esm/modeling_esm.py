@@ -587,7 +587,7 @@ class EsmEncoder(nn.Module):
     ):
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                     "`use_cache=False`..."
                 )
@@ -968,7 +968,7 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         super().__init__(config)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `EsmForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )

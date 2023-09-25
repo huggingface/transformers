@@ -104,7 +104,7 @@ class EncodecConv1d(nn.Module):
 
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
-            logger.warning(
+            logging.warning(
                 "EncodecConv1d has been initialized with stride > 1 and dilation > 1"
                 f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
             )

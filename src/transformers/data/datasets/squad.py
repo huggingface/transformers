@@ -160,7 +160,7 @@ class SquadDataset(Dataset):
                 )
 
                 if self.dataset is None or self.examples is None:
-                    logger.warning(
+                    logging.warning(
                         f"Deleting cached file {cached_features_file} will allow dataset and examples to be cached in"
                         " future run"
                     )

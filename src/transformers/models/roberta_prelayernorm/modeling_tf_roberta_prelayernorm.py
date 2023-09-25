@@ -1095,7 +1095,7 @@ class TFRobertaPreLayerNormForCausalLM(TFRobertaPreLayerNormPreTrainedModel, TFC
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `TFRobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`"
             )
 

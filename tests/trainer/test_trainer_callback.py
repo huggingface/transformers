@@ -238,7 +238,7 @@ class TrainerCallbackTest(unittest.TestCase):
         self.assertEqual(events, self.get_expected_events(trainer))
 
         # warning should be emitted for duplicated callbacks
-        with patch("transformers.trainer_callback.logger.warning") as warn_mock:
+        with patch("transformers.trainer_callback.logging.warning") as warn_mock:
             trainer = self.get_trainer(
                 callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],
             )

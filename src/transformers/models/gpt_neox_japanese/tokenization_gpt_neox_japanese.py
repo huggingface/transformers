@@ -203,7 +203,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token_index, token in self.ids_to_tokens.items():
                 if index != token_index:
-                    logger.warning(
+                    logging.warning(
                         f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
                         " Please check that the vocabulary is not corrupted!"
                     )

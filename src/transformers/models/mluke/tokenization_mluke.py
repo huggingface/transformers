@@ -1150,7 +1150,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
                 num_invalid_entities += len(pair_entity_ids) - len(valid_pair_entity_ids)
 
             if num_invalid_entities != 0:
-                logger.warning(
+                logging.warning(
                     f"{num_invalid_entities} entities are ignored because their entity spans are invalid due to the"
                     " truncation of input tokens"
                 )

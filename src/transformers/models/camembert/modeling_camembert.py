@@ -510,7 +510,7 @@ class CamembertEncoder(nn.Module):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -934,7 +934,7 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
         super().__init__(config)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `CamembertForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
@@ -1414,7 +1414,7 @@ class CamembertForCausalLM(CamembertPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `CamembertLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `CamembertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.roberta = CamembertModel(config, add_pooling_layer=False)
         self.lm_head = CamembertLMHead(config)

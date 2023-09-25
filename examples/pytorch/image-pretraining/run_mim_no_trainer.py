@@ -479,7 +479,7 @@ def main():
         config = AutoConfig.from_pretrained(args.model_name_or_path, **config_kwargs)
     else:
         config = CONFIG_MAPPING[args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
         if args.config_overrides is not None:
             logger.info(f"Overriding config: {args.config_overrides}")
             config.update_from_string(args.config_overrides)

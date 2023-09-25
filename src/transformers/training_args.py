@@ -83,7 +83,7 @@ if is_torch_neuroncore_available(check_device=False):
                 "will fail otherwise."
             )
         else:
-            logger.warning(
+            logging.warning(
                 "Please use the TrainiumTrainer from optimum[neuron] instead of the Transformers library to perform "
                 "training on AWS Trainium instances. More information here: "
                 "https://github.com/huggingface/optimum-neuron"
@@ -1479,7 +1479,7 @@ class TrainingArguments:
                     torch.backends.cuda.matmul.allow_tf32 = True
                     torch.backends.cudnn.allow_tf32 = True
             else:
-                logger.warning(
+                logging.warning(
                     "The speedups for torchdynamo mostly come wih GPU Ampere or higher and which is not detected here."
                 )
         if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
@@ -1752,7 +1752,7 @@ class TrainingArguments:
         The actual batch size for training (may differ from `per_gpu_train_batch_size` in distributed training).
         """
         if self.per_gpu_train_batch_size:
-            logger.warning(
+            logging.warning(
                 "Using deprecated `--per_gpu_train_batch_size` argument which will be removed in a future "
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
@@ -1766,7 +1766,7 @@ class TrainingArguments:
         The actual batch size for evaluation (may differ from `per_gpu_eval_batch_size` in distributed training).
         """
         if self.per_gpu_eval_batch_size:
-            logger.warning(
+            logging.warning(
                 "Using deprecated `--per_gpu_eval_batch_size` argument which will be removed in a future "
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
@@ -1825,7 +1825,7 @@ class TrainingArguments:
             device = self.distributed_state.device
             self.local_rank = self.distributed_state.local_process_index
         if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
-            logger.warning(
+            logging.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )

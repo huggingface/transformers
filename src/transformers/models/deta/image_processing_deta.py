@@ -569,7 +569,7 @@ class DetaImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
     def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
-        logger.warning_once(
+        logging.warning_once(
             "The `prepare` method is deprecated and will be removed in a v4.33. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
             "does not return the image anymore.",
@@ -579,17 +579,17 @@ class DetaImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, *args, **kwargs):
-        logger.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
+        logging.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
         return convert_coco_poly_to_mask(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection
     def prepare_coco_detection(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
+        logging.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_detection_annotation(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_panoptic
     def prepare_coco_panoptic(self, *args, **kwargs):
-        logger.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
+        logging.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_panoptic_annotation(*args, **kwargs)
 
     def resize(
@@ -849,7 +849,7 @@ class DetaImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         if "pad_and_return_pixel_mask" in kwargs:
-            logger.warning_once(
+            logging.warning_once(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
                 "use `do_pad` instead.",
             )
@@ -924,7 +924,7 @@ class DetaImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
+            logging.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )

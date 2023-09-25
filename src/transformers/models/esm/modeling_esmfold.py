@@ -242,7 +242,7 @@ def trunc_normal_init_(weights, scale=1.0, fan="fan_in"):
     scale = scale / max(1, shape[1])
 
     if not is_scipy_available():
-        logger.warning(
+        logging.warning(
             "This init requires scipy, but scipy was not found, default to an approximation that might not be"
             " equivalent."
         )

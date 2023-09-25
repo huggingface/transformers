@@ -498,7 +498,7 @@ class RobertaPreLayerNormEncoder(nn.Module):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -884,7 +884,7 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `RobertaPreLayerNormLMHeadModel` as a standalone, add `is_decoder=True.`"
             )
 
@@ -1040,7 +1040,7 @@ class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
         super().__init__(config)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `RobertaPreLayerNormForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )

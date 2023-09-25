@@ -285,7 +285,7 @@ class SEWDConfig(PretrainedConfig):
 
     @property
     def hidden_dropout(self):
-        logger.warning_once("hidden_dropout is not used by the model and will be removed as config attribute in v4.35")
+        logging.warning_once("hidden_dropout is not used by the model and will be removed as config attribute in v4.35")
         return self._hidden_dropout
 
     def to_dict(self):

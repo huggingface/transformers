@@ -943,7 +943,7 @@ class ModelUtilsTest(TestCasePlus):
         logger = logging.get_logger("transformers.modeling_utils")
 
         with self.subTest("Ensure no warnings when pad_token_id is None."):
-            logger.warning_once.cache_clear()
+            logging.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config_no_pad_token = PretrainedConfig()
                 config_no_pad_token.pad_token_id = None
@@ -953,7 +953,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure no warnings when there is an attention_mask."):
-            logger.warning_once.cache_clear()
+            logging.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
@@ -964,7 +964,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure no warnings when there are no pad_token_ids in the input_ids."):
-            logger.warning_once.cache_clear()
+            logging.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
@@ -974,7 +974,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure a warning is shown when the input_ids start with a pad_token_id."):
-            logger.warning_once.cache_clear()
+            logging.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
@@ -984,7 +984,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure a warning is shown when the input_ids end with a pad_token_id."):
-            logger.warning_once.cache_clear()
+            logging.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
@@ -994,7 +994,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
         with self.subTest("Ensure that the warning is shown at most once."):
-            logger.warning_once.cache_clear()
+            logging.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
@@ -1005,7 +1005,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(cl.out.count("We strongly recommend passing in an `attention_mask`"), 1)
 
         with self.subTest("Ensure a different warning is shown when the pad_token_id is equal to the bos_token_id."):
-            logger.warning_once.cache_clear()
+            logging.warning_once.cache_clear()
             with CaptureLogger(logger) as cl:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
@@ -1018,7 +1018,7 @@ class ModelUtilsTest(TestCasePlus):
         if not is_torchdynamo_available():
             return
         with self.subTest("Ensure that the warning code is skipped when compiling with torchdynamo."):
-            logger.warning_once.cache_clear()
+            logging.warning_once.cache_clear()
             from torch._dynamo import config, testing
 
             config = PretrainedConfig()

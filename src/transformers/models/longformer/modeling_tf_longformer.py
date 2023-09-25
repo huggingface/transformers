@@ -2205,7 +2205,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         # set global attention on question tokens
         if global_attention_mask is None and input_ids is not None:
             if shape_list(tf.where(input_ids == self.config.sep_token_id))[0] != 3 * shape_list(input_ids)[0]:
-                logger.warning(
+                logging.warning(
                     f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for"
                     " questions answering. You might also consider to set `global_attention_mask` manually in the"
                     " forward function to avoid this. This is most likely an error. The global attention is disabled"

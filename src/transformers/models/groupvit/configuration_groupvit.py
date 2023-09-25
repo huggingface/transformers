@@ -135,7 +135,7 @@ class GroupViTTextConfig(PretrainedConfig):
             config_dict = config_dict["text_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
+            logging.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
@@ -229,7 +229,7 @@ class GroupViTVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.depths = depths
         if num_hidden_layers != sum(depths):
-            logger.warning(
+            logging.warning(
                 f"Manually setting num_hidden_layers to {num_hidden_layers}, but we expect num_hidden_layers ="
                 f" sum(depth) = {sum(depths)}"
             )
@@ -260,7 +260,7 @@ class GroupViTVisionConfig(PretrainedConfig):
             config_dict = config_dict["vision_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
+            logging.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
@@ -338,7 +338,7 @@ class GroupViTConfig(PretrainedConfig):
                             f"`text_config_dict` is provided which will be used to initialize `GroupViTTextConfig`. "
                             f'The value `text_config["{key}"]` will be overriden.'
                         )
-                    logger.warning(message)
+                    logging.warning(message)
 
             # Update all values in `text_config` with the ones in `_text_config_dict`.
             text_config.update(_text_config_dict)
@@ -370,7 +370,7 @@ class GroupViTConfig(PretrainedConfig):
                             f"`vision_config_dict` is provided which will be used to initialize `GroupViTVisionConfig`."
                             f' The value `vision_config["{key}"]` will be overriden.'
                         )
-                    logger.warning(message)
+                    logging.warning(message)
 
             # Update all values in `vision_config` with the ones in `_vision_config_dict`.
             vision_config.update(_vision_config_dict)

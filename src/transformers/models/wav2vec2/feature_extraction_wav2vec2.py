@@ -177,7 +177,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
                     f" {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
-            logger.warning(
+            logging.warning(
                 "It is strongly recommended to pass the ``sampling_rate`` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )

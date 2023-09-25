@@ -796,7 +796,7 @@ def pipeline(
         # At that point framework might still be undetermined
         model, default_revision = get_default_model_and_revision(targeted_task, framework, task_options)
         revision = revision if revision is not None else default_revision
-        logger.warning(
+        logging.warning(
             f"No model was supplied, defaulted to {model} and revision"
             f" {revision} ({HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{model}).\n"
             "Using a pipeline without specifying a model name and revision in production is not recommended."
@@ -812,7 +812,7 @@ def pipeline(
                 " arguments might conflict, use only one.)"
             )
         if device is not None:
-            logger.warning(
+            logging.warning(
                 "Both `device` and `device_map` are specified. `device` will override `device_map`. You"
                 " will most likely encounter unexpected behavior. Please remove `device` and keep `device_map`."
             )
@@ -999,12 +999,12 @@ def pipeline(
 
                     kwargs["decoder"] = decoder
                 except ImportError as e:
-                    logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}")
+                    logging.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}")
                     if not is_kenlm_available():
-                        logger.warning("Try to install `kenlm`: `pip install kenlm")
+                        logging.warning("Try to install `kenlm`: `pip install kenlm")
 
                     if not is_pyctcdecode_available():
-                        logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
+                        logging.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

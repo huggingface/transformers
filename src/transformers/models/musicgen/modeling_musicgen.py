@@ -796,7 +796,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -1272,14 +1272,14 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask", None) is None:
-                logger.warning(
+                logging.warning(
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
             eos_token_id = generation_config.eos_token_id
             if isinstance(eos_token_id, list):
                 eos_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            logging.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             generation_config.pad_token_id = eos_token_id
 
         # 3. Define model inputs
@@ -1308,13 +1308,13 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
-            logger.warning(
+            logging.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
                 "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
-                logger.warning(
+                logging.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
                     "Please refer to the documentation for more information. "
@@ -1328,7 +1328,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 f" the maximum length ({generation_config.max_length})"
             )
         if input_ids_seq_length >= generation_config.max_length:
-            logger.warning(
+            logging.warning(
                 f"Input length of decoder_input_ids is {input_ids_seq_length}, but `max_length` is set to"
                 f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
                 " increasing `max_new_tokens`."
@@ -1510,17 +1510,17 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         self.decoder = decoder
 
         if self.text_encoder.config.to_dict() != self.config.text_encoder.to_dict():
-            logger.warning(
+            logging.warning(
                 f"Config of the text_encoder: {self.text_encoder.__class__} is overwritten by shared text_encoder config:"
                 f" {self.config.text_encoder}"
             )
         if self.audio_encoder.config.to_dict() != self.config.audio_encoder.to_dict():
-            logger.warning(
+            logging.warning(
                 f"Config of the audio_encoder: {self.audio_encoder.__class__} is overwritten by shared audio_encoder config:"
                 f" {self.config.audio_encoder}"
             )
         if self.decoder.config.to_dict() != self.config.decoder.to_dict():
-            logger.warning(
+            logging.warning(
                 f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
                 f" {self.config.decoder}"
             )
@@ -1602,7 +1602,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         # At the moment fast initialization is not supported for composite models
         if kwargs.get("_fast_init", False):
-            logger.warning(
+            logging.warning(
                 "Fast initialization is currently not supported for MusicgenForConditionalGeneration. "
                 "Falling back to slow initialization..."
             )
@@ -1797,7 +1797,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 kwargs_decoder["config"] = decoder_config
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
-                logger.warning(
+                logging.warning(
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
                     "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
@@ -2285,14 +2285,14 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask", None) is None:
-                logger.warning(
+                logging.warning(
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
             eos_token_id = generation_config.eos_token_id
             if isinstance(eos_token_id, list):
                 eos_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            logging.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             generation_config.pad_token_id = eos_token_id
 
         # 3. Define model inputs
@@ -2347,13 +2347,13 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
-            logger.warning(
+            logging.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
                 "to control the generation length. We recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
-                logger.warning(
+                logging.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
                     "Please refer to the documentation for more information. "
@@ -2367,7 +2367,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 f" the maximum length ({generation_config.max_length})"
             )
         if input_ids_seq_length >= generation_config.max_length:
-            logger.warning(
+            logging.warning(
                 f"Input length of decoder_input_ids is {input_ids_seq_length}, but `max_length` is set to"
                 f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
                 " increasing `max_new_tokens`."

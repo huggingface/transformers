@@ -542,7 +542,7 @@ def input_processing(func, config, **kwargs):
             if isinstance(v, allowed_types) or v is None:
                 output[k] = v
             elif k not in parameter_names and "args" not in parameter_names:
-                logger.warning(
+                logging.warning(
                     f"The parameter {k} does not belongs to the parameter list {parameter_names} and will be ignored."
                 )
                 continue
@@ -2656,7 +2656,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             token = use_auth_token
 
         if trust_remote_code is True:
-            logger.warning(
+            logging.warning(
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
                 " ignored."
             )
@@ -2971,7 +2971,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
         if len(unexpected_keys) > 0:
-            logger.warning(
+            logging.warning(
                 f"Some layers from the model checkpoint at {pretrained_model_name_or_path} were not used when"
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
@@ -2981,16 +2981,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
         else:
-            logger.warning(f"All model checkpoint layers were used when initializing {model.__class__.__name__}.\n")
+            logging.warning(f"All model checkpoint layers were used when initializing {model.__class__.__name__}.\n")
 
         if len(missing_keys) > 0:
-            logger.warning(
+            logging.warning(
                 f"Some layers of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
                 " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:
-            logger.warning(
+            logging.warning(
                 f"All the layers of {model.__class__.__name__} were initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path}.\nIf your task is similar to the task the model of the checkpoint"
                 f" was trained on, you can already use {model.__class__.__name__} for predictions without further"
@@ -3003,7 +3003,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     for key, shape1, shape2 in mismatched_keys
                 ]
             )
-            logger.warning(
+            logging.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
                 f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"

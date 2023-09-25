@@ -89,7 +89,7 @@ if (
     and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
     and "TRANSFORMERS_CACHE" not in os.environ
 ):
-    logger.warning(
+    logging.warning(
         "In Transformers v4.0.0, the default path to cache downloaded models changed from"
         " '~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have"
         " overridden and '~/.cache/torch/transformers' is a directory that exists, we're moving it to"
@@ -1229,14 +1229,14 @@ cache_is_not_empty = os.path.isdir(TRANSFORMERS_CACHE) and len(os.listdir(TRANSF
 
 if cache_version < 1 and cache_is_not_empty:
     if is_offline_mode():
-        logger.warning(
+        logging.warning(
             "You are offline and the cache for model files in Transformers v4.22.0 has been updated while your local "
             "cache seems to be the one of a previous version. It is very likely that all your calls to any "
             "`from_pretrained()` method will fail. Remove the offline mode and enable internet connection to have "
             "your cache be updated automatically, then you can go back to offline mode."
         )
     else:
-        logger.warning(
+        logging.warning(
             "The cache for model files in Transformers v4.22.0 has been updated. Migrating your old cache. This is a "
             "one-time only operation. You can interrupt this and resume the migration later on by calling "
             "`transformers.utils.move_cache()`."
@@ -1261,7 +1261,7 @@ if cache_version < 1:
         with open(cache_version_file, "w") as f:
             f.write("1")
     except Exception:
-        logger.warning(
+        logging.warning(
             f"There was a problem when trying to write in your cache folder ({TRANSFORMERS_CACHE}). You should set "
             "the environment variable TRANSFORMERS_CACHE to a writable directory."
         )

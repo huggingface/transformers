@@ -581,7 +581,7 @@ def main():
     pad_on_right = tokenizer.padding_side == "right"
 
     if data_args.max_seq_length > tokenizer.model_max_length:
-        logger.warning(
+        logging.warning(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )
@@ -862,11 +862,11 @@ def main():
             summary_writer.hparams({**training_args.to_dict(), **vars(model_args), **vars(data_args)})
         except ImportError as ie:
             has_tensorboard = False
-            logger.warning(
+            logging.warning(
                 f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
             )
     else:
-        logger.warning(
+        logging.warning(
             "Unable to display metrics through TensorBoard because the package is not installed: "
             "Please run pip install tensorboard to enable."
         )

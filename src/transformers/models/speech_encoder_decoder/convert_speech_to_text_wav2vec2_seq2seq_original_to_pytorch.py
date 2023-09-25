@@ -141,7 +141,7 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
         if not is_used:
             unused_weights.append(name)
 
-    logger.warning(f"Unused weights: {unused_weights}")
+    logging.warning(f"Unused weights: {unused_weights}")
 
     return proj_weight
 
@@ -254,8 +254,8 @@ def convert_wav2vec2_checkpoint(
     hf_decoder.lm_head.weight = nn.Parameter(model.decoder.embed_out.detach())
 
     # layer norm is init to identity matrix so leaving it is fine
-    logger.warning(f"The following keys are missing when loading the decoder weights: {missing_keys}")
-    logger.warning(f"The following keys are unexpected when loading the decoder weights: {unexpected_keys}")
+    logging.warning(f"The following keys are missing when loading the decoder weights: {missing_keys}")
+    logging.warning(f"The following keys are unexpected when loading the decoder weights: {unexpected_keys}")
 
     hf_wav2vec = SpeechEncoderDecoderModel(encoder=hf_encoder, decoder=hf_decoder)
     hf_wav2vec.config.tie_word_embeddings = False

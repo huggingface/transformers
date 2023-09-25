@@ -169,7 +169,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
         if not is_used:
             unused_weights.append(name)
 
-    logger.warning(f"Unused weights: {unused_weights}")
+    logging.warning(f"Unused weights: {unused_weights}")
 
 
 # Copied from transformers.models.wav2vec2.convert_wav2vec2_original_pytorch_checkpoint_to_pytorch.load_conv_layer

@@ -1602,7 +1602,7 @@ class BigBirdEncoder(nn.Module):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -1954,7 +1954,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
             self.activation = None
 
         if self.attention_type != "original_full" and config.add_cross_attention:
-            logger.warning(
+            logging.warning(
                 "When using `BigBirdForCausalLM` as decoder, then `attention_type` must be `original_full`. Setting"
                 " `attention_type=original_full`"
             )
@@ -2066,7 +2066,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
         if self.attention_type == "block_sparse" and seq_length <= max_tokens_to_attend:
             # change attention_type from block_sparse to original_full
             sequence_length = input_ids.size(1) if input_ids is not None else inputs_embeds.size(1)
-            logger.warning(
+            logging.warning(
                 "Attention type 'block_sparse' is not possible if sequence_length: "
                 f"{sequence_length} <= num global tokens: 2 * config.block_size "
                 "+ min. num sliding tokens: 3 * config.block_size "
@@ -2375,7 +2375,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         super().__init__(config)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `BigBirdForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
@@ -2519,7 +2519,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `BigBirdForCausalLM` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `BigBirdForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.bert = BigBirdModel(config)
         self.cls = BigBirdOnlyMLMHead(config)

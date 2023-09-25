@@ -1469,7 +1469,7 @@ class TFCamembertForCausalLM(TFCamembertPreTrainedModel, TFCausalLanguageModelin
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `TFCamembertLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `TFCamembertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.roberta = TFCamembertMainLayer(config, add_pooling_layer=False, name="roberta")
         self.lm_head = TFCamembertLMHead(config, input_embeddings=self.roberta.embeddings, name="lm_head")

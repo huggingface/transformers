@@ -740,7 +740,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             writer.write("#version: 0.2\n")
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning(
+                    logging.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
                         " Please check that the tokenizer is not corrupted!"
                     )
@@ -1002,7 +1002,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
 
     if previous_tokens:
         if return_timestamps:
-            logger.warning(
+            logging.warning(
                 "Whisper did not predict an ending timestamp, which can happen if audio is cut off in the middle of a word. "
                 "Also make sure WhisperTimeStampLogitsProcessor was used during generation."
             )

@@ -139,7 +139,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
             self.demojizer = demojize
         except ImportError:
-            logger.warning(
+            logging.warning(
                 "emoji is not installed, thus not converting emoticons or emojis into text. Install emoji: pip3"
                 " install emoji==0.6.0"
             )

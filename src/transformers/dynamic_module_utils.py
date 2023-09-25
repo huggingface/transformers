@@ -366,7 +366,7 @@ def get_cached_module_file(
         new_files = "\n".join([f"- {f}" for f in new_files])
         repo_type_str = "" if repo_type is None else f"{repo_type}s/"
         url = f"https://huggingface.co/{repo_type_str}{pretrained_model_name_or_path}"
-        logger.warning(
+        logging.warning(
             f"A new version of the following files was downloaded from {url}:\n{new_files}"
             "\n. Make sure to double-check they do not contain any added malicious code. To avoid downloading new "
             "versions of the code file, you can pin a revision."
@@ -512,7 +512,7 @@ def custom_object_save(obj: Any, folder: Union[str, os.PathLike], config: Option
         `List[str]`: The list of files saved.
     """
     if obj.__module__ == "__main__":
-        logger.warning(
+        logging.warning(
             f"We can't save the code defining {obj} in {folder} as it's been defined in __main__. You should put "
             "this code in a separate module so we can include it in the saved folder and make it easier to share via "
             "the Hub."

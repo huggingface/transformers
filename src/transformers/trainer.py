@@ -604,7 +604,7 @@ class Trainer:
             if IS_SAGEMAKER_MP_POST_1_10:
                 # When there's mismatch between SMP config and trainer argument, use SMP config as truth
                 if args.fp16 != smp.state.cfg.fp16:
-                    logger.warning(
+                    logging.warning(
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16},"
                         f"but FP16 provided in trainer argument is {args.fp16},"
                         f"setting to {smp.state.cfg.fp16}"
@@ -613,7 +613,7 @@ class Trainer:
             else:
                 # smp < 1.10 does not support fp16 in trainer.
                 if hasattr(smp.state.cfg, "fp16"):
-                    logger.warning(
+                    logging.warning(
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
                         "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
@@ -1111,7 +1111,7 @@ class Trainer:
             if is_bitsandbytes_available() and version.parse(
                 importlib.metadata.version("bitsandbytes")
             ) < version.parse("0.41.1"):
-                logger.warning(
+                logging.warning(
                     "You are using 8-bit optimizers with a version of `bitsandbytes` < 0.41.1. "
                     "It is recommended to update your version as a major bug has been fixed in 8-bit optimizers."
                 )
@@ -1188,7 +1188,7 @@ class Trainer:
                 train_tokens += tokens
             return train_tokens
         except KeyError:
-            logger.warning("Cannot get num_tokens from dataloader")
+            logging.warning("Cannot get num_tokens from dataloader")
             return train_tokens
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
@@ -1209,7 +1209,7 @@ class Trainer:
 
         for key, value in params.items():
             if not hasattr(self.args, key):
-                logger.warning(
+                logging.warning(
                     f"Trying to set {key} in the hyperparameter search but there is no corresponding field in"
                     " `TrainingArguments`."
                 )
@@ -1289,7 +1289,7 @@ class Trainer:
     def torch_jit_model_eval(self, model, dataloader, training=False):
         if not training:
             if dataloader is None:
-                logger.warning("failed to use PyTorch jit mode due to current dataloader is none.")
+                logging.warning("failed to use PyTorch jit mode due to current dataloader is none.")
                 return model
             example_batch = next(iter(dataloader))
             example_batch = self._prepare_inputs(example_batch)
@@ -1325,7 +1325,7 @@ class Trainer:
                 self.use_cpu_amp = False
                 self.use_cuda_amp = False
             except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
-                logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
+                logging.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
         return model
 
@@ -1986,7 +1986,7 @@ class Trainer:
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
             if step < 0:
-                logger.warning(
+                logging.warning(
                     "There seems to be not a single sample in your epoch_iterator, stopping training at step"
                     f" {self.state.global_step}! This is expected if you're using an IterableDataset and set"
                     f" num_steps ({max_steps}) higher than the number of available samples."
@@ -2001,7 +2001,7 @@ class Trainer:
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                     xm.master_print(met.metrics_report())
                 else:
-                    logger.warning(
+                    logging.warning(
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
                         "configured. Check your training configuration if this is unexpected."
                     )
@@ -2124,7 +2124,7 @@ class Trainer:
             config = PretrainedConfig.from_json_file(config_file)
             checkpoint_version = config.transformers_version
             if checkpoint_version is not None and checkpoint_version != __version__:
-                logger.warning(
+                logging.warning(
                     f"You are resuming training from a checkpoint trained with {checkpoint_version} of "
                     f"Transformers but your current version is {__version__}. This is not recommended and could "
                     "yield to errors or unwanted behaviors."
@@ -2143,7 +2143,7 @@ class Trainer:
                     # If the 'user_content.pt' file does NOT exist, load with the old smp api.
                     # Checkpoint must have been saved with the old smp api.
                     if hasattr(self.args, "fp16") and self.args.fp16 is True:
-                        logger.warning(
+                        logging.warning(
                             "Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported."
                         )
                     state_dict = torch.load(weights_file, map_location="cpu")
@@ -2175,13 +2175,13 @@ class Trainer:
                 if os.path.exists(resume_from_checkpoint):
                     model.load_adapter(resume_from_checkpoint, model.active_adapter, is_trainable=True)
                 else:
-                    logger.warning(
+                    logging.warning(
                         "The intermediate checkpoints of PEFT may not be saved correctly, "
                         f"consider using a custom callback to save {ADAPTER_WEIGHTS_NAME} in corresponding saving folders. "
                         "Check some examples here: https://github.com/huggingface/peft/issues/96"
                     )
             else:
-                logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+                logging.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
         else:
             # We load the sharded checkpoint
             load_result = load_sharded_checkpoint(
@@ -2242,14 +2242,14 @@ class Trainer:
 
                             load_result = _IncompatibleKeys([], [])
                         else:
-                            logger.warning(
+                            logging.warning(
                                 "The intermediate checkpoints of PEFT may not be saved correctly, "
                                 f"consider using a custom callback to save {ADAPTER_WEIGHTS_NAME} in corresponding saving folders. "
                                 "Check some examples here: https://github.com/huggingface/peft/issues/96"
                             )
                             has_been_loaded = False
                     else:
-                        logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+                        logging.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
                         has_been_loaded = False
                 else:
                     # We load the model state dict on the CPU to avoid an OOM error.
@@ -2271,7 +2271,7 @@ class Trainer:
             if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
         else:
-            logger.warning(
+            logging.warning(
                 f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
                 "on multiple nodes, you should activate `--save_on_each_node`."
             )
@@ -2283,9 +2283,9 @@ class Trainer:
             ):
                 self.model.tie_weights()
             else:
-                logger.warning(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
+                logging.warning(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
         if len(load_result.unexpected_keys) != 0:
-            logger.warning(
+            logging.warning(
                 f"There were unexpected keys in the checkpoint model loaded: {load_result.unexpected_keys}."
             )
 
@@ -2885,7 +2885,7 @@ class Trainer:
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
             except ValueError:
-                logger.warning(
+                logging.warning(
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )

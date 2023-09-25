@@ -2081,7 +2081,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
 
         if global_attention_mask is None:
             if input_ids is None:
-                logger.warning(
+                logging.warning(
                     "It is not possible to automatically generate the `global_attention_mask` because input_ids is"
                     " None. Please make sure that it is correctly set."
                 )

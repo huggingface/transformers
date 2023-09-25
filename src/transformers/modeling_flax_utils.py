@@ -634,7 +634,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             token = use_auth_token
 
         if trust_remote_code is True:
-            logger.warning(
+            logging.warning(
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
                 " ignored."
             )
@@ -895,7 +895,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 unexpected_keys.remove(unexpected_key)
 
         if missing_keys and not _do_init:
-            logger.warning(
+            logging.warning(
                 f"The checkpoint {pretrained_model_name_or_path} is missing required keys: {missing_keys}. "
                 "Make sure to call model.init_weights to initialize the missing weights."
             )
@@ -927,7 +927,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             del state[unexpected_key]
 
         if len(unexpected_keys) > 0:
-            logger.warning(
+            logging.warning(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
                 f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
@@ -940,7 +940,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
 
         if len(missing_keys) > 0:
-            logger.warning(
+            logging.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
                 " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
@@ -959,7 +959,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     for key, shape1, shape2 in mismatched_keys
                 ]
             )
-            logger.warning(
+            logging.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
                 f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
@@ -974,7 +974,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         # raise a warning if any of the parameters are not in jnp.float32
         if len(fp16_params) > 0:
-            logger.warning(
+            logging.warning(
                 f"Some of the weights of {model.__class__.__name__} were initialized in float16 precision from "
                 f"the model checkpoint at {pretrained_model_name_or_path}:\n{fp16_params}\n"
                 "You should probably UPCAST the model weights to float32 if this was not intended. "
@@ -982,7 +982,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
 
         if len(bf16_params) > 0:
-            logger.warning(
+            logging.warning(
                 f"Some of the weights of {model.__class__.__name__} were initialized in bfloat16 precision from "
                 f"the model checkpoint at {pretrained_model_name_or_path}:\n{bf16_params}\n"
                 "You should probably UPCAST the model weights to float32 if this was not intended. "

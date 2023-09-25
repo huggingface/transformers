@@ -533,7 +533,7 @@ def is_ipex_available():
     torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
     ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
     if torch_major_and_minor != ipex_major_and_minor:
-        logger.warning(
+        logging.warning(
             f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
             f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
         )

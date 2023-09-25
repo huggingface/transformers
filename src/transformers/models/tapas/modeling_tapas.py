@@ -48,7 +48,7 @@ from .configuration_tapas import TapasConfig
 logger = logging.get_logger(__name__)
 
 if not is_torch_greater_or_equal_than_1_12:
-    logger.warning(
+    logging.warning(
         f"You are using torch=={torch.__version__}, but torch>=1.12.0 is required to use "
         "TapasModel. Please upgrade torch."
     )

@@ -46,7 +46,7 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
     )
 if not is_torch_available() and not is_tf_available():
-    logger.warning(
+    logging.warning(
         "The ONNX export features are only supported for PyTorch or TensorFlow. You will not be able to export models"
         " without one of these libraries installed."
     )

@@ -75,7 +75,7 @@ class Seq2SeqTrainer(Trainer):
             )
 
         if self.config.pad_token_id is None and self.config.eos_token_id is not None:
-            logger.warning(
+            logging.warning(
                 f"The `config.pad_token_id` is `None`. Using `config.eos_token_id` = {self.config.eos_token_id} for"
                 " padding.."
             )
@@ -130,7 +130,7 @@ class Seq2SeqTrainer(Trainer):
         if self.lr_scheduler is None:
             self.lr_scheduler = self._get_lr_scheduler(num_training_steps)
         else:  # ignoring --lr_scheduler
-            logger.warning("scheduler is passed to `Seq2SeqTrainer`, `--lr_scheduler` arg is ignored.")
+            logging.warning("scheduler is passed to `Seq2SeqTrainer`, `--lr_scheduler` arg is ignored.")
 
     def _get_lr_scheduler(self, num_training_steps):
         schedule_func = arg_to_scheduler[self.args.lr_scheduler]

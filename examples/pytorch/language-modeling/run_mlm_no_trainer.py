@@ -382,7 +382,7 @@ def main():
         config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=args.trust_remote_code)
     else:
         config = CONFIG_MAPPING[args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     if args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -424,7 +424,7 @@ def main():
     if args.max_seq_length is None:
         max_seq_length = tokenizer.model_max_length
         if max_seq_length > 1024:
-            logger.warning(
+            logging.warning(
                 "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
                 " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
                 " override this default with `--block_size xxx`."
@@ -432,7 +432,7 @@ def main():
             max_seq_length = 1024
     else:
         if args.max_seq_length > tokenizer.model_max_length:
-            logger.warning(
+            logging.warning(
                 f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the"
                 f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
             )

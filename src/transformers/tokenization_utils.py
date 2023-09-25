@@ -539,7 +539,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
         if kwargs:
-            logger.warning(f"Keyword arguments {kwargs} not recognized.")
+            logging.warning(f"Keyword arguments {kwargs} not recognized.")
 
         if hasattr(self, "do_lower_case") and self.do_lower_case:
             # convert non-special tokens to lowercase
@@ -980,7 +980,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
         if spaces_between_special_tokens:
-            logger.warning_once(
+            logging.warning_once(
                 "spaces_between_special_tokens is deprecated and will be removed in transformers v5. It was adding spaces between `added_tokens`, not special tokens, "
                 "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
             )

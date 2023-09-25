@@ -338,7 +338,7 @@ def main():
     # Initialize the distributed state.
     distributed_state = PartialState(cpu=args.use_cpu)
 
-    logger.warning(f"device: {distributed_state.device}, 16-bits inference: {args.fp16}")
+    logging.warning(f"device: {distributed_state.device}, 16-bits inference: {args.fp16}")
 
     if args.seed is not None:
         set_seed(args.seed)

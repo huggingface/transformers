@@ -147,7 +147,7 @@ class EsmConfig(PretrainedConfig):
                 esmfold_config = EsmFoldConfig(**esmfold_config)
             self.esmfold_config = esmfold_config
             if vocab_list is None:
-                logger.warning("No vocab_list supplied for folding model, assuming the ESM-2 vocabulary!")
+                logging.warning("No vocab_list supplied for folding model, assuming the ESM-2 vocabulary!")
                 self.vocab_list = get_default_vocab_list()
             else:
                 self.vocab_list = vocab_list

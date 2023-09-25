@@ -496,7 +496,7 @@ class Data2VecTextEncoder(nn.Module):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -881,7 +881,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `Data2VecTextLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `Data2VecTextLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         self.lm_head = Data2VecTextLMHead(config)
@@ -1032,7 +1032,7 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
         super().__init__(config)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `Data2VecTextForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )

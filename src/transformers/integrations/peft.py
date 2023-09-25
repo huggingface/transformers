@@ -188,7 +188,7 @@ class PeftAdapterMixin:
         if incompatible_keys is not None:
             # check only for unexpected keys
             if hasattr(incompatible_keys, "unexpected_keys") and len(incompatible_keys.unexpected_keys) > 0:
-                logger.warning(
+                logging.warning(
                     f"Loading adapter weights from {peft_model_id} led to unexpected keys not found in the model: "
                     f" {incompatible_keys.unexpected_keys}. "
                 )

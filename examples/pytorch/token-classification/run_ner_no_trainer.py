@@ -407,7 +407,7 @@ def main():
         )
     else:
         config = CONFIG_MAPPING[args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     tokenizer_name_or_path = args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
     if not tokenizer_name_or_path:
@@ -456,7 +456,7 @@ def main():
                 label_list = [model.config.id2label[i] for i in range(num_labels)]
                 label_to_id = {l: i for i, l in enumerate(label_list)}
         else:
-            logger.warning(
+            logging.warning(
                 "Your model seems to have been trained with labels, but they don't match the dataset: ",
                 f"model labels: {sorted(model.config.label2id.keys())}, dataset labels:"
                 f" {sorted(label_list)}.\nIgnoring the model labels as a result.",

@@ -841,7 +841,7 @@ class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingL
         super().__init__(config, *inputs, **kwargs)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `TFRoFormerForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
@@ -913,7 +913,7 @@ class TFRoFormerForCausalLM(TFRoFormerPreTrainedModel, TFCausalLanguageModelingL
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `TFRoFormerForCausalLM` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `TFRoFormerForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.roformer = TFRoFormerMainLayer(config, name="roformer")
         self.mlm = TFRoFormerMLMHead(config, input_embeddings=self.roformer.embeddings, name="mlm___cls")

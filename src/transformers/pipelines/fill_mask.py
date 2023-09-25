@@ -177,7 +177,7 @@ class FillMaskPipeline(Pipeline):
                     truncation=True,
                 )["input_ids"]
                 if len(input_ids) == 0:
-                    logger.warning(
+                    logging.warning(
                         f"The specified target token `{target}` does not exist in the model vocabulary. "
                         "We cannot replace it with anything meaningful, ignoring it"
                     )
@@ -187,7 +187,7 @@ class FillMaskPipeline(Pipeline):
                 # it becomes pretty slow, so let's make sure
                 # The warning enables them to fix the input to
                 # get faster performance.
-                logger.warning(
+                logging.warning(
                     f"The specified target token `{target}` does not exist in the model vocabulary. "
                     f"Replacing with `{self.tokenizer.convert_ids_to_tokens(id_)}`."
                 )

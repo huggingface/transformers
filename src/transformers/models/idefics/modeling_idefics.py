@@ -716,7 +716,7 @@ class IdeficsAttention(nn.Module):
 
         attn_weights = None
         if output_attentions:
-            logger.warning_once(
+            logging.warning_once(
                 "attn_weights are not extracted in scaled_dot_product_attention. The model returns None instead"
             )
 
@@ -1273,7 +1273,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -1333,7 +1333,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
             if self.gradient_checkpointing and self.training:
                 past_key_value = None
                 if use_cache:
-                    logger.warning_once(
+                    logging.warning_once(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False

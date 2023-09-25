@@ -301,7 +301,7 @@ def main():
 
                         writer.write(output_line)
                     else:
-                        logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
+                        logging.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
 
     return results
 

@@ -1051,7 +1051,7 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
         super().__init__(config)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `EsmForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )

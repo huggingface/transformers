@@ -540,7 +540,7 @@ class DetrAttention(nn.Module):
             )
 
         if position_embeddings is not None:
-            logger.warning_once(
+            logging.warning_once(
                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
             )
             object_queries = position_embeddings
@@ -576,13 +576,13 @@ class DetrAttention(nn.Module):
             )
 
         if position_embeddings is not None:
-            logger.warning_once(
+            logging.warning_once(
                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
             )
             object_queries = position_embeddings
 
         if key_value_position_embeddings is not None:
-            logger.warning_once(
+            logging.warning_once(
                 "key_value_position_embeddings has been deprecated and will be removed in v4.34. Please use spatial_position_embeddings instead"
             )
             spatial_position_embeddings = key_value_position_embeddings
@@ -717,7 +717,7 @@ class DetrEncoderLayer(nn.Module):
             )
 
         if position_embeddings is not None:
-            logger.warning_once(
+            logging.warning_once(
                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
             )
             object_queries = position_embeddings
@@ -825,7 +825,7 @@ class DetrDecoderLayer(nn.Module):
             )
 
         if position_embeddings is not None:
-            logger.warning_once(
+            logging.warning_once(
                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
             )
             object_queries = position_embeddings
@@ -1058,7 +1058,7 @@ class DetrEncoder(DetrPreTrainedModel):
             )
 
         if position_embeddings is not None:
-            logger.warning_once(
+            logging.warning_once(
                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
             )
             object_queries = position_embeddings
@@ -1203,7 +1203,7 @@ class DetrDecoder(DetrPreTrainedModel):
             )
 
         if position_embeddings is not None:
-            logger.warning_once(
+            logging.warning_once(
                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
             )
             object_queries = position_embeddings

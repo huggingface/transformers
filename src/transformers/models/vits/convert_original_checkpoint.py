@@ -259,7 +259,7 @@ def recursively_load_weights(fairseq_dict, hf_model):
         if not is_used:
             unused_weights.append(name)
 
-    logger.warning(f"Unused weights: {unused_weights}")
+    logging.warning(f"Unused weights: {unused_weights}")
 
 
 @torch.no_grad()
@@ -313,7 +313,7 @@ def convert_checkpoint(
 
         is_uroman = hps["data"]["training_files"].split(".")[-1] == "uroman"
         if is_uroman:
-            logger.warning("For this checkpoint, you should use `uroman` to convert input text before tokenizing it!")
+            logging.warning("For this checkpoint, you should use `uroman` to convert input text before tokenizing it!")
     else:
         logger.info(f"***Converting model: {checkpoint_path}***")
         is_uroman = False

@@ -1263,7 +1263,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
         )
 
         if lengths is not None:
-            logger.warning(
+            logging.warning(
                 "The `lengths` parameter cannot be used with the Flaubert multiple choice models. Please use the "
                 "attention mask instead."
             )

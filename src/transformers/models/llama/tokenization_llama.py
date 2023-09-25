@@ -124,7 +124,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
 
         if legacy is None:
-            logger.warning_once(
+            logging.warning_once(
                 f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
                 " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"

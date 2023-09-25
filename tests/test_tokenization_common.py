@@ -2017,7 +2017,7 @@ class TokenizerTesterMixin:
         with self.assertLogs(level="WARNING") as cm:
             # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
             # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
-            logger.warning("Dummy warning")
+            logging.warning("Dummy warning")
             tokenizer_slow.pad(encoding_slow)
         self.assertEqual(len(cm.records), 1)
         self.assertIn(

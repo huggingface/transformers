@@ -1438,14 +1438,14 @@ class GenerationMixin:
 
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask", None) is None:
-                logger.warning(
+                logging.warning(
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
             eos_token_id = generation_config.eos_token_id
             if isinstance(eos_token_id, list):
                 eos_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            logging.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             generation_config.pad_token_id = eos_token_id
 
         # 3. Define model inputs
@@ -1485,7 +1485,7 @@ class GenerationMixin:
                 and len(inputs_tensor.shape) == 2
                 and torch.sum(inputs_tensor[:, -1] == generation_config.pad_token_id) > 0
             ):
-                logger.warning(
+                logging.warning(
                     "A decoder-only architecture is being used, but right-padding was detected! For correct "
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
                 )
@@ -1518,7 +1518,7 @@ class GenerationMixin:
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if generation_config.max_new_tokens is not None:
             if not has_default_max_length and generation_config.max_length is not None:
-                logger.warning(
+                logging.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
                     "Please refer to the documentation for more information. "

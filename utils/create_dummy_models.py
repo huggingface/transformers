@@ -775,7 +775,7 @@ def upload_model(model_dir, organization, token):
         error = e
         if "You already created" in str(e):
             error = None
-            logger.warning("Remote repository exists and will be cloned.")
+            logging.warning("Remote repository exists and will be cloned.")
             repo_exist = True
             try:
                 create_repo(repo_id=repo_id, exist_ok=True, repo_type="model", token=token)
@@ -800,14 +800,14 @@ def upload_model(model_dir, organization, token):
                 create_pr=True,
                 token=token,
             )
-            logger.warning(f"PR open in {hub_pr_url}.")
+            logging.warning(f"PR open in {hub_pr_url}.")
             # TODO: We need this information?
         else:
             # Push to Hub repo directly
             repo.git_add(auto_lfs_track=True)
             repo.git_commit(f"Upload tiny models for {arch_name}")
             repo.git_push(blocking=True)  # this prints a progress bar with the upload
-            logger.warning(f"Tiny models {arch_name} pushed to {repo_id}.")
+            logging.warning(f"Tiny models {arch_name} pushed to {repo_id}.")
 
 
 def build_composite_models(config_class, output_dir):
@@ -1170,7 +1170,7 @@ def build(config_class, models_to_create, output_dir):
                 tiny_config.text_config_dict[k] = v
 
     if result["warnings"]:
-        logger.warning(result["warnings"][0][0])
+        logging.warning(result["warnings"][0][0])
 
     # update `result["processor"]`
     result["processor"] = {type(p).__name__: p.__class__.__name__ for p in processors}
@@ -1284,7 +1284,7 @@ def build_tiny_model_summary(results, organization=None, token=None):
                         commit_hash = hf_api.repo_info(repo_id, token=token).sha
                     except Exception:
                         # The directory is not created, but processor(s) is/are included in `results`.
-                        logger.warning(f"Failed to get information for {repo_id}.\n{traceback.format_exc()}")
+                        logging.warning(f"Failed to get information for {repo_id}.\n{traceback.format_exc()}")
                         del tiny_model_summary[base_arch_name]
                         continue
                     tiny_model_summary[base_arch_name]["sha"] = commit_hash

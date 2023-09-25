@@ -277,7 +277,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
             self.nlp = _nlp.tokenizer
             self.fix_text = ftfy.fix_text
         except ImportError:
-            logger.warning("ftfy or spacy is not installed using BERT BasicTokenizer instead of SpaCy & ftfy.")
+            logging.warning("ftfy or spacy is not installed using BERT BasicTokenizer instead of SpaCy & ftfy.")
             self.nlp = BasicTokenizer(do_lower_case=True)
             self.fix_text = None
 
@@ -394,7 +394,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
             writer.write("#version: 0.2\n")
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning(
+                    logging.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
                         " Please check that the tokenizer is not corrupted!"
                     )

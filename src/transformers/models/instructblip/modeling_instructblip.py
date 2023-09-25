@@ -935,7 +935,7 @@ class InstructBlipQFormerEncoder(nn.Module):
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
                 if use_cache:
-                    logger.warning(
+                    logging.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
@@ -1317,7 +1317,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
 
         if len(hf_device_map) > 1 and "language_model" not in hf_device_map and torch.cuda.device_count() > 1:
             # warn users about unexpected behavior when using multi-GPU + InstructBLIP + `accelerate`.
-            logger.warning(
+            logging.warning(
                 "The `language_model` is not in the `hf_device_map` dictionary and you are running your script"
                 " in a multi-GPU environment. this may lead to unexpected behavior when using `accelerate`."
                 " Please pass a `device_map` that contains `language_model` to remove this warning."

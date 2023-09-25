@@ -387,7 +387,7 @@ class BertEncoder(nn.Module):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -868,7 +868,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `BertGenerationDecoder` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `BertGenerationDecoder` as a standalone, add `is_decoder=True.`")
 
         self.bert = BertGenerationEncoder(config)
         self.lm_head = BertGenerationOnlyLMHead(config)

@@ -718,7 +718,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
         try:
             ray.init(address=args.ray_address, namespace="rag")
         except (ConnectionError, ValueError):
-            logger.warning(
+            logging.warning(
                 "Connection to Ray cluster failed. Make sure a Ray"
                 "cluster is running by either using Ray's cluster "
                 "launcher (`ray up`) or by manually starting Ray on "

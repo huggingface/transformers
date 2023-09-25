@@ -159,7 +159,7 @@ class VisualBertEmbeddings(nn.Module):
 
                 if (image_text_alignment_mask == 0).sum() != 0:
                     image_text_alignment_mask[image_text_alignment_mask == 0] = 1  # Avoid divide by zero error
-                    logger.warning(
+                    logging.warning(
                         "Found 0 values in `image_text_alignment_mask`. Setting them to 1 to avoid divide-by-zero"
                         " error."
                     )

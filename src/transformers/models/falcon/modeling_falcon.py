@@ -472,7 +472,7 @@ class FalconAttention(nn.Module):
         if alibi is None:
             if hasattr(F, "scaled_dot_product_attention") and not output_attentions:
                 # TODO: deprecate this once we add FA2 support in Falcon
-                logger.warning_once(
+                logging.warning_once(
                     "The current implementation of Falcon calls `torch.scaled_dot_product_attention` directly, this will be deprecated in the"
                     " future in favor of the `BetterTransformer` API. Please install the latest optimum library with `pip install -U optimum` and call "
                     "`model.to_bettertransformer()` to benefit from `torch.scaled_dot_product_attention` and future performance optimizations."
@@ -610,7 +610,7 @@ class FalconFlashAttention2(FalconAttention):
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_layer.dtype
         if input_dtype == torch.float32:
-            logger.warning_once(
+            logging.warning_once(
                 "The input hidden states seems to be silently casted in float32, this might be related to"
                 " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
                 " float16."
@@ -1162,7 +1162,7 @@ class FalconModel(FalconPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
-                    logger.warning(
+                    logging.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
@@ -1447,7 +1447,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
                 sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(dim=-1) - 1).to(logits.device)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logging.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

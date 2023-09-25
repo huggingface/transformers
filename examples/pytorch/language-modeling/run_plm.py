@@ -265,7 +265,7 @@ def main():
     transformers.utils.logging.enable_explicit_format()
 
     # Log on each process the small summary:
-    logger.warning(
+    logging.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
@@ -367,7 +367,7 @@ def main():
         config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
         config = XLNetConfig()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
         if model_args.config_overrides is not None:
             logger.info(f"Overriding config: {model_args.config_overrides}")
             config.update_from_string(model_args.config_overrides)
@@ -418,7 +418,7 @@ def main():
     text_column_name = "text" if "text" in column_names else column_names[0]
 
     if data_args.max_seq_length > tokenizer.model_max_length:
-        logger.warning(
+        logging.warning(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )

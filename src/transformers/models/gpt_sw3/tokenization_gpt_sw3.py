@@ -122,7 +122,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         name_or_path = kwargs.get("name_or_path")
         if name_or_path is None:
-            logger.warning(
+            logging.warning(
                 "name_or_path not provided, will work for all GPTSw3 models except gpt-sw3-7b,"
                 " you are testing the model, this can safely be ignored"
             )

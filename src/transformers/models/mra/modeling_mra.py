@@ -82,7 +82,7 @@ if is_torch_cuda_available() and is_ninja_available():
     try:
         load_cuda_kernels()
     except Exception as e:
-        logger.warning(
+        logging.warning(
             "Failed to load CUDA kernels. Mra requires custom CUDA kernels. Please verify that compatible versions of"
             f" PyTorch and CUDA Toolkit are installed: {e}"
         )

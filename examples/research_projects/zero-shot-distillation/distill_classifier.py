@@ -152,7 +152,7 @@ def get_entailment_id(config):
     for label, ind in config.label2id.items():
         if label.lower().startswith("entail"):
             return ind
-    logger.warning("Could not identify entailment dimension from teacher config label2id. Setting to -1.")
+    logging.warning("Could not identify entailment dimension from teacher config label2id. Setting to -1.")
     return -1
 
 
@@ -252,7 +252,7 @@ def main():
     logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
 
     # Log on each process the small summary:
-    logger.warning(
+    logging.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )

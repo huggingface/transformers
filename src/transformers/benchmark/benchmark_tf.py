@@ -260,7 +260,7 @@ class TensorFlowBenchmark(Benchmark):
                 elif self.args.is_gpu:
                     # gpu
                     if not is_py3nvml_available():
-                        logger.warning(
+                        logging.warning(
                             "py3nvml not installed, we won't log GPU memory usage. "
                             "Install py3nvml (pip install py3nvml) to log information about GPU."
                         )

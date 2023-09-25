@@ -313,7 +313,7 @@ def main():
         config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -343,7 +343,7 @@ def main():
             output = tokenizer(examples[text_column_name])
         # clm input could be much much longer than block_size
         if "Token indices sequence length is longer than the" in cl.out:
-            tok_logger.warning(
+            tok_logging.warning(
                 "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
                 " before being passed to the model."
             )
@@ -360,14 +360,14 @@ def main():
     if data_args.block_size is None:
         block_size = tokenizer.model_max_length
         if block_size > config.max_position_embeddings:
-            logger.warning(
+            logging.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
                 "Picking 1024 instead. You can change that default value by passing --block_size xxx."
             )
             block_size = 1024
     else:
         if data_args.block_size > tokenizer.model_max_length:
-            logger.warning(
+            logging.warning(
                 f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
                 f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
@@ -429,11 +429,11 @@ def main():
             summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
         except ImportError as ie:
             has_tensorboard = False
-            logger.warning(
+            logging.warning(
                 f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
             )
     else:
-        logger.warning(
+        logging.warning(
             "Unable to display metrics through TensorBoard because the package is not installed: "
             "Please run pip install tensorboard to enable."
         )

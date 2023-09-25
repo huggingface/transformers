@@ -88,7 +88,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         self._args_parser = args_parser
         super().__init__(*args, **kwargs)
         if self.entailment_id == -1:
-            logger.warning(
+            logging.warning(
                 "Failed to determine 'entailment' label id from the label2id mapping in the model config. Setting to "
                 "-1. Define a descriptive label2id mapping in the model config to ensure correct outputs."
             )
@@ -145,7 +145,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     def _sanitize_parameters(self, **kwargs):
         if kwargs.get("multi_class", None) is not None:
             kwargs["multi_label"] = kwargs["multi_class"]
-            logger.warning(
+            logging.warning(
                 "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
                 "`multi_class` will be removed in a future version of Transformers."
             )

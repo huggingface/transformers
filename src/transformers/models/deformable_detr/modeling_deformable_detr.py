@@ -56,7 +56,7 @@ if is_torch_cuda_available() and is_ninja_available():
     try:
         MultiScaleDeformableAttention = load_cuda_kernels()
     except Exception as e:
-        logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+        logging.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
         MultiScaleDeformableAttention = None
 else:
     MultiScaleDeformableAttention = None

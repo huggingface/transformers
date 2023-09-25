@@ -740,7 +740,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
 
     def get_output_embeddings(self):
         # Remove after transformers v4.32. Fix this model's `test_model_common_attributes` test too.
-        logger.warning(
+        logging.warning(
             "Sequence classification models do not have output embeddings. `.get_output_embeddings` will be removed "
             "in transformers v4.32."
         )
@@ -805,7 +805,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
                 in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
             else:
                 sequence_lengths = -1
-                logger.warning(
+                logging.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )

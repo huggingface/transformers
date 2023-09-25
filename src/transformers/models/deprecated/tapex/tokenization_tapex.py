@@ -502,7 +502,7 @@ class TapexTokenizer(PreTrainedTokenizer):
             writer.write("#version: 0.2\n")
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning(
+                    logging.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
                         " Please check that the tokenizer is not corrupted!"
                     )
@@ -1349,12 +1349,12 @@ class TapexTokenizer(PreTrainedTokenizer):
             linear_table = ""
 
         if linear_table == "":
-            logger.warning(
+            logging.warning(
                 "You provide an empty table, or all cells contain much tokens (e.g., >= 1024 tokens). "
                 + f"Please carefully check the corresponding table with the query : {query}."
             )
         if query == "":
-            logger.warning("You provide nothing to query with respect to the table.")
+            logging.warning("You provide nothing to query with respect to the table.")
         # step 4: concatenate query with linear_table
         separator = " " if query and linear_table else ""
         joint_input = (query + separator + linear_table) if query else linear_table
@@ -1484,4 +1484,4 @@ class TapexTokenizer(PreTrainedTokenizer):
 
         # only when the drop ratio is too large, logging for warning.
         if "id" in table_content and len(drop_row_indices) > 0:
-            logger.warning("Delete {:.2f} rows in table {}".format(len(drop_row_indices), table_content["id"]))
+            logging.warning("Delete {:.2f} rows in table {}".format(len(drop_row_indices), table_content["id"]))

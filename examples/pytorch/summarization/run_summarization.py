@@ -358,7 +358,7 @@ def main():
     transformers.utils.logging.enable_explicit_format()
 
     # Log on each process the small summary:
-    logger.warning(
+    logging.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
@@ -371,7 +371,7 @@ def main():
         "t5-3b",
         "t5-11b",
     ]:
-        logger.warning(
+        logging.warning(
             "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
             "`--source_prefix 'summarize: ' `"
         )
@@ -481,7 +481,7 @@ def main():
         and model.config.max_position_embeddings < data_args.max_source_length
     ):
         if model_args.resize_position_embeddings is None:
-            logger.warning(
+            logging.warning(
                 "Increasing the model's number of position embedding vectors from"
                 f" {model.config.max_position_embeddings} to {data_args.max_source_length}."
             )
@@ -555,7 +555,7 @@ def main():
     padding = "max_length" if data_args.pad_to_max_length else False
 
     if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
-        logger.warning(
+        logging.warning(
             "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )

@@ -707,7 +707,7 @@ class SwitchTransformersBlock(nn.Module):
     ):
         if past_key_value is not None:
             if not self.is_decoder:
-                logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
+                logging.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
             expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
 
             if len(past_key_value) != expected_num_past_key_values:
@@ -1013,7 +1013,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -1749,7 +1749,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
         if past_key_values is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
+            logging.warning("You might want to consider setting `use_cache=True` to speed up decoding")
             return past_key_values
 
         reordered_decoder_past = ()

@@ -311,7 +311,7 @@ class CallbackHandler(TrainerCallback):
         self.eval_dataloader = None
 
         if not any(isinstance(cb, DefaultFlowCallback) for cb in self.callbacks):
-            logger.warning(
+            logging.warning(
                 "The Trainer will not work properly if you don't have a `DefaultFlowCallback` in its callbacks. You\n"
                 + "should add one before training with `trainer.add_callback(DefaultFlowCallback). The current list of"
                 + "callbacks is\n:"
@@ -322,7 +322,7 @@ class CallbackHandler(TrainerCallback):
         cb = callback() if isinstance(callback, type) else callback
         cb_class = callback if isinstance(callback, type) else callback.__class__
         if cb_class in [c.__class__ for c in self.callbacks]:
-            logger.warning(
+            logging.warning(
                 f"You are adding a {cb_class} to the callbacks of this Trainer, but there is already one. The current"
                 + "list of callbacks is\n:"
                 + self.callback_list
@@ -582,7 +582,7 @@ class EarlyStoppingCallback(TrainerCallback):
         metric_value = metrics.get(metric_to_check)
 
         if metric_value is None:
-            logger.warning(
+            logging.warning(
                 f"early stopping required metric_for_best_model, but did not find {metric_to_check} so early stopping"
                 " is disabled"
             )

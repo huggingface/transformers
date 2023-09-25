@@ -224,7 +224,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in self.encoder.items():
                 if index != token_index:
-                    logger.warning(
+                    logging.warning(
                         f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
                         " Please check that the vocabulary is not corrupted!"
                     )

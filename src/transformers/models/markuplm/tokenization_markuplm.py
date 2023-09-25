@@ -379,7 +379,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        logger.warning(
+        logging.warning(
             "MarkupLM now does not support generative tasks, decoding is experimental and subject to change."
         )
         text = "".join(tokens)
@@ -407,7 +407,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             writer.write("#version: 0.2\n")
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning(
+                    logging.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
                         " Please check that the tokenizer is not corrupted!"
                     )
@@ -1323,7 +1323,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     )
                 logger.error(error_msg)
         elif truncation_strategy == TruncationStrategy.LONGEST_FIRST:
-            logger.warning(
+            logging.warning(
                 "Be aware, overflowing tokens are not returned for the setting you have chosen,"
                 f" i.e. sequence pairs with the '{TruncationStrategy.LONGEST_FIRST.value}' "
                 "truncation strategy. So the returned list will always be empty even if some "

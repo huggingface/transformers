@@ -98,7 +98,7 @@ class BarkProcessor(ProcessorMixin):
                 revision=kwargs.pop("revision", None),
             )
             if speaker_embeddings_path is None:
-                logger.warning(
+                logging.warning(
                     f"""`{os.path.join(pretrained_processor_name_or_path,speaker_embeddings_dict_path)}` does not exists
                     , no preloaded speaker embeddings will be used - Make sure to provide a correct path to the json
                     dictionnary if wanted, otherwise set `speaker_embeddings_dict_path=None`."""

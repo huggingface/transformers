@@ -785,7 +785,7 @@ class BatchEncoding(UserDict):
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
-            logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
+            logging.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
 
 
@@ -866,7 +866,7 @@ class SpecialTokensMixin:
         The `sanitize_special_tokens` is now deprecated kept for backward compatibility and will be removed in
         transformers v5.
         """
-        logger.warning_once("The `sanitize_special_tokens` will be removed in transformers v5.")
+        logging.warning_once("The `sanitize_special_tokens` will be removed in transformers v5.")
         return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
     def add_special_tokens(
@@ -1646,7 +1646,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # For backward compatibility, allow to try to setup 'max_len_single_sentence'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False) and self.verbose:
             if not self.deprecation_warnings.get("max_len_single_sentence", False):
-                logger.warning(
+                logging.warning(
                     "Setting 'max_len_single_sentence' is now deprecated. This value is automatically set up."
                 )
             self.deprecation_warnings["max_len_single_sentence"] = True
@@ -1660,7 +1660,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # For backward compatibility, allow to try to setup 'max_len_sentences_pair'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True) and self.verbose:
             if not self.deprecation_warnings.get("max_len_sentences_pair", False):
-                logger.warning(
+                logging.warning(
                     "Setting 'max_len_sentences_pair' is now deprecated. This value is automatically set up."
                 )
             self.deprecation_warnings["max_len_sentences_pair"] = True
@@ -2148,7 +2148,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if config_tokenizer_class is not None:
             if cls.__name__.replace("Fast", "") != config_tokenizer_class.replace("Fast", ""):
-                logger.warning(
+                logging.warning(
                     "The tokenizer class you load from this checkpoint is not the same type as the class this"
                     " function is called from. It may result in unexpected tokenization. \nThe tokenizer class you"
                     f" load from this checkpoint is '{config_tokenizer_class}'. \nThe class this function is called"
@@ -2201,7 +2201,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
                     )
         else:
-            logger.warning_once(
+            logging.warning_once(
                 "Loading the tokenizer from the `special_tokens_map.json` and the `added_tokens.json` will be removed in `transformers 5`, "
                 " it is kept for forward compatibility, but it is recommended to update your `tokenizer_config.json` by uploading it again."
                 " You will see the new `added_tokens_decoder` attribute that will store the relevant information."
@@ -2287,7 +2287,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
 
         if len(added_tokens_decoder) > 0:
-            logger.warning_advice(
+            logging.warning_advice(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."
             )
@@ -2611,7 +2611,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if max_length is not None and padding is False and truncation is None:
             if verbose:
                 if not self.deprecation_warnings.get("Truncation-not-explicitly-activated", False):
-                    logger.warning(
+                    logging.warning(
                         "Truncation was not explicitly activated but `max_length` is provided a specific value, please"
                         " use `truncation=True` to explicitly truncate examples to max length. Defaulting to"
                         " 'longest_first' truncation strategy. If you encode pairs of sequences (GLUE-style) with the"
@@ -2689,7 +2689,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if self.model_max_length > LARGE_INTEGER:
                     if verbose:
                         if not self.deprecation_warnings.get("Asking-to-pad-to-max_length", False):
-                            logger.warning(
+                            logging.warning(
                                 "Asking to pad to max_length but no maximum length is provided and the model has no"
                                 " predefined maximum length. Default to no padding."
                             )
@@ -2702,7 +2702,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 if self.model_max_length > LARGE_INTEGER:
                     if verbose:
                         if not self.deprecation_warnings.get("Asking-to-truncate-to-max_length", False):
-                            logger.warning(
+                            logging.warning(
                                 "Asking to truncate to max_length but no maximum length is provided and the model has"
                                 " no predefined maximum length. Default to no truncation."
                             )
@@ -3210,7 +3210,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         if self.__class__.__name__.endswith("Fast"):
             if not self.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False):
-                logger.warning_advice(
+                logging.warning_advice(
                     f"You're using a {self.__class__.__name__} tokenizer. Please note that with a fast tokenizer,"
                     " using the `__call__` method is faster than using a method to encode the text followed by a call"
                     " to the `pad` method to get a padded encoding."
@@ -3560,7 +3560,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     )
                 logger.error(error_msg)
         elif truncation_strategy == TruncationStrategy.LONGEST_FIRST:
-            logger.warning(
+            logging.warning(
                 "Be aware, overflowing tokens are not returned for the setting you have chosen,"
                 f" i.e. sequence pairs with the '{TruncationStrategy.LONGEST_FIRST.value}' "
                 "truncation strategy. So the returned list will always be empty even if some "
@@ -3841,7 +3841,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         if max_length is None and len(ids) > self.model_max_length and verbose:
             if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
-                logger.warning(
+                logging.warning(
                     "Token indices sequence length is longer than the specified maximum sequence length "
                     f"for this model ({len(ids)} > {self.model_max_length}). Running this sequence through the model "
                     "will result in indexing errors"

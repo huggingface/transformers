@@ -254,13 +254,13 @@ def infer_framework_load_model(
             kwargs = model_kwargs.copy()
             if framework == "pt" and model.endswith(".h5"):
                 kwargs["from_tf"] = True
-                logger.warning(
+                logging.warning(
                     "Model might be a TensorFlow model (ending with `.h5`) but TensorFlow is not available. "
                     "Trying to load the model with PyTorch."
                 )
             elif framework == "tf" and model.endswith(".bin"):
                 kwargs["from_pt"] = True
-                logger.warning(
+                logging.warning(
                     "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                     "Trying to load the model with Tensorflow."
                 )
@@ -1056,7 +1056,7 @@ class Pipeline(_ScikitCompat):
             dataset = PipelineDataset(inputs, self.preprocess, preprocess_params)
         else:
             if num_workers > 1:
-                logger.warning(
+                logging.warning(
                     "For iterable dataset using num_workers>1 is likely to result"
                     " in errors since everything is iterable, setting `num_workers=1`"
                     " to guarantee correctness."
@@ -1076,7 +1076,7 @@ class Pipeline(_ScikitCompat):
 
     def __call__(self, inputs, *args, num_workers=None, batch_size=None, **kwargs):
         if args:
-            logger.warning(f"Ignoring args : {args}")
+            logging.warning(f"Ignoring args : {args}")
 
         if num_workers is None:
             if self._num_workers is None:
@@ -1171,7 +1171,7 @@ class ChunkPipeline(Pipeline):
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
         if num_workers > 1:
-            logger.warning(
+            logging.warning(
                 "For ChunkPipeline using num_workers>0 is likely to result in errors since everything is iterable,"
                 " setting `num_workers=1` to guarantee correctness."
             )
@@ -1226,7 +1226,7 @@ class PipelineRegistry:
         type: Optional[str] = None,
     ) -> None:
         if task in self.supported_tasks:
-            logger.warning(f"{task} is already registered. Overwriting pipeline for task {task}...")
+            logging.warning(f"{task} is already registered. Overwriting pipeline for task {task}...")
 
         if pt_model is None:
             pt_model = ()

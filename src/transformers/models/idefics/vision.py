@@ -114,7 +114,7 @@ class IdeficsVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         fp32_upcasting = patch_pos_embed.dtype == torch.bfloat16
         if fp32_upcasting:
-            logger.warning_once(
+            logging.warning_once(
                 "Upcasting patch_pos_embed to fp32 for interpolation since `upsample_bicubic2d_out_frame` in nn.functional.interpolate"
                 "is not implemented for 'torch.bfloat16' dtype. This will result in a slight overhead"
             )

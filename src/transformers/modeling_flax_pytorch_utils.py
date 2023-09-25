@@ -346,7 +346,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     if any(is_type_bf16):
         # convert all weights to fp32 if the are bf16 since torch.from_numpy can-not handle bf16
         # and bf16 is not fully supported in PT yet.
-        logger.warning(
+        logging.warning(
             "Found ``bfloat16`` weights in Flax model. Casting all ``bfloat16`` weights to ``float32`` "
             "before loading those in PyTorch model."
         )
@@ -441,7 +441,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     missing_keys = list(missing_keys)
 
     if len(unexpected_keys) > 0:
-        logger.warning(
+        logging.warning(
             "Some weights of the Flax model were not used when initializing the PyTorch model"
             f" {pt_model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are initializing"
             f" {pt_model.__class__.__name__} from a Flax model trained on another task or with another architecture"
@@ -451,15 +451,15 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
             " FlaxBertForSequenceClassification model)."
         )
     else:
-        logger.warning(f"All Flax model weights were used when initializing {pt_model.__class__.__name__}.\n")
+        logging.warning(f"All Flax model weights were used when initializing {pt_model.__class__.__name__}.\n")
     if len(missing_keys) > 0:
-        logger.warning(
+        logging.warning(
             f"Some weights of {pt_model.__class__.__name__} were not initialized from the Flax model and are newly"
             f" initialized: {missing_keys}\nYou should probably TRAIN this model on a down-stream task to be able to"
             " use it for predictions and inference."
         )
     else:
-        logger.warning(
+        logging.warning(
             f"All the weights of {pt_model.__class__.__name__} were initialized from the Flax model.\n"
             "If your task is similar to the task the model of the checkpoint was trained on, "
             f"you can already use {pt_model.__class__.__name__} for predictions without further training."

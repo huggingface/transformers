@@ -412,7 +412,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             if is_safetensors_available():
                 load_safe = True  # load safe due to preference
             else:
-                logger.warning(
+                logging.warning(
                     f"Cannot load sharded checkpoint at {folder} safely since safetensors is not installed!"
                 )
         elif not index_present:
@@ -1033,7 +1033,7 @@ class ModuleUtilsMixin:
         if self.main_input_name in input_dict:
             return input_dict[self.main_input_name].numel()
         elif "estimate_tokens" not in self.warnings_issued:
-            logger.warning(
+            logging.warning(
                 "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
             )
             self.warnings_issued["estimate_tokens"] = True
@@ -1288,7 +1288,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if torch_dtype is None:
-            logger.warning(
+            logging.warning(
                 "You are attempting to use Flash Attention 2.0 without specifying a torch dtype. This might lead to unexpected behaviour"
             )
         elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
@@ -1299,7 +1299,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if device_map is None:
             if torch.cuda.is_available():
-                logger.warning(
+                logging.warning(
                     "You are attempting to use Flash Attention 2.0 with a model initialized on CPU. Make sure to move the model to GPU"
                     " after initializing it on CPU with `model.to('cuda')`."
                 )
@@ -1480,7 +1480,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # tie weights recursively
         tie_encoder_to_decoder_recursively(decoder, encoder, base_model_prefix, uninitialized_encoder_weights)
         if len(uninitialized_encoder_weights) > 0:
-            logger.warning(
+            logging.warning(
                 f"The following encoder weights were not tied to the decoder {uninitialized_encoder_weights}"
             )
 
@@ -1614,7 +1614,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 new_num_tokens = old_embeddings.weight.shape[0]
             new_num_tokens = ((new_num_tokens + pad_to_multiple_of - 1) // pad_to_multiple_of) * pad_to_multiple_of
         else:
-            logger.warning(
+            logging.warning(
                 "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
                 f" dimension will be {new_num_tokens}. This might induce some performance reduction as *Tensor Cores* will not be available."
                 " For more details about this, or help on choosing the correct value for resizing, refer to this guide:"
@@ -2058,7 +2058,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             del state_dict[name]
                             warn_names.add(name)
             if len(warn_names) > 0:
-                logger.warning_once(
+                logging.warning_once(
                     f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
                 )
 
@@ -2480,7 +2480,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             is_8bit_serializable = False
 
         if trust_remote_code is True:
-            logger.warning(
+            logging.warning(
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
                 " ignored."
             )
@@ -2671,7 +2671,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for attr, val in loading_attr_dict.items():
                 config.quantization_config[attr] = val
             quantization_method_from_args = None
-            logger.warning(
+            logging.warning(
                 "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
                 "`quantization_config` attribute and has already quantized weights. However, loading attributes"
                 " (e.g. disable_exllama, use_cuda_fp16, max_input_length) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
@@ -2709,7 +2709,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             and load_in_8bit
         ):
             if quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES:
-                logger.warning(
+                logging.warning(
                     "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
                     " `quantization_config` attribute. The `quantization_config` attribute will be overwritten with the"
                     " one you passed to `from_pretrained`."
@@ -2754,7 +2754,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             and not load_in_8bit
             and quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES
         ):
-            logger.warning(
+            logging.warning(
                 "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
                 " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
                 " `pip install --upgrade bitsandbytes`."
@@ -3128,7 +3128,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.is_8bit_serializable = is_8bit_serializable
 
         if load_in_8bit and torch_dtype is None:
-            logger.warning(
+            logging.warning(
                 "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute."
                 "All non-linear modules will be loaded in full precision."
                 " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
@@ -3196,7 +3196,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
                 device_map_kwargs["special_dtypes"] = special_dtypes
             elif len(special_dtypes) > 0:
-                logger.warning(
+                logging.warning(
                     "This model has some weights that should be kept in higher precision, you need to upgrade "
                     "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
                 )
@@ -3743,7 +3743,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if len(unexpected_keys) > 0:
             archs = [] if model.config.architectures is None else model.config.architectures
-            warner = logger.warning if model.__class__.__name__ in archs else logger.info
+            warner = logging.warning if model.__class__.__name__ in archs else logger.info
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
@@ -3756,7 +3756,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
         if len(missing_keys) > 0:
-            logger.warning(
+            logging.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
                 " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
@@ -3775,7 +3775,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     for key, shape1, shape2 in mismatched_keys
                 ]
             )
-            logger.warning(
+            logging.warning(
                 f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
                 f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
                 f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
@@ -3940,7 +3940,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     f"or the `sep_token_id` ({self.config.sep_token_id}), and your input is not padded."
                 )
 
-            logger.warning_once(warn_string)
+            logging.warning_once(warn_string)
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

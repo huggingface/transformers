@@ -1834,7 +1834,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         )
 
         if input_ids_masked is None and input_ids is not None:
-            logger.warning(
+            logging.warning(
                 "`input_ids_masked` isn't passed which means MLM loss won't be calculated correctlySetting it to"
                 " `input_ids` so that model can work. Please pass it if this is unintentional. This is usually OKAY if"
                 " you are doing inference on unmasked text..."

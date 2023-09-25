@@ -271,7 +271,7 @@ def main():
     transformers.utils.logging.enable_explicit_format()
 
     # Log on each process the small summary:
-    logger.warning(
+    logging.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
@@ -366,7 +366,7 @@ def main():
     if data_args.max_seq_length is None:
         max_seq_length = tokenizer.model_max_length
         if max_seq_length > 1024:
-            logger.warning(
+            logging.warning(
                 "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
                 " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
                 " override this default with `--block_size xxx`."
@@ -374,7 +374,7 @@ def main():
             max_seq_length = 1024
     else:
         if data_args.max_seq_length > tokenizer.model_max_length:
-            logger.warning(
+            logging.warning(
                 f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
                 f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
             )

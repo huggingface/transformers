@@ -472,7 +472,7 @@ class DistributedTensorGatherer:
         if self._storage is None:
             return
         if self._offsets[0] != self.process_length:
-            logger.warning("Not all data has been set. Are you sure you passed all values?")
+            logging.warning("Not all data has been set. Are you sure you passed all values?")
         return nested_truncate(self._storage, self.num_samples)
 
 
@@ -853,7 +853,7 @@ def _get_learning_rate(self):
             last_lr = self.lr_scheduler.get_last_lr()[0]
         except AssertionError as e:
             if "need to call step" in str(e):
-                logger.warning("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
+                logging.warning("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
                 last_lr = 0
             else:
                 raise

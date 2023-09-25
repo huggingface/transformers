@@ -337,7 +337,7 @@ def main():
         "t5-3b",
         "t5-11b",
     ]:
-        logger.warning(
+        logging.warning(
             "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
             "`--source_prefix 'summarize: ' `"
         )
@@ -713,7 +713,7 @@ def main():
             logger.info(f"  Total optimization steps = {num_train_steps}")
 
             if training_args.xla and not data_args.pad_to_max_length:
-                logger.warning(
+                logging.warning(
                     "XLA training may be slow at first when --pad_to_max_length is not set "
                     "until all possible shapes have been compiled."
                 )

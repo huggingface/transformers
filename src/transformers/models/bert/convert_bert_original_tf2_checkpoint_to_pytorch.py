@@ -189,7 +189,7 @@ def load_tf2_weights_in_bert(model, tf_checkpoint_path, config):
                 trace.append("weight")
                 pointer = getattr(pointer, "weight")
             else:
-                logger.warning(f"Ignored {m_name}")
+                logging.warning(f"Ignored {m_name}")
         # for certain layers reshape is necessary
         trace = ".".join(trace)
         if re.match(r"(\S+)\.attention\.self\.(key|value|query)\.(bias|weight)", trace) or re.match(

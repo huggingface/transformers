@@ -464,7 +464,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning(
+                    logging.warning(
                         f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
                         " Please check that the vocabulary is not corrupted!"
                     )
@@ -804,10 +804,10 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         query_tokens = self.tokenize(query)
         if self.max_question_length is not None and len(query_tokens) > self.max_question_length:
-            logger.warning("Skipping query as its tokens are longer than the max question length")
+            logging.warning("Skipping query as its tokens are longer than the max question length")
             return "", []
         if self.min_question_length is not None and len(query_tokens) < self.min_question_length:
-            logger.warning("Skipping query as its tokens are shorter than the min question length")
+            logging.warning("Skipping query as its tokens are shorter than the min question length")
             return "", []
 
         return query, query_tokens
@@ -1093,7 +1093,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     ):
         if query is None:
             query = ""
-            logger.warning(
+            logging.warning(
                 "TAPAS is a question answering model but you have not passed a query. Please be aware that the "
                 "model will probably not behave correctly."
             )
@@ -1289,7 +1289,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         # Check lengths
         if max_length is None and len(encoded_inputs["input_ids"]) > self.model_max_length and verbose:
             if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
-                logger.warning(
+                logging.warning(
                     "Token indices sequence length is longer than the specified maximum sequence length "
                     f"for this model ({len(encoded_inputs['input_ids'])} > {self.model_max_length}). Running this "
                     "sequence through the model will result in indexing errors."

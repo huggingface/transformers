@@ -271,10 +271,10 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         Checks whether there might be something wrong with given input with regard to the model.
         """
         if max_length < min_length:
-            logger.warning(f"Your min_length={min_length} must be inferior than your max_length={max_length}.")
+            logging.warning(f"Your min_length={min_length} must be inferior than your max_length={max_length}.")
 
         if input_length < max_length:
-            logger.warning(
+            logging.warning(
                 f"Your max_length is set to {max_length}, but your input_length is only {input_length}. Since this is "
                 "a summarization task, where outputs shorter than the input are typically wanted, you might "
                 f"consider decreasing max_length manually, e.g. summarizer('...', max_length={input_length//2})"
@@ -306,7 +306,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
         if input_length > 0.9 * max_length:
-            logger.warning(
+            logging.warning(
                 f"Your input_length: {input_length} is bigger than 0.9 * max_length: {max_length}. You might consider "
                 "increasing your max_length manually, e.g. translator('...', max_length=400)"
             )

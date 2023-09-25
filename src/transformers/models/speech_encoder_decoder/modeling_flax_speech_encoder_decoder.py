@@ -905,7 +905,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                 kwargs_decoder["config"] = decoder_config
 
             if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
-                logger.warning(
+                logging.warning(
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
                     "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "

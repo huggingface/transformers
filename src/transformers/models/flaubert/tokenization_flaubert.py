@@ -249,7 +249,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
     ):
         do_lowercase_and_remove_accent = kwargs.pop("do_lowercase_and_remove_accent", None)
         if do_lowercase_and_remove_accent is not None:
-            logger.warning(
+            logging.warning(
                 "`do_lowercase_and_remove_accent` is passed as a keyword argument, but this won't do anything."
                 " `FlaubertTokenizer` will always set it to `False`."
             )
@@ -578,7 +578,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         with open(merge_file, "w", encoding="utf-8") as writer:
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning(
+                    logging.warning(
                         f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
                         " Please check that the tokenizer is not corrupted!"
                     )

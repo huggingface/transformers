@@ -395,18 +395,18 @@ def main():
         train_dataset = train_dataset.filter(filter_by_max_duration, remove_columns=["duration_in_seconds"])
         val_dataset = val_dataset.filter(filter_by_max_duration, remove_columns=["duration_in_seconds"])
         if len(train_dataset) > old_train_size:
-            logger.warning(
+            logging.warning(
                 f"Filtered out {len(train_dataset) - old_train_size} train example(s) longer than"
                 f" {data_args.max_duration_in_seconds} second(s)."
             )
         if len(val_dataset) > old_val_size:
-            logger.warning(
+            logging.warning(
                 f"Filtered out {len(val_dataset) - old_val_size} validation example(s) longer than"
                 f" {data_args.max_duration_in_seconds} second(s)."
             )
     logger.info(f"Split sizes: {len(train_dataset)} train and {len(val_dataset)} validation.")
 
-    logger.warning(f"Updated {len(text_updates)} transcript(s) using '{data_args.orthography}' orthography rules.")
+    logging.warning(f"Updated {len(text_updates)} transcript(s) using '{data_args.orthography}' orthography rules.")
     if logger.isEnabledFor(logging.DEBUG):
         for original_text, updated_text in text_updates:
             logger.debug(f'Updated text: "{original_text}" -> "{updated_text}"')

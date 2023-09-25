@@ -39,7 +39,7 @@ try:
     from xformers import ops as xops
 except ImportError:
     xops = None
-    logger.warning(
+    logging.warning(
         "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
     )
 
@@ -654,7 +654,7 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False

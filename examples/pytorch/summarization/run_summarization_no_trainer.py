@@ -345,7 +345,7 @@ def main():
         "t5-3b",
         "t5-11b",
     ]:
-        logger.warning(
+        logging.warning(
             "You're running a t5 model but didn't provide a source prefix, which is the expected, e.g. with "
             "`--source_prefix 'summarize: ' `"
         )
@@ -421,7 +421,7 @@ def main():
         config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=args.trust_remote_code)
     else:
         config = CONFIG_MAPPING[args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     if args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(

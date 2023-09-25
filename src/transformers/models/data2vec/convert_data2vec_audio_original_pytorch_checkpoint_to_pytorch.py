@@ -139,7 +139,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
         if not is_used:
             unused_weights.append(name)
 
-    logger.warning(f"Unused weights: {unused_weights}")
+    logging.warning(f"Unused weights: {unused_weights}")
 
 
 def access_by_string(module, path):

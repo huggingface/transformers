@@ -340,14 +340,14 @@ class FlaxGenerationMixin:
 
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask") is None:
-                logger.warning(
+                logging.warning(
                     "The attention mask and the pad token id were not set. As a consequence, you may observe "
                     "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
                 )
             eos_token_id = generation_config.eos_token_id
             if isinstance(eos_token_id, list):
                 eos_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
+            logging.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             generation_config.pad_token_id = eos_token_id
 
         if generation_config.decoder_start_token_id is None and self.config.is_encoder_decoder:
@@ -359,7 +359,7 @@ class FlaxGenerationMixin:
                 generation_config.pad_token_id is not None
                 and jnp.sum(input_ids[:, -1] == generation_config.pad_token_id) > 0
             ):
-                logger.warning(
+                logging.warning(
                     "A decoder-only architecture is being used, but right-padding was detected! For correct "
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
                 )
@@ -390,7 +390,7 @@ class FlaxGenerationMixin:
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length and generation_config.max_length is not None:
-                logger.warning(
+                logging.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
                     "Please refer to the documentation for more information. "
@@ -405,7 +405,7 @@ class FlaxGenerationMixin:
             )
         if input_ids_seq_length >= generation_config.max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-            logger.warning(
+            logging.warning(
                 f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
                 f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
                 " increasing`max_new_tokens`."

@@ -105,6 +105,6 @@ class RunCommand(BaseTransformersCLICommand):
         # Saving data
         if self._nlp.binary_output:
             binary_path = self._reader.save_binary(outputs)
-            logger.warning(f"Current pipeline requires output to be in binary format, saving at {binary_path}")
+            logging.warning(f"Current pipeline requires output to be in binary format, saving at {binary_path}")
         else:
             self._reader.save(outputs)

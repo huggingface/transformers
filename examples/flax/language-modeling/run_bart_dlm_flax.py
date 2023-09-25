@@ -625,7 +625,7 @@ def main():
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
@@ -707,11 +707,11 @@ def main():
             summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir))
         except ImportError as ie:
             has_tensorboard = False
-            logger.warning(
+            logging.warning(
                 f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
             )
     else:
-        logger.warning(
+        logging.warning(
             "Unable to display metrics through TensorBoard because the package is not installed: "
             "Please run pip install tensorboard to enable."
         )

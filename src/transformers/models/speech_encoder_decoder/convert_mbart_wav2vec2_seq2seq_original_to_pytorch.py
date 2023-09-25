@@ -137,7 +137,7 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
         if not is_used:
             unused_weights.append(name)
 
-    logger.warning(f"Unused weights: {unused_weights}")
+    logging.warning(f"Unused weights: {unused_weights}")
 
 
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
@@ -292,8 +292,8 @@ def convert_wav2vec2_checkpoint(
     # load decoder weights
     hf_decoder = MBartForCausalLM(decoder_config)
     missing_keys, unexpected_keys = hf_decoder.model.decoder.load_state_dict(model.decoder.state_dict(), strict=False)
-    logger.warning(f"The following keys are missing when loading the decoder weights: {missing_keys}")
-    logger.warning(f"The following keys are unexpected when loading the decoder weights: {unexpected_keys}")
+    logging.warning(f"The following keys are missing when loading the decoder weights: {missing_keys}")
+    logging.warning(f"The following keys are unexpected when loading the decoder weights: {unexpected_keys}")
 
     hf_wav2vec = SpeechEncoderDecoderModel(encoder=hf_encoder, decoder=hf_decoder)
     hf_wav2vec.config.tie_word_embeddings = False

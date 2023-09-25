@@ -585,7 +585,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         # Check for warnings if the attention_mask is missing.
         logger = logging.get_logger("transformers.modeling_utils")
         # clear cache so we can test the warning is emitted (from `warning_once`).
-        logger.warning_once.cache_clear()
+        logging.warning_once.cache_clear()
 
         with CaptureLogger(logger) as cl:
             model = BertModel(config=config)

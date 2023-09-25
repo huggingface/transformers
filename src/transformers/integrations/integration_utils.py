@@ -49,7 +49,7 @@ if _has_comet:
             _has_comet = True
         else:
             if os.getenv("COMET_MODE", "").upper() != "DISABLED":
-                logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
+                logging.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
             _has_comet = False
     except (ImportError, ValueError):
         _has_comet = False
@@ -78,7 +78,7 @@ from ..utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 def is_wandb_available():
     # any value of WANDB_DISABLED disables wandb
     if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
-        logger.warning(
+        logging.warning(
             "Using the `WANDB_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
             "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
         )
@@ -263,7 +263,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     if not trainer._memory_tracker.skip_memory_metrics:
         from ..trainer_utils import TrainerMemoryTracker
 
-        logger.warning(
+        logging.warning(
             "Memory tracking for your Trainer is currently "
             "enabled. Automatically disabling the memory tracker "
             "since the memory tracker is not serializable."
@@ -300,7 +300,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         # `keep_checkpoints_num=0` would disabled checkpointing
         trainer.use_tune_checkpoints = True
         if kwargs["keep_checkpoints_num"] > 1:
-            logger.warning(
+            logging.warning(
                 f"Currently keeping {kwargs['keep_checkpoints_num']} checkpoints for each trial. "
                 "Checkpoints are usually huge, "
                 "consider setting `keep_checkpoints_num=1`."
@@ -311,7 +311,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         # Check if checkpointing is enabled for PopulationBasedTraining
         if isinstance(kwargs["scheduler"], PopulationBasedTraining):
             if not trainer.use_tune_checkpoints:
-                logger.warning(
+                logging.warning(
                     "You are using PopulationBasedTraining but you haven't enabled checkpointing. "
                     "This means your trials will train from scratch everytime they are exploiting "
                     "new configurations. Consider enabling checkpointing by passing "
@@ -512,7 +512,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
             trainer.objective = trainer.compute_objective(metrics)
             format_metrics = rewrite_logs(metrics)
             if metric not in format_metrics:
-                logger.warning(
+                logging.warning(
                     f"Provided metric {metric} not found. This might result in unexpected sweeps charts. The available"
                     f" metrics are {format_metrics.keys()}"
                 )
@@ -648,7 +648,7 @@ class TensorBoardCallback(TrainerCallback):
                 if isinstance(v, (int, float)):
                     self.tb_writer.add_scalar(k, v, state.global_step)
                 else:
-                    logger.warning(
+                    logging.warning(
                         "Trainer is attempting to log a value of "
                         f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
                         "This invocation of Tensorboard's writer.add_scalar() "
@@ -1001,7 +1001,7 @@ class MLflowCallback(TrainerCallback):
             for name, value in list(combined_dict.items()):
                 # internally, all values are converted to str in MLflow
                 if len(str(value)) > self._MAX_PARAM_VAL_LENGTH:
-                    logger.warning(
+                    logging.warning(
                         f'Trainer is attempting to log a value of "{value}" for key "{name}" as a parameter. MLflow\'s'
                         " log_param() only accepts values no longer than 250 characters so we dropped this attribute."
                         " You can use `MLFLOW_FLATTEN_PARAMS` environment variable to flatten the parameters and"
@@ -1031,7 +1031,7 @@ class MLflowCallback(TrainerCallback):
                 if isinstance(v, (int, float)):
                     metrics[k] = v
                 else:
-                    logger.warning(
+                    logging.warning(
                         f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
                         "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
@@ -1314,7 +1314,7 @@ class NeptuneCallback(TrainerCallback):
                 shutil.copytree(relative_path, copy_path)
                 target_path = consistent_checkpoint_path
             except IOError as e:
-                logger.warning(
+                logging.warning(
                     "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'."
                     "Could fail trying to upload.".format(e)
                 )
@@ -1528,7 +1528,7 @@ class ClearMLCallback(TrainerCallback):
                             title=k, series="train", value=v, iteration=state.global_step
                         )
                 else:
-                    logger.warning(
+                    logging.warning(
                         "Trainer is attempting to log a value of "
                         f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
                         "This invocation of ClearML logger's  report_scalar() "
@@ -1576,7 +1576,7 @@ class FlyteCallback(TrainerCallback):
             raise ImportError("FlyteCallback requires flytekit to be installed. Run `pip install flytekit`.")
 
         if not is_flyte_deck_standard_available() or not is_pandas_available():
-            logger.warning(
+            logging.warning(
                 "Syncing log history requires both flytekitplugins-deck-standard and pandas to be installed. "
                 "Run `pip install flytekitplugins-deck-standard pandas` to enable this feature."
             )

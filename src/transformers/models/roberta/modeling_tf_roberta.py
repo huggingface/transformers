@@ -1085,7 +1085,7 @@ class TFRobertaForCausalLM(TFRobertaPreTrainedModel, TFCausalLanguageModelingLos
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `TFRobertaLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `TFRobertaLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.lm_head = TFRobertaLMHead(config, input_embeddings=self.roberta.embeddings, name="lm_head")

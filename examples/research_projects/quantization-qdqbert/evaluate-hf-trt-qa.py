@@ -36,7 +36,7 @@ from transformers import AutoTokenizer, EvalPrediction, default_data_collator, s
 from transformers.trainer_pt_utils import nested_concat, nested_truncate
 
 
-TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+TRT_LOGGER = trt.Logger(trt.logging.warning)
 absl_logger = absl_logging.get_absl_logger()
 absl_logger.setLevel(logging.WARNING)
 
@@ -287,7 +287,7 @@ answer_column_name = "answers" if "answers" in column_names else column_names[2]
 pad_on_right = tokenizer.padding_side == "right"
 
 if args.max_seq_length > tokenizer.model_max_length:
-    logger.warning(
+    logging.warning(
         f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the"
         f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
     )

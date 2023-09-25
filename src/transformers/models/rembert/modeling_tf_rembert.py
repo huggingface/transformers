@@ -989,7 +989,7 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
         super().__init__(config, *inputs, **kwargs)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `TFRemBertForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
@@ -1063,7 +1063,7 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `TFRemBertForCausalLM` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `TFRemBertForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.rembert = TFRemBertMainLayer(config, name="rembert", add_pooling_layer=False)
         self.mlm = TFRemBertMLMHead(config, input_embeddings=self.rembert.embeddings, name="mlm___cls")

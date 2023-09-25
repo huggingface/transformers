@@ -529,7 +529,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                     "`use_cache=False`..."
                 )

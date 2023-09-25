@@ -354,7 +354,7 @@ if __name__ == "__main__":
 
     # Log on each process the small summary:
     logger = logging.getLogger(__name__)
-    logger.warning(
+    logging.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
@@ -387,7 +387,7 @@ if __name__ == "__main__":
         config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
+        logging.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -420,7 +420,7 @@ if __name__ == "__main__":
             from flax.metrics.tensorboard import SummaryWriter
         except ImportError as ie:
             has_tensorboard = False
-            logger.warning(
+            logging.warning(
                 f"Unable to display metrics through TensorBoard because some package are not installed: {ie}"
             )
 

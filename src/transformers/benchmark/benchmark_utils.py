@@ -241,7 +241,7 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
         return memory
 
     if not is_psutil_available():
-        logger.warning(
+        logging.warning(
             "Psutil not installed, we won't log CPU memory usage. "
             "Install Psutil (pip install psutil) to use CPU memory tracing."
         )
@@ -363,7 +363,7 @@ def start_memory_tracing(
     if is_psutil_available():
         process = psutil.Process(os.getpid())
     else:
-        logger.warning(
+        logging.warning(
             "Psutil not installed, we won't log CPU memory usage. "
             "Install psutil (pip install psutil) to use CPU memory tracing."
         )
@@ -375,12 +375,12 @@ def start_memory_tracing(
             devices = list(range(nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
             nvml.nvmlShutdown()
         except (OSError, nvml.NVMLError):
-            logger.warning("Error while initializing communication with GPU. We won't perform GPU memory tracing.")
+            logging.warning("Error while initializing communication with GPU. We won't perform GPU memory tracing.")
             log_gpu = False
         else:
             log_gpu = is_torch_available() or is_tf_available()
     else:
-        logger.warning(
+        logging.warning(
             "py3nvml not installed, we won't log GPU memory usage. "
             "Install py3nvml (pip install py3nvml) to use GPU memory tracing."
         )
@@ -620,7 +620,7 @@ class Benchmark(ABC):
         )
 
         if self.args.memory and os.getenv("TRANSFORMERS_USE_MULTIPROCESSING") == 0:
-            logger.warning(
+            logging.warning(
                 "Memory consumption will not be measured accurately if `args.multi_process` is set to `False.` The"
                 " flag 'TRANSFORMERS_USE_MULTIPROCESSING' should only be disabled for debugging / testing."
             )
@@ -805,7 +805,7 @@ class Benchmark(ABC):
             if is_psutil_available():
                 info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)
             else:
-                logger.warning(
+                logging.warning(
                     "Psutil not installed, we won't log available CPU memory. "
                     "Install psutil (pip install psutil) to log available CPU memory."
                 )
@@ -823,7 +823,7 @@ class Benchmark(ABC):
                     info["gpu_performance_state"] = nvml.nvmlDeviceGetPerformanceState(handle)
                     nvml.nvmlShutdown()
                 else:
-                    logger.warning(
+                    logging.warning(
                         "py3nvml not installed, we won't log GPU memory usage. "
                         "Install py3nvml (pip install py3nvml) to log information about GPU."
                     )

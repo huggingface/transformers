@@ -93,13 +93,13 @@ class Conversation:
         """
         if len(self) > 0 and self[-1]["role"] == "user":
             if overwrite:
-                logger.warning(
+                logging.warning(
                     f'User input added while unprocessed input was existing: "{self[-1]["content"]}" was overwritten '
                     f'with: "{text}".'
                 )
                 self[-1]["content"] = text
             else:
-                logger.warning(
+                logging.warning(
                     f'User input added while unprocessed input was existing: "{self[-1]["content"]}" new input '
                     f'ignored: "{text}". Set `overwrite` to True to overwrite unprocessed user input'
                 )
@@ -275,7 +275,7 @@ class ConversationalPipeline(Pipeline):
 
         n = model_inputs["input_ids"].shape[1]
         if max_length - minimum_tokens < n:
-            logger.warning(
+            logging.warning(
                 f"Conversation input is too long ({n}), trimming it to {max_length - minimum_tokens} tokens. Consider increasing `max_length` to avoid truncation."
             )
             trim = max_length - minimum_tokens

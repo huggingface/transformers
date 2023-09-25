@@ -621,7 +621,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
                 raise ImportError("If not data_dir is specified, tensorflow_datasets needs to be installed.")
 
             if args.version_2_with_negative:
-                logger.warning("tensorflow_datasets does not handle version 2 of SQuAD.")
+                logging.warning("tensorflow_datasets does not handle version 2 of SQuAD.")
 
             tfds_examples = tfds.load("squad")
             examples = SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=evaluate)
@@ -961,7 +961,7 @@ def main():
         args.regularization = None
 
     if args.doc_stride >= args.max_seq_length - args.max_query_length:
-        logger.warning(
+        logging.warning(
             "WARNING - You've set a doc stride which may be superior to the document length in some "
             "examples. This could result in errors when building features from the examples. Please reduce the doc "
             "stride or increase the maximum length to ensure the features are correctly built."
@@ -1005,7 +1005,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
     )
-    logger.warning(
+    logging.warning(
         "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
         args.local_rank,
         device,

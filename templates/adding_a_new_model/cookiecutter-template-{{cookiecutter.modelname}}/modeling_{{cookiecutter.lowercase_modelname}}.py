@@ -526,7 +526,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
         return_dict=True,
     ):
         if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning(
+            logging.warning(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
             )
             use_cache = False
@@ -931,7 +931,7 @@ class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_m
         super().__init__(config)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `{{cookiecutter.camelcase_modelname}}ForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
@@ -1037,7 +1037,7 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `{{cookiecutter.camelcase_modelname}}ForCausalLM` as a standalone, add `is_decoder=True.`")
+            logging.warning("If you want to use `{{cookiecutter.camelcase_modelname}}ForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
         self.cls = {{cookiecutter.camelcase_modelname}}OnlyMLMHead(config)
@@ -2526,7 +2526,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
 
         # decoder layers
         if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning("`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`...")
+            logging.warning("`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`...")
             use_cache = False
 
         all_hidden_states = () if output_hidden_states else None
@@ -2821,7 +2821,7 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutte
 
         if labels is not None:
             if use_cache:
-                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+                logging.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)

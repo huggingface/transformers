@@ -213,7 +213,7 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     )
 
     if not has_been_replaced:
-        logger.warning(
+        logging.warning(
             "You are loading your model in 8bit or 4bit but no linear modules were found in your model."
             " Please double check your model architecture, or submit an issue on github if you think this is"
             " a bug."

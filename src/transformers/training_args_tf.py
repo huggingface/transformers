@@ -262,7 +262,7 @@ class TFTrainingArguments(TrainingArguments):
         The actual batch size for training (may differ from `per_gpu_train_batch_size` in distributed training).
         """
         if self.per_gpu_train_batch_size:
-            logger.warning(
+            logging.warning(
                 "Using deprecated `--per_gpu_train_batch_size` argument which will be removed in a future "
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
@@ -275,7 +275,7 @@ class TFTrainingArguments(TrainingArguments):
         The actual batch size for evaluation (may differ from `per_gpu_eval_batch_size` in distributed training).
         """
         if self.per_gpu_eval_batch_size:
-            logger.warning(
+            logging.warning(
                 "Using deprecated `--per_gpu_eval_batch_size` argument which will be removed in a future "
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )

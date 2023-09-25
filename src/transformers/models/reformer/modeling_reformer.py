@@ -717,7 +717,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         if num_buckets > num_buckets_limit:
             num_buckets = [2 ** (num_buckets_pow_2 // 2), 2 ** (num_buckets_pow_2 - num_buckets_pow_2 // 2)]
 
-        logger.warning(f"config.num_buckets is not set. Setting config.num_buckets to {num_buckets}...")
+        logging.warning(f"config.num_buckets is not set. Setting config.num_buckets to {num_buckets}...")
 
         # set num buckets in config to be properly saved
         self.config.num_buckets = num_buckets
@@ -2450,7 +2450,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         self.reformer = ReformerModel(config)
         self.classifier = ReformerClassificationHead(config)
         if config.is_decoder is True:
-            logger.warning("You might want to disable causal masking for sequence classification")
+            logging.warning("You might want to disable causal masking for sequence classification")
 
         # Initialize weights and apply final processing
         self.post_init()

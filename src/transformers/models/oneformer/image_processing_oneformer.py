@@ -576,7 +576,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
         if is_scaled_image(image) and do_rescale:
-            logger.warning_once(
+            logging.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
@@ -1281,7 +1281,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         """
 
         if label_ids_to_fuse is None:
-            logger.warning("`label_ids_to_fuse` unset. No instance will be fused.")
+            logging.warning("`label_ids_to_fuse` unset. No instance will be fused.")
             label_ids_to_fuse = set()
 
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]

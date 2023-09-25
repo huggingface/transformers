@@ -321,7 +321,7 @@ class PretrainedConfig(PushToHubMixin):
                 raise ValueError("Argument id2label should be a dictionary.")
             num_labels = kwargs.pop("num_labels", None)
             if num_labels is not None and len(self.id2label) != num_labels:
-                logger.warning(
+                logging.warning(
                     f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
                     f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
                 )
@@ -362,7 +362,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # TPU arguments
         if kwargs.pop("xla_device", None) is not None:
-            logger.warning(
+            logging.warning(
                 "The `xla_device` argument has been deprecated in v4.4.0 of Transformers. It is ignored and you can "
                 "safely remove it from your `config.json` file."
             )
@@ -590,7 +590,7 @@ class PretrainedConfig(PushToHubMixin):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
+            logging.warning(
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
@@ -648,7 +648,7 @@ class PretrainedConfig(PushToHubMixin):
         commit_hash = kwargs.pop("_commit_hash", None)
 
         if trust_remote_code is True:
-            logger.warning(
+            logging.warning(
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
                 " ignored."
             )

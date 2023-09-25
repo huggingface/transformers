@@ -1001,7 +1001,7 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         super().__init__(config, *inputs, **kwargs)
 
         if config.is_decoder:
-            logger.warning(
+            logging.warning(
                 "If you want to use `TFLayoutLMForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )

@@ -57,7 +57,7 @@ def extract_warnings_from_single_artifact(artifact_path, targets):
                         with z.open(filename) as fp:
                             parse_line(fp)
         except Exception:
-            logger.warning(
+            logging.warning(
                 f"{artifact_path} is either an invalid zip file or something else wrong. This file is skipped."
             )
 

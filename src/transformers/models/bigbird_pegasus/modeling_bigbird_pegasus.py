@@ -1885,7 +1885,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         if self.attention_type == "block_sparse" and input_shape[1] <= max_tokens_to_attend:
             # change attention_type from block_sparse to original_full
             sequence_length = input_shape[1]
-            logger.warning(
+            logging.warning(
                 "Attention type 'block_sparse' is not possible if sequence_length: "
                 f"{sequence_length} <= num global tokens: 2 * config.block_size "
                 "+ min. num sliding tokens: 3 * config.block_size "
@@ -2258,7 +2258,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logging.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -2562,7 +2562,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
 
         if labels is not None:
             if use_cache:
-                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+                logging.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(

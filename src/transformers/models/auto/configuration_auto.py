@@ -1089,7 +1089,7 @@ def sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote
 
         if isinstance(pretrained_model_name_or_path, str) and pretrained_model_name_or_path.lower() in revision_dict:
             revision = revision_dict.get(pretrained_model_name_or_path.lower())
-            logger.warning(
+            logging.warning(
                 "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
                 f"transformers library implementation. {pretrained_model_name_or_path}'s revision is set to a version that doesn't "
                 f"leverage remote code ({revision}).\n\nIn order to override this, please set a revision manually or set "

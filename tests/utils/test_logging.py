@@ -54,7 +54,7 @@ class HfArgumentParserTest(unittest.TestCase):
         # should be able to log warnings (if default settings weren't overridden by `pytest --log-level-all`)
         if level_origin <= logging.WARNING:
             with CaptureLogger(logger) as cl:
-                logger.warning(msg)
+                logging.warning(msg)
             self.assertEqual(cl.out, msg + "\n")
 
         # this is setting the level for all of `transformers.*` loggers
@@ -62,13 +62,13 @@ class HfArgumentParserTest(unittest.TestCase):
 
         # should not be able to log warnings
         with CaptureLogger(logger) as cl:
-            logger.warning(msg)
+            logging.warning(msg)
         self.assertEqual(cl.out, "")
 
         # should be able to log warnings again
         logging.set_verbosity_warning()
         with CaptureLogger(logger) as cl:
-            logger.warning(msg)
+            logging.warning(msg)
         self.assertEqual(cl.out, msg + "\n")
 
         # restore to the original level
@@ -108,7 +108,7 @@ class HfArgumentParserTest(unittest.TestCase):
         # no need to restore as nothing was changed
 
     def test_advisory_warnings(self):
-        # testing `logger.warning_advice()`
+        # testing `logging.warning_advice()`
         transformers.utils.logging._reset_library_root_logger()
 
         logger = logging.get_logger("transformers.models.bart.tokenization_bart")
@@ -117,13 +117,13 @@ class HfArgumentParserTest(unittest.TestCase):
         with mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS="1"):
             # nothing should be logged as env var disables this method
             with CaptureLogger(logger) as cl:
-                logger.warning_advice(msg)
+                logging.warning_advice(msg)
             self.assertEqual(cl.out, "")
 
         with mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS=""):
             # should log normally as TRANSFORMERS_NO_ADVISORY_WARNINGS is unset
             with CaptureLogger(logger) as cl:
-                logger.warning_advice(msg)
+                logging.warning_advice(msg)
             self.assertEqual(cl.out, msg + "\n")
 
 

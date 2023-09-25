@@ -1530,7 +1530,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             kwargs["return_dict_in_generate"] = True
 
             if getattr(generation_config, "task", None) == "translate":
-                logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
+                logging.warning("Token-level timestamps may not be reliable for task 'translate'.")
             if not hasattr(generation_config, "alignment_heads"):
                 raise ValueError(
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "
