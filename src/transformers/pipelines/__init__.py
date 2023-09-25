@@ -763,6 +763,8 @@ def pipeline(
     elif config is None and isinstance(model, str):
         # Check for an adapter file in the model path if PEFT is available
         if is_peft_available():
+            # `find_adapter_config_file` doesn't accept `trust_remote_code`
+            _hub_kwargs = {k: v for k, v in hub_kwargs.items() if k != "trust_remote_code"}
             maybe_adapter_path = find_adapter_config_file(model, **hub_kwargs)
 
             if maybe_adapter_path is not None:
