@@ -1,22 +1,24 @@
 """PyTorch SuperPoint model."""
 
-from typing import Tuple, Union, Optional
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
 
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import (
-    ImagePointDescriptionOutput,
     BaseModelOutputWithNoAttention,
+    ImagePointDescriptionOutput,
 )
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
+
 from ...utils import (
-    logging,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    add_code_sample_docstrings,
+    logging,
 )
+
 
 logger = logging.get_logger(__name__)
 
@@ -141,9 +143,8 @@ class SuperPointInterestPointDecoder(nn.Module):
     The SuperPointInterestPointDecoder uses the output of the SuperPointEncoder to compute the keypoint with scores.
     The scores are first computed by a convolutional layer, then a softmax is applied to get a probability distribution
     over the 65 possible keypoint classes. The keypoints are then extracted from the scores by thresholding and
-    non-maximum suppression.
-    Post-processing is then applied to remove keypoints too close to the image borders as well as to keep only the k
-    keypoints with highest score.
+    non-maximum suppression. Post-processing is then applied to remove keypoints too close to the image borders as well
+    as to keep only the k keypoints with highest score.
     """
 
     def __init__(self, config: SuperPointConfig):
@@ -242,11 +243,11 @@ class SuperPointInterestPointDecoder(nn.Module):
 
 class SuperPointDescriptorDecoder(nn.Module):
     """
-    The SuperPointDescriptorDecoder uses the outputs of both the SuperPointEncoder and the SuperPointInterestPointDecoder
-    to compute the descriptors at the keypoints locations.
+    The SuperPointDescriptorDecoder uses the outputs of both the SuperPointEncoder and the
+    SuperPointInterestPointDecoder to compute the descriptors at the keypoints locations.
 
-    The descriptors are first computed by a convolutional layer, then normalized to have a norm of 1.
-    The descriptors are then interpolated at the keypoints locations.
+    The descriptors are first computed by a convolutional layer, then normalized to have a norm of 1. The descriptors
+    are then interpolated at the keypoints locations.
     """
 
     def __init__(self, config: SuperPointConfig):
@@ -332,8 +333,8 @@ class SuperPointPreTrainedModel(PreTrainedModel):
     def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor):
         """
         Assuming pixel_values has shape (batch_size, 3, height, width), and that all channels values are the same,
-        extract the first channel value to get a tensor of shape (batch_size, 1, height, width) for SuperPoint.
-        This is a workaround for the issue discussed in :
+        extract the first channel value to get a tensor of shape (batch_size, 1, height, width) for SuperPoint. This is
+        a workaround for the issue discussed in :
         https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
         Args:
@@ -350,7 +351,7 @@ SUPERPOINT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
-    
+
     Parameters:
         config ([`SuperPointConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -377,10 +378,9 @@ Args:
 class SuperPointModel(SuperPointPreTrainedModel):
     """
     SuperPoint model. It consists of a SuperPointEncoder, a SuperPointInterestPointDecoder and a
-    SuperPointDescriptorDecoder.
-    SuperPoint was proposed in `SuperPoint: Self-Supervised Interest Point Detection and Description
-    <https://arxiv.org/abs/1712.07629>`__ by Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabinovich. It is a fully
-    convolutional neural network that extracts keypoints and descriptors from an image. It is trained in a
+    SuperPointDescriptorDecoder. SuperPoint was proposed in `SuperPoint: Self-Supervised Interest Point Detection and
+    Description <https://arxiv.org/abs/1712.07629>`__ by Daniel DeTone, Tomasz Malisiewicz, and Andrew Rabinovich. It
+    is a fully convolutional neural network that extracts keypoints and descriptors from an image. It is trained in a
     self-supervised manner, using a combination of a photometric loss and a loss based on the homographic adaptation of
     keypoints. It is made of a convolutional encoder and two decoders: one for keypoints and one for descriptors.
     """

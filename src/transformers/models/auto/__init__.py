@@ -22,6 +22,7 @@ from ...utils import (
     is_torch_available,
 )
 
+
 _import_structure = {
     "auto_factory": ["get_values"],
     "configuration_auto": ["ALL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"],
@@ -236,6 +237,7 @@ if TYPE_CHECKING:
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
+            MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING,
             MODEL_FOR_MASK_GENERATION_MAPPING,
             MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -276,6 +278,7 @@ if TYPE_CHECKING:
             AutoModelForImageSegmentation,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
+            AutoModelForInterestPointDescription,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMaskGeneration,

@@ -1,19 +1,20 @@
-from typing import Dict, Union, Optional
+from typing import Dict, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, get_size_dict, BatchFeature
-from ...image_transforms import resize, convert_to_grayscale, to_channel_dimension_format, get_resize_output_image_size
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import convert_to_grayscale, get_resize_output_image_size, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
+    ImageInput,
+    infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    is_scaled_image,
-    infer_channel_dimension_format,
-    ImageInput,
 )
-from ...utils import logging, TensorType
+from ...utils import TensorType, logging
+
 
 logger = logging.get_logger(__name__)
 
