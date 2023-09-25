@@ -1160,8 +1160,8 @@ class Beit3ImageTextMatchingModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.Tensor] = None
-    text_hidden: Optional[torch.FloatTensor] = None
-    image_hidden: Optional[torch.FloatTensor] = None
+    text_hidden  = None
+    image_hidde = None
 
 
 @add_start_docstrings(
@@ -1227,4 +1227,4 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
                 else outputs
             )
 
-        return Beit3ImageTextMatchingModelOutput(similarity, text_out, vision_out)
+        return Beit3ImageTextMatchingModelOutput(similarity, vision_cls, text_cls)
