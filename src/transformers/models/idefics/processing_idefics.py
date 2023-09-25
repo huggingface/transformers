@@ -323,13 +323,13 @@ class IdeficsProcessor(ProcessorMixin):
 
             all_prompts.append(full_text)
             all_images.append(image_objects)
-        
+
         text_encoding = self.tokenizer(
-              text=all_prompts,
-              add_special_tokens=False,
-              padding=padding,
-              truncation=truncation,
-              max_length=max_length,
+            text=all_prompts,
+            add_special_tokens=False,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
         all_texts = text_encoding["input_ids"]
 
@@ -411,4 +411,3 @@ class IdeficsProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
