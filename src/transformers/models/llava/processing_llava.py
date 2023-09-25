@@ -26,12 +26,11 @@ from ...utils import (
     TensorType,
     is_torch_available,
 )
+from ..clip import CLIPVisionModel
 
 
 if is_torch_available():
     import torch
-
-    from ..clip import CLIPVisionModel
 
 
 class LlavaProcessor(ProcessorMixin):
