@@ -212,18 +212,3 @@ trainer.train()
 ```
 
 保存するトレーニング済みアダプタとそれを読み込むための手順：
-
-
-<!--
-TODO: (@younesbelkada @stevhliu)
--   Link to PEFT docs for further details
--   Trainer  
--   8-bit / 4-bit examples ?
--->
-
-
-
-
-
-
-

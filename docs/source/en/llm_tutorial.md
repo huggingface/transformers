@@ -62,15 +62,6 @@ A critical aspect of autoregressive generation with LLMs is how to select the ne
     <figcaption>"Autoregressive generation iteratively selects the next token from a probability distribution to generate text"</figcaption>
 </figure>
 
-<!-- [GIF 2 -- TEXT GENERATION] -->
-<figure class="image table text-center m-0 w-full">
-    <video
-        style="max-width: 90%; margin: auto;"
-        autoplay loop muted playsinline
-        src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_2_1080p.mov"
-    ></video>
-    <figcaption>"Autoregressive generation iteratively selects the next token from a probability distribution to generate text"</figcaption>
-</figure>
 ```py
 >>> from transformers import AutoModelForCausalLM
 
