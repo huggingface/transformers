@@ -1297,25 +1297,23 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             else:
                 loss_val = self.loss(y_hat * model_output.scale + model_output.loc, future_values)
         return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=model_output.hidden_states)
-    
+
     @torch.no_grad()
-    def generate(self, past_values: torch.Tensor, output_hidden_states: Optional[bool] = None) -> SampleTSPredictionOutput:
+    def generate(
+        self, past_values: torch.Tensor, output_hidden_states: Optional[bool] = None
+    ) -> SampleTSPredictionOutput:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         model_output = self.model(past_values, output_hidden_states=output_hidden_states)
         y_hat = self.head(model_output.last_hidden_state)
         if self.distribution_output:
-            distribution = self.distribution_output.distribution(
-                y_hat, loc=model_output.loc, scale=model_output.scale
-            )
+            distribution = self.distribution_output.distribution(y_hat, loc=model_output.loc, scale=model_output.scale)
             y_hat = distribution.sample(sample_shape=(self.config.num_parallel_samples,))
         else:
             y_hat = y_hat * model_output.scale + model_output.loc
-        
-        return SampleTSPredictionOutput(sequences=y_hat)
-    
 
+        return SampleTSPredictionOutput(sequences=y_hat)
 
 
 @dataclass
