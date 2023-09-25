@@ -96,11 +96,7 @@ class SuperPointModelTester:
 
 @require_torch
 class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (SuperPointModel, SuperPointModelForInterestPointDescription)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (SuperPointModel, SuperPointModelForInterestPointDescription) if is_torch_available() else ()
     all_generative_model_classes = () if is_torch_available() else ()
 
     fx_compatible = False
