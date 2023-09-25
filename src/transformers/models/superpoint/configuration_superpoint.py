@@ -65,7 +65,7 @@ class SuperPointConfig(PretrainedConfig):
         self.keypoint_threshold = keypoint_threshold
         self.max_keypoints = max_keypoints
         self.nms_radius = nms_radius
-        self.remove_borders = border_removal_distance
+        self.border_removal_distance = border_removal_distance
         self.initializer_range = initializer_range
 
         super().__init__(**kwargs)

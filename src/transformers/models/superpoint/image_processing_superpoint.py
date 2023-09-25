@@ -30,7 +30,7 @@ def is_grayscale(
 
 class SuperPointImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a ConvNeXT image processor.
+    Constructs a SuperPoint image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):

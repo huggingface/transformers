@@ -298,6 +298,10 @@ The following auto classes are available for the following computer vision tasks
 
 [[autodoc]] AutoModelForZeroShotObjectDetection
 
+### AutoModelForInterestPointDescription
+
+[[autodoc]] AutoModelForInterestPointDescription
+
 ## Audio
 
 The following auto classes are available for the following audio tasks.
