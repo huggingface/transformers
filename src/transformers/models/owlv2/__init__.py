@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_owlv2 import Owlv2mageProcessor
+        from .image_processing_owlv2 import Owlv2ImageProcessor
 
 else:
     import sys

@@ -5032,7 +5032,7 @@ if TYPE_CHECKING:
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.oneformer import OneFormerImageProcessor
-        from .models.owlv2 import Owlv2mageProcessor
+        from .models.owlv2 import Owlv2ImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
