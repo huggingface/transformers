@@ -129,7 +129,7 @@ class PeftAdapterMixin:
             adapter_state_dict (`Dict[str, torch.Tensor]`, *optional*):
                 The state dict of the adapter to load. This argument is used in case users directly pass PEFT state
                 dicts
-            adapter_hub_kwargs (`Dict[str, Any]`, *optional*):
+            adapter_kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to the `from_pretrained` method of the adapter config and
                 `find_adapter_config_file` method.
         """
