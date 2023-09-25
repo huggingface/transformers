@@ -2431,8 +2431,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 commit_hash = getattr(config, "_commit_hash", None)
 
         if is_peft_available():
-            if adapter_kwargs is None:
-                adapter_kwargs = {}
 
             _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
 
