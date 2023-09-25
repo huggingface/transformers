@@ -50,7 +50,7 @@ class LayoutLMv3Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         feature_extractor = None
         if "feature_extractor" in kwargs:
-            warnings.warn(
+            logger.warning(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
                 " instead.",
                 FutureWarning,
@@ -183,7 +183,7 @@ class LayoutLMv3Processor(ProcessorMixin):
 
     @property
     def feature_extractor_class(self):
-        warnings.warn(
+        logger.warning(
             "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
             FutureWarning,
         )
@@ -191,7 +191,7 @@ class LayoutLMv3Processor(ProcessorMixin):
 
     @property
     def feature_extractor(self):
-        warnings.warn(
+        logger.warning(
             "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
             FutureWarning,
         )

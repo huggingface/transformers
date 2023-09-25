@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class CLIPFeatureExtractor(CLIPImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logger.warning(
             "The class CLIPFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
             " use CLIPImageProcessor instead.",
             FutureWarning,

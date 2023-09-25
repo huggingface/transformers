@@ -125,12 +125,12 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         )
 
         if frame_signal_scale != 1.0:
-            warnings.warn(
+            logger.warning(
                 "The argument `frame_signal_scale` is deprecated and will be removed in version 4.30.0 of Transformers",
                 FutureWarning,
             )
         if reduction_factor != 2.0:
-            warnings.warn(
+            logger.warning(
                 "The argument `reduction_factor` is deprecated and will be removed in version 4.30.0 of Transformers",
                 FutureWarning,
             )

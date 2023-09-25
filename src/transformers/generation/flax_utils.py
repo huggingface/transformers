@@ -319,7 +319,7 @@ class FlaxGenerationMixin:
             ):
                 new_generation_config = GenerationConfig.from_model_config(self.config)
                 if new_generation_config != self.generation_config:
-                    warnings.warn(
+                    logger.warning(
                         "You have modified the pretrained model configuration to control generation. This is a"
                         " deprecated strategy to control generation and will be removed soon, in a future version."
                         " Please use and modify the model generation configuration (see"
@@ -383,7 +383,7 @@ class FlaxGenerationMixin:
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
             # 20 is the default max_length of the generation config
-            warnings.warn(
+            logger.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
                 "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,

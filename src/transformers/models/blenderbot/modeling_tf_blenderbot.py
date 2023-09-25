@@ -1136,7 +1136,7 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
         if pretrained_model_name_or_path == "facebook/blenderbot-90M":
             from ..blenderbot_small import TFBlenderbotSmallModel
 
-            warnings.warn(
+            logger.warning(
                 "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical"
                 " checkpoint `facebook/small_blenderbot-90M` with"
                 " `TFBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')`"
@@ -1283,7 +1283,7 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
         if pretrained_model_name_or_path == "facebook/blenderbot-90M":
             from ..blenderbot_small import TFBlenderbotSmallForConditionalGeneration
 
-            warnings.warn(
+            logger.warning(
                 "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical"
                 " checkpoint `facebook/small_blenderbot-90M` with"
                 " `TFBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')`"

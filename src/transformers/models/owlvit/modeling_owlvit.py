@@ -1224,7 +1224,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
             loss = owlvit_loss(logits_per_text)
 
         if return_base_image_embeds:
-            warnings.warn(
+            logger.warning(
                 "`return_base_image_embeds` is deprecated and will be removed in v4.27 of Transformers, one can"
                 " obtain the base (unprojected) image embeddings from outputs.vision_model_output.",
                 FutureWarning,

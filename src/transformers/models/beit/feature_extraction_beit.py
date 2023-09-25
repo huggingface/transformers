@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class BeitFeatureExtractor(BeitImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logger.warning(
             "The class BeitFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
             " use BeitImageProcessor instead.",
             FutureWarning,

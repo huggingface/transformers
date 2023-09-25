@@ -114,7 +114,7 @@ def export_pytorch(
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
     if tokenizer is not None:
-        warnings.warn(
+        logger.warning(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
             " `preprocessor` instead.",
             FutureWarning,
@@ -250,7 +250,7 @@ def export_tensorflow(
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
         raise ValueError("You cannot provide both a tokenizer and preprocessor to export the model.")
     if tokenizer is not None:
-        warnings.warn(
+        logger.warning(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
             " `preprocessor` instead.",
             FutureWarning,
@@ -325,7 +325,7 @@ def export(
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to export the model.")
     if tokenizer is not None:
-        warnings.warn(
+        logger.warning(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
             " `preprocessor` instead.",
             FutureWarning,
@@ -364,7 +364,7 @@ def validate_model_outputs(
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
         raise ValueError("You cannot provide both a tokenizer and a preprocessor to validate the model outputs.")
     if tokenizer is not None:
-        warnings.warn(
+        logger.warning(
             "The `tokenizer` argument is deprecated and will be removed in version 5 of Transformers. Use"
             " `preprocessor` instead.",
             FutureWarning,

@@ -336,7 +336,7 @@ def get_framework(model, revision: Optional[str] = None):
             If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
             the model name). If no specific model is provided, defaults to using PyTorch.
     """
-    warnings.warn(
+    logger.warning(
         "`get_framework` is deprecated and will be removed in v5, use `infer_framework_from_model` instead.",
         FutureWarning,
     )
@@ -1098,7 +1098,7 @@ class Pipeline(_ScikitCompat):
 
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
-            warnings.warn(
+            logger.warning(
                 "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
                 " dataset",
                 UserWarning,

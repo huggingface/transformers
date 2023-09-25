@@ -49,7 +49,7 @@ class LayoutXLMProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         if "feature_extractor" in kwargs:
-            warnings.warn(
+            logger.warning(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
                 " instead.",
                 FutureWarning,
@@ -185,7 +185,7 @@ class LayoutXLMProcessor(ProcessorMixin):
 
     @property
     def feature_extractor_class(self):
-        warnings.warn(
+        logger.warning(
             "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
             FutureWarning,
         )
@@ -193,7 +193,7 @@ class LayoutXLMProcessor(ProcessorMixin):
 
     @property
     def feature_extractor(self):
-        warnings.warn(
+        logger.warning(
             "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
             FutureWarning,
         )

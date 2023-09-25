@@ -927,7 +927,7 @@ class T5Stack(T5PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
-        warnings.warn(
+        logger.warning(
             "`T5Stack.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your model"
             " with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
             " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
@@ -955,7 +955,7 @@ class T5Stack(T5PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        warnings.warn(
+        logger.warning(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
@@ -1385,7 +1385,7 @@ class T5Model(T5PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
-        warnings.warn(
+        logger.warning(
             "`T5Model.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your model"
             " with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
             " `device_map` but it needs to be a dictionary module_name to device, so for instance {'encoder.block.0':"
@@ -1404,7 +1404,7 @@ class T5Model(T5PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        warnings.warn(
+        logger.warning(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
@@ -1488,7 +1488,7 @@ class T5Model(T5PreTrainedModel):
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
             if self.config.num_layers == self.config.num_decoder_layers:
-                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
+                logger.warning(__HEAD_MASK_WARNING_MSG, FutureWarning)
                 decoder_head_mask = head_mask
 
         # Encode if needed (training, first prediction pass)
@@ -1589,7 +1589,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
-        warnings.warn(
+        logger.warning(
             "`T5ForConditionalGeneration.parallelize` is deprecated and will be removed in v5 of Transformers, you"
             " should load your model with `device_map='balanced'` in the call to `from_pretrained`. You can also"
             " provide your own `device_map` but it needs to be a dictionary module_name to device, so for instance"
@@ -1609,7 +1609,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        warnings.warn(
+        logger.warning(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
@@ -1700,7 +1700,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
             if self.config.num_layers == self.config.num_decoder_layers:
-                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
+                logger.warning(__HEAD_MASK_WARNING_MSG, FutureWarning)
                 decoder_head_mask = head_mask
 
         # Encode if needed (training, first prediction pass)
@@ -1885,7 +1885,7 @@ class T5EncoderModel(T5PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
-        warnings.warn(
+        logger.warning(
             "`T5EncoderModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
             " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
             " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
@@ -1903,7 +1903,7 @@ class T5EncoderModel(T5PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        warnings.warn(
+        logger.warning(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
@@ -2213,7 +2213,7 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
             if self.config.num_layers == self.config.num_decoder_layers:
-                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
+                logger.warning(__HEAD_MASK_WARNING_MSG, FutureWarning)
                 decoder_head_mask = head_mask
 
         # Encode if needed (training, first prediction pass)

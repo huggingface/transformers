@@ -28,13 +28,13 @@ DEPRECATION_WARNING = (
 
 
 def simple_accuracy(preds, labels):
-    warnings.warn(DEPRECATION_WARNING, FutureWarning)
+    logger.warning(DEPRECATION_WARNING, FutureWarning)
     requires_backends(simple_accuracy, "sklearn")
     return (preds == labels).mean()
 
 
 def acc_and_f1(preds, labels):
-    warnings.warn(DEPRECATION_WARNING, FutureWarning)
+    logger.warning(DEPRECATION_WARNING, FutureWarning)
     requires_backends(acc_and_f1, "sklearn")
     acc = simple_accuracy(preds, labels)
     f1 = f1_score(y_true=labels, y_pred=preds)
@@ -46,7 +46,7 @@ def acc_and_f1(preds, labels):
 
 
 def pearson_and_spearman(preds, labels):
-    warnings.warn(DEPRECATION_WARNING, FutureWarning)
+    logger.warning(DEPRECATION_WARNING, FutureWarning)
     requires_backends(pearson_and_spearman, "sklearn")
     pearson_corr = pearsonr(preds, labels)[0]
     spearman_corr = spearmanr(preds, labels)[0]
@@ -58,7 +58,7 @@ def pearson_and_spearman(preds, labels):
 
 
 def glue_compute_metrics(task_name, preds, labels):
-    warnings.warn(DEPRECATION_WARNING, FutureWarning)
+    logger.warning(DEPRECATION_WARNING, FutureWarning)
     requires_backends(glue_compute_metrics, "sklearn")
     assert len(preds) == len(labels), f"Predictions and labels have mismatched lengths {len(preds)} and {len(labels)}"
     if task_name == "cola":
@@ -88,7 +88,7 @@ def glue_compute_metrics(task_name, preds, labels):
 
 
 def xnli_compute_metrics(task_name, preds, labels):
-    warnings.warn(DEPRECATION_WARNING, FutureWarning)
+    logger.warning(DEPRECATION_WARNING, FutureWarning)
     requires_backends(xnli_compute_metrics, "sklearn")
     if len(preds) != len(labels):
         raise ValueError(f"Predictions and labels have mismatched lengths {len(preds)} and {len(labels)}")

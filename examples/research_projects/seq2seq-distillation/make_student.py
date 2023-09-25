@@ -57,7 +57,7 @@ def pick_layers_to_copy(n_student, n_teacher):
         return val
     except KeyError:
         if n_student != n_teacher:
-            warnings.warn(
+            logger.warning(
                 f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first"
                 f" {n_student}"
             )

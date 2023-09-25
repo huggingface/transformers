@@ -500,7 +500,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
-        warnings.warn(
+        logger.warning(
             "`GPTJModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your"
             " model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
             " `device_map` but it needs to be a dictionary module_name to device, so for instance {'h.0': 0, 'h.1': 1,"
@@ -526,7 +526,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        warnings.warn(
+        logger.warning(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
@@ -751,7 +751,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
-        warnings.warn(
+        logger.warning(
             "`GPTJForCausalLM.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
             " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
             " `device_map` but it needs to be a dictionary module_name to device, so for instance {'transformer.h.0':"
@@ -770,7 +770,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
-        warnings.warn(
+        logger.warning(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
             FutureWarning,
         )
