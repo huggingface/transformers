@@ -309,8 +309,6 @@ class OwlViTVisionEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
 
-        print("Mean value of pixel values:", pixel_values.mean())
-
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [batch_size, num_channels, height, width]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
@@ -747,7 +745,7 @@ class OwlViTEncoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
-        for i, encoder_layer in enumerate(self.layers):
+        for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
@@ -859,8 +857,6 @@ class OwlViTTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        print("Shape of text last hidden states: ", last_hidden_state.shape)
-
         # take features from the end of tokens embedding (end of token is the highest number in each sequence)
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
         pooled_output = last_hidden_state[
@@ -963,15 +959,8 @@ class OwlViTVisionTransformer(nn.Module):
         expected_input_dtype = self.embeddings.patch_embedding.weight.dtype
         pixel_values = pixel_values.to(expected_input_dtype)
 
-        print("First values of pixel values:", pixel_values[0, 0, :3, :3])
-
         hidden_states = self.embeddings(pixel_values)
-        print("Shape of final patch embeddings:", hidden_states.shape)
-        print("First values of final patch embeddings:", hidden_states[0, :3, :3])
         hidden_states = self.pre_layernorm(hidden_states)
-
-        print("First values of final patch embedding after prelayernorm:", hidden_states[0, :3, :3])
-        print("Dtype of final patch embedding after prelayernorm:", hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1460,9 +1449,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         last_hidden_state = outputs.vision_model_output[0]
         image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
 
-        print("Shape of image_embeds after post_layernorm:", image_embeds.shape)
-        print("First values of image_embeds after post_layernorm:", image_embeds[0, :3, :3])
-
         # Resize class token
         new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
         class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
@@ -1470,9 +1456,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
         image_embeds = self.layer_norm(image_embeds)
-
-        print("Shape of image embeds after merge_class_token:", image_embeds.shape)
-        print("First values of image embeds after merge_class_token:", image_embeds[0, :3, :3])
 
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         new_size = (
@@ -1727,9 +1710,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         max_text_queries = input_ids.shape[0] // batch_size
         query_embeds = query_embeds.reshape(batch_size, max_text_queries, query_embeds.shape[-1])
 
-        print("Shape of query embeds:", query_embeds.shape)
-        print("First values of query embeds:", query_embeds[0, :3, :3])
-
         # If first token is 0, then this is a padded query [batch_size, num_queries].
         input_ids = input_ids.reshape(batch_size, max_text_queries, input_ids.shape[-1])
         query_mask = input_ids[..., 0] > 0
@@ -1743,11 +1723,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
-
-        print("Predicted logits:", pred_logits.shape)
-        print("First values of predicted logits:", pred_logits[0, :3, :3])
-        print("Predicted boxes:", pred_boxes.shape)
-        print("First values of predicted boxes:", pred_boxes[0, :3, :3])
 
         if not return_dict:
             output = (

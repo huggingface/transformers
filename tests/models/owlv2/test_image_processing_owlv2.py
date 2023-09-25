@@ -16,13 +16,17 @@
 
 import unittest
 
-from transformers.testing_utils import require_torch, require_vision
+from huggingface_hub import hf_hub_download
+
+from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import Owlv2ImageProcessor
 
 
@@ -107,3 +111,14 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.image_processor_dict, size={"height": 42, "width": 42}
         )
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+
+    @slow
+    def test_image_processor_integration_test(self):
+        processor = Owlv2ImageProcessor()
+
+        filepath = hf_hub_download(repo_id="adirik/OWL-ViT", repo_type="space", filename="assets/astronaut.png")
+        image = Image.open(filepath)
+        pixel_values = processor(image, return_tensors="pt").pixel_values
+
+        mean_value = round(pixel_values.mean().item(), 4)
+        self.assertEqual(mean_value, 0.0004)
