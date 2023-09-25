@@ -17,7 +17,6 @@ import copy
 import inspect
 import math
 import random
-import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
@@ -1309,10 +1308,9 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
-            warnings.warn(
+            logger.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
-                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
-                UserWarning,
+                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
@@ -2349,10 +2347,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
-            warnings.warn(
+            logger.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
-                "to control the generation length. We recommend setting `max_new_tokens` to control the maximum length of the generation.",
-                UserWarning,
+                "to control the generation length. We recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
