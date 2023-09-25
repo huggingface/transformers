@@ -142,6 +142,14 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(reason="SuperPoint was not designed smaller.")
+    def test_model_is_small(self):
+        pass
+
+    @unittest.skip(reason="SuperPoint does not output any loss term in the forward pass")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
