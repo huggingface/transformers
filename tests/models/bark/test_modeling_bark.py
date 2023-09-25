@@ -494,13 +494,6 @@ class BarkModelTester:
 
         self.is_training = is_training
 
-    def prepare_config_and_inputs(self):
-        # TODO: @Yoach: Preapre `inputs_dict`
-        inputs_dict = {}
-        config = self.get_config()
-
-        return config, inputs_dict
-
     def get_config(self):
         return BarkConfig.from_sub_model_configs(
             self.semantic_model_tester.get_config(),
@@ -522,11 +515,6 @@ class BarkModelTester:
         config.fine_acoustics_config.output_vocab_size = 300
 
         return config
-
-    def prepare_config_and_inputs_for_common(self):
-        # TODO: @Yoach
-        pass
-        # return config, inputs_dict
 
 
 @require_torch
