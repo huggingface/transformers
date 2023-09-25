@@ -46,6 +46,7 @@ from .utils import (
     logging,
 )
 
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -1124,6 +1125,7 @@ else:
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
             "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING",
             "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
+            "MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING",
             "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MASK_GENERATION_MAPPING",
@@ -1147,7 +1149,6 @@ else:
             "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
-            "MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
             "AutoBackbone",
@@ -1163,6 +1164,7 @@ else:
             "AutoModelForImageSegmentation",
             "AutoModelForImageToImage",
             "AutoModelForInstanceSegmentation",
+            "AutoModelForInterestPointDescription",
             "AutoModelForMaskedImageModeling",
             "AutoModelForMaskedLM",
             "AutoModelForMaskGeneration",
@@ -1186,7 +1188,6 @@ else:
             "AutoModelForVisualQuestionAnswering",
             "AutoModelForZeroShotImageClassification",
             "AutoModelForZeroShotObjectDetection",
-            "AutoModelForInterestPointDescription",
             "AutoModelWithLMHead",
         ]
     )
@@ -2735,8 +2736,8 @@ else:
         [
             "SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SuperPointModel",
-            "SuperPointPreTrainedModel",
             "SuperPointModelForInterestPointDescription",
+            "SuperPointPreTrainedModel",
         ]
     )
     _import_structure["models.swiftformer"].extend(
@@ -5176,6 +5177,7 @@ if TYPE_CHECKING:
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
+            MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING,
             MODEL_FOR_MASK_GENERATION_MAPPING,
             MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
@@ -5199,7 +5201,6 @@ if TYPE_CHECKING:
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
-            MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoBackbone,
@@ -5215,6 +5216,7 @@ if TYPE_CHECKING:
             AutoModelForImageSegmentation,
             AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
+            AutoModelForInterestPointDescription,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
             AutoModelForMaskGeneration,
@@ -5238,7 +5240,6 @@ if TYPE_CHECKING:
             AutoModelForVisualQuestionAnswering,
             AutoModelForZeroShotImageClassification,
             AutoModelForZeroShotObjectDetection,
-            AutoModelForInterestPointDescription,
             AutoModelWithLMHead,
         )
         from .models.autoformer import (

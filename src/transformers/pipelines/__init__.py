@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from huggingface_hub import model_info
 
-
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -85,27 +84,7 @@ from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
-from ..configuration_utils import PretrainedConfig
-from ..dynamic_module_utils import get_class_from_dynamic_module
-from ..feature_extraction_utils import PreTrainedFeatureExtractor
-from ..image_processing_utils import BaseImageProcessor
-from ..models.auto.configuration_auto import AutoConfig
-from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
-from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
-from ..models.auto.modeling_auto import AutoModelForDepthEstimation
-from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import (
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
-    find_adapter_config_file,
-    is_kenlm_available,
-    is_offline_mode,
-    is_peft_available,
-    is_pyctcdecode_available,
-    is_tf_available,
-    is_torch_available,
-    logging,
-)
+
 
 if is_tf_available():
     from ..models.auto.modeling_tf_auto import (

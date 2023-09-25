@@ -20,6 +20,11 @@ import warnings
 from collections import OrderedDict
 from typing import Dict, Optional, Union
 
+# Build the list of all image processors
+from ...configuration_utils import PretrainedConfig
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...image_processing_utils import ImageProcessingMixin
+from ...utils import CONFIG_NAME, IMAGE_PROCESSOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -28,11 +33,6 @@ from .configuration_auto import (
     replace_list_option_in_docstrings,
 )
 
-# Build the list of all image processors
-from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...image_processing_utils import ImageProcessingMixin
-from ...utils import CONFIG_NAME, IMAGE_PROCESSOR_NAME, get_file_from_repo, logging
 
 logger = logging.get_logger(__name__)
 

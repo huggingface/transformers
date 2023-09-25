@@ -5,7 +5,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import SuperPointConfig, SuperPointModel, SuperPointImageProcessor
+from transformers import SuperPointConfig, SuperPointImageProcessor, SuperPointModel
 
 
 def get_superglue_config():
@@ -26,34 +26,34 @@ def create_rename_keys(config, state_dict):
     rename_keys = []
 
     # Encoder weights
-    rename_keys.append((f"conv1a.weight", f"encoder.conv1a.weight"))
-    rename_keys.append((f"conv1b.weight", f"encoder.conv1b.weight"))
-    rename_keys.append((f"conv2a.weight", f"encoder.conv2a.weight"))
-    rename_keys.append((f"conv2b.weight", f"encoder.conv2b.weight"))
-    rename_keys.append((f"conv3a.weight", f"encoder.conv3a.weight"))
-    rename_keys.append((f"conv3b.weight", f"encoder.conv3b.weight"))
-    rename_keys.append((f"conv4a.weight", f"encoder.conv4a.weight"))
-    rename_keys.append((f"conv4b.weight", f"encoder.conv4b.weight"))
-    rename_keys.append((f"conv1a.bias", f"encoder.conv1a.bias"))
-    rename_keys.append((f"conv1b.bias", f"encoder.conv1b.bias"))
-    rename_keys.append((f"conv2a.bias", f"encoder.conv2a.bias"))
-    rename_keys.append((f"conv2b.bias", f"encoder.conv2b.bias"))
-    rename_keys.append((f"conv3a.bias", f"encoder.conv3a.bias"))
-    rename_keys.append((f"conv3b.bias", f"encoder.conv3b.bias"))
-    rename_keys.append((f"conv4a.bias", f"encoder.conv4a.bias"))
-    rename_keys.append((f"conv4b.bias", f"encoder.conv4b.bias"))
+    rename_keys.append(("conv1a.weight", "encoder.conv1a.weight"))
+    rename_keys.append(("conv1b.weight", "encoder.conv1b.weight"))
+    rename_keys.append(("conv2a.weight", "encoder.conv2a.weight"))
+    rename_keys.append(("conv2b.weight", "encoder.conv2b.weight"))
+    rename_keys.append(("conv3a.weight", "encoder.conv3a.weight"))
+    rename_keys.append(("conv3b.weight", "encoder.conv3b.weight"))
+    rename_keys.append(("conv4a.weight", "encoder.conv4a.weight"))
+    rename_keys.append(("conv4b.weight", "encoder.conv4b.weight"))
+    rename_keys.append(("conv1a.bias", "encoder.conv1a.bias"))
+    rename_keys.append(("conv1b.bias", "encoder.conv1b.bias"))
+    rename_keys.append(("conv2a.bias", "encoder.conv2a.bias"))
+    rename_keys.append(("conv2b.bias", "encoder.conv2b.bias"))
+    rename_keys.append(("conv3a.bias", "encoder.conv3a.bias"))
+    rename_keys.append(("conv3b.bias", "encoder.conv3b.bias"))
+    rename_keys.append(("conv4a.bias", "encoder.conv4a.bias"))
+    rename_keys.append(("conv4b.bias", "encoder.conv4b.bias"))
 
     # Keypoint Decoder weights
-    rename_keys.append((f"convPa.weight", f"keypoint_decoder.convSa.weight"))
-    rename_keys.append((f"convPb.weight", f"keypoint_decoder.convSb.weight"))
-    rename_keys.append((f"convPa.bias", f"keypoint_decoder.convSa.bias"))
-    rename_keys.append((f"convPb.bias", f"keypoint_decoder.convSb.bias"))
+    rename_keys.append(("convPa.weight", "keypoint_decoder.convSa.weight"))
+    rename_keys.append(("convPb.weight", "keypoint_decoder.convSb.weight"))
+    rename_keys.append(("convPa.bias", "keypoint_decoder.convSa.bias"))
+    rename_keys.append(("convPb.bias", "keypoint_decoder.convSb.bias"))
 
     # Descriptor Decoder weights
-    rename_keys.append((f"convDa.weight", f"descriptor_decoder.convDa.weight"))
-    rename_keys.append((f"convDb.weight", f"descriptor_decoder.convDb.weight"))
-    rename_keys.append((f"convDa.bias", f"descriptor_decoder.convDa.bias"))
-    rename_keys.append((f"convDb.bias", f"descriptor_decoder.convDb.bias"))
+    rename_keys.append(("convDa.weight", "descriptor_decoder.convDa.weight"))
+    rename_keys.append(("convDb.weight", "descriptor_decoder.convDb.weight"))
+    rename_keys.append(("convDa.bias", "descriptor_decoder.convDa.bias"))
+    rename_keys.append(("convDb.bias", "descriptor_decoder.convDb.bias"))
 
     return rename_keys
 
