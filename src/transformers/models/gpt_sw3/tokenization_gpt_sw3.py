@@ -4,7 +4,7 @@ import os
 import re
 import unicodedata
 from shutil import copyfile
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
 
@@ -14,10 +14,6 @@ from ...utils import is_torch_available, logging
 
 if is_torch_available():
     import torch
-
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -107,7 +103,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -142,18 +138,6 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             pad_token = "<pad>" if pad_token is None else pad_token
             bos_token = "<s>" if bos_token is None else bos_token
 
-        super().__init__(
-            do_lower_case=do_lower_case,
-            remove_space=remove_space,
-            keep_accents=keep_accents,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
-
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
@@ -170,6 +154,18 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         # Regular expression to remove non-printing characters (e.g. some unicode control chars) in preprocessing
         self.non_printing_characters_re = re.compile(
             f"[{''.join(map(chr, list(range(0, 9)) + list(range(11, 32)) + list(range(127, 160)) + [160, 173, 8203]))}]"
+        )
+
+        super().__init__(
+            do_lower_case=do_lower_case,
+            remove_space=remove_space,
+            keep_accents=keep_accents,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
         )
 
     # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.__getstate__
@@ -319,31 +315,18 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         return self.sp_model.decode(token_ids)
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """Builds the input ids for a conversation.
-
-        This is the format used in the original GPT-SW3 paper [1] and which is also mentioned in the model card [2].
-        The format is inspired by the ChatML format [3]. Concretely, the chat format is set up as follows:
-
-        ```
-        <eos><bos>User: Jag tycker träd är fina<bos>Bot: Kul att du tycker det!<bos>...
-        ```
-
-        Args:
-            conversation (`Conversation`):
-                Conversation to build input ids for.
-
-        Returns:
-            `List[int]`:
-                Input ids for the conversation.
-
-        References:
-            - [1] https://doi.org/10.48550/arXiv.2305.12987
-            - [2] https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m-instruct
-            - [3] https://github.com/openai/openai-python/blob/main/chatml.md
+    @property
+    def default_chat_template(self):
         """
-        all_responses = [f"User: {text}" if is_user else f"Bot: {text}" for is_user, text in conversation.iter_texts()]
-        prompt = (
-            f"{self.eos_token}{self.bos_token}" + f"{self.bos_token}".join(all_responses) + f"{self.bos_token}Bot:"
+        This chat template formats messages like an instant messenger chat log, with "User:" and "Bot:" strings
+        preceding messages. BOS tokens are added between all messages.
+        """
+        return (
+            "{{ eos_token }}{{ bos_token }}"
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}{{ 'User: ' + message['content']}}"
+            "{% else %}{{ 'Bot: ' + message['content']}}{% endif %}"
+            "{{ message['text'] }}{{ bos_token }}"
+            "{% endfor %}"
+            "Bot:"
         )
-        return self.encode(text=prompt)

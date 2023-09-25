@@ -51,7 +51,7 @@ Library:
 - pipelines: @Narsil
 - tensorflow: @gante and @Rocketknight1
 - tokenizers: @ArthurZucker
-- trainer: @muellerz and @pacman100
+- trainer: @muellerzr and @pacman100
 
 Integrations:
 

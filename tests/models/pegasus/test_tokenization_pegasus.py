@@ -54,16 +54,16 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         token = "</s>"
         token_id = 1
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
-        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+        self.assertEqual(self.get_tokenizer().convert_tokens_to_ids(token), token_id)
+        self.assertEqual(self.get_tokenizer().convert_ids_to_tokens(token_id), token)
 
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "<pad>")
         self.assertEqual(vocab_keys[1], "</s>")
-        self.assertEqual(vocab_keys[-1], "v")
-        self.assertEqual(len(vocab_keys), 1_103)
+        self.assertEqual(vocab_keys[-1], "<unk_102>")
+        self.assertEqual(len(vocab_keys), 1_104)
 
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_103)

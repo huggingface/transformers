@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import os
+from io import BytesIO
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -298,14 +300,22 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
         elif os.path.isfile(image):
             image = PIL.Image.open(image)
         else:
-            raise ValueError(
-                f"Incorrect path or url, URLs must start with `http://` or `https://`, and {image} is not a valid path"
-            )
+            if image.startswith("data:image/"):
+                image = image.split(",")[1]
+
+            # Try to load as base64
+            try:
+                b64 = base64.b64decode(image, validate=True)
+                image = PIL.Image.open(BytesIO(b64))
+            except Exception as e:
+                raise ValueError(
+                    f"Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got {image}. Failed with {e}"
+                )
     elif isinstance(image, PIL.Image.Image):
         image = image
     else:
         raise ValueError(
-            "Incorrect format used for image. Should be an url linking to an image, a local path, or a PIL image."
+            "Incorrect format used for image. Should be an url linking to an image, a base64 string, a local path, or a PIL image."
         )
     image = PIL.ImageOps.exif_transpose(image)
     image = image.convert("RGB")
