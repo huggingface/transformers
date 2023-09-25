@@ -529,20 +529,6 @@ class BarkModelTester:
         # return config, inputs_dict
 
 
-# Need this class in oder to create tiny model for `bark`
-# TODO (@Yoach) Implement actual test methods
-@unittest.skip("So far all tests will fail.")
-class BarkModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (BarkModel,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"feature-extraction": BarkModel, "text-to-audio": BarkModel} if is_torch_available() else {}
-    )
-
-    def setUp(self):
-        self.model_tester = BarkModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BarkConfig, n_embd=37)
-
-
 @require_torch
 class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
