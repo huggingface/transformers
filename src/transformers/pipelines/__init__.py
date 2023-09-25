@@ -765,7 +765,7 @@ def pipeline(
         if is_peft_available():
             # `find_adapter_config_file` doesn't accept `trust_remote_code`
             _hub_kwargs = {k: v for k, v in hub_kwargs.items() if k != "trust_remote_code"}
-            maybe_adapter_path = find_adapter_config_file(model, **hub_kwargs)
+            maybe_adapter_path = find_adapter_config_file(model, **_hub_kwargs)
 
             if maybe_adapter_path is not None:
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
