@@ -150,7 +150,7 @@ class PeftAdapterMixin:
         # We keep `revision` in the signature for backward compatibility
         if revision is not None and "revision" not in adapter_hub_kwargs:
             adapter_hub_kwargs["revision"] = revision
-        elif revision is not None and "revision" in adapter_hub_kwargs and revision!= adapter_hub_kwargs["revision"]:
+        elif revision is not None and "revision" in adapter_hub_kwargs and revision != adapter_hub_kwargs["revision"]:
             logger.warning(
                 "You passed a `revision` argument both in `adapter_hub_kwargs` and as a standalone argument. "
                 "The one in `adapter_hub_kwargs` will be used."
