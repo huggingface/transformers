@@ -2735,7 +2735,7 @@ else:
         [
             "SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SuperPointModel",
-            "SuperPointPretrainedModel",
+            "SuperPointPreTrainedModel",
             "SuperPointModelForInterestPointDescription",
         ]
     )
