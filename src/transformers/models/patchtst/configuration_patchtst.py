@@ -122,7 +122,8 @@ class PatchTSTConfig(PretrainedConfig):
             Number of output channels.
         prediction_range (`list`, *optional*, defaults to None):
             The range of prediction values can be set to enforce the model to produce values within a range.
-
+        num_parallel_samples (`int`, *optional*, defaults to 100):
+            The number of samples to generate in parallel for probablistic forecast.
 
     Example:
 
@@ -173,6 +174,7 @@ class PatchTSTConfig(PretrainedConfig):
         positional_encoding: str = "sincos",
         learn_pe: bool = False,
         use_cls_token: bool = False,
+        num_parallel_samples: int = 100,
         init_std: float = 0.02,
         shared_projection: bool = True,
         seed_number: int = None,
@@ -200,6 +202,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.num_input_channels = num_input_channels  # n_vars
         self.loss = loss
         self.distribution_output = distribution_output
+        self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
         self.d_model = d_model
