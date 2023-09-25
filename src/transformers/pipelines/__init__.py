@@ -812,7 +812,6 @@ def pipeline(
             pipeline_class = get_class_from_dynamic_module(
                 class_ref,
                 model,
-                revision=revision,
                 code_revision=code_revision,
                 **hub_kwargs,
             )
