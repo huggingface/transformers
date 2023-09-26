@@ -1010,6 +1010,10 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     def default_processor(self):
         return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
 
+    @cached_property
+    def default_vocoder(self):
+        return SpeechT5HifiGan.from_pretrained(f"microsoft/speecht5_hifigan")
+
     def test_generation(self):
         model = self.default_model
         model.to(torch_device)
@@ -1031,6 +1035,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         model = self.default_model
         model.to(torch_device)
         processor = self.default_processor
+        vocoder = self.default_vocoder
         set_seed(555)  # make deterministic
 
         input_text = [
@@ -1047,6 +1052,19 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             attention_mask=inputs["attention_mask"],
         )
         self.assertEqual(spectrograms.shape, (3, 262, model.config.num_mel_bins))
+        waveforms = vocoder(spectrograms)
+        waveform_lengths = [int(waveforms.size(1) / max(spectrogram_lengths)) * i for i in spectrogram_lengths]
+
+        # Check waveform results are the same with or without using vocder
+        set_seed(555)
+        waveforms_with_vocoder, waveform_lengths_with_vocoder = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+            attention_mask=inputs["attention_mask"],
+            vocoder=vocoder,
+        )
+        self.assertTrue(torch.allclose(waveforms, waveforms_with_vocoder, atol=1e-8))
+        self.assertEqual(waveform_lengths, waveform_lengths_with_vocoder)
 
         # Check results when batching are consistent with results without batching
         for i, text in enumerate(input_text):
@@ -1058,6 +1076,8 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(spectrogram.shape, spectrograms[i][: spectrogram_lengths[i]].shape)
             self.assertTrue(torch.allclose(spectrogram, spectrograms[i][: spectrogram_lengths[i]], atol=5e-3))
+            waveform = vocoder(spectrogram)
+            self.assertEqual(waveform.shape, waveforms[i][: waveform_lengths[i]].shape)
 
 
 @require_torch
