@@ -1529,19 +1529,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Return:
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
-        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds, new_num_tokens = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         if new_num_tokens is None and pad_to_multiple_of is None:
             return model_embeds
 
         # Update base model and current model config
-        # get the actual size (considering both zero stage 3 and pad_to_multiple_of)
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(model_embeds.weight, modifier_rank=None):
-                new_num_tokens = model_embeds.weight.shape[0]
-        else:
-            new_num_tokens = model_embeds.weight.shape[0]
         self.config.vocab_size = new_num_tokens
         self.vocab_size = new_num_tokens
 
@@ -1577,7 +1569,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 add_hook_to_module(new_lm_head, hook)
             self.set_output_embeddings(new_lm_head)
 
-        return self.get_input_embeddings()
+        return self.get_input_embeddings(), new_num_tokens
 
     def _get_resized_embeddings(
         self,
