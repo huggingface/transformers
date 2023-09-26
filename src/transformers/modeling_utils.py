@@ -1983,7 +1983,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             custom_object_save(self, save_directory, config=self.config)
 
         _hf_peft_config_loaded = getattr(model_to_save, "_hf_peft_config_loaded", False)
-        peft_multi_adapter_state_dict = None
+        peft_multi_adapter_state_dict = {}
 
         # Save the config
         if is_main_process:
