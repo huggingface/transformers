@@ -869,10 +869,7 @@ class OPTDecoder(OPTPreTrainedModel):
                 f"{mask_seq_length} (sum of the lengths of current and past inputs)"
             )
         else:
-            if 0 in attention_mask:
-                padding_mask = attention_mask
-            else:
-                padding_mask = None
+            padding_mask = attention_mask
 
         causal_attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
