@@ -677,12 +677,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            if not module.weight.requires_grad:
-                # sinusoidal positional encodings used in WhisperEncoder
-                with torch.no_grad():
-                    module.weight.copy_(torch.from_numpy(sinusoids(*module.weight.shape)))
-            else:
-                module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
@@ -860,6 +855,8 @@ class WhisperEncoder(WhisperPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
+        with torch.no_grad():
+            self.embed_positions.weight.copy_(sinusoids(self.max_source_positions, embed_dim))
 
     def _freeze_parameters(self):
         for param in self.parameters():
