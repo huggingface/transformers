@@ -1983,6 +1983,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             custom_object_save(self, save_directory, config=self.config)
 
         _hf_peft_config_loaded = getattr(model_to_save, "_hf_peft_config_loaded", False)
+        peft_multi_adapter_state_dict = None
 
         # Save the config
         if is_main_process:
@@ -1995,82 +1996,85 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.info(
                     "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
                 )
-                state_dict = model_to_save.get_adapter_state_dict()
+                
+                total_adapters = list(self.peft_config.keys())
+                
+                if len(total_adapters) == 1:
+                    state_dict = model_to_save.get_adapter_state_dict()
 
-                if save_peft_format:
-                    logger.info(
-                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
-                    )
-                    peft_state_dict = {}
-                    for key, value in state_dict.items():
-                        peft_state_dict[f"base_model.model.{key}"] = value
-                    state_dict = peft_state_dict
-
-                active_adapter = self.active_adapter()
-
-                if isinstance(active_adapter, list):
-                    if len(active_adapter) > 1:
-                        logger.warning(
-                            "Multiple active adapters detected, will only consider the first active adapter. In order to save them all, please iteratively call `set_adapter()` on each"
-                            " adapter name and save them one by one manually. "
+                    if save_peft_format:
+                        logger.info(
+                            "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
                         )
-                    active_adapter = active_adapter[0]
+                        peft_state_dict = {}
+                        for key, value in state_dict.items():
+                            peft_state_dict[f"base_model.model.{key}"] = value
+                        state_dict = peft_state_dict
 
-                current_peft_config = self.peft_config[active_adapter]
-                current_peft_config.save_pretrained(save_directory)
+                    active_adapter = self.active_adapter()
+
+                    if isinstance(active_adapter, list):
+                        active_adapter = active_adapter[0]
+
+                        current_peft_config = self.peft_config[active_adapter]
+                        current_peft_config.save_pretrained(save_directory)
+                    else:
+                        current_peft_config = self.peft_config[active_adapter]
+                        current_peft_config.save_pretrained(save_directory)
+                else:
+                    for adapter_name in total_adapters:
+                        adapter_state_dict = model_to_save.get_adapter_state_dict(adapter_name=adapter_name)
+
+                        if save_peft_format:
+                            logger.info(
+                                "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
+                            )
+                            peft_state_dict = {}
+                            for key, value in adapter_state_dict.items():
+                                peft_state_dict[f"base_model.model.{key}"] = value
+                            adapter_state_dict = peft_state_dict.copy()
+                            # Free memory
+                            del peft_state_dict
+
+                        current_peft_config = self.peft_config[adapter_name]
+                        peft_multi_adapter_state_dict[adapter_name] = adapter_state_dict
+
+                        # the default adapter is always saved on the root directory
+                        if adapter_name != "default":
+                            current_peft_config.save_pretrained(os.path.join(save_directory, adapter_name))
+                        else:
+                            current_peft_config.save_pretrained(save_directory)
+
+        _peft_save_multi_adapter = _hf_peft_config_loaded and peft_multi_adapter_state_dict is not None
 
         # Save the model
-        if state_dict is None:
+        if state_dict is None and not _peft_save_multi_adapter:
             state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
-        if IS_SAGEMAKER_MP_POST_1_10:
+        if IS_SAGEMAKER_MP_POST_1_10 and not _peft_save_multi_adapter:
             for smp_to_hf, _ in smp.state.module_manager.translate_functions:
                 state_dict = smp_to_hf(state_dict)
 
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
-            for ignore_key in self._keys_to_ignore_on_save:
-                if ignore_key in state_dict.keys():
-                    del state_dict[ignore_key]
+            if not _peft_save_multi_adapter:
+                for ignore_key in self._keys_to_ignore_on_save:
+                    if ignore_key in state_dict.keys():
+                        del state_dict[ignore_key]
+            else:
+                for adapter_name in peft_multi_adapter_state_dict:
+                    for ignore_key in self._keys_to_ignore_on_save:
+                        if ignore_key in peft_multi_adapter_state_dict[adapter_name].keys():
+                            del peft_multi_adapter_state_dict[adapter_name][ignore_key]
         if safe_serialization:
-            # Safetensors does not allow tensor aliasing.
-            # We're going to remove aliases before saving
-            ptrs = collections.defaultdict(list)
-            for name, tensor in state_dict.items():
-                ptrs[id_tensor_storage(tensor)].append(name)
-
-            # These are all the pointers of shared tensors.
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
-            warn_names = set()
-            for names in shared_ptrs.values():
-                # Removing the keys which are declared as known duplicates on
-                # load. This allows to make sure the name which is kept is consistent.
-                if self._tied_weights_keys is not None:
-                    found = 0
-                    for name in sorted(names):
-                        matches_pattern = any(re.search(pat, name) for pat in self._tied_weights_keys)
-                        if matches_pattern and name in state_dict:
-                            found += 1
-                            if found < len(names):
-                                del state_dict[name]
-
-                # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
-                # If the link between tensors was done at runtime then `from_pretrained` will not get
-                # the key back leading to random tensor. A proper warning will be shown
-                # during reload (if applicable), but since the file is not necessarily compatible with
-                # the config, better show a proper warning.
-                found = 0
-                for name in names:
-                    if name in state_dict:
-                        found += 1
-                        if found > 1:
-                            del state_dict[name]
-                            warn_names.add(name)
-            if len(warn_names) > 0:
-                logger.warning_once(
-                    f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
-                )
+            if not _peft_save_multi_adapter:
+                state_dict = self._post_process_safe_checkpoint(state_dict)
+            else:
+                for adapter_name in peft_multi_adapter_state_dict:
+                    peft_multi_adapter_state_dict[adapter_name] = self._post_process_safe_checkpoint(
+                        peft_multi_adapter_state_dict[adapter_name]
+                    )
 
         # Shard the model if it is too big.
         if not _hf_peft_config_loaded:
@@ -2079,6 +2083,44 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             weights_name = ADAPTER_SAFE_WEIGHTS_NAME if safe_serialization else ADAPTER_WEIGHTS_NAME
 
+        if not _peft_save_multi_adapter:
+            self._shard_and_save_checkpoints(save_directory, state_dict, weights_name, max_shard_size, safe_serialization, is_main_process, variant, save_function)
+        else:
+            for adapter_name in peft_multi_adapter_state_dict:
+                # The default adapter always needs to be saved on the root directory
+                adapter_save_path = save_directory if adapter_name == "default" else os.path.join(save_directory, adapter_name)
+
+                self._shard_and_save_checkpoints(
+                    adapter_save_path,
+                    peft_multi_adapter_state_dict[adapter_name],
+                    weights_name,
+                    max_shard_size,
+                    safe_serialization,
+                    is_main_process,
+                    variant,
+                    save_function,
+                ) 
+
+        if push_to_hub:
+            self._upload_modified_files(
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=token,
+            )
+
+    def _shard_and_save_checkpoints(
+        self, 
+        save_directory, 
+        state_dict, 
+        weights_name, 
+        max_shard_size, 
+        safe_serialization, 
+        is_main_process, 
+        variant, 
+        save_function: Callable = torch.save
+    ):
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
 
         # Clean the folder from a previous save
@@ -2126,14 +2168,46 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f"index located at {save_index_file}."
             )
 
-        if push_to_hub:
-            self._upload_modified_files(
-                save_directory,
-                repo_id,
-                files_timestamps,
-                commit_message=commit_message,
-                token=token,
+    def _post_process_safe_checkpoint(self, state_dict: Dict[str, Any]) -> Dict[str, Any]:
+        # Safetensors does not allow tensor aliasing.
+        # We're going to remove aliases before saving
+        ptrs = collections.defaultdict(list)
+        for name, tensor in state_dict.items():
+            ptrs[id_tensor_storage(tensor)].append(name)
+
+        # These are all the pointers of shared tensors.
+        shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+        warn_names = set()
+        for names in shared_ptrs.values():
+            # Removing the keys which are declared as known duplicates on
+            # load. This allows to make sure the name which is kept is consistent.
+            if self._tied_weights_keys is not None:
+                found = 0
+                for name in sorted(names):
+                    matches_pattern = any(re.search(pat, name) for pat in self._tied_weights_keys)
+                    if matches_pattern and name in state_dict:
+                        found += 1
+                        if found < len(names):
+                            del state_dict[name]
+
+            # When not all duplicates have been cleaned, still remove those keys, but put a clear warning.
+            # If the link between tensors was done at runtime then `from_pretrained` will not get
+            # the key back leading to random tensor. A proper warning will be shown
+            # during reload (if applicable), but since the file is not necessarily compatible with
+            # the config, better show a proper warning.
+            found = 0
+            for name in names:
+                if name in state_dict:
+                    found += 1
+                    if found > 1:
+                        del state_dict[name]
+                        warn_names.add(name)
+        if len(warn_names) > 0:
+            logger.warning_once(
+                f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
             )
+        
+        return state_dict
 
     def get_memory_footprint(self, return_buffers=True):
         r"""
