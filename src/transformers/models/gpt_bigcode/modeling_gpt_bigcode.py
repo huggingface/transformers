@@ -119,6 +119,14 @@ class GPTBigCodeAttention(nn.Module):
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
+    def _split_heads(self, tensor, num_heads, attn_head_size):
+        """
+        Splits hidden_size dim into attn_head_size and num_heads
+        """
+        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
+        tensor = tensor.view(new_shape)
+        return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+
     def _get_mask_value(self, device, dtype):
         # torch.where expects a tensor. We use a cache to avoid recreating it every time.
         if self.mask_value is None or self.mask_value.dtype != dtype or self.mask_value.device != device:
@@ -126,6 +134,9 @@ class GPTBigCodeAttention(nn.Module):
         return self.mask_value
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+        # (batch_size, num_heads, key_length, head_dim) -> (batch_size, kv_dim, key_length)
+        key = key.permute(0, 2, 1, 3).view(key.shape[0], key.shape[-2], self.kv_dim).transpose(-1, -2)
+        value = value.permute(0, 2, 1, 3).view(value.shape[0], value.shape[-2], self.kv_dim)
         dtype = query.dtype
         softmax_dtype = torch.float32 if self.attention_softmax_in_fp32 else dtype
         upcast = dtype != softmax_dtype
@@ -239,13 +250,21 @@ class GPTBigCodeAttention(nn.Module):
                 .split((self.head_dim, 2 * self.head_dim), dim=3)
             )
 
-        if layer_past is not None:
-            key_value = torch.cat((layer_past, key_value), dim=-2)
-        present = key_value if use_cache else None
-
         key, value = key_value.split((self.head_dim, self.head_dim), dim=-1)
+        key = self._split_heads(key, self.kv_heads, self.head_dim)
+        value = self._split_heads(value, self.kv_heads, self.head_dim)
 
-        attn_output, attn_weights = self._attn(query, key.transpose(-1, -2), value, attention_mask, head_mask)
+        if layer_past is not None:
+            past_key, past_value = layer_past
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
+
+        if use_cache is True:
+            present = (key, value)
+        else:
+            present = None
+
+        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
         if not self.multi_query:
             attn_output = attn_output.transpose(1, 2).reshape(hidden_states.shape)
@@ -584,7 +603,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
             past_length = 0
             past_key_values = tuple([None] * len(self.h))
         else:
-            past_length = past_key_values[0].size(-2)
+            past_length = past_key_values[0][0].size(-2)
 
         if attention_mask is not None and len(attention_mask.shape) == 2 and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -855,7 +874,10 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
         beam_idx at every generation step.
         """
-        return tuple(layer_past.index_select(0, beam_idx.to(layer_past.device)) for layer_past in past_key_values)
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past_key_values
+        )
 
 
 @add_start_docstrings(
