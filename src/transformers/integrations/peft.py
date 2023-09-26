@@ -270,7 +270,11 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                module.active_adapter = adapter_name
+                # For backward compatbility with previous PEFT versions
+                if hasattr(module, "set_adapter"):
+                    module.set_adapter(adapter_name)
+                else:
+                    module.active_adapter = adapter_name
                 _adapters_has_been_set = True
 
         if not _adapters_has_been_set:
@@ -294,7 +298,11 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                module.disable_adapters = True
+                # The recent version of PEFT need to call `enable_adapters` instead
+                if hasattr(module, "enable_adapters"):
+                    module.enable_adapters(enabled=False)
+                else:
+                    module.disable_adapters = True
 
     def enable_adapters(self) -> None:
         """
@@ -312,7 +320,11 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                module.disable_adapters = False
+                # The recent version of PEFT need to call `enable_adapters` instead
+                if hasattr(module, "enable_adapters"):
+                    module.enable_adapters(enabled=True)
+                else:
+                    module.disable_adapters = False
 
     def active_adapter(self) -> str:
         """
@@ -333,7 +345,11 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                return module.active_adapter
+                active_adapter = module.active_adapter
+                if isinstance(active_adapter, list):
+                    # In case the adapter name is a list (multiple adapters), we only consider the first one
+                    active_adapter = active_adapter[0]
+                return active_adapter
 
     def get_adapter_state_dict(self, adapter_name: Optional[str] = None) -> dict:
         """
@@ -356,6 +372,15 @@ class PeftAdapterMixin:
 
         if adapter_name is None:
             adapter_name = self.active_adapter()
+
+        if isinstance(adapter_name, list):
+            # In case the adapter name is a list (multiple adapters), we only consider the first one
+            adapter_name = adapter_name[0]
+
+            logger.warning(
+                "Multiple adapters detected, we will only consider the first adapter, to get all adapters state dict manually loop "
+                "over the list of adapters and call `get_adapter_state_dict` for each adapter."
+            )
 
         adapter_state_dict = get_peft_model_state_dict(self, adapter_name=adapter_name)
         return adapter_state_dict
