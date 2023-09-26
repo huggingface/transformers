@@ -2908,7 +2908,6 @@ class ModelTesterMixin:
 
                 self.assertTrue(torch.equal(out, out_fa))
 
-
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
