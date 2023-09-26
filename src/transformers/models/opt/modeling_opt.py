@@ -389,7 +389,6 @@ class OptFlashAttention2(OPTAttention):
 
         return attn_output, attn_weights_reshaped, past_key_value
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
         self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None
     ):
@@ -412,8 +411,9 @@ class OptFlashAttention2(OPTAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
-        # Contains at least one padding token in the sequence
-        if padding_mask is not None:
+        # we check if padding_mask contains all ones, in that case we don't use it. This is to make sure the torch.fx
+        # tests pass for the relevant models
+        if padding_mask.sum().item() != padding_mask.numel():
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
                 query_states, key_states, value_states, padding_mask, query_length
@@ -862,14 +862,13 @@ class OPTDecoder(OPTPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
-            padding_mask = None
         elif attention_mask.shape[1] != mask_seq_length:
             raise ValueError(
                 f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
                 f"{mask_seq_length} (sum of the lengths of current and past inputs)"
             )
-        else:
-            padding_mask = attention_mask
+
+        padding_mask = attention_mask
 
         causal_attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
