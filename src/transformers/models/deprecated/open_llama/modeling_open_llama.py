@@ -364,7 +364,6 @@ class OpenLlamaDecoderLayer(nn.Module):
         self.input_layernorm = OpenLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OpenLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,

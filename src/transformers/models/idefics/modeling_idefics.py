@@ -31,6 +31,7 @@ from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -261,7 +262,7 @@ def freeze_model(model, module_exceptions=[]):
     }
     module_exceptions_mapped = [mapping[m] for m in module_exceptions]
     for module in model.modules():
-        if module_exceptions and any([isinstance(module, t) for t in module_exceptions_mapped]):
+        if module_exceptions and any(isinstance(module, t) for t in module_exceptions_mapped):
             module.requires_grad_(True)  # Explicitely setting it to true to avoid any mistakes
         else:
             module.requires_grad_(False)
@@ -427,7 +428,7 @@ class IdeficsDecoupledLinear(nn.Linear):
         output = F.linear(input, self.weight, self.bias)
 
         if self.out_additional_features > 0:
-            additional_features = F.linear(input, self.additional_fc.weight, self.additional_fc.bias)
+            additional_features = self.additional_fc(input)
             output = torch.cat((output, additional_features), -1)
 
         return output
@@ -494,6 +495,9 @@ class IdeficsRMSNorm(nn.Module):
             hidden_states = hidden_states.to(self.weight.dtype)
 
         return self.weight * hidden_states
+
+
+ALL_LAYERNORM_LAYERS.append(IdeficsRMSNorm)
 
 
 # this was adapted from LlamaRotaryEmbedding
