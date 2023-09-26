@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for Donut."""
+"""Image processor class for Nougat."""
 
 from typing import Dict, List, Optional, Union
 
@@ -24,10 +24,11 @@ from ...image_transforms import (
     pad,
     resize,
     to_channel_dimension_format,
+    to_pil_image,
 )
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -39,28 +40,32 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import TensorType, logging
-from ...utils.import_utils import is_vision_available
+from ...utils.import_utils import is_cv2_available, is_vision_available
 
 
 logger = logging.get_logger(__name__)
+
+
+if is_cv2_available():
+    pass
 
 
 if is_vision_available():
     import PIL
 
 
-class DonutImageProcessor(BaseImageProcessor):
+class NougatImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Donut image processor.
+    Constructs a Nougat image processor.
 
     Args:
+        do_crop_margin (`bool`, *optional*, defaults to `True`):
+            Whether to crop the image margins.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
-            Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
-            the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
-            method.
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 896, "width": 672}`):
+            Size of the image after resizing. Can be overridden by `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_thumbnail (`bool`, *optional*, defaults to `True`):
@@ -68,21 +73,19 @@ class DonutImageProcessor(BaseImageProcessor):
         do_align_long_axis (`bool`, *optional*, defaults to `False`):
             Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
         do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image. If `random_padding` is set to `True` in `preprocess`, each image is padded with a
-            random amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
-            padded to the largest image size in the batch.
+            Whether to pad the images to the largest image size in the batch.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
-            the `preprocess` method.
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
-            method.
-        do_normalize:
+            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
+            `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Image standard deviation.
     """
 
@@ -90,6 +93,7 @@ class DonutImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
+        do_crop_margin: bool = True,
         do_resize: bool = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -105,12 +109,10 @@ class DonutImageProcessor(BaseImageProcessor):
     ) -> None:
         super().__init__(**kwargs)
 
-        size = size if size is not None else {"height": 2560, "width": 1920}
-        if isinstance(size, (tuple, list)):
-            # The previous feature extractor size parameter was in (width, height) format
-            size = size[::-1]
+        size = size if size is not None else {"height": 896, "width": 672}
         size = get_size_dict(size)
 
+        self.do_crop_margin = do_crop_margin
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -120,9 +122,77 @@ class DonutImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
+    def python_find_non_zero(self, image: np.array):
+        """This is a reimplementation of a findNonZero function equivalent to cv2."""
+        non_zero_indices = np.column_stack(np.nonzero(image))
+        idxvec = non_zero_indices[:, [1, 0]]
+        idxvec = idxvec.reshape(-1, 1, 2)
+        return idxvec
+
+    def python_bounding_rect(self, coordinates):
+        """This is a reimplementation of a BoundingRect function equivalent to cv2."""
+        min_values = np.min(coordinates, axis=(0, 1)).astype(int)
+        max_values = np.max(coordinates, axis=(0, 1)).astype(int)
+        x_min, y_min = min_values[0], min_values[1]
+        width = max_values[0] - x_min + 1
+        height = max_values[1] - y_min + 1
+        return x_min, y_min, width, height
+
+    def crop_margin(
+        self,
+        image: np.array,
+        gray_threshold: int = 200,
+        data_format: Optional[ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Crops the margin of the image. Gray pixels are considered margin (i.e., pixels with a value below the
+        threshold).
+
+        Args:
+            image (`np.array`):
+                The image to be cropped.
+            gray_threshold (`int`, *optional*, defaults to `200`)
+                Value below which pixels are considered to be gray.
+            data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the output image. If unset, will use the inferred format from the
+                input.
+            input_data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If unset, will use the inferred format from the input.
+        """
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+
+        image = to_pil_image(image, input_data_format=input_data_format)
+        data = np.array(image.convert("L")).astype(np.uint8)
+        max_val = data.max()
+        min_val = data.min()
+        if max_val == min_val:
+            image = np.array(image)
+            image = (
+                to_channel_dimension_format(image, data_format, input_data_format)
+                if data_format is not None
+                else image
+            )
+            return image
+        data = (data - min_val) / (max_val - min_val) * 255
+        gray = data < gray_threshold
+        coords = self.python_find_non_zero(gray)
+        x_min, y_min, width, height = self.python_bounding_rect(coords)
+        image = image.crop((x_min, y_min, x_min + width, y_min + height))
+        image = np.array(image).astype(np.uint8)
+        image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
+
+        image = (
+            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+        )
+
+        return image
+
+    # Copied from transformers.models.donut.image_processing_donut.DonutImageProcessor.align_long_axis
     def align_long_axis(
         self,
         image: np.ndarray,
@@ -163,20 +233,17 @@ class DonutImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        random_padding: bool = False,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """
-        Pad the image to the specified size.
+        Pad the image to the specified size at the top, bottom, left and right.
 
         Args:
             image (`np.ndarray`):
                 The image to be padded.
             size (`Dict[str, int]`):
                 The size `{"height": h, "width": w}` to pad the image to.
-            random_padding (`bool`, *optional*, defaults to `False`):
-                Whether to use random padding or not.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -188,12 +255,8 @@ class DonutImageProcessor(BaseImageProcessor):
         delta_width = output_width - input_width
         delta_height = output_height - input_height
 
-        if random_padding:
-            pad_top = np.random.randint(low=0, high=delta_height + 1)
-            pad_left = np.random.randint(low=0, high=delta_width + 1)
-        else:
-            pad_top = delta_height // 2
-            pad_left = delta_width // 2
+        pad_top = delta_height // 2
+        pad_left = delta_width // 2
 
         pad_bottom = delta_height - pad_top
         pad_right = delta_width - pad_left
@@ -201,10 +264,7 @@ class DonutImageProcessor(BaseImageProcessor):
         padding = ((pad_top, pad_bottom), (pad_left, pad_right))
         return pad(image, padding, data_format=data_format, input_data_format=input_data_format)
 
-    def pad(self, *args, **kwargs):
-        logger.info("pad is deprecated and will be removed in version 4.27. Please use pad_image instead.")
-        return self.pad_image(*args, **kwargs)
-
+    # Copied from transformers.models.donut.image_processing_donut.DonutImageProcessor.thumbnail
     def thumbnail(
         self,
         image: np.ndarray,
@@ -255,6 +315,7 @@ class DonutImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    # Copied from transformers.models.donut.image_processing_donut.DonutImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -297,15 +358,15 @@ class DonutImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
+        do_crop_margin: bool = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
         do_thumbnail: bool = None,
         do_align_long_axis: bool = None,
         do_pad: bool = None,
-        random_padding: bool = False,
         do_rescale: bool = None,
-        rescale_factor: float = None,
+        rescale_factor: Union[int, float] = None,
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -319,8 +380,9 @@ class DonutImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
+            do_crop_margin (`bool`, *optional*, defaults to `self.do_crop_margin`):
+                Whether to crop the image margins.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -334,16 +396,11 @@ class DonutImageProcessor(BaseImageProcessor):
             do_align_long_axis (`bool`, *optional*, defaults to `self.do_align_long_axis`):
                 Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
-                Whether to pad the image. If `random_padding` is set to `True`, each image is padded with a random
-                amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
-                padded to the largest image size in the batch.
-            random_padding (`bool`, *optional*, defaults to `self.random_padding`):
-                Whether to use random padding when padding the image. If `True`, each image in the batch with be padded
-                with a random amount of padding on each side up to the size of the largest image in the batch.
+                Whether to pad the images to the largest image size in the batch.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image pixel values.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+                Whether to rescale the image by the specified scale `rescale_factor`.
+            rescale_factor (`int` or `float`, *optional*, defaults to `self.rescale_factor`):
+                Scale factor to use if rescaling the image.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
@@ -369,12 +426,9 @@ class DonutImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
+        do_crop_margin = do_crop_margin if do_crop_margin is not None else self.do_crop_margin
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        if isinstance(size, (tuple, list)):
-            # Previous feature extractor had size in (width, height) format
-            size = size[::-1]
-        size = get_size_dict(size)
         resample = resample if resample is not None else self.resample
         do_thumbnail = do_thumbnail if do_thumbnail is not None else self.do_thumbnail
         do_align_long_axis = do_align_long_axis if do_align_long_axis is not None else self.do_align_long_axis
@@ -396,11 +450,11 @@ class DonutImageProcessor(BaseImageProcessor):
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")
 
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
         if do_pad and size is None:
             raise ValueError("Size must be specified if do_pad is True.")
+
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
@@ -418,6 +472,9 @@ class DonutImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
+        if do_crop_margin:
+            images = [self.crop_margin(image, input_data_format=input_data_format) for image in images]
+
         if do_align_long_axis:
             images = [self.align_long_axis(image, size=size, input_data_format=input_data_format) for image in images]
 
@@ -431,12 +488,7 @@ class DonutImageProcessor(BaseImageProcessor):
             images = [self.thumbnail(image=image, size=size, input_data_format=input_data_format) for image in images]
 
         if do_pad:
-            images = [
-                self.pad_image(
-                    image=image, size=size, random_padding=random_padding, input_data_format=input_data_format
-                )
-                for image in images
-            ]
+            images = [self.pad_image(image=image, size=size, input_data_format=input_data_format) for image in images]
 
         if do_rescale:
             images = [
