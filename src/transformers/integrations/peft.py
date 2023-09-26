@@ -260,11 +260,12 @@ class PeftAdapterMixin:
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
         elif isinstance(adapter_name, list):
-            for adapter in adapter_name:
-                if adapter not in self.peft_config:
-                    raise ValueError(
-                        f"Adapter with name {adapter} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
-                    )
+            missing = set(adapter_name) - set(self.peft_config)
+            if len(missing) > 0:
+                raise ValueError(
+                    f"Following adapter(s) could not be found: {', '.join(missing)}. Make sure you are passing the correct adapter name(s)."
+                    f" current loaded adapters are: {list(self.peft_config.keys())}"
+                )
         elif adapter_name not in self.peft_config:
             raise ValueError(
                 f"Adapter with name {adapter_name} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
