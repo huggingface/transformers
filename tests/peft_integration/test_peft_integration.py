@@ -265,12 +265,12 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 _ = model.generate(input_ids=dummy_input)
 
                 model.set_adapter("default")
-                self.assertTrue(model.active_adapter() == ["default"])
-                self.assertTrue(model.active_adapter(return_multi_adapters=False) == "default")
+                self.assertTrue(model.active_adapters() == ["default"])
+                self.assertTrue(model.active_adapter() == "default")
 
                 model.set_adapter("adapter-2")
-                self.assertTrue(model.active_adapter() == ["adapter-2"])
-                self.assertTrue(model.active_adapter(return_multi_adapters=False) == "adapter-2")
+                self.assertTrue(model.active_adapters() == ["adapter-2"])
+                self.assertTrue(model.active_adapter() == "adapter-2")
 
                 # Logits comparison
                 self.assertFalse(
@@ -279,8 +279,8 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertFalse(torch.allclose(logits_original_model, logits_adapter_2.logits, atol=1e-6, rtol=1e-6))
 
                 model.set_adapter(["adapter-2", "default"])
-                self.assertTrue(model.active_adapter() == ["adapter-2", "default"])
-                self.assertTrue(model.active_adapter(return_multi_adapters=False) == "adapter-2")
+                self.assertTrue(model.active_adapters() == ["adapter-2", "default"])
+                self.assertTrue(model.active_adapter() == "adapter-2")
 
                 logits_adapter_mixed = model(dummy_input)
                 self.assertFalse(
