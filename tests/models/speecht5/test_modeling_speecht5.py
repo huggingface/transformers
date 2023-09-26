@@ -1012,7 +1012,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
 
     @cached_property
     def default_vocoder(self):
-        return SpeechT5HifiGan.from_pretrained(f"microsoft/speecht5_hifigan")
+        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan")
 
     def test_generation(self):
         model = self.default_model
