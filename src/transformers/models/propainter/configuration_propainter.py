@@ -27,12 +27,11 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/vit-base-patch16-224": "https://huggingface.co/vit-base-patch16-224/resolve/main/config.json",
-    # See all ViT models at https://huggingface.co/models?filter=vit
+    "shauray/ProPainter-hf": "https://huggingface.co/shauray/ProPainter-hf/resolve/main/config.json",
 }
 
 
-class ViTConfig(PretrainedConfig):
+class ProPainterConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTModel`]. It is used to instantiate an ViT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -88,13 +87,14 @@ class ViTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "vit"
+    model_type = "propainter"
 
     def __init__(
         self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        hidden_size=512,
+        threshold=.2,
+        num_hidden_layers=8,
+        num_attention_heads=4,
         intermediate_size=3072,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
@@ -103,9 +103,16 @@ class ViTConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         image_size=224,
         patch_size=16,
-        num_channels=3,
+        num_channels=128,
         qkv_bias=True,
         encoder_stride=16,
+        kernel_size=(7, 7),
+        padding = (3, 3),
+        stride = (3, 3),
+        window_size = (5, 9),
+        pool_size = (4, 4),
+
+
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -125,18 +132,3 @@ class ViTConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
 
-
-class ViTOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
