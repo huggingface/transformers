@@ -692,6 +692,7 @@ src/transformers/models/nezha/modeling_nezha.py
 src/transformers/models/nllb_moe/configuration_nllb_moe.py
 src/transformers/models/nllb_moe/convert_nllb_moe_sharded_original_checkpoint_to_pytorch.py
 src/transformers/models/nllb_moe/modeling_nllb_moe.py
+src/transformers/models/nougat/convert_nougat_to_hf.py
 src/transformers/models/nystromformer/configuration_nystromformer.py
 src/transformers/models/nystromformer/convert_nystromformer_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/nystromformer/modeling_nystromformer.py

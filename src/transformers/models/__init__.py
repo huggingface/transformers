@@ -147,6 +147,7 @@ from . import (
     nezha,
     nllb,
     nllb_moe,
+    nougat,
     nystromformer,
     oneformer,
     openai,
