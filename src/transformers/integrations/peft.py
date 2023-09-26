@@ -260,11 +260,12 @@ class PeftAdapterMixin:
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
         elif isinstance(adapter_name, list):
-            for adapter in adapter_name:
-                if adapter not in self.peft_config:
-                    raise ValueError(
-                        f"Adapter with name {adapter} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
-                    )
+            missing = set(adapter_name) - set(self.peft_config)
+            if len(missing) > 0:
+                raise ValueError(
+                    f"Following adapter(s) could not be found: {', '.join(missing)}. Make sure you are passing the correct adapter name(s)."
+                    f" current loaded adapters are: {list(self.peft_config.keys())}"
+                )
         elif adapter_name not in self.peft_config:
             raise ValueError(
                 f"Adapter with name {adapter_name} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
@@ -332,18 +333,16 @@ class PeftAdapterMixin:
                 else:
                     module.disable_adapters = False
 
-    def active_adapter(self, return_multi_adapters: bool = True) -> Union[str, List[str]]:
+    def active_adapters(self) -> List[str]:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
 
-        Gets the current active adapter of the model. In case of multi-adapter inference (combining multiple adapters
-        for inference) returns the list of active adapters so that users can deal with them accordingly.
+        Gets the current active adapters of the model. In case of multi-adapter inference (combining multiple adapters
+        for inference) returns the list of all active adapters so that users can deal with them accordingly.
 
-        Args:
-            return_multi_adapters (`bool`, *optional*, defaults to `True`):
-                Whether to return a list of active adapters or not. If `False`, only the first adapter is returned. If
-                `True`, returns the list of active adapters.
+        For previous PEFT versions (that does not support multi-adapter inference), `module.active_adapter` will return
+        a single string.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
 
@@ -357,16 +356,34 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                active_adapter = module.active_adapter
-                if isinstance(active_adapter, list) and not return_multi_adapters:
-                    # In case the adapter name is a list (multiple adapters), we only consider the first one
-                    active_adapter = active_adapter[0]
+                active_adapters = module.active_adapter
+                break
 
-                    logger.warning(
-                        "Multiple adapters detected, we will only consider the first adapter. If you want to get all active adapters, "
-                        "call `active_adapter(return_multi_adapters=True)` instead."
-                    )
-                return active_adapter
+        # For previous PEFT versions
+        if isinstance(active_adapters, str):
+            active_adapters = [active_adapters]
+
+        return active_adapters
+
+    def active_adapter(self) -> str:
+        """
+        Gets the current active adapter of the model. In case of multi-adapter inference (combining multiple adapters
+        for inference) returns the first active adapter - kept for backward compatibility.
+
+        For higher versions of PEFT, users should use `model.active_adapters()` instead to get the list of active
+        adapters.
+        """
+
+        active_adapters = self.active_adapters()
+
+        if isinstance(active_adapters, list):
+            logger.warning(
+                "`active_adapter` will return the first adapter in case of multi-adapter inference. Make sure to know what you are doing.",
+                " you should use `model.active_adapters() instead to get the list of active adapters",
+            )
+            active_adapters = active_adapters[0]
+
+        return active_adapters
 
     def get_adapter_state_dict(self, adapter_name: Optional[str] = None) -> dict:
         """
@@ -388,7 +405,7 @@ class PeftAdapterMixin:
         from peft import get_peft_model_state_dict
 
         if adapter_name is None:
-            adapter_name = self.active_adapter(return_multi_adapters=False)
+            adapter_name = self.active_adapter()
 
         adapter_state_dict = get_peft_model_state_dict(self, adapter_name=adapter_name)
         return adapter_state_dict
