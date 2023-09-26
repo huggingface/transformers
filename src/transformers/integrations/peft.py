@@ -341,6 +341,8 @@ class PeftAdapterMixin:
         Gets the current active adapters of the model. In case of multi-adapter inference (combining multiple adapters
         for inference) returns the list of all active adapters so that users can deal with them accordingly.
 
+        For previous PEFT versions (that does not support multi-adapter inference), `module.active_adapter` will return 
+        a single string.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
 
@@ -354,10 +356,14 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                active_adapter = module.active_adapter
+                active_adapters = module.active_adapter
                 break
 
-        return active_adapter
+        # For previous PEFT versions
+        if isinstance(active_adapters, str):
+            active_adapters = [active_adapters]
+
+        return active_adapters
 
     def active_adapter(self) -> str:
         """

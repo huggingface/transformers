@@ -2006,15 +2006,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         peft_state_dict[f"base_model.model.{key}"] = value
                     state_dict = peft_state_dict
 
-                active_adapter = self.active_adapter()
+                active_adapter = self.active_adapters()
 
-                if isinstance(active_adapter, list):
-                    if len(active_adapter) > 1:
-                        logger.warning(
-                            "Multiple active adapters detected, will only consider the first active adapter. In order to save them all, please iteratively call `set_adapter()` on each"
-                            " adapter name and save them one by one manually. "
-                        )
-                    active_adapter = active_adapter[0]
+                if len(active_adapter) > 1:
+                    logger.warning(
+                        "Multiple active adapters detected, will only consider the first active adapter. In order to save them all, please iteratively call `set_adapter()` on each"
+                        " adapter name and save them one by one manually. "
+                    )
+                active_adapter = active_adapter[0]
 
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
