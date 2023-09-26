@@ -83,37 +83,7 @@ def imagebind_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->ImageBind
-class ImageBindVisionModelOutput(ModelOutput):
-    """
-    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
-
-    Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->ImageBind
+# CLIPTextModelOutput + normalized embeddings
 class ImageBindTextModelOutput(ModelOutput):
     """
     Base class for text model's outputs that also contains a pooling of the last hidden states.
@@ -134,16 +104,53 @@ class ImageBindTextModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        normalized_text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The normalized text embeddings obtained by applying the projection layer to the pooler_output, then
+            applying L2 normalization and scaling the logits.
     """
 
     text_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    normalized_text_embeds: Optional[torch.FloatTensor] = None
 
 
-# TODO: copied from CLAP for now, change as appropriate
-# Copied from transformers.models.clap.modeling_clap.CLAPAudioModelOutput with CLAP->ImageBind
+@dataclass
+# ClipVisionModelOutput + normalized embeddings
+class ImageBindVisionModelOutput(ModelOutput):
+    """
+    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+
+    Args:
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        normalized_image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The normalized image embeddings obtained by applying the projection layer to the pooler_output, then
+            applying L2 normalization and scaling the logits.
+    """
+
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    normalized_image_embeds: Optional[torch.FloatTensor] = None
+
+
+# CLAPAudioModelOutput + normalized embeddings
 @dataclass
 class ImageBindAudioModelOutput(ModelOutput):
     """
@@ -165,15 +172,18 @@ class ImageBindAudioModelOutput(ModelOutput):
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        normalized_audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The normalized audio embeddings obtained by applying the projection layer to the pooler_output, then
+            applying L2 normalization and scaling the logits.
     """
 
     audio_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    normalized_audio_embeds: Optional[torch.FloatTensor] = None
 
 
-# TODO: Add depth, thermal, IMU modeling output classes
 @dataclass
 class ImageBindDepthModelOutput(ModelOutput):
     """
@@ -195,12 +205,16 @@ class ImageBindDepthModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        normalized_depth_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The normalized depth embeddings obtained by applying the projection layer to the pooler_output, then
+            applying L2 normalization and scaling the logits.
     """
     
     depth_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    normalized_depth_embeds: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -224,12 +238,16 @@ class ImageBindThermalModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        normalized_thermal_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The normalized thermal embeddings obtained by applying the projection layer to the pooler_output, then
+            applying L2 normalization and scaling the logits.
     """
     
     thermal_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    normalized_thermal_embeds: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -253,12 +271,16 @@ class ImageBindImuModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        normalized_imu_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The normalized IMU embeddings obtained by applying the projection layer to the pooler_output, then
+            applying L2 normalization and scaling the logits.
     """
     
     imu_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    normalized_imu_embeds: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -287,17 +309,17 @@ class ImageBindOutput(ModelOutput):
             The scaled dot product scores between `imu_embeds` and `image_embeds`. This represents the IMU-image
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`ImageBindTextModel`].
+            The normalized text embeddings obtained by applying the projection layer to the pooled output of [`ImageBindTextModel`], then applying L2 normalization and logit scaling.
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`ImageBindVisionModel`].
+            The normalized image embeddings obtained by applying the projection layer to the pooled output of [`ImageBindVisionModel`], then applying L2 normalization and logit scaling.
         audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The audio embeddings obtained by applying the projection layer to the pooled output of [`ImageBindAudioModel`].
+            The normalized audio embeddings obtained by applying the projection layer to the pooled output of [`ImageBindAudioModel`], then applying L2 normalization and logit scaling.
         depth_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The depth embeddings obtained by applying the projection layer to the pooled output of [`ImageBindDepthModel`].
+            The normalized depth embeddings obtained by applying the projection layer to the pooled output of [`ImageBindDepthModel`], then applying L2 normalization and logit scaling.
         thermal_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The thermal embeddings obtained by applying the projection layer to the pooled output of [`ImageBindThermalModel`].
+            The normalized thermal embeddings obtained by applying the projection layer to the pooled output of [`ImageBindThermalModel`], then applying L2 normalization and logit scaling.
         imu_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The IMU embeddings obtained by applying the projection layer to the pooled output of [`ImageBindImuModel`].
+            The normalized IMU embeddings obtained by applying the projection layer to the pooled output of [`ImageBindImuModel`], then applying L2 normalization and logit scaling.
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`ImageBindTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
@@ -1949,7 +1971,6 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         pooled_output = text_outputs[1]
         text_features = self.text_projection(pooled_output)
-        text_features = self.text_postprocessor(text_features)
 
         return text_features
 
@@ -1999,7 +2020,6 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         pooled_output = vision_outputs[1]  # pooled_output
         image_features = self.visual_projection(pooled_output)
-        image_features = self.vision_postprocessor(image_features)
 
         return image_features
     
@@ -2050,7 +2070,6 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         pooled_output = audio_outputs[1]  # pooled_output
         audio_features = self.audio_projection(pooled_output)
-        audio_features = self.audio_postprocessor(audio_features)
 
         return audio_features
 
@@ -2101,7 +2120,6 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         pooled_output = depth_outputs[1]  # pooled_output
         depth_features = self.depth_projection(pooled_output)
-        depth_features = self.depth_postprocessor(depth_features)
 
         return depth_features
 
@@ -2152,7 +2170,6 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         pooled_output = thermal_outputs[1]  # pooled_output
         thermal_features = self.thermal_projection(pooled_output)
-        thermal_features = self.thermal_postprocessor(thermal_features)
 
         return thermal_features
 
@@ -2203,7 +2220,6 @@ class ImageBindModel(ImageBindPreTrainedModel):
 
         pooled_output = imu_outputs[1]  # pooled_output
         imu_features = self.imu_projection(pooled_output)
-        imu_features = self.imu_postprocessor(imu_features)
 
         return imu_features
 
@@ -2426,10 +2442,10 @@ class ImageBindTextModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = text_outputs[1]
 
         text_embeds = self.text_projection(pooled_output)
-        text_embeds = self.text_postprocessor(text_embeds)
+        normalized_text_embeds = self.text_postprocessor(text_embeds)
 
         if not return_dict:
-            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
+            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:] + (normalized_text_embeds,)
             return tuple(output for output in outputs if output is not None)
 
         return ImageBindTextModelOutput(
@@ -2437,6 +2453,7 @@ class ImageBindTextModelWithProjection(ImageBindPreTrainedModel):
             last_hidden_state=text_outputs.last_hidden_state,
             hidden_states=text_outputs.hidden_states,
             attentions=text_outputs.attentions,
+            normalized_text_embeds=normalized_text_embeds,
         )
 
 
@@ -2507,10 +2524,10 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = vision_outputs[1]  # pooled_output
 
         image_embeds = self.visual_projection(pooled_output)
-        image_embeds = self.vision_postprocessor(image_embeds)
+        normalized_image_embeds = self.vision_postprocessor(image_embeds)
 
         if not return_dict:
-            outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:]
+            outputs = (image_embeds, vision_outputs[0]) + vision_outputs[2:] + (normalized_image_embeds,)
             return tuple(output for output in outputs if output is not None)
 
         return ImageBindVisionModelOutput(
@@ -2518,6 +2535,7 @@ class ImageBindVisionModelWithProjection(ImageBindPreTrainedModel):
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
+            normalized_image_embeds=normalized_image_embeds,
         )
 
 
@@ -2588,10 +2606,10 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = audio_outputs[1]  # pooled_output
 
         audio_embeds = self.audio_projection(pooled_output)
-        audio_embeds = self.audio_postprocessor(audio_embeds)
+        normalized_audio_embeds = self.audio_postprocessor(audio_embeds)
 
         if not return_dict:
-            outputs = (audio_embeds, audio_outputs[0]) + audio_outputs[2:]
+            outputs = (audio_embeds, audio_outputs[0]) + audio_outputs[2:] + (normalized_audio_embeds,)
             return tuple(output for output in outputs if output is not None)
 
         return ImageBindAudioModelOutput(
@@ -2599,6 +2617,7 @@ class ImageBindAudioModelWithProjection(ImageBindPreTrainedModel):
             last_hidden_state=audio_outputs.last_hidden_state,
             hidden_states=audio_outputs.hidden_states,
             attentions=audio_outputs.attentions,
+            normalized_audio_embeds=normalized_audio_embeds,
         )
 
 
@@ -2669,10 +2688,10 @@ class ImageBindDepthModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = depth_outputs[1]  # pooled_output
 
         depth_embeds = self.depth_projection(pooled_output)
-        depth_embeds = self.depth_postprocessor(depth_embeds)
+        normalized_depth_embeds = self.depth_postprocessor(depth_embeds)
 
         if not return_dict:
-            outputs = (depth_embeds, depth_outputs[0]) + depth_outputs[2:]
+            outputs = (depth_embeds, depth_outputs[0]) + depth_outputs[2:] + (normalized_depth_embeds,)
             return tuple(output for output in outputs if output is not None)
 
         return ImageBindDepthModelOutput(
@@ -2680,6 +2699,7 @@ class ImageBindDepthModelWithProjection(ImageBindPreTrainedModel):
             last_hidden_state=depth_outputs.last_hidden_state,
             hidden_states=depth_outputs.hidden_states,
             attentions=depth_outputs.attentions,
+            normalized_depth_embeds=normalized_depth_embeds,
         )
 
 
@@ -2750,10 +2770,10 @@ class ImageBindThermalModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = thermal_outputs[1]  # pooled_output
 
         thermal_embeds = self.thermal_projection(pooled_output)
-        thermal_embeds = self.thermal_postprocessor(thermal_embeds)
+        normalized_thermal_embeds = self.thermal_postprocessor(thermal_embeds)
 
         if not return_dict:
-            outputs = (thermal_embeds, thermal_outputs[0]) + thermal_outputs[2:]
+            outputs = (thermal_embeds, thermal_outputs[0]) + thermal_outputs[2:] + (normalized_thermal_embeds,)
             return tuple(output for output in outputs if output is not None)
 
         return ImageBindThermalModelOutput(
@@ -2761,6 +2781,7 @@ class ImageBindThermalModelWithProjection(ImageBindPreTrainedModel):
             last_hidden_state=thermal_outputs.last_hidden_state,
             hidden_states=thermal_outputs.hidden_states,
             attentions=thermal_outputs.attentions,
+            normalized_thermal_embeds=normalized_thermal_embeds,
         )
 
 
@@ -2831,10 +2852,10 @@ class ImageBindImuModelWithProjection(ImageBindPreTrainedModel):
         pooled_output = imu_outputs[1]  # pooled_output
 
         imu_embeds = self.imu_projection(pooled_output)
-        imu_embeds = self.imu_postprocessor(imu_embeds)
+        normalized_imu_embeds = self.imu_postprocessor(imu_embeds)
 
         if not return_dict:
-            outputs = (imu_embeds, imu_outputs[0]) + imu_outputs[2:]
+            outputs = (imu_embeds, imu_outputs[0]) + imu_outputs[2:] + (normalized_imu_embeds,)
             return tuple(output for output in outputs if output is not None)
 
         return ImageBindImuModelOutput(
@@ -2842,4 +2863,5 @@ class ImageBindImuModelWithProjection(ImageBindPreTrainedModel):
             last_hidden_state=imu_outputs.last_hidden_state,
             hidden_states=imu_outputs.hidden_states,
             attentions=imu_outputs.attentions,
+            normalized_imu_embeds=normalized_imu_embeds,
         )
