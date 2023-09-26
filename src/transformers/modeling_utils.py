@@ -1996,9 +1996,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 logger.info(
                     "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
                 )
-                
+
                 total_adapters = list(self.peft_config.keys())
-                
+
                 for adapter_name in total_adapters:
                     adapter_state_dict = model_to_save.get_adapter_state_dict(adapter_name=adapter_name)
 
@@ -2026,7 +2026,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     current_adapter = list(peft_multi_adapter_state_dict.keys())[0]
                     state_dict = peft_multi_adapter_state_dict[current_adapter].copy()
                     peft_multi_adapter_state_dict = None
-
 
         _peft_save_multi_adapter = _hf_peft_config_loaded and peft_multi_adapter_state_dict is not None
 
@@ -2067,11 +2066,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             weights_name = ADAPTER_SAFE_WEIGHTS_NAME if safe_serialization else ADAPTER_WEIGHTS_NAME
 
         if not _peft_save_multi_adapter:
-            self._shard_and_save_checkpoints(save_directory, state_dict, weights_name, max_shard_size, safe_serialization, is_main_process, variant, save_function)
+            self._shard_and_save_checkpoints(
+                save_directory,
+                state_dict,
+                weights_name,
+                max_shard_size,
+                safe_serialization,
+                is_main_process,
+                variant,
+                save_function,
+            )
         else:
             for adapter_name in peft_multi_adapter_state_dict:
                 # The default adapter always needs to be saved on the root directory
-                adapter_save_path = save_directory if adapter_name == "default" else os.path.join(save_directory, adapter_name)
+                adapter_save_path = (
+                    save_directory if adapter_name == "default" else os.path.join(save_directory, adapter_name)
+                )
 
                 self._shard_and_save_checkpoints(
                     adapter_save_path,
@@ -2082,7 +2092,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     is_main_process,
                     variant,
                     save_function,
-                ) 
+                )
 
         if push_to_hub:
             self._upload_modified_files(
@@ -2094,15 +2104,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
     def _shard_and_save_checkpoints(
-        self, 
-        save_directory, 
-        state_dict, 
-        weights_name, 
-        max_shard_size, 
-        safe_serialization, 
-        is_main_process, 
-        variant, 
-        save_function: Callable = torch.save
+        self,
+        save_directory,
+        state_dict,
+        weights_name,
+        max_shard_size,
+        safe_serialization,
+        is_main_process,
+        variant,
+        save_function: Callable = torch.save,
     ):
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
 
@@ -2189,7 +2199,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.warning_once(
                 f"Removed shared tensor {warn_names} while saving. This should be OK, but check by verifying that you don't receive any warning while reloading",
             )
-        
+
         return state_dict
 
     def get_memory_footprint(self, return_buffers=True):
