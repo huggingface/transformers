@@ -265,16 +265,30 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 _ = model.generate(input_ids=dummy_input)
 
                 model.set_adapter("default")
-                self.assertTrue(model.active_adapter() == "default")
+                self.assertTrue(model.active_adapter() == ["default"])
+                self.assertTrue(model.active_adapter(return_multi_adapters=False) == "default")
 
                 model.set_adapter("adapter-2")
-                self.assertTrue(model.active_adapter() == "adapter-2")
+                self.assertTrue(model.active_adapter() == ["adapter-2"])
+                self.assertTrue(model.active_adapter(return_multi_adapters=False) == "adapter-2")
 
                 # Logits comparison
                 self.assertFalse(
                     torch.allclose(logits_adapter_1.logits, logits_adapter_2.logits, atol=1e-6, rtol=1e-6)
                 )
                 self.assertFalse(torch.allclose(logits_original_model, logits_adapter_2.logits, atol=1e-6, rtol=1e-6))
+
+                model.set_adapter(["adapter-2", "default"])
+                self.assertTrue(model.active_adapter() == ["adapter-2", "default"])
+
+                logits_adapter_mixed = model(dummy_input)
+                self.assertFalse(
+                    torch.allclose(logits_adapter_1.logits, logits_adapter_mixed.logits, atol=1e-6, rtol=1e-6)
+                )
+
+                self.assertFalse(
+                    torch.allclose(logits_adapter_2.logits, logits_adapter_mixed.logits, atol=1e-6, rtol=1e-6)
+                )
 
     @require_torch_gpu
     def test_peft_from_pretrained_kwargs(self):

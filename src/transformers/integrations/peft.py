@@ -245,7 +245,7 @@ class PeftAdapterMixin:
 
         self.set_adapter(adapter_name)
 
-    def set_adapter(self, adapter_name: str) -> None:
+    def set_adapter(self, adapter_name: Union[List[str], str]) -> None:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -253,12 +253,18 @@ class PeftAdapterMixin:
         Sets a specific adapter by forcing the model to use a that adapter and disable the other adapters.
 
         Args:
-            adapter_name (`str`):
-                The name of the adapter to set.
+            adapter_name (`Union[List[str], str]`):
+                The name of the adapter to set. Can be also a list of strings to set multiple adapters.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
+        elif isinstance(adapter_name, list):
+            for adapter in adapter_name:
+                if adapter not in self.peft_config:
+                    raise ValueError(
+                        f"Adapter with name {adapter} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
+                    )
         elif adapter_name not in self.peft_config:
             raise ValueError(
                 f"Adapter with name {adapter_name} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
@@ -326,7 +332,7 @@ class PeftAdapterMixin:
                 else:
                     module.disable_adapters = False
 
-    def active_adapter(self, return_multi_adapters: bool = False) -> Union[str, List[str]]:
+    def active_adapter(self, return_multi_adapters: bool = True) -> Union[str, List[str]]:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -335,7 +341,7 @@ class PeftAdapterMixin:
         for inference) returns the list of active adapters so that users can deal with them accordingly.
 
         Args:
-            return_multi_adapters (`bool`, *optional*, defaults to `False`):
+            return_multi_adapters (`bool`, *optional*, defaults to `True`):
                 Whether to return a list of active adapters or not. If `False`, only the first adapter is returned. If
                 `True`, returns the list of active adapters.
         """
@@ -382,7 +388,7 @@ class PeftAdapterMixin:
         from peft import get_peft_model_state_dict
 
         if adapter_name is None:
-            adapter_name = self.active_adapter()
+            adapter_name = self.active_adapter(return_multi_adapters=False)
 
         adapter_state_dict = get_peft_model_state_dict(self, adapter_name=adapter_name)
         return adapter_state_dict
