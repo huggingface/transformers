@@ -1999,51 +1999,34 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 
                 total_adapters = list(self.peft_config.keys())
                 
-                if len(total_adapters) == 1:
-                    state_dict = model_to_save.get_adapter_state_dict()
+                for adapter_name in total_adapters:
+                    adapter_state_dict = model_to_save.get_adapter_state_dict(adapter_name=adapter_name)
 
                     if save_peft_format:
                         logger.info(
                             "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
                         )
                         peft_state_dict = {}
-                        for key, value in state_dict.items():
+                        for key, value in adapter_state_dict.items():
                             peft_state_dict[f"base_model.model.{key}"] = value
-                        state_dict = peft_state_dict
+                        adapter_state_dict = peft_state_dict.copy()
+                        # Free memory
+                        del peft_state_dict
 
-                    active_adapter = self.active_adapter()
+                    current_peft_config = self.peft_config[adapter_name]
+                    peft_multi_adapter_state_dict[adapter_name] = adapter_state_dict
 
-                    if isinstance(active_adapter, list):
-                        active_adapter = active_adapter[0]
-
-                        current_peft_config = self.peft_config[active_adapter]
-                        current_peft_config.save_pretrained(save_directory)
+                    # the default adapter is always saved on the root directory
+                    if adapter_name != "default":
+                        current_peft_config.save_pretrained(os.path.join(save_directory, adapter_name))
                     else:
-                        current_peft_config = self.peft_config[active_adapter]
                         current_peft_config.save_pretrained(save_directory)
-                else:
-                    for adapter_name in total_adapters:
-                        adapter_state_dict = model_to_save.get_adapter_state_dict(adapter_name=adapter_name)
 
-                        if save_peft_format:
-                            logger.info(
-                                "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
-                            )
-                            peft_state_dict = {}
-                            for key, value in adapter_state_dict.items():
-                                peft_state_dict[f"base_model.model.{key}"] = value
-                            adapter_state_dict = peft_state_dict.copy()
-                            # Free memory
-                            del peft_state_dict
+                if len(peft_multi_adapter_state_dict.keys()) == 1:
+                    current_adapter = list(peft_multi_adapter_state_dict.keys())[0]
+                    state_dict = peft_multi_adapter_state_dict[current_adapter].copy()
+                    peft_multi_adapter_state_dict = None
 
-                        current_peft_config = self.peft_config[adapter_name]
-                        peft_multi_adapter_state_dict[adapter_name] = adapter_state_dict
-
-                        # the default adapter is always saved on the root directory
-                        if adapter_name != "default":
-                            current_peft_config.save_pretrained(os.path.join(save_directory, adapter_name))
-                        else:
-                            current_peft_config.save_pretrained(save_directory)
 
         _peft_save_multi_adapter = _hf_peft_config_loaded and peft_multi_adapter_state_dict is not None
 
