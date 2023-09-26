@@ -153,6 +153,7 @@ class OptimizerNames(ExplicitEnum):
     PAGED_ADAMW_8BIT = "paged_adamw_8bit"
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
+    RMSPROP = "rmsprop"
 
 
 # TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
