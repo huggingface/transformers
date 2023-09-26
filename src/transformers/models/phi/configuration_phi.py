@@ -111,16 +111,17 @@ class PhiConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
+        vocab_size=51200,
+        hidden_size=2048,
+        intermediate_size=8192,
+        num_hidden_layers=24,
+        num_attention_heads=16,
         num_key_value_heads=None,
-        hidden_act="silu",
+        rotary_dim=32,
+        hidden_act="gelu_new",
         max_position_embeddings=2048,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        rms_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=None,
         bos_token_id=1,
@@ -129,6 +130,8 @@ class PhiConfig(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
+        resid_pdrop=0.0,
+        embd_pdrop=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,6 +146,7 @@ class PhiConfig(PretrainedConfig):
             num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
+        self.rotary_dim = rotary_dim
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
@@ -150,6 +154,8 @@ class PhiConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.resid_pdrop = resid_pdrop
+        self.embd_pdrop = embd_pdrop
         self._rope_scaling_validation()
 
         super().__init__(

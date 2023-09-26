@@ -33,7 +33,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -60,6 +59,7 @@ PHI_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(padding_mask):
     seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(padding_mask.flatten(), as_tuple=False).flatten()
@@ -105,28 +105,19 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Phi
-class PhiRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        PhiRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-ALL_LAYERNORM_LAYERS.append(PhiRMSNorm)
-
-
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Phi
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Phi with self.register_buffer("inv_freq", inv_freq, persistent=False)->self.register_buffer("inv_freq", inv_freq)
 class PhiRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -135,7 +126,7 @@ class PhiRotaryEmbedding(nn.Module):
         self.max_position_embeddings = max_position_embeddings
         self.base = base
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("inv_freq", inv_freq)
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
@@ -163,51 +154,51 @@ class PhiRotaryEmbedding(nn.Module):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Phi
-class PhiLinearScalingRotaryEmbedding(PhiRotaryEmbedding):
-    """PhiRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-        self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base, device)
-
-    def _set_cos_sin_cache(self, seq_len, device, dtype):
-        self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-        t = t / self.scaling_factor
-
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
-
-
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Phi
-class PhiDynamicNTKScalingRotaryEmbedding(PhiRotaryEmbedding):
-    """PhiRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-        self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base, device)
-
-    def _set_cos_sin_cache(self, seq_len, device, dtype):
-        self.max_seq_len_cached = seq_len
-
-        if seq_len > self.max_position_embeddings:
-            base = self.base * (
-                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
-            ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
-            self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
+# # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Phi
+# class PhiLinearScalingRotaryEmbedding(PhiRotaryEmbedding):
+#     """PhiRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+#
+#     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+#         self.scaling_factor = scaling_factor
+#         super().__init__(dim, max_position_embeddings, base, device)
+#
+#     def _set_cos_sin_cache(self, seq_len, device, dtype):
+#         self.max_seq_len_cached = seq_len
+#         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+#         t = t / self.scaling_factor
+#
+#         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+#         # Different from paper, but it uses a different permutation in order to obtain the same calculation
+#         emb = torch.cat((freqs, freqs), dim=-1)
+#         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
+#         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
+#
+#
+# # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Phi
+# class PhiDynamicNTKScalingRotaryEmbedding(PhiRotaryEmbedding):
+#     """PhiRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+#
+#     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+#         self.scaling_factor = scaling_factor
+#         super().__init__(dim, max_position_embeddings, base, device)
+#
+#     def _set_cos_sin_cache(self, seq_len, device, dtype):
+#         self.max_seq_len_cached = seq_len
+#
+#         if seq_len > self.max_position_embeddings:
+#             base = self.base * (
+#                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+#             ) ** (self.dim / (self.dim - 2))
+#             inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+#             self.register_buffer("inv_freq", inv_freq, persistent=False)
+#
+#         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+#
+#         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+#         # Different from paper, but it uses a different permutation in order to obtain the same calculation
+#         emb = torch.cat((freqs, freqs), dim=-1)
+#         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
+#         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
 
 def rotate_half(x):
@@ -223,59 +214,28 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
     cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+    print(q.shape, sin.shape, cos.shape)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaMLP with Llama->Phi
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Phi
 class PhiMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, x):
-        if self.config.pretraining_tp > 1:
-            slice = self.intermediate_size // self.config.pretraining_tp
-            gate_proj_slices = self.gate_proj.weight.split(slice, dim=0)
-            up_proj_slices = self.up_proj.weight.split(slice, dim=0)
-            down_proj_slices = self.down_proj.weight.split(slice, dim=1)
-
-            gate_proj = torch.cat(
-                [F.linear(x, gate_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1
-            )
-            up_proj = torch.cat([F.linear(x, up_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1)
-
-            intermediate_states = (self.act_fn(gate_proj) * up_proj).split(slice, dim=2)
-            down_proj = [
-                F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.config.pretraining_tp)
-            ]
-            down_proj = sum(down_proj)
-        else:
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-
-        return down_proj
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->Phi
 class PhiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -295,43 +255,51 @@ class PhiAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
 
-        self._init_rope()
+        self.rotary_emb = PhiRotaryEmbedding(
+            config.rotary_dim,
+            max_position_embeddings=self.max_position_embeddings,
+            base=self.rope_theta,
+        )
 
-    def _init_rope(self):
-        if self.config.rope_scaling is None:
-            self.rotary_emb = PhiRotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-            )
-        else:
-            scaling_type = self.config.rope_scaling["type"]
-            scaling_factor = self.config.rope_scaling["factor"]
-            if scaling_type == "linear":
-                self.rotary_emb = PhiLinearScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            elif scaling_type == "dynamic":
-                self.rotary_emb = PhiDynamicNTKScalingRotaryEmbedding(
-                    self.head_dim,
-                    max_position_embeddings=self.max_position_embeddings,
-                    scaling_factor=scaling_factor,
-                    base=self.rope_theta,
-                )
-            else:
-                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
+        # self._init_rope()
 
+    # def _init_rope(self):
+    #     if self.config.rope_scaling is None:
+    #         self.rotary_emb = PhiRotaryEmbedding(
+    #             self.head_dim,
+    #             max_position_embeddings=self.max_position_embeddings,
+    #             base=self.rope_theta,
+    #         )
+    #     else:
+    #         scaling_type = self.config.rope_scaling["type"]
+    #         scaling_factor = self.config.rope_scaling["factor"]
+    #         if scaling_type == "linear":
+    #             self.rotary_emb = PhiLinearScalingRotaryEmbedding(
+    #                 self.head_dim,
+    #                 max_position_embeddings=self.max_position_embeddings,
+    #                 scaling_factor=scaling_factor,
+    #                 base=self.rope_theta,
+    #             )
+    #         elif scaling_type == "dynamic":
+    #             self.rotary_emb = PhiDynamicNTKScalingRotaryEmbedding(
+    #                 self.head_dim,
+    #                 max_position_embeddings=self.max_position_embeddings,
+    #                 scaling_factor=scaling_factor,
+    #                 base=self.rope_theta,
+    #             )
+    #         else:
+    #             raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
+
+    # Copied from transformers.models.llama.modeling_llama.LlamaAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -603,7 +571,6 @@ class PhiFlashAttention2(PhiAttention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Phi
 class PhiDecoderLayer(nn.Module):
     def __init__(self, config: PhiConfig):
         super().__init__()
@@ -614,8 +581,8 @@ class PhiDecoderLayer(nn.Module):
             else PhiFlashAttention2(config=config)
         )
         self.mlp = PhiMLP(config)
-        self.input_layernorm = PhiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = PhiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(
         self,
@@ -646,7 +613,7 @@ class PhiDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        attn_outputs, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -655,14 +622,10 @@ class PhiDecoderLayer(nn.Module):
             use_cache=use_cache,
             padding_mask=padding_mask,
         )
-        hidden_states = residual + hidden_states
+        attn_outputs = self.resid_dropout(attn_outputs)
 
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
+        feed_forward_hidden_states = self.resid_dropout(self.mlp(hidden_states))
+        hidden_states = attn_outputs + feed_forward_hidden_states + residual
         outputs = (hidden_states,)
 
         if output_attentions:
@@ -788,7 +751,6 @@ PHI_INPUTS_DOCSTRING = r"""
     "The bare Phi Model outputting raw hidden-states without any specific head on top.",
     PHI_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->PHI,Llama->Phi
 class PhiModel(PhiPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PhiDecoderLayer`]
@@ -803,8 +765,9 @@ class PhiModel(PhiPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_dropout = nn.Dropout(config.embd_pdrop)
         self.layers = nn.ModuleList([PhiDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = PhiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -888,6 +851,7 @@ class PhiModel(PhiPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.embed_dropout(inputs_embeds)
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
@@ -980,7 +944,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
         super().__init__(config)
         self.model = PhiModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
