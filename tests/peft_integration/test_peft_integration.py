@@ -280,6 +280,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 model.set_adapter(["adapter-2", "default"])
                 self.assertTrue(model.active_adapter() == ["adapter-2", "default"])
+                self.assertTrue(model.active_adapter(return_multi_adapters=False) == "adapter-2")
 
                 logits_adapter_mixed = model(dummy_input)
                 self.assertFalse(
