@@ -94,15 +94,16 @@ if is_flax_available():
 # NOTE: currently copied from previous PR (#23284)
 
 
-class ImageBindVisionModelTester:
+class ImageBindTextModelTester:
     def __init__(
         self,
         parent,
         batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
+        seq_length=7,
         is_training=True,
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=99,
         hidden_size=32,
         projection_dim=32,
         num_hidden_layers=5,
@@ -110,14 +111,181 @@ class ImageBindVisionModelTester:
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
+        max_position_embeddings=512,
+        layer_norm_eps=1e-6,
         initializer_range=0.02,
+        logit_scale_init_value=14.2857,
+        learnable_logit_scale=True,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.max_position_embeddings = max_position_embeddings
+        self.initializer_range = initializer_range
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
+        self.scope = scope
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        if input_mask is not None:
+            batch_size, seq_length = input_mask.shape
+            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
+            for batch_idx, start_index in enumerate(rnd_start_indices):
+                input_mask[batch_idx, :start_index] = 1
+                input_mask[batch_idx, start_index:] = 0
+
+        config = self.get_config()
+
+        return config, input_ids, input_mask
+
+    def get_config(self):
+        return ImageBindTextConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            layer_norm_eps=self.layer_norm_eps,
+            max_position_embeddings=self.max_position_embeddings,
+            initializer_range=self.initializer_range,
+            logit_scale_init_value=self.logit_scale_init_value,
+            learnable_logit_scale=self.learnable_logit_scale,
+        )
+
+    def create_and_check_model(self, config, input_ids, input_mask):
+        model = ImageBindTextModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+            result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+    def create_and_check_model_with_projection(self, config, input_ids, input_mask):
+        model = ImageBindTextModelWithProjection(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+            result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, input_mask = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        return config, inputs_dict
+
+
+@require_torch
+class ImageBindTextModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (ImageBindTextModel, ImageBindTextModelWithProjection) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_head_masking = False
+
+    def setUp(self):
+        self.model_tester = ImageBindTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ImageBindTextConfig, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
+
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="ImageBind does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="ImageBindTextModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="ImageBindTextModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ImageBindTextModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+    @slow
+    def test_model_with_projection_from_pretrained(self):
+        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ImageBindTextModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "text_projection"))
+
+
+class ImageBindVisionModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=12,
+        image_size=30,
+        patch_size=(2, 2, 2),
+        stride=(2, 2, 2),
+        num_channels=3,
+        num_frames=2,
+        is_training=True,
+        hidden_size=32,
+        projection_dim=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        dropout=0.1,
+        layer_norm_eps=1e-6,
+        attention_dropout=0.1,
+        initializer_range=0.02,
+        logit_scale_init_value=None,
+        learnable_logit_scale=False,
         scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.patch_size = patch_size
+        self.stride = stride
         self.num_channels = num_channels
+        self.num_frames = num_frames
         self.is_training = is_training
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
@@ -126,15 +294,20 @@ class ImageBindVisionModelTester:
         self.intermediate_size = intermediate_size
         self.dropout = dropout
         self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
         self.scope = scope
 
+        # Resolve spatiotemporal patch size
+        temporal_patch_size, spatial_patch_size, _ = patch_size
+        num_patches = (num_frames // temporal_patch_size) * (image_size // spatial_patch_size) ** 2
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.num_frames, self.image_size, self.image_size])
         config = self.get_config()
 
         return config, pixel_values
@@ -143,7 +316,9 @@ class ImageBindVisionModelTester:
         return ImageBindVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
+            stride=self.stride,
             num_channels=self.num_channels,
+            num_frames=self.num_frames,
             hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
@@ -151,9 +326,13 @@ class ImageBindVisionModelTester:
             intermediate_size=self.intermediate_size,
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
+            layer_norm_eps=self.layer_norm_eps,
             initializer_range=self.initializer_range,
+            logit_scale_init_value=self.logit_scale_init_value,
+            learnable_logit_scale=self.learnable_logit_scale,
         )
 
+    # TODO: fix image size and patch_size
     def create_and_check_model(self, config, pixel_values):
         model = ImageBindVisionModel(config=config)
         model.to(torch_device)
@@ -167,6 +346,7 @@ class ImageBindVisionModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
+    # TODO: fix image size and patch_size
     def create_and_check_model_with_projection(self, config, pixel_values):
         model = ImageBindVisionModelWithProjection(config=config)
         model.to(torch_device)
@@ -268,34 +448,42 @@ class ImageBindVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(hasattr(model, "visual_projection"))
 
 
-class ImageBindTextModelTester:
+class ImageBindAudioModelTester:
     def __init__(
         self,
         parent,
         batch_size=12,
-        seq_length=7,
+        image_size=30,
+        patch_size=4,
+        stride=2,
+        num_channels=1,
         is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
+        num_mel_bins=128,
+        target_len=204,
         hidden_size=32,
         projection_dim=32,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
-        dropout=0.1,
+        dropout=0.0,
+        layer_norm_eps=1e-6,
+        add_kv_bias=True,
         attention_dropout=0.1,
-        max_position_embeddings=512,
+        drop_path_rate=0.1,
         initializer_range=0.02,
+        logit_scale_init_value=20.0,
+        learnable_logit_scale=False,
         scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.stride = stride
+        self.num_channels = num_channels
         self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
+        self.num_mel_bins = num_mel_bins
+        self.target_len = target_len
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
@@ -303,31 +491,32 @@ class ImageBindTextModelTester:
         self.intermediate_size = intermediate_size
         self.dropout = dropout
         self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
+        self.drop_path_rate = drop_path_rate
+        self.layer_norm_eps = layer_norm_eps
+        self.add_kv_bias = add_kv_bias
         self.initializer_range = initializer_range
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
         self.scope = scope
 
+        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches + 1
+
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        if input_mask is not None:
-            batch_size, seq_length = input_mask.shape
-            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
-            for batch_idx, start_index in enumerate(rnd_start_indices):
-                input_mask[batch_idx, :start_index] = 1
-                input_mask[batch_idx, start_index:] = 0
-
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
 
-        return config, input_ids, input_mask
+        return config, pixel_values
 
     def get_config(self):
-        return ImageBindTextConfig(
-            vocab_size=self.vocab_size,
+        return ImageBindAudioConfig(
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            stride=self.stride,
+            num_channels=self.num_channels,
+            num_mel_bins=self.num_mel_bins,
+            target_len=self.target_len,
             hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
@@ -335,50 +524,90 @@ class ImageBindTextModelTester:
             intermediate_size=self.intermediate_size,
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
-            max_position_embeddings=self.max_position_embeddings,
+            layer_norm_eps=self.layer_norm_eps,
+            add_kv_bias=self.add_kv_bias,
             initializer_range=self.initializer_range,
+            logit_scale_init_value=self.logit_scale_init_value,
+            learnable_logit_scale=self.learnable_logit_scale,
         )
 
-    def create_and_check_model(self, config, input_ids, input_mask):
-        model = ImageBindTextModel(config=config)
+    def create_and_check_model(self, config, pixel_values):
+        model = ImageBindAudioModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_ids, attention_mask=input_mask)
-            result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_model_with_projection(self, config, input_ids, input_mask):
-        model = ImageBindTextModelWithProjection(config=config)
+    def create_and_check_model_with_projection(self, config, pixel_values):
+        model = ImageBindAudioModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_ids, attention_mask=input_mask)
-            result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, input_mask = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
 @require_torch
-class ImageBindTextModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (ImageBindTextModel, ImageBindTextModelWithProjection) if is_torch_available() else ()
+class ImageBindAudioModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as IMAGEBIND does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (ImageBindAudioModel, ImageBindAudioModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
+    test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ImageBindTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ImageBindTextConfig, hidden_size=37)
+        self.model_tester = ImageBindAudioModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ImageBindAudioConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="ImageBind does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -394,30 +623,593 @@ class ImageBindTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="IMAGEBIND does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="ImageBindTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="ImageBindAudioModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="ImageBindTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="ImageBindAudioModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageBindTextModel.from_pretrained(model_name)
+            model = ImageBindAudioModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
         for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageBindTextModelWithProjection.from_pretrained(model_name)
+            model = ImageBindAudioModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "text_projection"))
+            self.assertTrue(hasattr(model, "audio_projection"))
+
+
+class ImageBindDepthModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=12,
+        image_size=30,
+        patch_size=2,
+        stride=2,
+        num_channels=1,
+        is_training=True,
+        hidden_size=32,
+        projection_dim=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        dropout=0.0,
+        layer_norm_eps=1e-6,
+        add_kv_bias=True,
+        attention_dropout=0.1,
+        drop_path_rate=0.1,
+        initializer_range=0.02,
+        logit_scale_init_value=5.0,
+        learnable_logit_scale=False,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.stride = stride
+        self.num_channels = num_channels
+        self.is_training = is_training
+        self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.drop_path_rate = drop_path_rate
+        self.layer_norm_eps = layer_norm_eps
+        self.add_kv_bias = add_kv_bias
+        self.initializer_range = initializer_range
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
+        self.scope = scope
+
+        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches + 1
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def get_config(self):
+        return ImageBindDepthConfig(
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            stride=self.stride,
+            num_channels=self.num_channels,
+            hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            layer_norm_eps=self.layer_norm_eps,
+            add_kv_bias=self.add_kv_bias,
+            initializer_range=self.initializer_range,
+            logit_scale_init_value=self.logit_scale_init_value,
+            learnable_logit_scale=self.learnable_logit_scale,
+        )
+
+    def create_and_check_model(self, config, pixel_values):
+        model = ImageBindDepthModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+    def create_and_check_model_with_projection(self, config, pixel_values):
+        model = ImageBindDepthModelWithProjection(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class ImageBindDepthModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as IMAGEBIND does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (ImageBindDepthModel, ImageBindDepthModelWithProjection) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+
+    def setUp(self):
+        self.model_tester = ImageBindDepthModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ImageBindDepthConfig, has_text_modality=False, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="ImageBind does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
+
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="ImageBindDepthModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="ImageBindDepthModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ImageBindDepthModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+    @slow
+    def test_model_with_projection_from_pretrained(self):
+        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ImageBindDepthModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "depth_projection"))
+
+
+class ImageBindThermalModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=12,
+        image_size=30,
+        patch_size=2,
+        stride=2,
+        num_channels=1,
+        is_training=True,
+        hidden_size=32,
+        projection_dim=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        dropout=0.0,
+        layer_norm_eps=1e-6,
+        add_kv_bias=True,
+        attention_dropout=0.1,
+        drop_path_rate=0.1,
+        initializer_range=0.02,
+        logit_scale_init_value=10.0,
+        learnable_logit_scale=False,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.stride = stride
+        self.num_channels = num_channels
+        self.is_training = is_training
+        self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.drop_path_rate = drop_path_rate
+        self.layer_norm_eps = layer_norm_eps
+        self.add_kv_bias = add_kv_bias
+        self.initializer_range = initializer_range
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
+        self.scope = scope
+
+        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size // patch_size) ** 2
+        self.seq_length = num_patches + 1
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def get_config(self):
+        return ImageBindThermalConfig(
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            stride=self.stride,
+            num_channels=self.num_channels,
+            hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            layer_norm_eps=self.layer_norm_eps,
+            add_kv_bias=self.add_kv_bias,
+            initializer_range=self.initializer_range,
+            logit_scale_init_value=self.logit_scale_init_value,
+            learnable_logit_scale=self.learnable_logit_scale,
+        )
+
+    def create_and_check_model(self, config, pixel_values):
+        model = ImageBindThermalModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+    def create_and_check_model_with_projection(self, config, pixel_values):
+        model = ImageBindThermalModelWithProjection(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class ImageBindThermalModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as IMAGEBIND does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (ImageBindThermalModel, ImageBindThermalModelWithProjection) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+
+    def setUp(self):
+        self.model_tester = ImageBindThermalModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ImageBindThermalConfig, has_text_modality=False, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="ImageBind does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
+
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="ImageBindThermalModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="ImageBindThermalModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ImageBindThermalModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+    @slow
+    def test_model_with_projection_from_pretrained(self):
+        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ImageBindThermalModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "thermal_projection"))
+
+
+class ImageBindImuModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=12,
+        input_shape=(6, 30),
+        kernel_size=2,
+        is_training=True,
+        hidden_size=32,
+        projection_dim=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        dropout=0.0,
+        layer_norm_eps=1e-6,
+        add_kv_bias=True,
+        attention_dropout=0.1,
+        drop_path_rate=0.1,
+        initializer_range=0.02,
+        logit_scale_init_value=5.0,
+        learnable_logit_scale=False,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.input_shape = input_shape
+        self.kernel_size = kernel_size
+        self.is_training = is_training
+        self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.drop_path_rate = drop_path_rate
+        self.layer_norm_eps = layer_norm_eps
+        self.add_kv_bias = add_kv_bias
+        self.initializer_range = initializer_range
+        self.logit_scale_init_value = logit_scale_init_value
+        self.learnable_logit_scale = learnable_logit_scale
+        self.scope = scope
+
+        num_patches = input_shape[1] // kernel_size
+        # The seq length is the number of patches + 1 (for the [CLS] token)
+        self.seq_length = num_patches + 1
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def get_config(self):
+        return ImageBindImuConfig(
+            input_shape=self.input_shape,
+            kernel_size=self.kernel_size,
+            hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            layer_norm_eps=self.layer_norm_eps,
+            add_kv_bias=self.add_kv_bias,
+            initializer_range=self.initializer_range,
+            logit_scale_init_value=self.logit_scale_init_value,
+            learnable_logit_scale=self.learnable_logit_scale,
+        )
+
+    def create_and_check_model(self, config, pixel_values):
+        model = ImageBindImuModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+    def create_and_check_model_with_projection(self, config, pixel_values):
+        model = ImageBindImuModelWithProjection(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class ImageBindImuModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as IMAGEBIND does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
+
+    all_model_classes = (ImageBindImuModel, ImageBindImuModelWithProjection) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_head_masking = False
+
+    def setUp(self):
+        self.model_tester = ImageBindImuModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ImageBindImuConfig, has_text_modality=False, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="ImageBind does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
+
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="ImageBindImuModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="ImageBindImuModel has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ImageBindImuModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+    @slow
+    def test_model_with_projection_from_pretrained(self):
+        for model_name in IMAGEBIND_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ImageBindImuModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "imu_projection"))
 
 
 class ImageBindModelTester:
