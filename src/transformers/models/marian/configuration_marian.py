@@ -129,7 +129,8 @@ class MarianConfig(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=58100,
         scale_embedding=False,
-        pad_token_id=58100,
+        source_pad_token_id=58100,
+        target_pad_token_id=58100,
         eos_token_id=0,
         forced_eos_token_id=0,
         share_encoder_decoder_embeddings=True,
@@ -157,7 +158,8 @@ class MarianConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.share_encoder_decoder_embeddings = share_encoder_decoder_embeddings
         super().__init__(
-            pad_token_id=pad_token_id,
+            source_pad_token_id=source_pad_token_id,
+            target_pad_token_id=target_pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,

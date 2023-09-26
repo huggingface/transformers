@@ -422,7 +422,7 @@ def check_equal(marian_cfg, k1, k2):
 
 def check_marian_cfg_assumptions(marian_cfg):
     assumed_settings = {
-        "layer-normalization": False,
+        #"layer-normalization": False, #some marian model maybe set this parameter as True, so remove it from model assumptions
         "right-left": False,
         "transformer-ffn-depth": 2,
         "transformer-aan-depth": 2,
@@ -479,14 +479,15 @@ class OpusState:
         npz_path = find_model_file(source_dir)
         self.state_dict = np.load(npz_path)
         cfg = load_config_from_state_dict(self.state_dict)
-        if cfg["dim-vocabs"][0] != cfg["dim-vocabs"][1]:
-            raise ValueError
+        #if cfg["dim-vocabs"][0] != cfg["dim-vocabs"][1]: # there is an assumption for the model, that the source and target vocab should be shared. But the assumption is not suitable for all marian models
+        #    raise ValueError
         if "Wpos" in self.state_dict:
             raise ValueError("Wpos key in state dictionary")
         self.state_dict = dict(self.state_dict)
         if cfg["tied-embeddings-all"]:
             cfg["tied-embeddings-src"] = True
             cfg["tied-embeddings"] = True
+
         self.share_encoder_decoder_embeddings = cfg["tied-embeddings-src"]
 
         # create the tokenizer here because we need to know the eos_token_id
@@ -500,17 +501,20 @@ class OpusState:
 
         if cfg["tied-embeddings-src"]:
             self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
-            self.pad_token_id = self.wemb.shape[0] - 1
+            self.source_pad_token_id = self.wemb.shape[0] - 1
+            self.pad_token_id = self.source_pad_token_id #trick here, pad_token_id is must have
             cfg["vocab_size"] = self.pad_token_id + 1
         else:
             self.wemb, _ = add_emb_entries(self.state_dict["encoder_Wemb"], self.state_dict[BIAS_KEY], 1)
             self.dec_wemb, self.final_bias = add_emb_entries(
                 self.state_dict["decoder_Wemb"], self.state_dict[BIAS_KEY], 1
             )
-            # still assuming that vocab size is same for encoder and decoder
-            self.pad_token_id = self.wemb.shape[0] - 1
-            cfg["vocab_size"] = self.pad_token_id + 1
-            cfg["decoder_vocab_size"] = self.pad_token_id + 1
+            # the source and target vocab are not shared.
+            self.source_pad_token_id = self.wemb.shape[0] - 1
+            self.target_pad_token_id = self.dec_wemb.shape[0] - 1
+            self.pad_token_id = self.source_pad_token_id #trick here, pad_token_id is must have
+            cfg["vocab_size"] = self.source_pad_token_id + 1
+            cfg["decoder_vocab_size"] = self.target_pad_token_id + 1
 
         if cfg["vocab_size"] != self.tokenizer.vocab_size:
             raise ValueError(
@@ -532,7 +536,7 @@ class OpusState:
         check_marian_cfg_assumptions(cfg)
         self.hf_config = MarianConfig(
             vocab_size=cfg["vocab_size"],
-            decoder_vocab_size=cfg.get("decoder_vocab_size", cfg["vocab_size"]),
+            decoder_vocab_size=cfg.get("decoder_vocab_size", cfg["decoder_vocab_size"]),
             share_encoder_decoder_embeddings=cfg["tied-embeddings-src"],
             decoder_layers=cfg["dec-depth"],
             encoder_layers=cfg["enc-depth"],
@@ -542,7 +546,9 @@ class OpusState:
             encoder_ffn_dim=cfg["transformer-dim-ffn"],
             d_model=cfg["dim-emb"],
             activation_function=cfg["transformer-ffn-activation"],
-            pad_token_id=self.pad_token_id,
+            pad_token_id=self.target_pad_token_id,
+            source_pad_token_id=self.source_pad_token_id,
+            target_pad_token_id=self.target_pad_token_id,
             eos_token_id=eos_token_id,
             forced_eos_token_id=eos_token_id,
             bos_token_id=0,
@@ -554,8 +560,8 @@ class OpusState:
             dropout=0.1,  # see opus-mt-train repo/transformer-dropout param.
             # default: add_final_layer_norm=False,
             num_beams=decoder_yml["beam-size"],
-            decoder_start_token_id=self.pad_token_id,
-            bad_words_ids=[[self.pad_token_id]],
+            decoder_start_token_id=self.target_pad_token_id,
+            bad_words_ids=[[self.target_pad_token_id]],
             max_length=512,
         )
 
@@ -623,6 +629,7 @@ class OpusState:
             model.model.decoder.embed_tokens.weight = decoder_wemb_tensor
 
         model.final_logits_bias = bias_tensor
+        model.lm_head = model.model.decoder.embed_tokens
 
         if "Wpos" in state_dict:
             print("Unexpected: got Wpos")
@@ -638,9 +645,9 @@ class OpusState:
         if self.extra_keys:
             raise ValueError(f"Failed to convert {self.extra_keys}")
 
-        if model.get_input_embeddings().padding_idx != self.pad_token_id:
+        if model.get_input_embeddings().padding_idx != self.source_pad_token_id:
             raise ValueError(
-                f"Padding tokens {model.get_input_embeddings().padding_idx} and {self.pad_token_id} mismatched"
+                f"Padding tokens {model.get_input_embeddings().padding_idx} and {self.source_pad_token_id} mismatched"
             )
         return model
 
@@ -672,12 +679,13 @@ def convert(source_dir: Path, dest_dir):
     model = model.half()
     model.save_pretrained(dest_dir)
     model.from_pretrained(dest_dir)  # sanity check
+    print("done model converter")
 
 
 def load_yaml(path):
     import yaml
 
-    with open(path) as f:
+    with open(path, encoding='utf8') as f:
         return yaml.load(f, Loader=yaml.BaseLoader)
 
 
@@ -689,7 +697,6 @@ def save_json(content: Union[Dict, List], path: str) -> None:
 def unzip(zip_path: str, dest_dir: str) -> None:
     with ZipFile(zip_path, "r") as zipObj:
         zipObj.extractall(dest_dir)
-
 
 if __name__ == "__main__":
     """

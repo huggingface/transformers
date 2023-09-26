@@ -506,7 +506,7 @@ class MarianPreTrainedModel(PreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        pad_token = self.config.pad_token_id
+        pad_token = self.config.target_pad_token_id
         input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
         dummy_inputs = {
             "attention_mask": input_ids.ne(pad_token),
@@ -582,7 +582,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            Marian uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
+            Marian uses the `target_pad_token_id` as the starting token for `decoder_input_ids` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -665,7 +665,7 @@ class MarianEncoder(MarianPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = config.source_pad_token_id
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
@@ -837,7 +837,7 @@ class MarianDecoder(MarianPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = config.target_pad_token_id
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
@@ -1109,7 +1109,7 @@ class MarianModel(MarianPreTrainedModel):
     def __init__(self, config: MarianConfig):
         super().__init__(config)
 
-        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
+        padding_idx, vocab_size = config.target_pad_token_id, config.decoder_vocab_size
 
         # We always use self.shared for token embeddings to ensure compatibility with all marian models
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
@@ -1122,8 +1122,10 @@ class MarianModel(MarianPreTrainedModel):
             decoder_embed_tokens = copy.deepcopy(self.shared)
             self.shared = None
 
-        self.encoder = MarianEncoder(config, encoder_embed_tokens)
-        self.decoder = MarianDecoder(config, decoder_embed_tokens)
+        #self.encoder = MarianEncoder(config, encoder_embed_tokens)
+        #self.decoder = MarianDecoder(config, decoder_embed_tokens)
+        self.encoder = MarianEncoder(config)
+        self.decoder = MarianDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1452,7 +1454,7 @@ class MarianMTModel(MarianPreTrainedModel):
             use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
-                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                    labels, self.config.target_pad_token_id, self.config.decoder_start_token_id
                 )
 
         outputs = self.model(
@@ -1524,7 +1526,7 @@ class MarianMTModel(MarianPreTrainedModel):
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+        return shift_tokens_right(labels, self.config.target_pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
