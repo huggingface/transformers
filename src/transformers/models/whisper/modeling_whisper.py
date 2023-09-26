@@ -55,13 +55,16 @@ WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> np.ndarray:
+def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> torch.Tensor:
     """Returns sinusoids for positional embedding"""
-    assert channels % 2 == 0
+    if channels % 2 != 0:
+        raise ValueError(
+            f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
+        )
     log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
-    inv_timescales = np.exp(-log_timescale_increment * np.arange(channels // 2))
-    scaled_time = np.arange(length).reshape(-1, 1) * inv_timescales.reshape(1, -1)
-    return np.concatenate([np.sin(scaled_time), np.cos(scaled_time)], axis=1)
+    inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
+    scaled_time = torch.arange(length).view(-1, 1) * inv_timescales.view(1, -1)
+    return torch.cat([scaled_time.sin(), scaled_time.cos()], dim=1)
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right

@@ -22,7 +22,6 @@ from typing import Optional, Tuple
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
@@ -60,14 +59,20 @@ _CONFIG_FOR_DOC = "WhisperConfig"
 remat = nn_partitioning.remat
 
 
-# Copied from transformers.models.whisper.modeling_whisper.sinusoids
-def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> np.ndarray:
-    """Returns sinusoids for positional embedding"""
-    assert channels % 2 == 0
-    log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
-    inv_timescales = np.exp(-log_timescale_increment * np.arange(channels // 2))
-    scaled_time = np.arange(length).reshape(-1, 1) * inv_timescales.reshape(1, -1)
-    return np.concatenate([np.sin(scaled_time), np.cos(scaled_time)], axis=1)
+def sinusoidal_embedding_init(max_timescale: float = 10000):
+    def init(key, shape, dtype=jnp.float_) -> jax.Array:
+        """Returns sinusoids for positional embedding"""
+        length, channels = shape
+        if channels % 2 != 0:
+            raise ValueError(
+                f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
+            )
+        log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
+        inv_timescales = jnp.exp(-log_timescale_increment * jnp.arange(channels // 2))
+        scaled_time = jnp.arange(length).reshape(-1, 1) * inv_timescales.reshape(1, -1)
+        return jnp.concatenate([jnp.sin(scaled_time), jnp.cos(scaled_time)], axis=1).astype(dtype)
+
+    return init
 
 
 WHISPER_START_DOCSTRING = r"""
@@ -662,11 +667,11 @@ class FlaxWhisperEncoder(nn.Module):
             gradient_checkpointing=self.gradient_checkpointing,
         )
 
-        def embedding_init(key, shape, dtype=jnp.float_):
-            return jnp.asarray(sinusoids(*shape), dtype=dtype)
-
         self.embed_positions = nn.Embed(
-            self.config.max_source_positions, self.config.d_model, dtype=self.dtype, embedding_init=embedding_init
+            self.config.max_source_positions,
+            self.config.d_model,
+            dtype=self.dtype,
+            embedding_init=sinusoidal_embedding_init(),
         )
 
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)

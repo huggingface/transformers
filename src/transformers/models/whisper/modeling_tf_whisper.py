@@ -59,14 +59,20 @@ TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LARGE_NEGATIVE = -1e8
 
 
-# Copied from transformers.models.whisper.modeling_whisper.sinusoids
-def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> np.ndarray:
-    """Returns sinusoids for positional embedding"""
-    assert channels % 2 == 0
-    log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
-    inv_timescales = np.exp(-log_timescale_increment * np.arange(channels // 2))
-    scaled_time = np.arange(length).reshape(-1, 1) * inv_timescales.reshape(1, -1)
-    return np.concatenate([np.sin(scaled_time), np.cos(scaled_time)], axis=1)
+def sinusoidal_embedding_init(max_timescale: float = 10000):
+    def init(shape, dtype=None) -> tf.Tensor:
+        """Returns sinusoids for positional embedding"""
+        length, channels = shape
+        if channels % 2 != 0:
+            raise ValueError(
+                f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
+            )
+        log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
+        inv_timescales = tf.exp(-log_timescale_increment * tf.range(channels // 2))
+        scaled_time = tf.reshape(tf.range(length), (-1, 1)) * tf.reshape(inv_timescales, (1, -1))
+        return tf.cast(tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=1), dtype)
+
+    return init
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
@@ -638,13 +644,10 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
         self.conv1 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=1, padding="valid", name="conv1")
         self.conv2 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=2, padding="valid", name="conv2")
 
-        def embedding_init(shape, dtype=None):
-            return tf.convert_to_tensor(sinusoids(*shape), dtype=dtype)
-
         self.embed_positions = TFWhisperPositionalEmbedding(
             num_positions=self.max_source_positions,
             embedding_dim=self.embed_dim,
-            embedding_initializer=embedding_init,
+            embedding_initializer=sinusoidal_embedding_init(),
             name="embed_positions",
         )
         self.embed_positions.trainable = False
