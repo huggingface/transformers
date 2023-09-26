@@ -343,7 +343,7 @@ class PeftAdapterMixin:
         Args:
             return_multi_adapters (`bool`, *optional*, defaults to `True`):
                 Whether to return a list of active adapters or not. If `False`, only the first adapter is returned. If
-                `True`, returns the list of active adapters.
+                `True`, returns the list of all active adapters, if there is more than one.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
 
