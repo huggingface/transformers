@@ -87,6 +87,8 @@ class LlamaConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
+        attention_bias (`bool`, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
 
         Example:
 
@@ -125,6 +127,7 @@ class LlamaConfig(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
+        attention_bias=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -147,6 +150,7 @@ class LlamaConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
+        self.attention_bias = attention_bias
 
         super().__init__(
             pad_token_id=pad_token_id,
