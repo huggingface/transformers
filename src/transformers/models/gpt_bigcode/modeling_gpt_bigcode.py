@@ -134,9 +134,6 @@ class GPTBigCodeAttention(nn.Module):
         return self.mask_value
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        # (batch_size, num_heads, key_length, head_dim) -> (batch_size, kv_dim, key_length)
-        key = key.permute(0, 2, 1, 3).view(key.shape[0], key.shape[-2], self.kv_dim).transpose(-1, -2)
-        value = value.permute(0, 2, 1, 3).view(value.shape[0], value.shape[-2], self.kv_dim)
         dtype = query.dtype
         softmax_dtype = torch.float32 if self.attention_softmax_in_fp32 else dtype
         upcast = dtype != softmax_dtype
@@ -150,8 +147,10 @@ class GPTBigCodeAttention(nn.Module):
         # MHA models: (batch_size, num_heads, query_length, head_dim)
         query_shape = query.shape
         batch_size = query_shape[0]
-        key_length = key.size(-1)
+        key_length = key.size(-2)
         if self.multi_query:
+            key = key.permute(0, 2, 1, 3).view(key.shape[0], key.shape[-2], self.kv_dim).transpose(-1, -2)
+            value = value.permute(0, 2, 1, 3).view(value.shape[0], value.shape[-2], self.kv_dim)
             # (batch_size, query_length, num_heads, head_dim) x (batch_size, head_dim, key_length)
             # -> (batch_size, query_length, num_heads, key_length)
             query_length = query_shape[1]
@@ -160,6 +159,7 @@ class GPTBigCodeAttention(nn.Module):
             # No copy needed for MQA 2, or when layer_past is provided.
             query = query.reshape(batch_size, query_length * self.num_heads, self.head_dim)
         else:
+            key = key.transpose(-1, -2)
             # (batch_size, num_heads, query_length, head_dim) x (batch_size, num_heads, head_dim, key_length)
             # -> (batch_size, num_heads, query_length, key_length)
             query_length = query_shape[2]
@@ -251,18 +251,16 @@ class GPTBigCodeAttention(nn.Module):
             )
 
         key, value = key_value.split((self.head_dim, self.head_dim), dim=-1)
-        key = self._split_heads(key, self.kv_heads, self.head_dim)
-        value = self._split_heads(value, self.kv_heads, self.head_dim)
+        if self.multi_query:
+            key = self._split_heads(key, self.kv_heads, self.head_dim)
+            value = self._split_heads(value, self.kv_heads, self.head_dim)
 
         if layer_past is not None:
             past_key, past_value = layer_past
             key = torch.cat((past_key, key), dim=-2)
             value = torch.cat((past_value, value), dim=-2)
 
-        if use_cache is True:
-            present = (key, value)
-        else:
-            present = None
+        present = (key, value) if use_cache else None
 
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
