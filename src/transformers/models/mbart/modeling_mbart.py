@@ -1184,6 +1184,10 @@ class MBartModel(MBartPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    def _tie_weights(self):
+        self.encoder.embed_tokens.weight = self.shared.weight
+        self.decoder.embed_tokens.weight = self.shared.weight
+
     @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
