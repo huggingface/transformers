@@ -733,7 +733,7 @@ def pipeline(
     if isinstance(model, Path):
         model = str(model)
 
-    if hub_kwargs["_commit_hash"] is None:
+    if commit_hash is None:
         pretrained_model_name_or_path = None
         if isinstance(config, str):
             pretrained_model_name_or_path = config
@@ -765,7 +765,12 @@ def pipeline(
         if is_peft_available():
             # `find_adapter_config_file` doesn't accept `trust_remote_code`
             _hub_kwargs = {k: v for k, v in hub_kwargs.items() if k != "trust_remote_code"}
-            maybe_adapter_path = find_adapter_config_file(model, **_hub_kwargs)
+            maybe_adapter_path = find_adapter_config_file(
+                model,
+                token=hub_kwargs["token"],
+                revision=hub_kwargs["revision"],
+                _commit_hash=hub_kwargs["_commit_hash"],
+            )
 
             if maybe_adapter_path is not None:
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
