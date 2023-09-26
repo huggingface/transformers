@@ -18,6 +18,7 @@
 import collections.abc
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
+from functools import reduce
 
 import torch
 import torch.utils.checkpoint
@@ -40,8 +41,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_vit import ViTConfig
-
+from .configuration_propainter import ProPainterConfig
+from torch.nn.modules.utils import _pair, _single
 
 logger = logging.get_logger(__name__)
 
@@ -64,8 +65,9 @@ VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class P3DBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, use_residual=0, bias=True, config:ProPainterConfig):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, use_residual=0, bias=True):
         super().__init__()
+        config = ProPainterConfig()
         self.Conv1 = nn.Sequential(
                         nn.Conv3d(in_channels, out_channels, kernel_size=(1, kernel_size, kernel_size),
                                     stride=(1, stride, stride), padding=(0, padding, padding), bias=bias),
@@ -87,7 +89,7 @@ class P3DBlock(nn.Module):
         return output
 
 class EdgeDetection(nn.Module):
-    def __init__(self, config:ProPainterConfig):
+    def __init__(self, config:ProPainterConfig, in_channels, out_channels, hidden_channels):
         super().__init__()
 
         self.config = config
@@ -122,10 +124,10 @@ class ReccurrentFlowCompleteNet(nn.Module):
     def __init__(self, config:ProPainterConfig):
         super().__init__()
 
-        self.Downsample = nn.Sequence(
+        self.Downsample = nn.Sequential(
             nn.Conv3d(3,32,kernel_size=(1,5,3), stride=(1,2,2),
                 padding=(0,2,2), padding_mode="replicate"),
-            nn.LeakyReLU(config.threshold,  inpalce=True)
+            nn.LeakyReLU(config.threshold,  inplace=True)
         )
 
         self.Encoder = []
@@ -168,7 +170,7 @@ class ReccurrentFlowCompleteNet(nn.Module):
             deconv(32, 2, 3, 1)
         )
 
-        self.EdgeDetector = EdgeDetection(in_channels=2, out_channels=1, hidden_channels=16)
+        self.EdgeDetector = EdgeDetection(config, in_channels=2, out_channels=1, hidden_channels=16)
 
         #for m in self.modules():
         #    if isinstance(m, SecondOrderDeformableAlignment):
@@ -210,40 +212,216 @@ class ReccurrentFlowCompleteNet(nn.Module):
         flow = flow.view(b, t, 2, h, w)
 
         return flow, edge
+
+class BottleneckBlock(nn.Module):
+    def __init__(self, in_planes, planes, norm_fn='group', stride=1):
+        super(BottleneckBlock, self).__init__()
+
+        self.conv1 = nn.Conv2d(in_planes, planes//4, kernel_size=1, padding=0)
+        self.conv2 = nn.Conv2d(planes//4, planes//4, kernel_size=3, padding=1, stride=stride)
+        self.conv3 = nn.Conv2d(planes//4, planes, kernel_size=1, padding=0)
+        self.relu = nn.ReLU(inplace=True)
+
+        num_groups = planes // 8
+
+        if norm_fn == 'group':
+            self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=planes//4)
+            self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=planes//4)
+            self.norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
+            if not stride == 1:
+                self.norm4 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
+
+        elif norm_fn == 'batch':
+            self.norm1 = nn.BatchNorm2d(planes//4)
+            self.norm2 = nn.BatchNorm2d(planes//4)
+            self.norm3 = nn.BatchNorm2d(planes)
+            if not stride == 1:
+                self.norm4 = nn.BatchNorm2d(planes)
+
+        elif norm_fn == 'instance':
+            self.norm1 = nn.InstanceNorm2d(planes//4)
+            self.norm2 = nn.InstanceNorm2d(planes//4)
+            self.norm3 = nn.InstanceNorm2d(planes)
+            if not stride == 1:
+                self.norm4 = nn.InstanceNorm2d(planes)
+
+        elif norm_fn == 'none':
+            self.norm1 = nn.Sequential()
+            self.norm2 = nn.Sequential()
+            self.norm3 = nn.Sequential()
+            if not stride == 1:
+                self.norm4 = nn.Sequential()
+
+        if stride == 1:
+            self.downsample = None
+
+        else:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm4)
+
+class SmallEncoder(nn.Module):
+    def __init__(self, output_dim=128, norm_fn='batch', dropout=0.0):
+        super(SmallEncoder, self).__init__()
+        self.norm_fn = norm_fn
+
+        if self.norm_fn == 'group':
+            self.norm1 = nn.GroupNorm(num_groups=8, num_channels=32)
+            
+        elif self.norm_fn == 'batch':
+            self.norm1 = nn.BatchNorm2d(32)
+
+        elif self.norm_fn == 'instance':
+            self.norm1 = nn.InstanceNorm2d(32)
+
+        elif self.norm_fn == 'none':
+            self.norm1 = nn.Sequential()
+
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=7, stride=2, padding=3)
+        self.relu1 = nn.ReLU(inplace=True)
+
+        self.in_planes = 32
+        self.layer1 = self._make_layer(32,  stride=1)
+        self.layer2 = self._make_layer(64, stride=2)
+        self.layer3 = self._make_layer(96, stride=2)
+
+        self.dropout = None
+        if dropout > 0:
+            self.dropout = nn.Dropout2d(p=dropout)
+        
+        self.conv2 = nn.Conv2d(96, output_dim, kernel_size=1)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm)):
+                if m.weight is not None:
+                    nn.init.constant_(m.weight, 1)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    def _make_layer(self, dim, stride=1):
+        layer1 = BottleneckBlock(self.in_planes, dim, self.norm_fn, stride=stride)
+        layer2 = BottleneckBlock(dim, dim, self.norm_fn, stride=1)
+        layers = (layer1, layer2)
     
+        self.in_planes = dim
+        return nn.Sequential(*layers)
+
+
+    def forward(self, x):
+
+        # if input is list, combine batch dimension
+        is_list = isinstance(x, tuple) or isinstance(x, list)
+        if is_list:
+            batch_dim = x[0].shape[0]
+            x = torch.cat(x, dim=0)
+
+        x = self.conv1(x)
+        x = self.norm1(x)
+        x = self.relu1(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.conv2(x)
+
+        if self.training and self.dropout is not None:
+            x = self.dropout(x)
+
+        if is_list:
+            x = torch.split(x, [batch_dim, batch_dim], dim=0)
+
+        return x
+
+class FlowHead(nn.Module):
+    def __init__(self, input_dim=128, hidden_dim=256):
+        super(FlowHead, self).__init__()
+        self.conv1 = nn.Conv2d(input_dim, hidden_dim, 3, padding=1)
+        self.conv2 = nn.Conv2d(hidden_dim, 2, 3, padding=1)
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        return self.conv2(self.relu(self.conv1(x)))
+
+
+class ConvGRU(nn.Module):
+    def __init__(self, hidden_dim=128, input_dim=192+128):
+        super(ConvGRU, self).__init__()
+        self.convz = nn.Conv2d(hidden_dim+input_dim, hidden_dim, 3, padding=1)
+        self.convr = nn.Conv2d(hidden_dim+input_dim, hidden_dim, 3, padding=1)
+        self.convq = nn.Conv2d(hidden_dim+input_dim, hidden_dim, 3, padding=1)
+
+    def forward(self, h, x):
+        hx = torch.cat([h, x], dim=1)
+
+        z = torch.sigmoid(self.convz(hx))
+        r = torch.sigmoid(self.convr(hx))
+        q = torch.tanh(self.convq(torch.cat([r*h, x], dim=1)))
+
+        h = (1-z) * h + z * q
+        return h
+
+
+class SmallMotionEncoder(nn.Module):
+    def __init__(self, args):
+        super(SmallMotionEncoder, self).__init__()
+        cor_planes = args.corr_levels * (2*args.corr_radius + 1)**2
+        self.convc1 = nn.Conv2d(cor_planes, 96, 1, padding=0)
+        self.convf1 = nn.Conv2d(2, 64, 7, padding=3)
+        self.convf2 = nn.Conv2d(64, 32, 3, padding=1)
+        self.conv = nn.Conv2d(128, 80, 3, padding=1)
+
+    def forward(self, flow, corr):
+        cor = F.relu(self.convc1(corr))
+        flo = F.relu(self.convf1(flow))
+        flo = F.relu(self.convf2(flo))
+        cor_flo = torch.cat([cor, flo], dim=1)
+        out = F.relu(self.conv(cor_flo))
+        return torch.cat([out, flow], dim=1)
+
+
+class SmallUpdateBlock(nn.Module):
+    def __init__(self, args, hidden_dim=96):
+        super(SmallUpdateBlock, self).__init__()
+        self.encoder = SmallMotionEncoder(args)
+        self.gru = ConvGRU(hidden_dim=hidden_dim, input_dim=82+64)
+        self.flow_head = FlowHead(hidden_dim, hidden_dim=128)
+
+    def forward(self, net, inp, corr, flow):
+        motion_features = self.encoder(flow, corr)
+        inp = torch.cat([inp, motion_features], dim=1)
+        net = self.gru(net, inp)
+        delta_flow = self.flow_head(net)
+
+        return net, None, delta_flow
+
 
 class RAFT(nn.Module):
-    def __init__(self, args):
+    def __init__(self, config):
         super(RAFT, self).__init__()
-        self.args = args
+        self.args = config
 
-        if args.small:
+        if config.small:
             self.hidden_dim = hdim = 96
             self.context_dim = cdim = 64
-            args.corr_levels = 4
-            args.corr_radius = 3
+            config.corr_levels = 4
+            config.corr_radius = 3
 
         else:
             self.hidden_dim = hdim = 128
             self.context_dim = cdim = 128
-            args.corr_levels = 4
-            args.corr_radius = 4
+            config.corr_levels = 4
+            config.corr_radius = 4
 
-        if 'dropout' not in args._get_kwargs():
-            args.dropout = 0
-
-        if 'alternate_corr' not in args._get_kwargs():
-            args.alternate_corr = False
-        
         # feature network, context network, and update block
-        if args.small:
-            self.fnet = SmallEncoder(output_dim=128, norm_fn='instance', dropout=args.dropout)
-            self.cnet = SmallEncoder(output_dim=hdim+cdim, norm_fn='none', dropout=args.dropout)
+        if config.small:
+            self.fnet = SmallEncoder(output_dim=128, norm_fn='instance', dropout=config.dropout)
+            self.cnet = SmallEncoder(output_dim=hdim+cdim, norm_fn='none', dropout=config.dropout)
             self.update_block = SmallUpdateBlock(self.args, hidden_dim=hdim)
 
         else:
-            self.fnet = BasicEncoder(output_dim=256, norm_fn='instance', dropout=args.dropout)
-            self.cnet = BasicEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=args.dropout)
+            self.fnet = BasicEncoder(output_dim=256, norm_fn='instance', dropout=config.dropout)
+            self.cnet = BasicEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=config.dropout)
             self.update_block = BasicUpdateBlock(self.args, hidden_dim=hdim)
 
 
@@ -336,7 +514,14 @@ class RAFT(nn.Module):
 
         return flow_predictions
 
-class DeformableAlignment(ModulatedDeformConv2d):
+def constant_init(module, val, bias=0):
+    if hasattr(module, 'weight') and module.weight is not None:
+        nn.init.constant_(module.weight, val)
+    if hasattr(module, 'bias') and module.bias is not None:
+        nn.init.constant_(module.bias, bias)
+
+
+class DeformableAlignment(nn.Module):
     """Second-order deformable alignment module."""
     def __init__(self, *args, **kwargs):
         # self.max_residue_magnitude = kwargs.pop('max_residue_magnitude', 10)
@@ -435,6 +620,93 @@ class deconv(nn.Module):
                           align_corners=True)
         return self.conv(x)
 
+class ModulatedDeformConv2d(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
+                 deform_groups=1,
+                 bias=True):
+        super(ModulatedDeformConv2d, self).__init__()
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = _pair(kernel_size)
+        self.stride = stride
+        self.padding = padding
+        self.dilation = dilation
+        self.groups = groups
+        self.deform_groups = deform_groups
+        self.with_bias = bias
+        # enable compatibility with nn.Conv2d
+        self.transposed = False
+        self.output_padding = _single(0)
+
+        self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
+        if bias:
+            self.bias = nn.Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
+        self.init_weights()
+
+    def init_weights(self):
+        n = self.in_channels
+        for k in self.kernel_size:
+            n *= k
+        stdv = 1. / math.sqrt(n)
+        self.weight.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            self.bias.data.zero_()
+
+        if hasattr(self, 'conv_offset'):
+            self.conv_offset.weight.data.zero_()
+            self.conv_offset.bias.data.zero_()
+
+    def forward(self, x, offset, mask):
+        pass
+
+class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
+    """Second-order deformable alignment module."""
+    def __init__(self, *args, **kwargs):
+        self.max_residue_magnitude = kwargs.pop('max_residue_magnitude', 5)
+
+        super(SecondOrderDeformableAlignment, self).__init__(*args, **kwargs)
+
+        self.conv_offset = nn.Sequential(
+            nn.Conv2d(3 * self.out_channels, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, 27 * self.deform_groups, 3, 1, 1),
+        )
+        self.init_offset()
+
+    def init_offset(self):
+        constant_init(self.conv_offset[-1], val=0, bias=0)
+
+    def forward(self, x, extra_feat):
+        out = self.conv_offset(extra_feat)
+        o1, o2, mask = torch.chunk(out, 3, dim=1)
+
+        # offset
+        offset = self.max_residue_magnitude * torch.tanh(torch.cat((o1, o2), dim=1))
+        offset_1, offset_2 = torch.chunk(offset, 2, dim=1)
+        offset = torch.cat([offset_1, offset_2], dim=1)
+
+        # mask
+        mask = torch.sigmoid(mask)
+
+        return torchvision.ops.deform_conv2d(x, offset, self.weight, self.bias,
+                                             self.stride, self.padding,
+                                             self.dilation, mask)
+
+
 class BidirectionalPropagation(nn.Module):
     def __init__(self, channel, learnable=True):
         super(BidirectionalPropagation, self).__init__()
@@ -446,7 +718,7 @@ class BidirectionalPropagation(nn.Module):
 
         if self.learnable:
             for i, module in enumerate(self.prop_list):
-                self.deform_align[module] = DeformableAlignment(
+                self.deform_align[module] = SecondOrderDeformableAlignment(
                     channel, channel, 3, padding=1, deform_groups=16)
 
                 self.backbone[module] = nn.Sequential(
@@ -555,13 +827,338 @@ class BidirectionalPropagation(nn.Module):
         return outputs_b.view(b, -1, c, h, w), outputs_f.view(b, -1, c, h, w), \
                outputs.view(b, -1, c, h, w), masks_f
 
-class InpaintGenerator(PretrainedModel):
-    def __init__(self):
+class SoftSplit(nn.Module):
+    def __init__(self, channel, hidden, kernel_size, stride, padding):
+        super(SoftSplit, self).__init__()
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.t2t = nn.Unfold(kernel_size=kernel_size,
+                             stride=stride,
+                             padding=padding)
+        c_in = reduce((lambda x, y: x * y), kernel_size) * channel
+        self.embedding = nn.Linear(c_in, hidden)
+
+    def forward(self, x, b, output_size):
+        f_h = int((output_size[0] + 2 * self.padding[0] -
+                   (self.kernel_size[0] - 1) - 1) / self.stride[0] + 1)
+        f_w = int((output_size[1] + 2 * self.padding[1] -
+                   (self.kernel_size[1] - 1) - 1) / self.stride[1] + 1)
+
+        feat = self.t2t(x)
+        feat = feat.permute(0, 2, 1)
+        # feat shape [b*t, num_vec, ks*ks*c]
+        feat = self.embedding(feat)
+        # feat shape after embedding [b, t*num_vec, hidden]
+        feat = feat.view(b, -1, f_h, f_w, feat.size(2))
+        return feat
+
+
+class SoftComp(nn.Module):
+    def __init__(self, channel, hidden, kernel_size, stride, padding):
+        super(SoftComp, self).__init__()
+        self.relu = nn.LeakyReLU(0.2, inplace=True)
+        c_out = reduce((lambda x, y: x * y), kernel_size) * channel
+        self.embedding = nn.Linear(hidden, c_out)
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.bias_conv = nn.Conv2d(channel,
+                                   channel,
+                                   kernel_size=3,
+                                   stride=1,
+                                   padding=1)
+
+    def forward(self, x, t, output_size):
+        b_, _, _, _, c_ = x.shape
+        x = x.view(b_, -1, c_)
+        feat = self.embedding(x)
+        b, _, c = feat.size()
+        feat = feat.view(b * t, -1, c).permute(0, 2, 1)
+        feat = F.fold(feat,
+                      output_size=output_size,
+                      kernel_size=self.kernel_size,
+                      stride=self.stride,
+                      padding=self.padding)
+        feat = self.bias_conv(feat)
+        return feat
+
+class SparseWindowAttention(nn.Module):
+    def __init__(self, dim, n_head, window_size, pool_size=(4,4), qkv_bias=True, attn_drop=0., proj_drop=0., 
+                pooling_token=True):
+        super().__init__()
+        assert dim % n_head == 0
+        # key, query, value projections for all heads
+        self.key = nn.Linear(dim, dim, qkv_bias)
+        self.query = nn.Linear(dim, dim, qkv_bias)
+        self.value = nn.Linear(dim, dim, qkv_bias)
+        # regularization
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj_drop = nn.Dropout(proj_drop)
+        # output projection
+        self.proj = nn.Linear(dim, dim)
+        self.n_head = n_head
+        self.window_size = window_size
+        self.pooling_token = pooling_token
+        if self.pooling_token:
+            ks, stride = pool_size, pool_size
+            self.pool_layer = nn.Conv2d(dim, dim, kernel_size=ks, stride=stride, padding=(0, 0), groups=dim)
+            self.pool_layer.weight.data.fill_(1. / (pool_size[0] * pool_size[1]))
+            self.pool_layer.bias.data.fill_(0)
+        # self.expand_size = tuple(i // 2 for i in window_size)
+        self.expand_size = tuple((i + 1) // 2 for i in window_size)
+
+        if any(i > 0 for i in self.expand_size):
+            # get mask for rolled k and rolled v
+            mask_tl = torch.ones(self.window_size[0], self.window_size[1])
+            mask_tl[:-self.expand_size[0], :-self.expand_size[1]] = 0
+            mask_tr = torch.ones(self.window_size[0], self.window_size[1])
+            mask_tr[:-self.expand_size[0], self.expand_size[1]:] = 0
+            mask_bl = torch.ones(self.window_size[0], self.window_size[1])
+            mask_bl[self.expand_size[0]:, :-self.expand_size[1]] = 0
+            mask_br = torch.ones(self.window_size[0], self.window_size[1])
+            mask_br[self.expand_size[0]:, self.expand_size[1]:] = 0
+            masrool_k = torch.stack((mask_tl, mask_tr, mask_bl, mask_br), 0).flatten(0)
+            self.register_buffer("valid_ind_rolled", masrool_k.nonzero(as_tuple=False).view(-1))
+
+        self.max_pool = nn.MaxPool2d(window_size, window_size, (0, 0))
+
+
+    def forward(self, x, mask=None, T_ind=None, attn_mask=None):
+        b, t, h, w, c = x.shape # 20 36
+        w_h, w_w = self.window_size[0], self.window_size[1]
+        c_head = c // self.n_head
+        n_wh = math.ceil(h / self.window_size[0])
+        n_ww = math.ceil(w / self.window_size[1])
+        new_h = n_wh * self.window_size[0] # 20
+        new_w = n_ww * self.window_size[1] # 36
+        pad_r = new_w - w
+        pad_b = new_h - h
+        # reverse order
+        if pad_r > 0 or pad_b > 0:
+            x = F.pad(x,(0, 0, 0, pad_r, 0, pad_b, 0, 0), mode='constant', value=0) 
+            mask = F.pad(mask,(0, 0, 0, pad_r, 0, pad_b, 0, 0), mode='constant', value=0) 
+
+        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+        q = self.query(x)
+        k = self.key(x)
+        v = self.value(x)
+        win_q = window_partition(q.contiguous(), self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head)
+        win_k = window_partition(k.contiguous(), self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head)
+        win_v = window_partition(v.contiguous(), self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head)
+        # roll_k and roll_v
+        if any(i > 0 for i in self.expand_size):
+            (k_tl, v_tl) = map(lambda a: torch.roll(a, shifts=(-self.expand_size[0], -self.expand_size[1]), dims=(2, 3)), (k, v))
+            (k_tr, v_tr) = map(lambda a: torch.roll(a, shifts=(-self.expand_size[0], self.expand_size[1]), dims=(2, 3)), (k, v))
+            (k_bl, v_bl) = map(lambda a: torch.roll(a, shifts=(self.expand_size[0], -self.expand_size[1]), dims=(2, 3)), (k, v))
+            (k_br, v_br) = map(lambda a: torch.roll(a, shifts=(self.expand_size[0], self.expand_size[1]), dims=(2, 3)), (k, v))
+
+            (k_tl_windows, k_tr_windows, k_bl_windows, k_br_windows) = map(
+                lambda a: window_partition(a, self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head), 
+                (k_tl, k_tr, k_bl, k_br))
+            (v_tl_windows, v_tr_windows, v_bl_windows, v_br_windows) = map(
+                lambda a: window_partition(a, self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head), 
+                (v_tl, v_tr, v_bl, v_br))
+            rool_k = torch.cat((k_tl_windows, k_tr_windows, k_bl_windows, k_br_windows), 4).contiguous()
+            rool_v = torch.cat((v_tl_windows, v_tr_windows, v_bl_windows, v_br_windows), 4).contiguous() # [b, n_wh*n_ww, n_head, t, w_h*w_w, c_head]
+            # mask out tokens in current window
+            rool_k = rool_k[:, :, :, :, self.valid_ind_rolled]
+            rool_v = rool_v[:, :, :, :, self.valid_ind_rolled]
+            roll_N = rool_k.shape[4]
+            rool_k = rool_k.view(b, n_wh*n_ww, self.n_head, t, roll_N, c // self.n_head)
+            rool_v = rool_v.view(b, n_wh*n_ww, self.n_head, t, roll_N, c // self.n_head)
+            win_k = torch.cat((win_k, rool_k), dim=4)
+            win_v = torch.cat((win_v, rool_v), dim=4)
+        else:
+            win_k = win_k
+            win_v = win_v
+        
+        # pool_k and pool_v
+        if self.pooling_token:
+            pool_x = self.pool_layer(x.view(b*t, new_h, new_w, c).permute(0,3,1,2))
+            _, _, p_h, p_w = pool_x.shape
+            pool_x = pool_x.permute(0,2,3,1).view(b, t, p_h, p_w, c)
+            # pool_k
+            pool_k = self.key(pool_x).unsqueeze(1).repeat(1, n_wh*n_ww, 1, 1, 1, 1) # [b, n_wh*n_ww, t, p_h, p_w, c]
+            pool_k = pool_k.view(b, n_wh*n_ww, t, p_h, p_w, self.n_head, c_head).permute(0,1,5,2,3,4,6)
+            pool_k = pool_k.contiguous().view(b, n_wh*n_ww, self.n_head, t, p_h*p_w, c_head)
+            win_k = torch.cat((win_k, pool_k), dim=4)
+            # pool_v
+            pool_v = self.value(pool_x).unsqueeze(1).repeat(1, n_wh*n_ww, 1, 1, 1, 1) # [b, n_wh*n_ww, t, p_h, p_w, c]
+            pool_v = pool_v.view(b, n_wh*n_ww, t, p_h, p_w, self.n_head, c_head).permute(0,1,5,2,3,4,6)
+            pool_v = pool_v.contiguous().view(b, n_wh*n_ww, self.n_head, t, p_h*p_w, c_head)
+            win_v = torch.cat((win_v, pool_v), dim=4)
+
+        # [b, n_wh*n_ww, n_head, t, w_h*w_w, c_head]
+        out = torch.zeros_like(win_q)
+        l_t = mask.size(1)
+
+        mask = self.max_pool(mask.view(b * l_t, new_h, new_w))
+        mask = mask.view(b, l_t, n_wh*n_ww)
+        mask = torch.sum(mask, dim=1) # [b, n_wh*n_ww]
+        for i in range(win_q.shape[0]):
+            ### For masked windows
+            mask_ind_i = mask[i].nonzero(as_tuple=False).view(-1)
+            # mask out quary in current window
+            # [b, n_wh*n_ww, n_head, t, w_h*w_w, c_head]
+            mask_n = len(mask_ind_i)
+            if mask_n > 0:
+                win_q_t = win_q[i, mask_ind_i].view(mask_n, self.n_head, t*w_h*w_w, c_head)
+                win_k_t = win_k[i, mask_ind_i] 
+                win_v_t = win_v[i, mask_ind_i] 
+                # mask out key and value
+                if T_ind is not None:
+                    # key [n_wh*n_ww, n_head, t, w_h*w_w, c_head]
+                    win_k_t = win_k_t[:, :, T_ind.view(-1)].view(mask_n, self.n_head, -1, c_head)
+                    # value
+                    win_v_t = win_v_t[:, :, T_ind.view(-1)].view(mask_n, self.n_head, -1, c_head)
+                else:
+                    win_k_t = win_k_t.view(n_wh*n_ww, self.n_head, t*w_h*w_w, c_head)
+                    win_v_t = win_v_t.view(n_wh*n_ww, self.n_head, t*w_h*w_w, c_head)
+
+                att_t = (win_q_t @ win_k_t.transpose(-2, -1)) * (1.0 / math.sqrt(win_q_t.size(-1)))
+                att_t = F.softmax(att_t, dim=-1)
+                att_t = self.attn_drop(att_t)
+                y_t = att_t @ win_v_t 
+                
+                out[i, mask_ind_i] = y_t.view(-1, self.n_head, t, w_h*w_w, c_head)
+
+            ### For unmasked windows
+            unmask_ind_i = (mask[i] == 0).nonzero(as_tuple=False).view(-1)
+            # mask out quary in current window
+            # [b, n_wh*n_ww, n_head, t, w_h*w_w, c_head]
+            win_q_s = win_q[i, unmask_ind_i]
+            win_k_s = win_k[i, unmask_ind_i, :, :, :w_h*w_w]
+            win_v_s = win_v[i, unmask_ind_i, :, :, :w_h*w_w]
+
+            att_s = (win_q_s @ win_k_s.transpose(-2, -1)) * (1.0 / math.sqrt(win_q_s.size(-1)))
+            att_s = F.softmax(att_s, dim=-1)
+            att_s = self.attn_drop(att_s)
+            y_s = att_s @ win_v_s
+            out[i, unmask_ind_i] = y_s
+
+        # re-assemble all head outputs side by side
+        out = out.view(b, n_wh, n_ww, self.n_head, t, w_h, w_w, c_head)
+        out = out.permute(0, 4, 1, 5, 2, 6, 3, 7).contiguous().view(b, t, new_h, new_w, c)
+
+
+        if pad_r > 0 or pad_b > 0:
+            out = out[:, :, :h, :w, :]
+
+        # output projection
+        out = self.proj_drop(self.proj(out))
+        return out
+
+class FusionFeedForward(nn.Module):
+    def __init__(self, dim, hidden_dim=1960, t2t_params=None):
+        super(FusionFeedForward, self).__init__()
+        # We set hidden_dim as a default to 1960
+        self.fc1 = nn.Sequential(nn.Linear(dim, hidden_dim))
+        self.fc2 = nn.Sequential(nn.GELU(), nn.Linear(hidden_dim, dim))
+        assert t2t_params is not None
+        self.t2t_params = t2t_params
+        self.kernel_shape = reduce((lambda x, y: x * y), t2t_params['kernel_size']) # 49
+
+    def forward(self, x, output_size):
+        n_vecs = 1
+        for i, d in enumerate(self.t2t_params['kernel_size']):
+            n_vecs *= int((output_size[i] + 2 * self.t2t_params['padding'][i] -
+                           (d - 1) - 1) / self.t2t_params['stride'][i] + 1)
+
+        x = self.fc1(x)
+        b, n, c = x.size()
+        normalizer = x.new_ones(b, n, self.kernel_shape).view(-1, n_vecs, self.kernel_shape).permute(0, 2, 1)
+        normalizer = F.fold(normalizer,
+                            output_size=output_size,
+                            kernel_size=self.t2t_params['kernel_size'],
+                            padding=self.t2t_params['padding'],
+                            stride=self.t2t_params['stride'])
+
+        x = F.fold(x.view(-1, n_vecs, c).permute(0, 2, 1),
+                   output_size=output_size,
+                   kernel_size=self.t2t_params['kernel_size'],
+                   padding=self.t2t_params['padding'],
+                   stride=self.t2t_params['stride'])
+
+        x = F.unfold(x / normalizer,
+                     kernel_size=self.t2t_params['kernel_size'],
+                     padding=self.t2t_params['padding'],
+                     stride=self.t2t_params['stride']).permute(
+                         0, 2, 1).contiguous().view(b, n, c)
+        x = self.fc2(x)
+        return x
+
+
+
+class TemporalSparseTransformer(nn.Module):
+    def __init__(self, dim, n_head, window_size, pool_size,
+                norm_layer=nn.LayerNorm, t2t_params=None):
+        super().__init__()
+        self.window_size = window_size
+        self.attention = SparseWindowAttention(dim, n_head, window_size, pool_size)
+        self.norm1 = norm_layer(dim)
+        self.norm2 = norm_layer(dim)
+        self.mlp = FusionFeedForward(dim, t2t_params=t2t_params)
+
+    def forward(self, x, fold_x_size, mask=None, T_ind=None):
+        """
+        Args:
+            x: image tokens, shape [B T H W C]
+            fold_x_size: fold feature size, shape [60 108]
+            mask: mask tokens, shape [B T H W 1]
+        Returns:
+            out_tokens: shape [B T H W C]
+        """
+        B, T, H, W, C = x.shape # 20 36
+
+        shortcut = x
+        x = self.norm1(x)
+        att_x = self.attention(x, mask, T_ind)
+
+        # FFN
+        x = shortcut + att_x
+        y = self.norm2(x)
+        x = x + self.mlp(y.view(B, T * H * W, C), fold_x_size).view(B, T, H, W, C)
+
+        return x
+
+class TemporalSparseTransformerBlock(nn.Module):
+    def __init__(self, dim, n_head, window_size, pool_size, depths, t2t_params=None):
+        super().__init__()
+        blocks = []
+        for i in range(depths):
+             blocks.append(
+                TemporalSparseTransformer(dim, n_head, window_size, pool_size, t2t_params=t2t_params)
+             )
+        self.transformer = nn.Sequential(*blocks)
+        self.depths = depths
+
+    def forward(self, x, fold_x_size, l_mask=None, t_dilation=2):
+        """
+        Args:
+            x: image tokens, shape [B T H W C]
+            fold_x_size: fold feature size, shape [60 108]
+            l_mask: local mask tokens, shape [B T H W 1]
+        Returns:
+            out_tokens: shape [B T H W C]
+        """
+        assert self.depths % t_dilation == 0, 'wrong t_dilation input.'
+        T = x.size(1)
+        T_ind = [torch.arange(i, T, t_dilation) for i in range(t_dilation)] * (self.depths // t_dilation)
+
+        for i in range(0, self.depths):
+            x = self.transformer[i](x, fold_x_size, l_mask, T_ind[i])
+
+        return x
+
+
+class InpaintGenerator(nn.Module):
+    def __init__(self, config:ProPainterConfig):
         super(InpaintGenerator, self).__init__()
         channel = 128
         hidden = 512
 
-        self.encoder = Encoder(o)
+        self.encoder = Encoder()
 
         self.decoder = nn.Sequential(
             deconv(channel, 128, kernel_size=3, padding=1),
@@ -600,17 +1197,7 @@ class InpaintGenerator(PretrainedModel):
                                                 pool_size=pool_size,
                                                 depths=depths,
                                                 t2t_params=t2t_params)
-        if init_weights:
-            self.init_weights()
 
-
-        if model_path is not None:
-            print('Pretrained ProPainter has loaded...')
-            ckpt = torch.load(model_path, map_location='cpu')
-            self.load_state_dict(ckpt, strict=True)
-
-        # print network parameter number
-        self.print_network()
 
     def img_propagation(self, masked_frames, completed_flows, masks, interpolation='nearest'):
         _, _, prop_frames, updated_masks = self.img_prop_module(masked_frames, completed_flows[0], completed_flows[1], masks, interpolation)
@@ -666,7 +1253,7 @@ class InpaintGenerator(PretrainedModel):
 
         return output
 
-class Discriminator(BaseNetwork):
+class Discriminator(nn.Module):
     def __init__(self,
                  in_channels=3,
                  use_sigmoid=False,
@@ -742,7 +1329,7 @@ class Discriminator(BaseNetwork):
         return out
 
 
-class Discriminator_2D(BaseNetwork):
+class Discriminator_2D(nn.Module):
     def __init__(self,
                  in_channels=3,
                  use_sigmoid=False,
@@ -847,22 +1434,22 @@ class ProPainterPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, ViTEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+       # elif isinstance(module, ViTEmbeddings):
+       #     module.position_embeddings.data = nn.init.trunc_normal_(
+       #         module.position_embeddings.data.to(torch.float32),
+       #         mean=0.0,
+       #         std=self.config.initializer_range,
+       #     ).to(module.position_embeddings.dtype)
 
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
+       #     module.cls_token.data = nn.init.trunc_normal_(
+       #         module.cls_token.data.to(torch.float32),
+       #         mean=0.0,
+       #         std=self.config.initializer_range,
+       #     ).to(module.cls_token.dtype)
 
-    def _set_gradient_checkpointing(self, module: ViTEncoder, value: bool = False) -> None:
-        if isinstance(module, ViTEncoder):
-            module.gradient_checkpointing = value
+    #def _set_gradient_checkpointing(self, module: ViTEncoder, value: bool = False) -> None:
+    #    if isinstance(module, ViTEncoder):
+    #        module.gradient_checkpointing = value
 
 
 VIT_START_DOCSTRING = r"""
@@ -878,7 +1465,7 @@ VIT_START_DOCSTRING = r"""
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        #pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
@@ -906,7 +1493,7 @@ VIT_INPUTS_DOCSTRING = r"""
     VIT_START_DOCSTRING,
 )
 class ProPainterModel(ProPainterPreTrainedModel):
-    def __init__(self, config: ViTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: ProPainterConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
 
@@ -918,17 +1505,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self) -> ViTPatchEmbeddings:
-        return self.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1013,19 +1589,12 @@ class ProPainterModel(ProPainterPreTrainedModel):
     VIT_START_DOCSTRING,
 )
 class ProPainterForImageInPainting(ProPainterPreTrainedModel):
-    def __init__(self, config: ViTConfig) -> None:
+    def __init__(self, config: ProPainterConfig) -> None:
         super().__init__(config)
 
-        self.vit = ViTModel(config, add_pooling_layer=False, use_mask_token=True)
-
-        self.decoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=config.encoder_stride**2 * config.num_channels,
-                kernel_size=1,
-            ),
-            nn.PixelShuffle(config.encoder_stride),
-        )
+        self.RAFT = RAFT(config)
+        self.FlowComplete = ReccurrentFlowCompleteNet(config)
+        self.InPainting = InpaintGenerator(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1034,9 +1603,9 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
     @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
+        frames: Optional[torch.Tensor] = None,
+        flow_masks: Optional[torch.BoolTensor] = None,
+        masks_dilated: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
@@ -1079,6 +1648,146 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
                 "the reconstructed image has the same dimensions as the input."
                 f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
             )
+
+        if frames.size(-1) <= 640:
+            short_clip_len = 12
+        elif frames.size(-1) < 720:
+            short_clip_len = 8
+        elif frames.size(-1) < 1280:
+            short_clip_len = 4
+        else:
+            short_clip_len = 2
+              
+        if frames.size(1) > short_clip_len:
+            gt_flows_f_list, gt_flows_b_list = [], []
+            for f in range(0, video_length, short_clip_len):
+                end_f = min(frames.size(1), f + short_clip_len)
+                if f == 0:
+                    flows_f, flows_b = self.RAFT(frames[:,f:end_f], iters=self.config.raft_iter)
+                else:
+                    flows_f, flows_b = self.RAFT(frames[:,f-1:end_f], iters=self.config.raft_iter)
+                
+                gt_flows_f_list.append(flows_f)
+                gt_flows_b_list.append(flows_b)
+
+            gt_flows_f = torch.cat(gt_flows_f_list, dim=1)
+            gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
+            gt_flows_bi = (gt_flows_f, gt_flows_b)
+        else:
+            gt_flows_bi = self.RAFT(frames, iters=self.config.raft_iter)
+
+
+        flow_length = gt_flows_bi[0].size(1)
+        if flow_length > args.subvideo_length:
+            pred_flows_f, pred_flows_b = [], []
+            pad_len = 5
+            for f in range(0, flow_length, args.subvideo_length):
+                s_f = max(0, f - pad_len)
+                e_f = min(flow_length, f + args.subvideo_length + pad_len)
+                pad_len_s = max(0, f) - s_f
+                pad_len_e = e_f - min(flow_length, f + args.subvideo_length)
+                pred_flows_bi_sub, _ = self.FlowComplete.forward_bidirect_flow(
+                    (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
+                    flow_masks[:, s_f:e_f+1])
+                pred_flows_bi_sub = self.FlowComplete.combine_flow(
+                    (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
+                    pred_flows_bi_sub, 
+                    flow_masks[:, s_f:e_f+1])
+
+                pred_flows_f.append(pred_flows_bi_sub[0][:, pad_len_s:e_f-s_f-pad_len_e])
+                pred_flows_b.append(pred_flows_bi_sub[1][:, pad_len_s:e_f-s_f-pad_len_e])
+                
+            pred_flows_f = torch.cat(pred_flows_f, dim=1)
+            pred_flows_b = torch.cat(pred_flows_b, dim=1)
+            pred_flows_bi = (pred_flows_f, pred_flows_b)
+        else:
+            pred_flows_bi, _ = self.FlowComplete.forward_bidirect_flow(gt_flows_bi, flow_masks)
+            pred_flows_bi = self.FlowComplete.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
+        
+
+        masked_frames = frames * (1 - masks_dilated)
+        subvideo_length_img_prop = min(100, args.subvideo_length) # ensure a minimum of 100 frames for image propagation
+        if video_length > subvideo_length_img_prop:
+            updated_frames, updated_masks = [], []
+            pad_len = 10
+            for f in range(0, video_length, subvideo_length_img_prop):
+                s_f = max(0, f - pad_len)
+                e_f = min(video_length, f + subvideo_length_img_prop + pad_len)
+                pad_len_s = max(0, f) - s_f
+                pad_len_e = e_f - min(video_length, f + subvideo_length_img_prop)
+
+                b, t, _, _, _ = masks_dilated[:, s_f:e_f].size()
+                pred_flows_bi_sub = (pred_flows_bi[0][:, s_f:e_f-1], pred_flows_bi[1][:, s_f:e_f-1])
+                prop_imgs_sub, updated_local_masks_sub = self.InPainting.img_propagation(masked_frames[:, s_f:e_f],
+                                                                       pred_flows_bi_sub,
+                                                                       masks_dilated[:, s_f:e_f],
+                                                                       'nearest')
+                updated_frames_sub = frames[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f]) + \
+                                    prop_imgs_sub.view(b, t, 3, h, w) * masks_dilated[:, s_f:e_f]
+                updated_masks_sub = updated_local_masks_sub.view(b, t, 1, h, w)
+
+                updated_frames.append(updated_frames_sub[:, pad_len_s:e_f-s_f-pad_len_e])
+                updated_masks.append(updated_masks_sub[:, pad_len_s:e_f-s_f-pad_len_e])
+
+            updated_frames = torch.cat(updated_frames, dim=1)
+            updated_masks = torch.cat(updated_masks, dim=1)
+        else:
+            b, t, _, _, _ = masks_dilated.size()
+            prop_imgs, updated_local_masks = self.InPainting.img_propagation(masked_frames, pred_flows_bi, masks_dilated, 'nearest')
+            updated_frames = frames * (1 - masks_dilated) + prop_imgs.view(b, t, 3, h, w) * masks_dilated
+            updated_masks = updated_local_masks.view(b, t, 1, h, w)
+
+        ori_frames = frames_inp
+        comp_frames = [None] * video_length
+
+        neighbor_stride = args.neighbor_length // 2
+        if video_length > args.subvideo_length:
+            ref_num = args.subvideo_length // args.ref_stride
+        else:
+            ref_num = -1
+
+
+        for f in range(0, video_length, neighbor_stride):
+            neighbor_ids = [
+                i for i in range(max(0, f - neighbor_stride),
+                                    min(video_length, f + neighbor_stride + 1))
+            ]
+            ref_ids = get_ref_index(f, neighbor_ids, video_length, args.ref_stride, ref_num)
+            selected_imgs = updated_frames[:, neighbor_ids + ref_ids, :, :, :]
+            selected_masks = masks_dilated[:, neighbor_ids + ref_ids, :, :, :]
+            selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, :, :, :]
+            selected_pred_flows_bi = (pred_flows_bi[0][:, neighbor_ids[:-1], :, :, :], pred_flows_bi[1][:, neighbor_ids[:-1], :, :, :])
+            
+            # 1.0 indicates mask
+            l_t = len(neighbor_ids)
+            
+            # pred_img = selected_imgs # results of image propagation
+            pred_img = self.InPainting(selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t)
+            
+            pred_img = pred_img.view(-1, 3, h, w)
+
+            pred_img = (pred_img + 1) / 2
+            pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
+            binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(
+                0, 2, 3, 1).numpy().astype(np.uint8)
+            for i in range(len(neighbor_ids)):
+                idx = neighbor_ids[i]
+                img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] \
+                    + ori_frames[idx] * (1 - binary_masks[i])
+                if comp_frames[idx] is None:
+                    comp_frames[idx] = img
+                else: 
+                    comp_frames[idx] = comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5
+                    
+                comp_frames[idx] = comp_frames[idx].astype(np.uint8)
+
+            for idx in range(video_length):
+                f = comp_frames[idx]
+                f = cv2.resize(f, out_size, interpolation = cv2.INTER_CUBIC)
+                f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
+                img_save_root = os.path.join(save_root, 'frames', str(idx).zfill(4)+'.png')
+                imwrite(f, img_save_root)
+
 
         outputs = self.vit(
             pixel_values,
@@ -1142,7 +1851,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
     VIT_START_DOCSTRING,
 )
 class ProPainterForImageOutPainting(ProPainterPreTrainedModel):
-    def __init__(self, config: ViTConfig) -> None:
+    def __init__(self, config: ProPainterConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1154,13 +1863,14 @@ class ProPainterForImageOutPainting(ProPainterPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    #@add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
+    #@add_code_sample_docstrings(
+    #    checkpoint=_IMAGE_CLASS_CHECKPOINT,
+    #    output_type=ImageClassifierOutput,
+    
+    #    config_class=_CONFIG_FOR_DOC,
+    #    expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+    #)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,

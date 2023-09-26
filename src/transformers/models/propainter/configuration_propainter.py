@@ -111,6 +111,9 @@ class ProPainterConfig(PretrainedConfig):
         stride = (3, 3),
         window_size = (5, 9),
         pool_size = (4, 4),
+        small = True,
+        dropout = 0,
+        encoder_depth = 2,
 
 
         **kwargs,
@@ -131,4 +134,8 @@ class ProPainterConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
+        self.small = small
+        self.dropout = dropout
+        self.threshold = threshold
+        self.encoder_depth = 2
 
