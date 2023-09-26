@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_speech_available,
     is_tokenizers_available,
     is_torch_available,
     is_vision_available,
@@ -34,6 +35,7 @@ _import_structure = {
         "ImageBindThermalConfig",
         "ImageBindVisionConfig",
     ],
+    "feature_extraction_imagebind": ["ImageBindImuFeatureExtractor"],
     "processing_imagebind": ["ImageBindProcessor"],
     "tokenization_imagebind": ["ImageBindTokenizer"],
 }
@@ -54,8 +56,16 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_imagebind"] = ["ImageBindFeatureExtractor"]
-    _import_structure["image_processing_imagebind"] = ["ImageBindImageProcessor"]
+    _import_structure["feature_extraction_imagebind"].extend(["ImageBindFeatureExtractor"])
+    _import_structure["image_processing_imagebind"] = ["ImageBindImageProcessor", "ImageBindDepthImageProcessor", "ImageBindThermalImageProcessor"]
+
+try:
+    if not is_speech_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_imagebind"].extend(["ImageBindAudioFeatureExtractor"])
 
 
 try:
@@ -94,6 +104,7 @@ if TYPE_CHECKING:
         ImageBindThermalConfig,
         ImageBindVisionConfig,
     )
+    from .feature_extraction_imagebind import ImageBindImuFeatureExtractor
     from .processing_imagebind import ImageBindProcessor
     from .tokenization_imagebind import ImageBindTokenizer
 
@@ -112,7 +123,15 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_imagebind import ImageBindFeatureExtractor
-        from .image_processing_imagebind import ImageBindImageProcessor
+        from .image_processing_imagebind import ImageBindImageProcessor, ImageBindDepthImageProcessor, ImageBindThermalImageProcessor
+
+    try:
+        if not is_speech_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_imagebind import ImageBindAudioFeatureExtractor
 
     try:
         if not is_torch_available():

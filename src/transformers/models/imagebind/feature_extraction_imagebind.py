@@ -210,3 +210,10 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+class ImageBindImuFeatureExtractor(SequenceFeatureExtractor):
+    """
+    Feature extractor for ImageBind IMU data.
+    """
+    pass
