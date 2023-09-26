@@ -360,7 +360,6 @@ class OptFlashAttention2(OPTAttention):
         key_states = key_states.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
         value_states = value_states.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
 
-
         attn_dropout = self.dropout if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
