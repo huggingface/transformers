@@ -129,9 +129,15 @@ class FalconRotaryEmbedding(nn.Module):
         total_length = seq_len + past_key_values_length
         if total_length > self.seq_len_cached:
             self._set_cos_sin_cache(total_length, device, dtype)
+
+        # the cached tensors need to update their devices (for example, after we change the model's device)
+        if device != self.cos_cached:
+            self.cos_cached = self.cos_cached.to(device)
+            self.sin_cached = self.sin_cached.to(device)
+
         # Gather cos, sin at the designated position ids
-        cos = self.cos_cached.squeeze(0)[position_ids].to(device)  # [bs, seq_len, dim]
-        sin = self.sin_cached.squeeze(0)[position_ids].to(device)  # [bs, seq_len, dim]
+        cos = self.cos_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
+        sin = self.sin_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
         return cos, sin
 
     def forward(self, query, key, past_key_values_length, position_ids):
