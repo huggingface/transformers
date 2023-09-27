@@ -80,9 +80,6 @@ def get_id2label_for_vqa():
     return id2label, label2id
 
 
-# SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
-
-
 def get_base_config_image_classification():
     id2label, label2id = get_id2label_for_imagenet_1k()
     return Beit3Config(hidden_size=768 * 4, num_labels=1000, id2label=id2label, label2id=label2id)
