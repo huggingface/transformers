@@ -52,7 +52,11 @@ jobs:
     steps:
       - name: ROCM-SMI
         run: |
-          rocm-smi
+          rocminfo  | grep "Agent" -A 14
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   setup_gpu:
     name: Setup
@@ -213,7 +217,11 @@ jobs:
 
       - name: ROCM-SMI
         run: |
-          rocm-smi
+          rocminfo  | grep "Agent" -A 14
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
         working-directory: /transformers
@@ -307,7 +315,7 @@ jobs:
       - name: ROCM-SMI
         run: |
           rocminfo  | grep "Agent" -A 14
-      - name: "Show HIP environment"
+      - name: Show HIP environment
         run: |
           echo "HIP: $HIP_VISIBLE_DEVICES"
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
