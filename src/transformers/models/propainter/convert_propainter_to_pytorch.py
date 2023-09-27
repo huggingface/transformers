@@ -37,65 +37,75 @@ logger = logging.get_logger(__name__)
 def create_rename_keys(config, base_model=False):
     rename_keys = []
     ## OPTICAL FLOW
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Norm1.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Norm1.bias"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.bias"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv2.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv2.bias"))
-    for i in range(config.num_hidden_layers):
+    rename_keys.append((f"fix_raft.fnet.conv2.weight", f"OpticalFlow.FeatureNet.Norm1.weight"))
+    rename_keys.append((f"fix_raft.fnet.conv2.bias", f"OpticalFlow.FeatureNet.Norm1.bias"))
+    rename_keys.append((f"fix_raft.fnet.conv1.weight", f"OpticalFlow.FeatureNet.Conv1.weight"))
+    rename_keys.append((f"fix_raft.fnet.conv1.bias", f"OpticalFlow.FeatureNet.Conv1.bias"))
+    rename_keys.append((f"fix_raft.fnet.conv2.weight", f"OpticalFlow.FeatureNet.Conv2.weight"))
+    rename_keys.append((f"fix_raft.fnet.conv2.bias", f"OpticalFlow.FeatureNet.Conv2.bias"))
+    for j in range(layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        for j in range(layers):
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv1.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv1.bias"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv2.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv2.bias"))
+        for i in range(config.num_hidden_layers):
+            rename_keys.append((f"fix_raft.fnet.layer{j}.{i}.conv1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv1.weight"))
+            rename_keys.append((f"fix_raft.fnet.layer{j}.{i}.conv1.bias", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv1.bias"))
+            rename_keys.append((f"fix_raft.fnet.layer{j}.{i}.conv2.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv2.weight"))
+            rename_keys.append((f"fix_raft.fnet.layer{j}.{i}.conv2.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv2.bias"))
             rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm1.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm1.bias"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm2.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm2.bias"))
+            #rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm1.bias"))
+            #rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm2.weight"))
 
 
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Norm1.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Norm1.bias"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.bias"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv2.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv2.bias"))
-    for i in range(config.num_hidden_layers):
+
+fix_raft.cnet.norm1.num_batches_tracked
+    rename_keys.append((f"fix_raft.cnet.norm1.weight", f"OpticalFlow.ContextNet.Norm1.weight"))
+    rename_keys.append((f"fix_raft.cnet.norm1.bias", f"OpticalFlow.ContextNet.Norm1.bias"))
+    rename_keys.append((f"fix_raft.cnet.norm1.running_mean", f"OpticalFlow.ContextNet.Norm1.running_mean"))
+    rename_keys.append((f"fix_raft.cnet.norm1.running_var", f"OpticalFlow.ContextNet.Norm1.running_var"))
+    rename_keys.append((f"fix_raft.cnet.norm1.num_batches_tracked", f"OpticalFlow.ContextNet.Norm1.num_batches_tracked"))
+
+    rename_keys.append((f"fix_raft.cnet.conv1.weight", f"OpticalFlow.ContextNet.Conv1.weight"))
+    rename_keys.append((f"fix_raft.cnet.conv1.bias", f"OpticalFlow.ContextNet.Conv1.bias"))
+    rename_keys.append((f"fix_raft.cnet.conv2.weight", f"OpticalFlow.ContextNet.Conv2.weight"))
+    rename_keys.append((f"fix_raft.cnet.conv2.bias", f"OpticalFlow.ContextNet.Conv2.bias"))
+    for j in range(layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        for j in range(layers):
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv1.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv1.bias"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv2.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv2.bias"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm1.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm1.bias"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm2.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm2.bias"))
+        for i in range(config.num_hidden_layers):
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.conv1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv1.weight"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.conv1.bias", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv1.bias"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.conv2.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv2.weight"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.conv2.bias", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv2.bias"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm1.weight"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm1.bias", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm1.bias"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm1.running_mean", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm1.running_mean"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm1.running_var", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm1.running_var"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm1.num_batched_tracked", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm1.num_batched_tracked"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm2.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm2.weight"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm2.bias", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm2.bias"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm2.running_mean", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm2.running_mean"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm2.running_var", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm2.running_var"))
+            rename_keys.append((f"fix_raft.cnet.layer{j}.{i}.norm2.num_batches_tracked", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm2.num_batches_tracked"))
 
-    for block in ["Conv_c1","Conv_c2","Conv_f1","Conv_f2","Conv_"]:
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Encoder.{block}.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Encoder.{block}.bias"))
+    for block_old, block in zip(["convc1","convc2","convf1","convf2","conv"], ["Conv_c1","Conv_c2","Conv_f1","Conv_f2","Conv_"]):
+        rename_keys.append((f"fix_raft.update_block.encoder.{block_old}.weight", f"OpticalFlow.UpdateBlock.Encoder.{block}.weight"))
+        rename_keys.append((f"fix_raft.update_block.encoder.{block_old}.bias", f"OpticalFlow.UpdateBlock.Encoder.{block}.bias"))
 
-    for block in ["Conv_z1","Conv_r2","Conv_q1","Conv_z2","Conv_r2","Conv_q2"]:
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.GRU.{block}.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.GRU.{block}.bias"))
+    for block_old, block in zip(["convz1","convr2","convq1","convz2","convr2","convq2"], ["Conv_z1","Conv_r2","Conv_q1","Conv_z2","Conv_r2","Conv_q2"]):
+        rename_keys.append((f"fix_raft.update_block.gru.{block_old}.weight", f"OpticalFlow.UpdateBlock.GRU.{block}.weight"))
+        rename_keys.append((f"fix_raft.update_block.gru.{block_old}.bias", f"OpticalFlow.UpdateBlock.GRU.{block}.bias"))
 
-    for block in ["Conv1","Conv2"]:
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.FlowHead.{block}.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.FlowHead.{block}.bias"))
+    for block_old, block in zip(["conv1","conv2"],["Conv1","Conv2"]):
+        rename_keys.append((f"fix_raft.update_block.flow_head.{block_old}.weight", f"OpticalFlow.UpdateBlock.FlowHead.{block}.weight"))
+        rename_keys.append((f"fix_raft.update_block.flow_head.{block_old}.bias", f"OpticalFlow.UpdateBlock.FlowHead.{block}.bias"))
 
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Mask.0.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Mask.0.bias"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Mask.2.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Mask.2.bias"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.FlowHead.{block}.bias"))
+    rename_keys.append((f"fix_raft.update_block.mask.0.weight", f"OpticalFlow.UpdateBlock.Mask.0.weight"))
+    rename_keys.append((f"fix_raft.update_block.mask.0.bias", f"OpticalFlow.UpdateBlock.Mask.0.bias"))
+    rename_keys.append((f"fix_raft.update_block.mask.2.weight", f"OpticalFlow.UpdateBlock.Mask.2.weight"))
+    rename_keys.append((f"fix_raft.update_block.mask.2.bias", f"OpticalFlow.UpdateBlock.Mask.2.bias"))
 
 
     ## RecurentFlowCompleteNet
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.Downsample.0.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.Downsample.0.bias"))
+    rename_keys.append((f"downsample.0.weight", f"FlowComplete.Downsample.0.weight"))
+    rename_keys.append((f"downsample.0.bias", f"FlowComplete.Downsample.0.bias"))
 
     for i in range(0,config.encoder_depth,2):#7
         rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.Encoder.0.{i}.Conv1.0.weight"))
@@ -104,21 +114,21 @@ def create_rename_keys(config, base_model=False):
         rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.Encoder.0.{i}.Conv2.0.bias"))
     
     for i in range(0, config.middilation_depth,2):#5
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.MidDilation.{i}.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.MidDilation.{i}.bias"))
+        rename_keys.append((f"mid_dilation.{i}.weight", f"FlowComplete.MidDilation.{i}.weight"))
+        rename_keys.append((f"mid_dilation.{i}.weight", f"FlowComplete.MidDilation.{i}.bias"))
 
-    for block in ["backward_1","forward_1"]
+    for block_old, block in zip(["backward_","forward_"],["backward_1","forward_1"]):
         for i in range(0,config.convoffset_depth,2):#6
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.feat_prop_module.deform_align.{block}.ConvOffset.{i}.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.feat_prop_module.deform_align.{block}.ConvOffset.{i}.bias"))
+            rename_keys.append((f"feat_prop_module.deform_align.{block_old}.conv_offset.{i}.weight", f"FlowComplete.feat_prop_module.deform_align.{block}.ConvOffset.{i}.weight"))
+            rename_keys.append((f"feat_prop_module.deform_align.{block_old}.conv_offset.{i}.bias", f"FlowComplete.feat_prop_module.deform_align.{block}.ConvOffset.{i}.bias"))
 
             rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.feat_prop_module.deform_align.{block}.ConvOffset.{i}.weight"))
             rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.feat_prop_module.deform_align.{block}.ConvOffset.{i}.bias"))
 
 
         for i in range(0,config.backbone_depth,2):#2
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.feat_prop_module.backbone.{block}.{i}.weight"))
-            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.feat_prop_module.backbone.{block}.{i}.bias"))
+            rename_keys.append((f"feat_prop_module.backbone.{block_old}.{i}.weight", f"FlowComplete.feat_prop_module.backbone.{block}.{i}.weight"))
+            rename_keys.append((f"feat_prop_module.backbone.{block_old}.{i}.bias", f"FlowComplete.feat_prop_module.backbone.{block}.{i}.bias"))
 
             rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.feat_prop_module.backbone.{block}.{i}.weight"))
             rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.feat_prop_module.backbone.{block}.{i}.bias"))
@@ -130,58 +140,58 @@ def create_rename_keys(config, base_model=False):
         rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.feat_prop_module.fuse.{i}.weight"))
         rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.feat_prop_module.fuse.{i}.bias"))
 
-    for block in ["Decoder1","Decoder2","Upsample"]:
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.{block}.0.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.{block}.0.bias"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.{block}.2.Conv.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.{block}.2.Conv.bias"))
+    for block_old, block in zip(["decoder1","decoder2","upsample"], ["Decoder1","Decoder2","Upsample"]):
+        rename_keys.append((f"{block_old}.0.weight", f"FlowComplete.{block}.0.weight"))
+        rename_keys.append((f"{block_old}.0.bias", f"FlowComplete.{block}.0.bias"))
+        rename_keys.append((f"{block_old}.2.weight", f"FlowComplete.{block}.2.Conv.weight"))
+        rename_keys.append((f"{block_old}.2.bias", f"FlowComplete.{block}.2.Conv.bias"))
 
-    for block in ["edge_projection","edge_layer_1","edge_layer_2"]:
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.EdgeDetector.{block}.0.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.EdgeDetector.{block}.0.bias"))
+    for block_old, block in zip(["projection","mid_layer_1","mid_layer_2"]["edge_projection","edge_layer_1","edge_layer_2"]):
+        rename_keys.append((f"edgeDetector.{block_old}.0.weight", f"FlowComplete.EdgeDetector.{block}.0.weight"))
+        rename_keys.append((f"edgeDetector.{block_old}.0.bias", f"FlowComplete.EdgeDetector.{block}.0.bias"))
 
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.EdgeDetector.edge_out.0.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.EdgeDetector.edge_out.0.bias"))
+    rename_keys.append((f"edgeDetector.out_layer.weight", f"FlowComplete.EdgeDetector.edge_out.0.weight"))
+    rename_keys.append((f"edgeDetector.out_layer.bias", f"FlowComplete.EdgeDetector.edge_out.0.bias"))
     
     ##ProPainter
     for i in range(0,config.encoder_depth,2):#17
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.encoder.Layers.{i}.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.encoder.Layers.{i}.bias"))
+        rename_keys.append((f"encoder.layers.{i}.weight", f"InPainting.encoder.Layers.{i}.weight"))
+        rename_keys.append((f"encoder.layers.{i}.bias", f"InPainting.encoder.Layers.{i}.bias"))
 
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.decoder.4.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.decoder.4.bias"))
+    rename_keys.append((f"decoder.4.conv.weight", f"InPainting.decoder.4.weight"))
+    rename_keys.append((f"decoder.4.conv.bias", f"InPainting.decoder.4.bias"))
     for i in [2,6]:#6
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.decoder.{i}.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.decoder.{i}.bias"))
+        rename_keys.append((f"decoder.{i}.weight", f"InPainting.decoder.{i}.weight"))
+        rename_keys.append((f"decoder.{i}.weight", f"InPainting.decoder.{i}.bias"))
 
     for block in ["sc","ss"]:
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.{block}.embedding.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.{block}.embedding.bias"))
+        rename_keys.append((f"{block}.embedding.weight", f"InPainting.{block}.embedding.weight"))
+        rename_keys.append((f"{block}.embedding.bias", f"InPainting.{block}.embedding.bias"))
 
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.sc.bias_conv.weight"))
-    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.sc.bias_conv.bias"))
+    rename_keys.append((f"sc.bias_conv.weight", f"InPainting.sc.bias_conv.weight"))
+    rename_keys.append((f"sc.bias_conv.bias", f"InPainting.sc.bias_conv.bias"))
 
     
     for i in range(config.transformer_block):#7
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.key.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.key.bias"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.query.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.query.bias"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.value.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.value.bias"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.proj.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.proj.bias"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.pool_layer.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.attention.pool_layer.bias"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.key.weight", f"InPainting.transformers.transformer.{i}.attention.key.weight"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.key.bias", f"InPainting.transformers.transformer.{i}.attention.key.bias"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.query.weight", f"InPainting.transformers.transformer.{i}.attention.query.weight"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.query.bias", f"InPainting.transformers.transformer.{i}.attention.query.bias"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.value.weight", f"InPainting.transformers.transformer.{i}.attention.value.weight"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.value.bias", f"InPainting.transformers.transformer.{i}.attention.value.bias"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.proj.weight", f"InPainting.transformers.transformer.{i}.attention.proj.weight"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.proj.bias", f"InPainting.transformers.transformer.{i}.attention.proj.bias"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.pool_layer.weight", f"InPainting.transformers.transformer.{i}.attention.pool_layer.weight"))
+        rename_keys.append((f"transformers.transformer.{i}.attention.pool_layer.bias", f"InPainting.transformers.transformer.{i}.attention.pool_layer.bias"))
 
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.norm1.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.norm1.bias"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.norm2.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.norm2.bias"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.mlp.fc1.0.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.mlp.fc1.0.bias"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.mlp.fc2.1.weight"))
-        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"InPainting.transformers.transformer.{i}.mlp.fc2.1.bias"))
+        rename_keys.append((f"transformers.transformer.{i}.norm1.weight", f"InPainting.transformers.transformer.{i}.norm1.weight"))
+        rename_keys.append((f"transformers.transformer.{i}.norm1.bias", f"InPainting.transformers.transformer.{i}.norm1.bias"))
+        rename_keys.append((f"transformers.transformer.{i}.norm2.weight", f"InPainting.transformers.transformer.{i}.norm2.weight"))
+        rename_keys.append((f"transformers.transformer.{i}.norm2.bias", f"InPainting.transformers.transformer.{i}.norm2.bias"))
+        rename_keys.append((f"transformers.transformer.{i}.mlp.fc1.0.weight", f"InPainting.transformers.transformer.{i}.mlp.fc1.0.weight"))
+        rename_keys.append((f"transformers.transformer.{i}.mlp.fc1.0.bias", f"InPainting.transformers.transformer.{i}.mlp.fc1.0.bias"))
+        rename_keys.append((f"transformers.transformer.{i}.mlp.fc2.1.weight", f"InPainting.transformers.transformer.{i}.mlp.fc2.1.weight"))
+        rename_keys.append((f"transformers.transformer.{i}.mlp.fc2.1.bias", f"InPainting.transformers.transformer.{i}.mlp.fc2.1.bias"))
 
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, config, base_model=False):
