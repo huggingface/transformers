@@ -1152,8 +1152,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if fp32_modules_from_instance is not None:
             modules += fp32_modules_from_instance
 
-        modules = modules if len(modules) > 0 else None
-
         return modules
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
