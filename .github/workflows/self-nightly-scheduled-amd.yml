@@ -45,9 +45,14 @@ jobs:
       image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      - name: NVIDIA-SMI
+      - name: ROCM-SMI
         run: |
-          nvidia-smi
+          rocminfo  | grep "Agent" -A 14
+
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   setup:
     name: Setup
@@ -84,9 +89,14 @@ jobs:
         run: |
           echo "matrix=$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = d2 + d1; print(d)')" >> $GITHUB_OUTPUT
 
-      - name: NVIDIA-SMI
+      - name: ROCM-SMI
         run: |
-          nvidia-smi
+          rocminfo  | grep "Agent" -A 14
+
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
   run_tests_single_gpu:
     name: Model tests
@@ -120,9 +130,14 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
-      - name: NVIDIA-SMI
+      - name: ROCM-SMI
         run: |
-          nvidia-smi
+          rocminfo  | grep "Agent" -A 14
+
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
         working-directory: /transformers
@@ -181,9 +196,14 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
-      - name: NVIDIA-SMI
+      - name: ROCM-SMI
         run: |
-          nvidia-smi
+          rocminfo  | grep "Agent" -A 14
+
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
         working-directory: /transformers
@@ -242,9 +262,14 @@ jobs:
           git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
           DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
-      - name: NVIDIA-SMI
+      - name: ROCM-SMI
         run: |
-          nvidia-smi
+          rocminfo  | grep "Agent" -A 14
+
+      - name: Show HIP environment
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
         working-directory: /workspace/transformers
