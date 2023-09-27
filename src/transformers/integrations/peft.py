@@ -366,16 +366,11 @@ class PeftAdapterMixin:
         return active_adapters
 
     def active_adapter(self) -> str:
-        active_adapters = self.active_adapters()
+        logger.warning(
+            "The `active_adapter` method is deprecated and will be removed in a future version. ", FutureWarning
+        )
 
-        if isinstance(active_adapters, list):
-            logger.warning(
-                "`active_adapter` will return the first adapter in case of multi-adapter inference. Make sure to know what you are doing.",
-                " you should use `model.active_adapters() instead to get the list of active adapters",
-            )
-            active_adapters = active_adapters[0]
-
-        return active_adapters
+        return self.active_adapters()[0]
 
     def get_adapter_state_dict(self, adapter_name: Optional[str] = None) -> dict:
         """

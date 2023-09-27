@@ -291,6 +291,10 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     torch.allclose(logits_adapter_2.logits, logits_adapter_mixed.logits, atol=1e-6, rtol=1e-6)
                 )
 
+                # multi active adapter saving not supported
+                with self.assertRaises(ValueError), tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+
     @require_torch_gpu
     def test_peft_from_pretrained_kwargs(self):
         """
