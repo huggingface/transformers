@@ -934,8 +934,9 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
     Returns:
        `str`: The description updated with the new default value.
     """
-    # Lots of docstrings have `optional` instead of *optional* so we do this fix here.
+    # Lots of docstrings have `optional` or **opational** instead of *optional* so we do this fix here.
     description = description.replace("`optional`", OPTIONAL_KEYWORD)
+    description = description.replace("**optional**", OPTIONAL_KEYWORD)
     if default is inspect._empty:
         # No default, make sure the description doesn't have any either
         idx = description.find(OPTIONAL_KEYWORD)
