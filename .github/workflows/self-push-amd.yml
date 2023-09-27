@@ -44,7 +44,7 @@ jobs:
     needs: check_runner_status
     strategy:
       matrix:
-        machine_type: [single-gpu, multi-amd-gpu]
+        machine_type: [single-gpu, multi-gpu]
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', mi210]
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
