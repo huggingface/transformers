@@ -2006,7 +2006,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         peft_state_dict[f"base_model.model.{key}"] = value
                     state_dict = peft_state_dict
 
-                current_peft_config = self.peft_config[self.active_adapter()]
+                active_adapter = self.active_adapters()
+
+                if len(active_adapter) > 1:
+                    raise ValueError(
+                        "Multiple active adapters detected, saving multiple active adapters is not supported yet. You can save adapters separately one by one "
+                        "by iteratively calling `model.set_adapter(adapter_name)` then `model.save_pretrained(...)`"
+                    )
+                active_adapter = active_adapter[0]
+
+                current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
         # Save the model
