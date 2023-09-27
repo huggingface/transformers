@@ -99,7 +99,7 @@ class GPTQTest(unittest.TestCase):
     group_size = 128
     desc_act = False
     disable_exllama = True
-    disable_exllamav2=True
+    disable_exllamav2 = True
 
     dataset = [
         "auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."
@@ -264,7 +264,9 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         """
         Setup quantized model
         """
-        cls.quantization_config = GPTQConfig(bits=4, disable_exllama=False, disable_exllamav2=True, max_input_length=4028)
+        cls.quantization_config = GPTQConfig(
+            bits=4, disable_exllama=False, disable_exllamav2=True, max_input_length=4028
+        )
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
             revision=cls.revision,
@@ -370,7 +372,8 @@ class GPTQTestExllamaV2(unittest.TestCase):
         Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model)
-        
+
+
 # fail when run all together
 @pytest.mark.skip
 @require_accelerate

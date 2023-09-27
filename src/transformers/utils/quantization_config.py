@@ -344,11 +344,13 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
-        disable_exllama (`bool`, *optional*, defaults to `False`):
+        disable_exllama (`bool`, *optional*, defaults to `True`):
             Whether to use exllama backend. Only works with `bits` = 4.
         max_input_length (`int`, *optional*)
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
+        disable_exllamav2 (`bool`, *optional*, defaults to `False`):
+            Whether to use exllamav2 backend. Only works with `bits` = 4.
     """
 
     def __init__(
@@ -369,7 +371,7 @@ class GPTQConfig(QuantizationConfigMixin):
         pad_token_id: Optional[int] = None,
         disable_exllama: bool = True,
         max_input_length: Optional[int] = None,
-        disable_exllamav2:bool = False, 
+        disable_exllamav2: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -394,7 +396,7 @@ class GPTQConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["disable_exllama","disable_exllamav2","use_cuda_fp16","max_input_length"]
+        loading_attibutes = ["disable_exllama", "disable_exllamav2", "use_cuda_fp16", "max_input_length"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
 
