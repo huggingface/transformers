@@ -366,14 +366,6 @@ class PeftAdapterMixin:
         return active_adapters
 
     def active_adapter(self) -> str:
-        """
-        Gets the current active adapter of the model. In case of multi-adapter inference (combining multiple adapters
-        for inference) returns the first active adapter - kept for backward compatibility.
-
-        For higher versions of PEFT, users should use `model.active_adapters()` instead to get the list of active
-        adapters.
-        """
-
         active_adapters = self.active_adapters()
 
         if isinstance(active_adapters, list):
