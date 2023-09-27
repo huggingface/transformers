@@ -807,8 +807,11 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             )
         else:
             labels = np.copy(batch["input_ids"])
+            labels_old = np.copy(batch["input_ids"]) if "input_ids" in batch else None
             if self.tokenizer.pad_token_id is not None:
                 labels[labels == self.tokenizer.pad_token_id] = -100
+            if labels_old is not None:
+                labels[labels_old == -100] = -100
             batch["labels"] = labels
         return batch
 
