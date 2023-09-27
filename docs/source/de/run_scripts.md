@@ -146,7 +146,7 @@ python -m torch.distributed.launch \
     --predict_with_generate
 ```
 
-TensorFlow-Skripte verwenden eine [`MirroredStrategy`] (https://www.tensorflow.org/guide/distributed_training#mirroredstrategy) für verteiltes Training, und Sie müssen dem Trainingsskript keine zusätzlichen Argumente hinzufügen. Das TensorFlow-Skript verwendet standardmäßig mehrere GPUs, wenn diese verfügbar sind.
+TensorFlow-Skripte verwenden eine [`MirroredStrategy`](https://www.tensorflow.org/guide/distributed_training#mirroredstrategy) für verteiltes Training, und Sie müssen dem Trainingsskript keine zusätzlichen Argumente hinzufügen. Das TensorFlow-Skript verwendet standardmäßig mehrere GPUs, wenn diese verfügbar sind.
 
 ## Ein Skript auf einer TPU ausführen
 
