@@ -118,7 +118,7 @@ Um einen neuen Adapter hinzuzufügen:
 model.add_adapter(lora_config, adapter_name="adapter_2")
 ```
 
-Jetzt können Sie mit [~peft.PeftModel.set_adapter`] festlegen, welcher Adapter verwendet werden soll:
+Jetzt können Sie mit [`~peft.PeftModel.set_adapter`] festlegen, welcher Adapter verwendet werden soll:
 
 ```py
 # use adapter_1
