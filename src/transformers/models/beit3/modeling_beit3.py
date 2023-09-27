@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch BEiT3 model."""
 
-
 import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -32,11 +31,12 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutput,
 )
 from transformers.models.beit3.configuration_beit3 import Beit3Config
-from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging
+from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 
 
 logger = logging.get_logger(__name__)
 
+_CONFIG_FOR_DOC = "Beit3Config"
 
 BEIT3_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -48,7 +48,6 @@ BEIT3_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
-
 
 BEIT3_MODEL = r"""
     Args:
@@ -90,7 +89,6 @@ BEIT3_MODEL = r"""
             more detail.
 """
 
-
 BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
@@ -118,7 +116,6 @@ BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
 
 """
 
-
 BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -133,7 +130,6 @@ BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
 """
-
 
 BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
     Args:
@@ -166,7 +162,6 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             classification loss is computed (Cross-Entropy) against these labels.
 """
 
-
 BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
@@ -191,7 +186,6 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
 """
-
 
 BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
     Args:
@@ -841,6 +835,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids,
@@ -850,6 +845,43 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         return_dict=None,
         labels=None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import Beit3ForVisualReasoning, BeitImageProcessor, Beit3Processor, XLMRobertaTokenizer
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
+        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
+
+        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+
+        >>> model.eval()
+
+        >>> pixel_values = torch.cat(
+        ...     (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)),
+        ...     dim=1,
+        ... )
+
+        >>> # forward pass
+        >>> output = model(
+        ...     input_ids=torch.tensor(input["input_ids"]),
+        ...     pixel_values=pixel_values,
+        ...     padding_mask=torch.ones(input["input_ids"].shape),
+        ... )
+        >>> list(output.shape)
+        ```"""
         batch_size = input_ids.size()[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         image1_values, image2_values = pixel_values.split(1, dim=1)
@@ -911,6 +943,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -918,6 +951,43 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[Any], ImageClassifierOutputWithNoAttention]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import (
+        ...     Beit3ForImageClassification,
+        ...     BeitImageProcessor,
+        ...     Beit3Processor,
+        ...     XLMRobertaTokenizer,
+        ... )
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+
+        >>> model = Beit3ForImageClassification.from_pretrained("Raghavan/beit3_base_patch16_224_in1k").to(
+        ...     torch_device
+        ... )
+        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
+
+        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
+
+        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+
+        >>> model.eval()
+        >>> # prepare bool_masked_pos
+
+        >>> # forward pass
+        >>> output = model(pixel_values=torch.tensor(input["pixel_values"]))
+        >>> list(output.shape)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.beit3(input_ids=None, pixel_values=pixel_values)
@@ -975,6 +1045,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids,
@@ -987,6 +1058,44 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import Beit3ForCaptioning, BeitImageProcessor, Beit3Processor, XLMRobertaTokenizer
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning").to(
+        ...     torch_device
+        ... )
+        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
+
+        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
+
+        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+
+        >>> model.eval()
+        >>> # prepare bool_masked_pos
+        >>> language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
+        >>> language_masked_pos[0, 5] = 1
+        >>> input_tokens = list(input["input_ids"][0])
+        >>> input_tokens[5] = 64001
+        >>> output = model(
+        ...     input_ids=torch.tensor([input_tokens]),
+        ...     pixel_values=torch.tensor(input["pixel_values"]),
+        ...     padding_mask=torch.zeros(language_masked_pos.shape),
+        ...     language_masked_pos=language_masked_pos,
+        ... )
+        >>> list(output.shape)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         text_len = text_len if text_len is not None else input_ids.size(1)
@@ -1099,6 +1208,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_VQA_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids,
@@ -1108,6 +1218,45 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[Any], SequenceClassifierOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import (
+        ...     Beit3ForVisualQuestionAnswering,
+        ...     BeitImageProcessor,
+        ...     Beit3Processor,
+        ...     XLMRobertaTokenizer,
+        ... )
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> model = Beit3ForVisualQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa").to(
+        ...     torch_device
+        ... )
+        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
+
+        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
+
+        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+
+        >>> model.eval()
+
+        >>> # forward pass
+        >>> output = model(
+        ...     input_ids=torch.tensor(input["input_ids"]),
+        ...     pixel_values=torch.tensor(input["pixel_values"]),
+        ...     padding_mask=torch.ones(input["input_ids"].shape),
+        ... )
+        >>> list(output.shape)
+        ```"""
         encoder_outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1189,6 +1338,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Beit3ImageTextMatchingModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor,
