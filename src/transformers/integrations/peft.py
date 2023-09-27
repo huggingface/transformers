@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..utils import (
     check_peft_version,
@@ -245,7 +245,7 @@ class PeftAdapterMixin:
 
         self.set_adapter(adapter_name)
 
-    def set_adapter(self, adapter_name: str) -> None:
+    def set_adapter(self, adapter_name: Union[List[str], str]) -> None:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -253,12 +253,19 @@ class PeftAdapterMixin:
         Sets a specific adapter by forcing the model to use a that adapter and disable the other adapters.
 
         Args:
-            adapter_name (`str`):
-                The name of the adapter to set.
+            adapter_name (`Union[List[str], str]`):
+                The name of the adapter to set. Can be also a list of strings to set multiple adapters.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
+        elif isinstance(adapter_name, list):
+            missing = set(adapter_name) - set(self.peft_config)
+            if len(missing) > 0:
+                raise ValueError(
+                    f"Following adapter(s) could not be found: {', '.join(missing)}. Make sure you are passing the correct adapter name(s)."
+                    f" current loaded adapters are: {list(self.peft_config.keys())}"
+                )
         elif adapter_name not in self.peft_config:
             raise ValueError(
                 f"Adapter with name {adapter_name} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
@@ -270,7 +277,11 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                module.active_adapter = adapter_name
+                # For backward compatbility with previous PEFT versions
+                if hasattr(module, "set_adapter"):
+                    module.set_adapter(adapter_name)
+                else:
+                    module.active_adapter = adapter_name
                 _adapters_has_been_set = True
 
         if not _adapters_has_been_set:
@@ -294,7 +305,11 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                module.disable_adapters = True
+                # The recent version of PEFT need to call `enable_adapters` instead
+                if hasattr(module, "enable_adapters"):
+                    module.enable_adapters(enabled=False)
+                else:
+                    module.disable_adapters = True
 
     def enable_adapters(self) -> None:
         """
@@ -312,14 +327,22 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                module.disable_adapters = False
+                # The recent version of PEFT need to call `enable_adapters` instead
+                if hasattr(module, "enable_adapters"):
+                    module.enable_adapters(enabled=True)
+                else:
+                    module.disable_adapters = False
 
-    def active_adapter(self) -> str:
+    def active_adapters(self) -> List[str]:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
 
-        Gets the current active adapter of the model.
+        Gets the current active adapters of the model. In case of multi-adapter inference (combining multiple adapters
+        for inference) returns the list of all active adapters so that users can deal with them accordingly.
+
+        For previous PEFT versions (that does not support multi-adapter inference), `module.active_adapter` will return
+        a single string.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
 
@@ -333,7 +356,21 @@ class PeftAdapterMixin:
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
-                return module.active_adapter
+                active_adapters = module.active_adapter
+                break
+
+        # For previous PEFT versions
+        if isinstance(active_adapters, str):
+            active_adapters = [active_adapters]
+
+        return active_adapters
+
+    def active_adapter(self) -> str:
+        logger.warning(
+            "The `active_adapter` method is deprecated and will be removed in a future version. ", FutureWarning
+        )
+
+        return self.active_adapters()[0]
 
     def get_adapter_state_dict(self, adapter_name: Optional[str] = None) -> dict:
         """
