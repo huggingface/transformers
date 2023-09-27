@@ -214,7 +214,7 @@ class EsmEmbeddings(nn.Module):
         # This is analogous to the way that dropout layers scale down outputs during evaluation when not
         # actually dropping out values (or, equivalently, scale up their un-dropped outputs in training).
         if self.token_dropout:
-            embeddings.masked_fill_((input_ids == self.mask_token_id).unsqueeze(-1), 0.0)
+            embeddings = embeddings.masked_fill((input_ids == self.mask_token_id).unsqueeze(-1), 0.0)
             mask_ratio_train = 0.15 * 0.8  # Hardcoded as the ratio used in all ESM model training runs
             src_lengths = attention_mask.sum(-1)
             mask_ratio_observed = (input_ids == self.mask_token_id).sum(-1).float() / src_lengths
