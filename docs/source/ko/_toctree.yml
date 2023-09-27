@@ -141,8 +141,8 @@
       title: 훈련용 사용자 맞춤형 하드웨어
     - local: in_translation
       title: (번역중) Instantiating a big model
-    - local: in_translation
-      title: (번역중) Debugging
+    - local: debugging
+      title: 디버깅
     - local: hpo_train
       title: Trainer API를 사용한 하이퍼파라미터 탐색
     - local: tf_xla
