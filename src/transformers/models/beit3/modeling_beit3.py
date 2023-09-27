@@ -867,8 +867,6 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
-        >>> model.eval()
-
         >>> pixel_values = torch.cat(
         ...     (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)),
         ...     dim=1,
@@ -980,9 +978,6 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
-        >>> model.eval()
-        >>> # prepare bool_masked_pos
-
         >>> # forward pass
         >>> output = model(pixel_values=torch.tensor(input["pixel_values"]))
         >>> list(output.shape)
@@ -1080,8 +1075,6 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
-        >>> model.eval()
-        >>> # prepare bool_masked_pos
         >>> language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
         >>> language_masked_pos[0, 5] = 1
         >>> input_tokens = list(input["input_ids"][0])
@@ -1244,9 +1237,6 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
-        >>> model.eval()
-
-        >>> # forward pass
         >>> output = model(
         ...     input_ids=torch.tensor(input["input_ids"]),
         ...     pixel_values=torch.tensor(input["pixel_values"]),
@@ -1372,8 +1362,6 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
-        >>> model.eval()
-        >>> # prepare bool_masked_pos
         >>> another_input_ids = beit3_processor(text=["This is photo of a dog"], images=image)["input_ids"]
         >>> output = model(
         ...     input_ids=torch.tensor([input["input_ids"][0], another_input_ids[0]]),
