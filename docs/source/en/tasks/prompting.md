@@ -111,7 +111,7 @@ to solve some common NLP tasks.
 First, let's set up the environment: 
 
 ```bash
-pip install -q transformers einops accelerate
+pip install -q transformers accelerate
 ```
 
 Next, let's load the model with the appropriate pipeline (`"text-generation"`): 
@@ -129,7 +129,6 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 ...     model=model,
 ...     tokenizer=tokenizer,
 ...     torch_dtype=torch.bfloat16,
-...     trust_remote_code=True,
 ...     device_map="auto",
 ... )
 ```
@@ -138,8 +137,6 @@ Next, let's load the model with the appropriate pipeline (`"text-generation"`):
 
 Note that Falcon models were trained using the `bfloat16` datatype, so we recommend you use the same. This requires a recent 
 version of CUDA and works best on modern cards.
-
-You also need to allow remote code execution. This is because the Falcon models use a new architecture that is not part of transformers yet - instead, the code necessary is provided by the model authors in the repo.
 
 </Tip>
 
