@@ -132,61 +132,15 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
+def convert_propainter_checkpoint(vit_name, pytorch_dump_folder_path):
     """
-    Copy/paste/tweak model's weights to our ViT structure.
+    Copy/paste/tweak model's weights to our ProPainter structure.
     """
 
     # define default ViT configuration
-    config = ViTConfig()
+    config = ProPainterConfig()
     base_model = False
-    # dataset (ImageNet-21k only or also fine-tuned on ImageNet 2012), patch_size and image_size
-    if vit_name[-5:] == "in21k":
-        base_model = True
-        config.patch_size = int(vit_name[-12:-10])
-        config.image_size = int(vit_name[-9:-6])
-    else:
-        config.num_labels = 1000
-        repo_id = "huggingface/label-files"
-        filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
-        config.patch_size = int(vit_name[-6:-4])
-        config.image_size = int(vit_name[-3:])
-    # size of the architecture
-    if "deit" in vit_name:
-        if vit_name[9:].startswith("tiny"):
-            config.hidden_size = 192
-            config.intermediate_size = 768
-            config.num_hidden_layers = 12
-            config.num_attention_heads = 3
-        elif vit_name[9:].startswith("small"):
-            config.hidden_size = 384
-            config.intermediate_size = 1536
-            config.num_hidden_layers = 12
-            config.num_attention_heads = 6
-        else:
-            pass
-    else:
-        if vit_name[4:].startswith("small"):
-            config.hidden_size = 768
-            config.intermediate_size = 2304
-            config.num_hidden_layers = 8
-            config.num_attention_heads = 8
-        elif vit_name[4:].startswith("base"):
-            pass
-        elif vit_name[4:].startswith("large"):
-            config.hidden_size = 1024
-            config.intermediate_size = 4096
-            config.num_hidden_layers = 24
-            config.num_attention_heads = 16
-        elif vit_name[4:].startswith("huge"):
-            config.hidden_size = 1280
-            config.intermediate_size = 5120
-            config.num_hidden_layers = 32
-            config.num_attention_heads = 16
+
 
     # load original model from timm
     timm_model = timm.create_model(vit_name, pretrained=True)
