@@ -111,7 +111,7 @@ class ProPainterConfig(PretrainedConfig):
         stride = (3, 3),
         window_size = (5, 9),
         pool_size = (4, 4),
-        small = True,
+        small = False,
         dropout = 0,
         encoder_depth = 2,
 

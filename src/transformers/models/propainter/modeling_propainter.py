@@ -213,82 +213,162 @@ class ReccurrentFlowCompleteNet(nn.Module):
 
         return flow, edge
 
-class BottleneckBlock(nn.Module):
+class ResidualBlock(nn.Module):
     def __init__(self, in_planes, planes, norm_fn='group', stride=1):
-        super(BottleneckBlock, self).__init__()
+        super(ResidualBlock, self).__init__()
 
-        self.conv1 = nn.Conv2d(in_planes, planes//4, kernel_size=1, padding=0)
-        self.conv2 = nn.Conv2d(planes//4, planes//4, kernel_size=3, padding=1, stride=stride)
-        self.conv3 = nn.Conv2d(planes//4, planes, kernel_size=1, padding=0)
-        self.relu = nn.ReLU(inplace=True)
+        self.Conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, padding=1, stride=stride)
+        self.Conv2 = nn.Conv2d(planes, planes, kernel_size=3, padding=1)
+        self.Relu = nn.ReLU(inplace=True)
 
         num_groups = planes // 8
 
         if norm_fn == 'group':
-            self.norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=planes//4)
-            self.norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=planes//4)
-            self.norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
+            self.Norm1 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
+            self.Norm2 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
             if not stride == 1:
-                self.norm4 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
+                self.Norm3 = nn.GroupNorm(num_groups=num_groups, num_channels=planes)
 
         elif norm_fn == 'batch':
-            self.norm1 = nn.BatchNorm2d(planes//4)
-            self.norm2 = nn.BatchNorm2d(planes//4)
-            self.norm3 = nn.BatchNorm2d(planes)
+            self.Norm1 = nn.BatchNorm2d(planes)
+            self.Norm2 = nn.BatchNorm2d(planes)
             if not stride == 1:
-                self.norm4 = nn.BatchNorm2d(planes)
+                self.Norm3 = nn.BatchNorm2d(planes)
 
         elif norm_fn == 'instance':
-            self.norm1 = nn.InstanceNorm2d(planes//4)
-            self.norm2 = nn.InstanceNorm2d(planes//4)
-            self.norm3 = nn.InstanceNorm2d(planes)
+            self.Norm1 = nn.InstanceNorm2d(planes)
+            self.Norm2 = nn.InstanceNorm2d(planes)
             if not stride == 1:
-                self.norm4 = nn.InstanceNorm2d(planes)
+                self.Norm3 = nn.InstanceNorm2d(planes)
 
         elif norm_fn == 'none':
-            self.norm1 = nn.Sequential()
-            self.norm2 = nn.Sequential()
-            self.norm3 = nn.Sequential()
+            self.Norm1 = nn.Sequential()
+            self.Norm2 = nn.Sequential()
             if not stride == 1:
-                self.norm4 = nn.Sequential()
+                self.Norm3 = nn.Sequential()
 
         if stride == 1:
-            self.downsample = None
+            self.Downsample = None
 
         else:
-            self.downsample = nn.Sequential(
-                nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.norm4)
+            self.Downsample = nn.Sequential(
+                nn.Conv2d(in_planes, planes, kernel_size=1, stride=stride), self.Norm3)
 
-class SmallEncoder(nn.Module):
+    def forward(self, x):
+        y = x
+        y = self.Relu(self.Norm1(self.Conv1(y)))
+        y = self.Relu(self.Norm2(self.Conv2(y)))
+
+        if self.Downsample is not None:
+            x = self.Downsample(x)
+
+        return self.Relu(x+y)
+
+class FlowHead(nn.Module):
+    def __init__(self, input_dim=128, hidden_dim=256):
+        super(FlowHead, self).__init__()
+        self.Conv1 = nn.Conv2d(input_dim, hidden_dim, 3, padding=1)
+        self.Conv2 = nn.Conv2d(hidden_dim, 2, 3, padding=1)
+        self.Relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        return self.Conv2(self.Relu(self.Conv1(x)))
+
+class FlowMotionEncoder(nn.Module):
+    def __init__(self, args):
+        super(FlowMotionEncoder, self).__init__()
+        cor_planes = args.corr_levels * (2*args.corr_radius + 1)**2
+        self.Conv_c1 = nn.Conv2d(cor_planes, 256, 1, padding=0)
+        self.Conv_c2 = nn.Conv2d(256, 192, 3, padding=1)
+        self.Conv_f1 = nn.Conv2d(2, 128, 7, padding=3)
+        self.Conv_f2 = nn.Conv2d(128, 64, 3, padding=1)
+        self.Conv_ = nn.Conv2d(64+192, 128-2, 3, padding=1)
+
+    def forward(self, flow, corr):
+        cor = F.relu(self.Conv_c1(corr))
+        cor = F.relu(self.Conv_c2(cor))
+        flo = F.relu(self.Conv_f1(flow))
+        flo = F.relu(self.Conv_f2(flo))
+
+        cor_flo = torch.cat([cor, flo], dim=1)
+        out = F.relu(self.Conv_(cor_flo))
+        return torch.cat([out, flow], dim=1)
+
+class SepConvGRU(nn.Module):
+    def __init__(self, hidden_dim=128, input_dim=192+128):
+        super(SepConvGRU, self).__init__()
+        self.Conv_z1 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (1,5), padding=(0,2))
+        self.Conv_r1 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (1,5), padding=(0,2))
+        self.Conv_q1 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (1,5), padding=(0,2))
+
+        self.Conv_z2 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (5,1), padding=(2,0))
+        self.Conv_r2 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (5,1), padding=(2,0))
+        self.Conv_q2 = nn.Conv2d(hidden_dim+input_dim, hidden_dim, (5,1), padding=(2,0))
+
+
+    def forward(self, h, x):
+        # horizontal
+        hx = torch.cat([h, x], dim=1)
+        z = torch.sigmoid(self.Conv_z1(hx))
+        r = torch.sigmoid(self.Conv_r1(hx))
+        q = torch.tanh(self.Conv_q1(torch.cat([r*h, x], dim=1)))        
+        h = (1-z) * h + z * q
+
+        # vertical
+        hx = torch.cat([h, x], dim=1)
+        z = torch.sigmoid(self.Conv_z2(hx))
+        r = torch.sigmoid(self.Conv_r2(hx))
+        q = torch.tanh(self.Conv_q2(torch.cat([r*h, x], dim=1)))       
+        h = (1-z) * h + z * q
+
+        return h
+
+
+class FlowUpdateBlock(nn.Module):
+    def __init__(self, args, hidden_dim=128, input_dim=128):
+        super(FlowUpdateBlock, self).__init__()
+        self.args = args
+        self.Encoder = FlowMotionEncoder(args)
+        self.GRU = SepConvGRU(hidden_dim=hidden_dim, input_dim=128+hidden_dim)
+        self.FlowHead = FlowHead(hidden_dim, hidden_dim=256)
+
+        self.Mask = nn.Sequential(
+            nn.Conv2d(128, 256, 3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 64*9, 1, padding=0))
+
+
+class FlowEncoder(nn.Module):
     def __init__(self, output_dim=128, norm_fn='batch', dropout=0.0):
-        super(SmallEncoder, self).__init__()
+        super(FlowEncoder, self).__init__()
         self.norm_fn = norm_fn
 
         if self.norm_fn == 'group':
-            self.norm1 = nn.GroupNorm(num_groups=8, num_channels=32)
+            self.norm1 = nn.GroupNorm(num_groups=8, num_channels=64)
             
         elif self.norm_fn == 'batch':
-            self.norm1 = nn.BatchNorm2d(32)
+            self.norm1 = nn.BatchNorm2d(64)
 
         elif self.norm_fn == 'instance':
-            self.norm1 = nn.InstanceNorm2d(32)
+            self.norm1 = nn.InstanceNorm2d(64)
 
         elif self.norm_fn == 'none':
             self.norm1 = nn.Sequential()
 
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=7, stride=2, padding=3)
-        self.relu1 = nn.ReLU(inplace=True)
+        self.Conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
+        self.Relu1 = nn.ReLU(inplace=True)
 
-        self.in_planes = 32
-        self.layer1 = self._make_layer(32,  stride=1)
-        self.layer2 = self._make_layer(64, stride=2)
-        self.layer3 = self._make_layer(96, stride=2)
+        self.in_planes = 64
+        self.layer1 = self._make_layer(64,  stride=1)
+        self.layer2 = self._make_layer(96, stride=2)
+        self.layer3 = self._make_layer(128, stride=2)
+
+        # output convolution
+        self.Conv2 = nn.Conv2d(128, output_dim, kernel_size=1)
 
         self.dropout = None
         if dropout > 0:
-            self.dropout = nn.Dropout2d(p=dropout)
-        
-        self.conv2 = nn.Conv2d(96, output_dim, kernel_size=1)
+            self.Dropout = nn.Dropout2d(p=dropout)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -300,10 +380,10 @@ class SmallEncoder(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
     def _make_layer(self, dim, stride=1):
-        layer1 = BottleneckBlock(self.in_planes, dim, self.norm_fn, stride=stride)
-        layer2 = BottleneckBlock(dim, dim, self.norm_fn, stride=1)
+        layer1 = ResidualBlock(self.in_planes, dim, self.norm_fn, stride=stride)
+        layer2 = ResidualBlock(dim, dim, self.norm_fn, stride=1)
         layers = (layer1, layer2)
-    
+        
         self.in_planes = dim
         return nn.Sequential(*layers)
 
@@ -316,113 +396,42 @@ class SmallEncoder(nn.Module):
             batch_dim = x[0].shape[0]
             x = torch.cat(x, dim=0)
 
-        x = self.conv1(x)
-        x = self.norm1(x)
-        x = self.relu1(x)
+        x = self.Conv1(x)
+        x = self.Norm1(x)
+        x = self.Relu1(x)
 
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.conv2(x)
+
+        x = self.Conv2(x)
 
         if self.training and self.dropout is not None:
-            x = self.dropout(x)
+            x = self.Dropout(x)
 
         if is_list:
             x = torch.split(x, [batch_dim, batch_dim], dim=0)
 
         return x
 
-class FlowHead(nn.Module):
-    def __init__(self, input_dim=128, hidden_dim=256):
-        super(FlowHead, self).__init__()
-        self.conv1 = nn.Conv2d(input_dim, hidden_dim, 3, padding=1)
-        self.conv2 = nn.Conv2d(hidden_dim, 2, 3, padding=1)
-        self.relu = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        return self.conv2(self.relu(self.conv1(x)))
 
 
-class ConvGRU(nn.Module):
-    def __init__(self, hidden_dim=128, input_dim=192+128):
-        super(ConvGRU, self).__init__()
-        self.convz = nn.Conv2d(hidden_dim+input_dim, hidden_dim, 3, padding=1)
-        self.convr = nn.Conv2d(hidden_dim+input_dim, hidden_dim, 3, padding=1)
-        self.convq = nn.Conv2d(hidden_dim+input_dim, hidden_dim, 3, padding=1)
-
-    def forward(self, h, x):
-        hx = torch.cat([h, x], dim=1)
-
-        z = torch.sigmoid(self.convz(hx))
-        r = torch.sigmoid(self.convr(hx))
-        q = torch.tanh(self.convq(torch.cat([r*h, x], dim=1)))
-
-        h = (1-z) * h + z * q
-        return h
-
-
-class SmallMotionEncoder(nn.Module):
-    def __init__(self, args):
-        super(SmallMotionEncoder, self).__init__()
-        cor_planes = args.corr_levels * (2*args.corr_radius + 1)**2
-        self.convc1 = nn.Conv2d(cor_planes, 96, 1, padding=0)
-        self.convf1 = nn.Conv2d(2, 64, 7, padding=3)
-        self.convf2 = nn.Conv2d(64, 32, 3, padding=1)
-        self.conv = nn.Conv2d(128, 80, 3, padding=1)
-
-    def forward(self, flow, corr):
-        cor = F.relu(self.convc1(corr))
-        flo = F.relu(self.convf1(flow))
-        flo = F.relu(self.convf2(flo))
-        cor_flo = torch.cat([cor, flo], dim=1)
-        out = F.relu(self.conv(cor_flo))
-        return torch.cat([out, flow], dim=1)
-
-
-class SmallUpdateBlock(nn.Module):
-    def __init__(self, args, hidden_dim=96):
-        super(SmallUpdateBlock, self).__init__()
-        self.encoder = SmallMotionEncoder(args)
-        self.gru = ConvGRU(hidden_dim=hidden_dim, input_dim=82+64)
-        self.flow_head = FlowHead(hidden_dim, hidden_dim=128)
-
-    def forward(self, net, inp, corr, flow):
-        motion_features = self.encoder(flow, corr)
-        inp = torch.cat([inp, motion_features], dim=1)
-        net = self.gru(net, inp)
-        delta_flow = self.flow_head(net)
-
-        return net, None, delta_flow
-
-class RAFT(nn.Module):
+class OpticalFlow(nn.Module):
     def __init__(self, config:ProPainterConfig, hidden_dim=128, context_dim=128):
-        super(RAFT, self).__init__()
-        self.args = config
+        super(OpticalFlow, self).__init__()
+        self.config = config
 
-        if config.small:
-            self.hidden_dim = hdim = 96
-            self.context_dim = cdim = 64
-            config.corr_levels = 4
-            config.corr_radius = 3
-
-        else:
-            self.hidden_dim = hdim = 128
-            self.context_dim = cdim = 128
-            config.corr_levels = 4
-            config.corr_radius = 4
+        self.hidden_dim = hdim = 128
+        self.context_dim = cdim = 128
+        config.corr_levels = 4
+        config.corr_radius = 4
 
         # feature network, context network, and update block
-        if config.small:
-            self.fnet = SmallEncoder(output_dim=128, norm_fn='instance', dropout=config.dropout)
-            self.cnet = SmallEncoder(output_dim=hdim+cdim, norm_fn='none', dropout=config.dropout)
-            self.update_block = SmallUpdateBlock(self.args, hidden_dim=hdim)
+        self.FeatureNet = FlowEncoder(output_dim=256, norm_fn='instance', dropout=config.dropout)
+        self.ContextNet = FlowEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=config.dropout)
+        self.UpdateBlock = FlowUpdateBlock(self.config, hidden_dim=hdim)
 
-        else:
-            self.fnet = BasicEncoder(output_dim=256, norm_fn='instance', dropout=config.dropout)
-            self.cnet = BasicEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=config.dropout)
-            self.update_block = BasicUpdateBlock(self.args, hidden_dim=hdim)
-
+        self.l1_criterion = nn.L1Loss()
 
     def initialize_flow(self, img):
         """ Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
@@ -446,8 +455,7 @@ class RAFT(nn.Module):
         up_flow = up_flow.permute(0, 1, 4, 2, 5, 3)
         return up_flow.reshape(N, 2, 8*H, 8*W)
 
-
-    def forward(self, image1, image2, iters=12, flow_init=None, test_mode=True):
+    def OpticalPairs(self, image1, image2, iters=12, flow_init=None, test_mode=True):
         """ Estimate optical flow between pair of frames """
 
         # image1 = 2 * (image1 / 255.0) - 1.0
@@ -460,20 +468,20 @@ class RAFT(nn.Module):
         cdim = self.context_dim
 
         # run the feature network
-        with autocast(enabled=self.args.mixed_precision):
-            fmap1, fmap2 = self.fnet([image1, image2])
+        with autocast(enabled=self.config.mixed_precision):
+            fmap1, fmap2 = self.FeatureNet([image1, image2])
 
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
         
-        if self.args.alternate_corr:
-            corr_fn = AlternateCorrBlock(fmap1, fmap2, radius=self.args.corr_radius)
+        if self.config.alternate_corr:
+            corr_fn = AlternateCorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
         else:
-            corr_fn = CorrBlock(fmap1, fmap2, radius=self.args.corr_radius)
+            corr_fn = CorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
 
         # run the context network
-        with autocast(enabled=self.args.mixed_precision):
-            cnet = self.cnet(image1)
+        with autocast(enabled=self.config.mixed_precision):
+            cnet = self.ContextNet(image1)
             net, inp = torch.split(cnet, [hdim, cdim], dim=1)
             net = torch.tanh(net)
             inp = torch.relu(inp)
@@ -489,8 +497,8 @@ class RAFT(nn.Module):
             corr = corr_fn(coords1) # index correlation volume
 
             flow = coords1 - coords0
-            with autocast(enabled=self.args.mixed_precision):
-                net, up_mask, delta_flow = self.update_block(net, inp, corr, flow)
+            with autocast(enabled=self.config.mixed_precision):
+                net, up_mask, delta_flow = self.UpdateBlock(net, inp, corr, flow)
 
             # F(t+1) = F(t) + \Delta(t)
             coords1 = coords1 + delta_flow
@@ -508,18 +516,6 @@ class RAFT(nn.Module):
 
         return flow_predictions
 
-class OpticalFlow(nn.Module):
-    """Flow completion loss"""
-    def __init__(self, config: ProPainterConfig):
-        super().__init__()
-        self.fix_raft = RAFT(config)
-
-        for p in self.fix_raft.parameters():
-            p.requires_grad = False
-
-        self.l1_criterion = nn.L1Loss()
-        self.eval()
-
     def forward(self, gt_local_frames, iters=20):
         b, l_t, c, h, w = gt_local_frames.size()
         # print(gt_local_frames.shape)
@@ -529,8 +525,8 @@ class OpticalFlow(nn.Module):
             gtlf_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, c, h, w)
             # print(gtlf_1.shape)
 
-            _, gt_flows_forward = self.fix_raft(gtlf_1, gtlf_2, iters=iters, test_mode=True)
-            _, gt_flows_backward = self.fix_raft(gtlf_2, gtlf_1, iters=iters, test_mode=True)
+            _, gt_flows_forward = self.OpticalPairs(gtlf_1, gtlf_2, iters=iters, test_mode=True)
+            _, gt_flows_backward = self.OpticalPairs(gtlf_2, gtlf_1, iters=iters, test_mode=True)
 
 
         gt_flows_forward = gt_flows_forward.view(b, l_t-1, 2, h, w)
@@ -554,7 +550,7 @@ class DeformableAlignment(nn.Module):
 
         super(DeformableAlignment, self).__init__(*args, **kwargs)
 
-        self.conv_offset = nn.Sequential(
+        self.ConvOffset = nn.Sequential(
             nn.Conv2d(2*self.out_channels + 2 + 1 + 2, self.out_channels, 3, 1, 1),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
@@ -563,13 +559,9 @@ class DeformableAlignment(nn.Module):
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             nn.Conv2d(self.out_channels, 27 * self.deform_groups, 3, 1, 1),
         )
-        self.init_offset()
-
-    def init_offset(self):
-        constant_init(self.conv_offset[-1], val=0, bias=0)
 
     def forward(self, x, cond_feat, flow):
-        out = self.conv_offset(cond_feat)
+        out = self.ConvOffset(cond_feat)
         o1, o2, mask = torch.chunk(out, 3, dim=1)
 
         # offset
@@ -587,7 +579,7 @@ class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
         self.group = [1, 2, 4, 8, 1]
-        self.layers = nn.ModuleList([
+        self.Layers = nn.ModuleList([
             nn.Conv2d(5, 64, kernel_size=3, stride=2, padding=1),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
@@ -612,7 +604,7 @@ class Encoder(nn.Module):
         bt, c, _, _ = x.size()
         # h, w = h//4, w//4
         out = x
-        for i, layer in enumerate(self.layers):
+        for i, layer in enumerate(self.Layers):
             if i == 8:
                 x0 = out
                 _, _, h, w = x0.size()
@@ -632,7 +624,7 @@ class deconv(nn.Module):
                  kernel_size=3,
                  padding=0):
         super().__init__()
-        self.conv = nn.Conv2d(input_channel,
+        self.Conv = nn.Conv2d(input_channel,
                               output_channel,
                               kernel_size=kernel_size,
                               stride=1,
@@ -643,7 +635,7 @@ class deconv(nn.Module):
                           scale_factor=2,
                           mode='bilinear',
                           align_corners=True)
-        return self.conv(x)
+        return self.Conv(x)
 
 class ModulatedDeformConv2d(nn.Module):
     def __init__(self,
@@ -701,7 +693,7 @@ class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
 
         super(SecondOrderDeformableAlignment, self).__init__(*args, **kwargs)
 
-        self.conv_offset = nn.Sequential(
+        self.ConvOffset = nn.Sequential(
             nn.Conv2d(3 * self.out_channels, self.out_channels, 3, 1, 1),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
@@ -710,13 +702,9 @@ class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             nn.Conv2d(self.out_channels, 27 * self.deform_groups, 3, 1, 1),
         )
-        self.init_offset()
-
-    def init_offset(self):
-        constant_init(self.conv_offset[-1], val=0, bias=0)
 
     def forward(self, x, extra_feat):
-        out = self.conv_offset(extra_feat)
+        out = self.ConvOffset(extra_feat)
         o1, o2, mask = torch.chunk(out, 3, dim=1)
 
         # offset
@@ -1113,8 +1101,6 @@ class FusionFeedForward(nn.Module):
         x = self.fc2(x)
         return x
 
-
-
 class TemporalSparseTransformer(nn.Module):
     def __init__(self, dim, n_head, window_size, pool_size,
                 norm_layer=nn.LayerNorm, t2t_params=None):
@@ -1175,264 +1161,6 @@ class TemporalSparseTransformerBlock(nn.Module):
             x = self.transformer[i](x, fold_x_size, l_mask, T_ind[i])
 
         return x
-
-
-class InpaintGenerator(nn.Module):
-    def __init__(self, config:ProPainterConfig):
-        super(InpaintGenerator, self).__init__()
-        channel = 128
-        hidden = 512
-
-        self.encoder = Encoder()
-
-        self.decoder = nn.Sequential(
-            deconv(channel, 128, kernel_size=3, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            deconv(64, 64, kernel_size=3, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1)
-        )
-
-        kernel_size = (7,7)
-        padding = (3,3)
-        stride = (3,3)
-        t2t_params = {
-            'kernel_size': kernel_size,
-            'stride': stride,
-            'padding': padding
-        }
-
-        self.ss = SoftSplit(channel, hidden, kernel_size, stride, padding)
-        self.sc = SoftComp(channel, hidden, kernel_size, stride, padding)
-        self.max_pool = nn.MaxPool2d(kernel_size, stride, padding)
-
-        # feature propagation module
-        self.img_prop_module = BidirectionalPropagation(3, learnable=False)
-        self.feat_prop_module = BidirectionalPropagation(128, learnable=True)
-
-        depths = 8
-        num_heads = 4
-        window_size = (5, 9)
-        pool_size = (4, 4)
-        self.transformers = TemporalSparseTransformerBlock(dim=hidden,
-                                                n_head=num_heads,
-                                                window_size=window_size,
-                                                pool_size=pool_size,
-                                                depths=depths,
-                                                t2t_params=t2t_params)
-
-
-    def img_propagation(self, masked_frames, completed_flows, masks, interpolation='nearest'):
-        _, _, prop_frames, updated_masks = self.img_prop_module(masked_frames, completed_flows[0], completed_flows[1], masks, interpolation)
-        return prop_frames, updated_masks
-
-    def forward(self, masked_frames, compeleted_flows, masks_in, masks_updated, num_local_frames, interpolation='bilinear', t_dilation=2):
-
-        l_t = num_local_frames
-        b, t, _, ori_h, ori_w = masked_frames.size()
-
-        # extracting features
-        enc_feat = self.encoder(torch.cat([masked_frames.view(b * t, 3, ori_h, ori_w),
-                                        masks_in.view(b * t, 1, ori_h, ori_w),
-                                        masks_updated.view(b * t, 1, ori_h, ori_w)], dim=1))
-        _, c, h, w = enc_feat.size()
-        local_feat = enc_feat.view(b, t, c, h, w)[:, :l_t, ...]
-        ref_feat = enc_feat.view(b, t, c, h, w)[:, l_t:, ...]
-        fold_feat_size = (h, w)
-
-        ds_flows_f = F.interpolate(completed_flows[0].view(-1, 2, ori_h, ori_w), scale_factor=1/4, mode='bilinear', align_corners=False).view(b, l_t-1, 2, h, w)/4.0
-        ds_flows_b = F.interpolate(completed_flows[1].view(-1, 2, ori_h, ori_w), scale_factor=1/4, mode='bilinear', align_corners=False).view(b, l_t-1, 2, h, w)/4.0
-        ds_mask_in = F.interpolate(masks_in.reshape(-1, 1, ori_h, ori_w), scale_factor=1/4, mode='nearest').view(b, t, 1, h, w)
-        ds_mask_in_local = ds_mask_in[:, :l_t]
-        ds_mask_updated_local =  F.interpolate(masks_updated[:,:l_t].reshape(-1, 1, ori_h, ori_w), scale_factor=1/4, mode='nearest').view(b, l_t, 1, h, w)
-
-
-        if self.training:
-            mask_pool_l = self.max_pool(ds_mask_in.view(-1, 1, h, w))
-            mask_pool_l = mask_pool_l.view(b, t, 1, mask_pool_l.size(-2), mask_pool_l.size(-1))
-        else:
-            mask_pool_l = self.max_pool(ds_mask_in_local.view(-1, 1, h, w))
-            mask_pool_l = mask_pool_l.view(b, l_t, 1, mask_pool_l.size(-2), mask_pool_l.size(-1))
-
-
-        prop_mask_in = torch.cat([ds_mask_in_local, ds_mask_updated_local], dim=2)
-        _, _, local_feat, _ = self.feat_prop_module(local_feat, ds_flows_f, ds_flows_b, prop_mask_in, interpolation)
-        enc_feat = torch.cat((local_feat, ref_feat), dim=1)
-
-        trans_feat = self.ss(enc_feat.view(-1, c, h, w), b, fold_feat_size)
-        mask_pool_l = rearrange(mask_pool_l, 'b t c h w -> b t h w c').contiguous()
-        trans_feat = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation)
-        trans_feat = self.sc(trans_feat, t, fold_feat_size)
-        trans_feat = trans_feat.view(b, t, -1, h, w)
-
-        enc_feat = enc_feat + trans_feat
-
-        if self.training:
-            output = self.decoder(enc_feat.view(-1, c, h, w))
-            output = torch.tanh(output).view(b, t, 3, ori_h, ori_w)
-        else:
-            output = self.decoder(enc_feat[:, :l_t].view(-1, c, h, w))
-            output = torch.tanh(output).view(b, l_t, 3, ori_h, ori_w)
-
-        return output
-
-class Discriminator(nn.Module):
-    def __init__(self,
-                 in_channels=3,
-                 use_sigmoid=False,
-                 use_spectral_norm=True,
-                 init_weights=True):
-        super(Discriminator, self).__init__()
-        self.use_sigmoid = use_sigmoid
-        nf = 32
-
-        self.conv = nn.Sequential(
-            spectral_norm(
-                nn.Conv3d(in_channels=in_channels,
-                          out_channels=nf * 1,
-                          kernel_size=(3, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=1,
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(64, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            spectral_norm(
-                nn.Conv3d(nf * 1,
-                          nf * 2,
-                          kernel_size=(3, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=(1, 2, 2),
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(128, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            spectral_norm(
-                nn.Conv3d(nf * 2,
-                          nf * 4,
-                          kernel_size=(3, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=(1, 2, 2),
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(256, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            spectral_norm(
-                nn.Conv3d(nf * 4,
-                          nf * 4,
-                          kernel_size=(3, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=(1, 2, 2),
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(256, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            spectral_norm(
-                nn.Conv3d(nf * 4,
-                          nf * 4,
-                          kernel_size=(3, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=(1, 2, 2),
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(256, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv3d(nf * 4,
-                      nf * 4,
-                      kernel_size=(3, 5, 5),
-                      stride=(1, 2, 2),
-                      padding=(1, 2, 2)))
-
-        if init_weights:
-            self.init_weights()
-
-    def forward(self, xs):
-        # T, C, H, W = xs.shape (old)
-        # B, T, C, H, W (new)
-        xs_t = torch.transpose(xs, 1, 2)
-        feat = self.conv(xs_t)
-        if self.use_sigmoid:
-            feat = torch.sigmoid(feat)
-        out = torch.transpose(feat, 1, 2)  # B, T, C, H, W
-        return out
-
-
-class Discriminator_2D(nn.Module):
-    def __init__(self,
-                 in_channels=3,
-                 use_sigmoid=False,
-                 use_spectral_norm=True,
-                 init_weights=True):
-        super(Discriminator_2D, self).__init__()
-        self.use_sigmoid = use_sigmoid
-        nf = 32
-
-        self.conv = nn.Sequential(
-            spectral_norm(
-                nn.Conv3d(in_channels=in_channels,
-                          out_channels=nf * 1,
-                          kernel_size=(1, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=(0, 2, 2),
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(64, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            spectral_norm(
-                nn.Conv3d(nf * 1,
-                          nf * 2,
-                          kernel_size=(1, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=(0, 2, 2),
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(128, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            spectral_norm(
-                nn.Conv3d(nf * 2,
-                          nf * 4,
-                          kernel_size=(1, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=(0, 2, 2),
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(256, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            spectral_norm(
-                nn.Conv3d(nf * 4,
-                          nf * 4,
-                          kernel_size=(1, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=(0, 2, 2),
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(256, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            spectral_norm(
-                nn.Conv3d(nf * 4,
-                          nf * 4,
-                          kernel_size=(1, 5, 5),
-                          stride=(1, 2, 2),
-                          padding=(0, 2, 2),
-                          bias=not use_spectral_norm), use_spectral_norm),
-            # nn.InstanceNorm2d(256, track_running_stats=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv3d(nf * 4,
-                      nf * 4,
-                      kernel_size=(1, 5, 5),
-                      stride=(1, 2, 2),
-                      padding=(0, 2, 2)))
-
-        if init_weights:
-            self.init_weights()
-
-    def forward(self, xs):
-        # T, C, H, W = xs.shape (old)
-        # B, T, C, H, W (new)
-        xs_t = torch.transpose(xs, 1, 2)
-        feat = self.conv(xs_t)
-        if self.use_sigmoid:
-            feat = torch.sigmoid(feat)
-        out = torch.transpose(feat, 1, 2)  # B, T, C, H, W
-        return out
-
-def spectral_norm(module, mode=True):
-    if mode:
-        return _spectral_norm(module)
-    return module
 
 class ProPainterPreTrainedModel(PreTrainedModel):
     """
@@ -1518,87 +1246,108 @@ VIT_INPUTS_DOCSTRING = r"""
     VIT_START_DOCSTRING,
 )
 class ProPainterModel(ProPainterPreTrainedModel):
-    def __init__(self, config: ProPainterConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
-        super().__init__(config)
-        self.config = config
+    def __init__(self, config:ProPainterConfig):
+        super(ProPainterModel, self).__init__(config)
+        channel = 128
+        hidden = 512
 
-        self.embeddings = ViTEmbeddings(config, use_mask_token=use_mask_token)
-        self.encoder = ViTEncoder(config)
+        self.encoder = Encoder()
 
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ViTPooler(config) if add_pooling_layer else None
+        self.decoder = nn.Sequential(
+            deconv(channel, 128, kernel_size=3, padding=1),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1),
+            nn.LeakyReLU(0.2, inplace=True),
+            deconv(64, 64, kernel_size=3, padding=1),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1)
+        )
 
-        # Initialize weights and apply final processing
+        kernel_size = (7,7)
+        padding = (3,3)
+        stride = (3,3)
+        t2t_params = {
+            'kernel_size': kernel_size,
+            'stride': stride,
+            'padding': padding
+        }
+
+        self.ss = SoftSplit(channel, hidden, kernel_size, stride, padding)
+        self.sc = SoftComp(channel, hidden, kernel_size, stride, padding)
+        self.max_pool = nn.MaxPool2d(kernel_size, stride, padding)
+
+        # feature propagation module
+        self.img_prop_module = BidirectionalPropagation(3, learnable=False)
+        self.feat_prop_module = BidirectionalPropagation(128, learnable=True)
+
+        depths = 8
+        num_heads = 4
+        window_size = (5, 9)
+        pool_size = (4, 4)
+        self.transformers = TemporalSparseTransformerBlock(dim=hidden,
+                                                n_head=num_heads,
+                                                window_size=window_size,
+                                                pool_size=pool_size,
+                                                depths=depths,
+                                                t2t_params=t2t_params)
+
+        
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
+    def img_propagation(self, masked_frames, completed_flows, masks, interpolation='nearest'):
+        _, _, prop_frames, updated_masks = self.img_prop_module(masked_frames, completed_flows[0], completed_flows[1], masks, interpolation)
+        return prop_frames, updated_masks
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+    def forward(self, masked_frames, compeleted_flows, masks_in, masks_updated, num_local_frames, interpolation='bilinear', t_dilation=2):
 
-        # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        if pixel_values.dtype != expected_dtype:
-            pixel_values = pixel_values.to(expected_dtype)
+        l_t = num_local_frames
+        b, t, _, ori_h, ori_w = masked_frames.size()
 
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        # extracting features
+        enc_feat = self.encoder(torch.cat([masked_frames.view(b * t, 3, ori_h, ori_w),
+                                        masks_in.view(b * t, 1, ori_h, ori_w),
+                                        masks_updated.view(b * t, 1, ori_h, ori_w)], dim=1))
+        _, c, h, w = enc_feat.size()
+        local_feat = enc_feat.view(b, t, c, h, w)[:, :l_t, ...]
+        ref_feat = enc_feat.view(b, t, c, h, w)[:, l_t:, ...]
+        fold_feat_size = (h, w)
 
-        encoder_outputs = self.encoder(
-            embedding_output,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        ds_flows_f = F.interpolate(completed_flows[0].view(-1, 2, ori_h, ori_w), scale_factor=1/4, mode='bilinear', align_corners=False).view(b, l_t-1, 2, h, w)/4.0
+        ds_flows_b = F.interpolate(completed_flows[1].view(-1, 2, ori_h, ori_w), scale_factor=1/4, mode='bilinear', align_corners=False).view(b, l_t-1, 2, h, w)/4.0
+        ds_mask_in = F.interpolate(masks_in.reshape(-1, 1, ori_h, ori_w), scale_factor=1/4, mode='nearest').view(b, t, 1, h, w)
+        ds_mask_in_local = ds_mask_in[:, :l_t]
+        ds_mask_updated_local =  F.interpolate(masks_updated[:,:l_t].reshape(-1, 1, ori_h, ori_w), scale_factor=1/4, mode='nearest').view(b, l_t, 1, h, w)
 
-        if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
+        if self.training:
+            mask_pool_l = self.max_pool(ds_mask_in.view(-1, 1, h, w))
+            mask_pool_l = mask_pool_l.view(b, t, 1, mask_pool_l.size(-2), mask_pool_l.size(-1))
+        else:
+            mask_pool_l = self.max_pool(ds_mask_in_local.view(-1, 1, h, w))
+            mask_pool_l = mask_pool_l.view(b, l_t, 1, mask_pool_l.size(-2), mask_pool_l.size(-1))
+
+
+        prop_mask_in = torch.cat([ds_mask_in_local, ds_mask_updated_local], dim=2)
+        _, _, local_feat, _ = self.feat_prop_module(local_feat, ds_flows_f, ds_flows_b, prop_mask_in, interpolation)
+        enc_feat = torch.cat((local_feat, ref_feat), dim=1)
+
+        trans_feat = self.ss(enc_feat.view(-1, c, h, w), b, fold_feat_size)
+        mask_pool_l = rearrange(mask_pool_l, 'b t c h w -> b t h w c').contiguous()
+        trans_feat = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation)
+        trans_feat = self.sc(trans_feat, t, fold_feat_size)
+        trans_feat = trans_feat.view(b, t, -1, h, w)
+
+        enc_feat = enc_feat + trans_feat
+
+        if self.training:
+            output = self.decoder(enc_feat.view(-1, c, h, w))
+            output = torch.tanh(output).view(b, t, 3, ori_h, ori_w)
+        else:
+            output = self.decoder(enc_feat[:, :l_t].view(-1, c, h, w))
+            output = torch.tanh(output).view(b, l_t, 3, ori_h, ori_w)
+
+        return output
 
 
 @add_start_docstrings(
@@ -1619,7 +1368,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
 
         self.OpticalFlow = OpticalFlow(config)
         self.FlowComplete = ReccurrentFlowCompleteNet(config)
-        self.InPainting = InpaintGenerator(config)
+        self.InPainting = ProPainterModel(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1806,6 +1555,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
                     
                 comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
+            ## to be removed
             for idx in range(video_length):
                 f = comp_frames[idx]
                 f = cv2.resize(f, out_size, interpolation = cv2.INTER_CUBIC)

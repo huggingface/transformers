@@ -36,10 +36,72 @@ logger = logging.get_logger(__name__)
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def create_rename_keys(config, base_model=False):
     rename_keys = []
+    ## OPTICAL FLOW
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Norm1.weight"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Norm1.bias"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.weight"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.bias"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv2.weight"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv2.bias"))
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias"))
+        for j in range(layers):
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv1.weight"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv1.bias"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv2.weight"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Conv2.bias"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm1.weight"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm1.bias"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm2.weight"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.FeatureNet.Conv1.layer{j}.{i}.Norm2.bias"))
+
+
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Norm1.weight"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Norm1.bias"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.weight"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.bias"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv2.weight"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv2.bias"))
+    for i in range(config.num_hidden_layers):
+        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
+        for j in range(layers):
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv1.weight"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv1.bias"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv2.weight"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Conv2.bias"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm1.weight"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm1.bias"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm2.weight"))
+            rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.ContextNet.Conv1.layer{j}.{i}.Norm2.bias"))
+
+    for block in ["Conv_c1","Conv_c2","Conv_f1","Conv_f2","Conv_"]:
+        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Encoder.{block}.weight"))
+        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Encoder.{block}.bias"))
+
+    for block in ["Conv_z1","Conv_r2","Conv_q1","Conv_z2","Conv_r2","Conv_q2"]:
+        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.GRU.{block}.weight"))
+        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.GRU.{block}.bias"))
+
+    for block in ["Conv1","Conv2"]:
+        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.FlowHead.{block}.weight"))
+        rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.FlowHead.{block}.bias"))
+
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Mask.0.weight"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Mask.0.bias"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Mask.2.weight"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.Mask.2.bias"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"OpticalFlow.UpdateBlock.FlowHead.{block}.bias"))
+
+
+    ## RecurentFlowCompleteNet
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.Downsample.0.weight"))
+    rename_keys.append((f"OpticalFlow.FeatureNet.Norm1.weight", f"FlowComplete.Downsample.0.bias"))
+
+
+
+
+    
+
         rename_keys.append((f"blocks.{i}.attn.proj.weight", f"vit.encoder.layer.{i}.attention.output.dense.weight"))
         rename_keys.append((f"blocks.{i}.attn.proj.bias", f"vit.encoder.layer.{i}.attention.output.dense.bias"))
         rename_keys.append((f"blocks.{i}.norm2.weight", f"vit.encoder.layer.{i}.layernorm_after.weight"))
