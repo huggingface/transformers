@@ -50,7 +50,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, past-ci]
     container:
       image: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -65,7 +65,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, past-ci]
     container:
       image: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -101,7 +101,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [single-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, past-ci]
     container:
       image: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -177,7 +177,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, past-ci]
     container:
       image: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -253,7 +253,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, past-ci]
     needs: setup
     container:
       image: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
