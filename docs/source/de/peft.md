@@ -94,7 +94,7 @@ model = AutoModelForCausalLM.from_pretrained(peft_model_id, device_map="auto", l
 
 ## Einen neuen Adapter hinzufügen
 
-Sie können [~peft.PeftModel.add_adapter`] verwenden, um einen neuen Adapter zu einem Modell mit einem bestehenden Adapter hinzuzufügen, solange der neue Adapter vom gleichen Typ ist wie der aktuelle Adapter. Wenn Sie zum Beispiel einen bestehenden LoRA-Adapter an ein Modell angehängt haben:
+Sie können [`~peft.PeftModel.add_adapter`] verwenden, um einen neuen Adapter zu einem Modell mit einem bestehenden Adapter hinzuzufügen, solange der neue Adapter vom gleichen Typ ist wie der aktuelle Adapter. Wenn Sie zum Beispiel einen bestehenden LoRA-Adapter an ein Modell angehängt haben:
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
