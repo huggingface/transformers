@@ -174,7 +174,7 @@ Wenn Sie mit der Feinabstimmung eines Modells mit [`Trainer`] noch nicht vertrau
 
 </Tip>
 
-1. Definieren Sie Ihre Adapterkonfiguration mit dem Aufgabentyp und den Hyperparametern (siehe [~peft.LoraConfig`] für weitere Details darüber, was die Hyperparameter tun).
+1. Definieren Sie Ihre Adapterkonfiguration mit dem Aufgabentyp und den Hyperparametern (siehe [`~peft.LoraConfig`] für weitere Details darüber, was die Hyperparameter tun).
 
 ```py
 from peft import LoraConfig
