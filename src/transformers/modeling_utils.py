@@ -1141,6 +1141,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return "pt"
 
+    @property
+    def _keep_in_fp32_full_modules(self) -> str:
+        """
+        :str: Identifies that this is a PyTorch model.
+        """
+        modules = self._keep_in_fp32_modules
+        modules = modules if modules is not None else []
+        fp32_modules_from_instance = getattr(self, "_keep_in_fp32_modules_in_instance", None)
+        if fp32_modules_from_instance is not None:
+            modules += fp32_modules_from_instance
+
+        modules = modules if len(modules) > 0 else None
+
+        return modules
+
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
@@ -3305,7 +3320,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if use_keep_in_fp32_modules:
             if is_accelerate_available():
                 low_cpu_mem_usage = True
-            keep_in_fp32_modules = model._keep_in_fp32_modules
+            keep_in_fp32_modules = model._keep_in_fp32_full_modules()
         else:
             keep_in_fp32_modules = []
 
