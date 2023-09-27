@@ -371,13 +371,13 @@ class MistralIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is mayonnaise."""
-        prompt = "My favourite condiment is"
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is mayonnaise. I love it on sandwiches, in salads, on burgers"""
+        prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
         model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1").to(torch_device)
 
         # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
