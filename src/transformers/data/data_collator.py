@@ -749,8 +749,11 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             )
         else:
             labels = batch["input_ids"].clone()
+            labels_old = batch["labels"].clone() if "labels" in batch else None
             if self.tokenizer.pad_token_id is not None:
                 labels[labels == self.tokenizer.pad_token_id] = -100
+            if labels_old is not None:
+                labels[labels_old == -100] = -100
             batch["labels"] = labels
         return batch
 
