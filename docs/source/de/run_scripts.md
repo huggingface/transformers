@@ -28,7 +28,7 @@ Diese Anleitung zeigt Ihnen, wie Sie ein Beispiel für ein Trainingsskript zur Z
 
 ## Einrichtung
 
-Um die neueste Version der Beispielskripte erfolgreich auszuführen, müssen Sie 🤗 Transformers aus dem Quellcode** in einer neuen virtuellen Umgebung installieren:
+Um die neueste Version der Beispielskripte erfolgreich auszuführen, **müssen Sie 🤗 Transformers aus dem Quellcode** in einer neuen virtuellen Umgebung installieren:
 
 ```bash
 git clone https://github.com/huggingface/transformers
