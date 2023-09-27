@@ -718,9 +718,15 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             )
         else:
             labels = batch["input_ids"]
+            labels_old = batch["labels"] if "labels" in batch else None
             if self.tokenizer.pad_token_id is not None:
                 # Replace self.tokenizer.pad_token_id with -100
                 labels = tf.where(labels == self.tokenizer.pad_token_id, -100, labels)
+            else:
+                labels = tf.identity(labels)  # Makes a copy, just in case
+            if labels_old is not None:
+                # Preserve -100 from the input labels
+                labels = tf.where(labels_old == -100, -100, labels)
             else:
                 labels = tf.identity(labels)  # Makes a copy, just in case
             batch["labels"] = labels
