@@ -144,7 +144,7 @@ agent.run("Draw me a picture of the sea then transform the picture to add an isl
 <br/>
 
 
-Jede [~Agent.run] Operation ist unabhängig, so dass Sie sie mehrmals hintereinander mit unterschiedlichen Aufgaben ausführen können.
+Jede [`~Agent.run`] Operation ist unabhängig, so dass Sie sie mehrmals hintereinander mit unterschiedlichen Aufgaben ausführen können.
 
 Beachten Sie, dass Ihr `Agent` nur ein großsprachiges Modell ist, so dass kleine Variationen in Ihrer Eingabeaufforderung völlig unterschiedliche Ergebnisse liefern können.
 unterschiedliche Ergebnisse liefern. Es ist wichtig, dass Sie die Aufgabe, die Sie ausführen möchten, so genau wie möglich erklären. Wir gehen noch weiter ins Detail
