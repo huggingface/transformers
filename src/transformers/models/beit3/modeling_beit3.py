@@ -313,18 +313,15 @@ class Beit3Embedder(nn.Module):
 
         self.first = Beit3PositionalEmbedding(self.num_patches + 2, config.embed_dim)
         self.second = Beit3PositionalEmbedding(config.max_source_positions, config.embed_dim)
-        self.split_position = -1
 
-    def forward(self, hidden_states, positions, multiway_split_position=None):
-        if multiway_split_position is not None:
-            self.split_position = multiway_split_position
-        if self.split_position == -1:
+    def forward(self, hidden_states, positions, multiway_split_position=-1):
+        if multiway_split_position == -1:
             return self.first(hidden_states, positions=positions)
-        if self.split_position == 0:
+        if multiway_split_position == 0:
             return self.second(hidden_states, positions=positions)
         text_hidden, image_hidden = torch.split(
             hidden_states,
-            [self.split_position, hidden_states.size(1) - self.split_position],
+            [multiway_split_position, hidden_states.size(1) - multiway_split_position],
             dim=1,
         )
         y1, y2 = self.first(text_hidden, positions=positions), self.second(image_hidden, positions=positions)
@@ -417,18 +414,19 @@ class Beit3MultiheadAttention(nn.Module):
         key_padding_mask: torch.Tensor = None,
         attention_mask: torch.Tensor = None,
         relative_pos: torch.Tensor = None,
+        multiway_split_position=-1
     ):
         batch_size, target_length, embed_dim = query.size()
 
         key_batch_size, src_len, _ = key.size()
 
         query = (
-            (self.query_proj(query) * self.scaling)
+            (self.query_proj(query,split_position=multiway_split_position) * self.scaling)
             .view(batch_size, target_length, self.num_heads, self.head_dim)
             .transpose(1, 2)
         )
-        key = self.key_proj(key).view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value = self.value_proj(value).view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key = self.key_proj(key,split_position=multiway_split_position).view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value = self.value_proj(value,split_position=multiway_split_position).view(batch_size, src_len, self.num_heads, self.head_dim).transpose(1, 2)
         query = query.reshape(batch_size * self.num_heads, target_length, self.head_dim)
         key = key.reshape(batch_size * self.num_heads, src_len, self.head_dim)
         value = value.reshape(batch_size * self.num_heads, src_len, self.head_dim)
@@ -469,9 +467,9 @@ class Beit3MultiheadAttention(nn.Module):
         attn = attn.transpose(0, 1).reshape(target_length, batch_size, embed_dim).transpose(0, 1)
 
         if self.inner_attn_ln is not None:
-            attn = self.inner_attn_ln(attn)
+            attn = self.inner_attn_ln(attn,split_position=multiway_split_position)
 
-        attn = self.out_proj(attn)
+        attn = self.out_proj(attn,split_position=multiway_split_position)
         attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len).transpose(1, 0)
 
         return attn, attn_weights
@@ -617,6 +615,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
             attention_mask=attention_mask,
             relative_pos=relative_pos,
             incremental_state=incremental_state,
+            multiway_split_position=split_position
         )
         hidden_states = self.dropout_module(hidden_states)
 
@@ -724,7 +723,7 @@ class Beit3Encoder(nn.Module):
                 hidden_states.append(x)
 
         if self.fc_norm is not None:
-            x = self.fc_norm(x)
+            x = self.fc_norm(x,split_position=multiway_split_position)
 
         if not return_dict:
             return [x, encoder_embedding, hidden_states]
@@ -1160,8 +1159,8 @@ class Beit3ImageTextMatchingModelOutput(ModelOutput):
     """
 
     loss: Optional[torch.Tensor] = None
-    text_hidden  = None
-    image_hidde = None
+    text_hidden: Optional[torch.FloatTensor] = None
+    image_hidden: Optional[torch.FloatTensor] = None
 
 
 @add_start_docstrings(
@@ -1227,4 +1226,4 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
                 else outputs
             )
 
-        return Beit3ImageTextMatchingModelOutput(similarity, vision_cls, text_cls)
+        return Beit3ImageTextMatchingModelOutput(similarity,text_out,vision_out)

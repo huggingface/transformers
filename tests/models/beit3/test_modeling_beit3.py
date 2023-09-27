@@ -535,7 +535,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             padding_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 2])
-        np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[4.533413, -4.529263]]), rtol=1e-05)
+        np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[ 6.593818, -6.582055]]), rtol=1e-05)
 
     @slow
     def test_inference_beit3_for_image_captioning(self):
@@ -549,18 +549,19 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         model.eval()
         # prepare bool_masked_pos
-        language_masked_pos = torch.zeros(input["input_ids"].shape)
-        to_fill = list(range(0, input["input_ids"].shape[1], 3))
-        language_masked_pos[:, to_fill] = 1
+        language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
+        language_masked_pos[0, 5] = 1
+        input_tokens = list(input["input_ids"][0])
+        input_tokens[5] = 64001
         output = model(
-            input_ids=torch.tensor(input["input_ids"]),
+            input_ids=torch.tensor([input_tokens]),
             pixel_values=torch.tensor(input["pixel_values"]),
-            padding_mask=torch.ones(input["input_ids"].shape),
+            padding_mask=torch.zeros(language_masked_pos.shape),
             language_masked_pos=language_masked_pos,
         )
-        assert output.logits.shape == torch.Size([3, 64010])
+        assert output.logits.shape == torch.Size([1, 64010])
         np.testing.assert_allclose(
-            output.logits.detach().numpy()[0, :3], torch.tensor([-5.82426, -5.824292, -5.83322]), rtol=1e-05
+            output.logits.detach().numpy()[0, :3], torch.tensor([-2.697914, -2.697912, -2.645459]), rtol=1e-05
         )
 
     @slow
@@ -583,4 +584,4 @@ class BeitModelIntegrationTest(unittest.TestCase):
             pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]),
         )
 
-        assert round(float(output.loss.detach().numpy()), 4) == 0.7458
+        assert round(float(output.loss.detach().numpy()), 4) == 1.8435
