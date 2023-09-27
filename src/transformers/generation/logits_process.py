@@ -1606,7 +1606,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
             the last token of the prompt.
-        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, **optional**):
+        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Attention mask for unconditional_ids.
         use_cache (`bool`, **optional*, defaults to `True`):
             Whether to cache key/values during the negative prompt forward pass.
