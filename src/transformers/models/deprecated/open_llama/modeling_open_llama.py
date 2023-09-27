@@ -124,15 +124,32 @@ class OpenLlamaRotaryEmbedding(nn.Module):
         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
-    def forward(self, x, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+    def rotate_half(self, x):
+        """Rotates half the hidden dims of the input."""
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
 
-        return (
-            self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
-            self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
+    def apply_rotary_pos_emb(self, q, k, cos, sin, position_ids):
+        # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
+        cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
+        sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
+        cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+        sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+        q_embed = (q * cos) + (self.rotate_half(q) * sin)
+        k_embed = (k * cos) + (self.rotate_half(k) * sin)
+        return q_embed, k_embed
+
+    def forward(self, q, k, position_ids, seq_len=None):
+        # q/k: [bs, num_attention_heads, seq_len, head_size]
+        if seq_len > self.max_seq_len_cached:
+            self._set_cos_sin_cache(seq_len=seq_len, device=q.device, dtype=q.dtype)
+
+        cos, sin = (
+            self.cos_cached[:, :, :seq_len, ...].to(dtype=q.dtype),
+            self.sin_cached[:, :, :seq_len, ...].to(dtype=q.dtype),
         )
+        return self.apply_rotary_pos_emb(q, k, cos, sin, position_ids)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->OpenLlama
@@ -184,12 +201,18 @@ class OpenLlamaDynamicNTKScalingRotaryEmbedding(OpenLlamaRotaryEmbedding):
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
+    logger.warning_once(
+        "Using the global `rotate_half` function is deprecated. Please use `OpenLlamaRotaryEmbedding.rotate_half` instead."
+    )
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
+    logger.warning_once(
+        "Using the global `apply_rotary_pos_emb` function is deprecated. Please use `OpenLlamaRotaryEmbedding.apply_rotary_pos_emb` instead."
+    )
     gather_indices = position_ids[:, None, :, None]  # [bs, 1, seq_len, 1]
     gather_indices = gather_indices.repeat(1, cos.shape[1], 1, cos.shape[3])
     cos = torch.gather(cos.repeat(gather_indices.shape[0], 1, 1, 1), 2, gather_indices)
@@ -291,8 +314,7 @@ class OpenLlamaAttention(nn.Module):
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = self.rotary_emb(query_states, key_states, position_ids, seq_len=kv_seq_len)
         # [bsz, nh, t, hd]
 
         if past_key_value is not None:
