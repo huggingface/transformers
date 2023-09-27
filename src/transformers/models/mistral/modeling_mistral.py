@@ -184,7 +184,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 class MistralAttention(nn.Module):
     """
-    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention
+    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer and "Generating Long Sequences with Sparse Transformers".
     """
 
     def __init__(self, config: MistralConfig):
