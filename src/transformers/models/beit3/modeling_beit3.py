@@ -1347,6 +1347,44 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[Any], Beit3ImageTextMatchingModelOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import (
+        ...     Beit3ForImageTextRetrieval,
+        ...     BeitImageProcessor,
+        ...     Beit3Processor,
+        ...     XLMRobertaTokenizer,
+        ... )
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> model = Beit3ForImageTextRetrieval.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval").to(
+        ...     torch_device
+        ... )
+        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
+
+        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
+
+        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+
+        >>> model.eval()
+        >>> # prepare bool_masked_pos
+        >>> another_input_ids = beit3_processor(text=["This is photo of a dog"], images=image)["input_ids"]
+        >>> output = model(
+        ...     input_ids=torch.tensor([input["input_ids"][0], another_input_ids[0]]),
+        ...     pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]),
+        ... )
+        >>> list(output.shape)
+        ```"""
         outputs = self.beit3(
             input_ids=None,
             pixel_values=pixel_values,
