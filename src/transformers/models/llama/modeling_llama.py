@@ -745,9 +745,9 @@ LLAMA_INPUTS_DOCSTRING = r"""
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
