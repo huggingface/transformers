@@ -393,7 +393,6 @@ Flax), PyTorch, and/or TensorFlow.
 |           MarkupLM            |       ✅        |         ❌         |      ❌      |
 |          Mask2Former          |       ✅        |         ❌         |      ❌      |
 |          MaskFormer           |       ✅        |         ❌         |      ❌      |
-|        MaskFormerSwin         |       ❌        |         ❌         |      ❌      |
 |             mBART             |       ✅        |         ✅         |      ✅      |
 |             MEGA              |       ✅        |         ❌         |      ❌      |
 |         Megatron-BERT         |       ✅        |         ❌         |      ❌      |
@@ -462,7 +461,6 @@ Flax), PyTorch, and/or TensorFlow.
 |             TAPAS             |       ✅        |         ✅         |      ❌      |
 |    Time Series Transformer    |       ✅        |         ❌         |      ❌      |
 |          TimeSformer          |       ✅        |         ❌         |      ❌      |
-|         TimmBackbone          |       ❌        |         ❌         |      ❌      |
 |    Trajectory Transformer     |       ✅        |         ❌         |      ❌      |
 |        Transformer-XL         |       ✅        |         ✅         |      ❌      |
 |             TrOCR             |       ✅        |         ❌         |      ❌      |

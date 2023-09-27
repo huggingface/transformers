@@ -42,7 +42,7 @@ pip install git+https://github.com/huggingface/peft.git
 
 ## Supported PEFT models
 
-🤗 Transformersは、いくつかのPEFT（Prompt Engineering for Tasks）メソッドをネイティブにサポートしており、ローカルまたはHubに格納されたアダプターウェイトを簡単に読み込んで実行またはトレーニングできます。以下のメソッドがサポートされています：
+🤗 Transformersは、いくつかのPEFT（Parameter Efficient Fine-Tuning）メソッドをネイティブにサポートしており、ローカルまたはHubに格納されたアダプターウェイトを簡単に読み込んで実行またはトレーニングできます。以下のメソッドがサポートされています：
 
 - [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora)
 - [IA3](https://huggingface.co/docs/peft/conceptual_guides/ia3)
