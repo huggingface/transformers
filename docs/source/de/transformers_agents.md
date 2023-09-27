@@ -182,7 +182,7 @@ agent.run("Draw me a picture of the `prompt`", prompt="a capybara swimming in th
 
 ### Chat-basierte Ausführung (Chat)
 
-Der Agent verfügt auch über einen Chat-basierten Ansatz, der die Methode [~Agent.chat] verwendet:
+Der Agent verfügt auch über einen Chat-basierten Ansatz, der die Methode [`~Agent.chat`] verwendet:
 
 ```py
 agent.chat("Generate a picture of rivers and lakes")
