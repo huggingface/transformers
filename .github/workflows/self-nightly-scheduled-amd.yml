@@ -39,8 +39,8 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-        hardware_flavors: [mi210]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+        hardware_flavors: [ mi210 ]
+    runs-on:  [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.hardware_flavors }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -60,7 +60,8 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+        hardware_flavors: [ mi210 ]
+    runs-on:  [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.hardware_flavors }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -104,8 +105,8 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machine_type: [single-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+        hardware_flavors: [ mi210 ]
+    runs-on:  [self-hosted, amd-gpu, single-gpu, '${{ matrix.hardware_flavors }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -150,19 +151,19 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+        run: python3 -m pytest -v --make-reports=single-gpu_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+        run: cat /transformers/reports/single-gpu_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+          name: single-gpu_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly
+          path: /transformers/reports/single-gpu_tests_gpu_${{ matrix.folders }}
 
   run_tests_multi_gpu:
     name: Model tests
@@ -170,8 +171,8 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machine_type: [multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+        hardware_flavors: [ mi210 ]
+    runs-on:  [self-hosted, amd-gpu, multi-gpu, '${{ matrix.hardware_flavors }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -216,19 +217,19 @@ jobs:
 
       - name: Run all tests on GPU
         working-directory: /transformers
-        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+        run: python3 -m pytest -v --make-reports=multi-gpu_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+        run: cat /transformers/reports/multi-gpu_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+          name: multi-gpu_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports_postfix_nightly
+          path: /transformers/reports/multi-gpu_tests_gpu_${{ matrix.folders }}
 
   run_all_tests_torch_cuda_extensions_gpu:
     name: Torch CUDA extension tests
@@ -236,7 +237,8 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+        hardware_flavors: [mi210]
+    runs-on: [self-hosted, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.hardware_flavors }}']
     needs: setup
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci
