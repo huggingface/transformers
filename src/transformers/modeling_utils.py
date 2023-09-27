@@ -1142,7 +1142,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return "pt"
 
     @property
-    def _keep_in_fp32_full_modules(self) -> str:
+    def _keep_in_fp32_full_modules(self) -> list:
         """
         :str: Identifies that this is a PyTorch model.
         """
