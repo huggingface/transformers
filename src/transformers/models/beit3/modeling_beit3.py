@@ -878,7 +878,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         ...     pixel_values=pixel_values,
         ...     padding_mask=torch.ones(input["input_ids"].shape),
         ... )
-        >>> list(output.shape)
+        >>> list(output.logits.shape)
         ```"""
         batch_size = input_ids.size()[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -980,7 +980,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 
         >>> # forward pass
         >>> output = model(pixel_values=torch.tensor(input["pixel_values"]))
-        >>> list(output.shape)
+        >>> list(output.logits.shape)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1085,7 +1085,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         ...     padding_mask=torch.zeros(language_masked_pos.shape),
         ...     language_masked_pos=language_masked_pos,
         ... )
-        >>> list(output.shape)
+        >>> list(output.logits.shape)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1242,7 +1242,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         ...     pixel_values=torch.tensor(input["pixel_values"]),
         ...     padding_mask=torch.ones(input["input_ids"].shape),
         ... )
-        >>> list(output.shape)
+        >>> list(output.logits.shape)
         ```"""
         encoder_outputs = self.beit3(
             input_ids=input_ids,
@@ -1367,7 +1367,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         ...     input_ids=torch.tensor([input["input_ids"][0], another_input_ids[0]]),
         ...     pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]),
         ... )
-        >>> list(output.shape)
+        >>> output.loss.detach().numpy()
         ```"""
         outputs = self.beit3(
             input_ids=None,
