@@ -254,7 +254,7 @@ jobs:
     runs-on: [ self-hosted, docker-gpu, amd-gpu, mi210, '${{ matrix.machine_type }}' ]
     container:
       image: transformers-pytorch-amd-gpu-push-ci
-      options: --device /dev/kfd $(./get_gpu.sh) --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --device /dev/kfd $(./get_gpu.sh) --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -306,7 +306,11 @@ jobs:
 
       - name: ROCM-SMI
         run: |
-          rocm-smi
+          rocminfo  | grep "Agent" -A 14
+      - name: "Show HIP environment"
+        run: |
+          echo "HIP: $HIP_VISIBLE_DEVICES"
+          echo "ROCR: $ROCR_VISIBLE_DEVICES"
 
       - name: Environment
         working-directory: /transformers
