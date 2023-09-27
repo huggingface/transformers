@@ -117,8 +117,8 @@
       title: 성능 및 확장성
     - local: in_translation
       title: (번역중) Training on one GPU
-    - local: in_translation
-      title: (번역중) Training on many GPUs
+    - local: perf_train_gpu_many
+      title: 다중 GPU에서 훈련 진행하기
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_cpu_many
