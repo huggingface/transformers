@@ -208,7 +208,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         # characters are not split at tokenization
         for token in self.encoder.keys():
             if len(token) > 1:
-                self.add_tokens(token)
+                self.add_tokens(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
 
     def set_target_lang(self, target_lang: str):
         """
