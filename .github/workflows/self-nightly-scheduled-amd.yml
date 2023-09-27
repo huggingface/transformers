@@ -1,4 +1,4 @@
-name: Self-hosted runner (nightly-ci)
+name: Self-hosted AMD runner (nightly-ci)
 
 # Note that each job's dependencies go into a corresponding docker file.
 #
