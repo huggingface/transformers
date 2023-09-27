@@ -535,7 +535,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             padding_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 2])
-        np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[ 6.593818, -6.582055]]), rtol=1e-05)
+        np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[6.593818, -6.582055]]), rtol=1e-05)
 
     @slow
     def test_inference_beit3_for_image_captioning(self):
