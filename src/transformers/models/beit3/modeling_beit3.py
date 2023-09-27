@@ -879,7 +879,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         ...     padding_mask=torch.ones(input["input_ids"].shape),
         ... )
         >>> list(output.logits.shape)
-        [1, 3129]
+        [1, 2]
         ```"""
         batch_size = input_ids.size()[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1246,7 +1246,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         ...     padding_mask=torch.ones(input["input_ids"].shape),
         ... )
         >>> list(output.logits.shape)
-        [1, 2]
+        [1, 3129]
         ```"""
         encoder_outputs = self.beit3(
             input_ids=input_ids,
