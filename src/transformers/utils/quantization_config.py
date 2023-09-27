@@ -423,5 +423,7 @@ class GPTQConfig(QuantizationConfigMixin):
                     ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
                 )
         if not self.disable_exllamav2 and not self.disable_exllama:
-            logger.warning("You have activated exllama and exllamav2 backend. Setting `disable_exllama=True` and keeping `disable_exllamav2=False`")
-            self.disable_exllama=True
+            logger.warning(
+                "You have activated exllama and exllamav2 backend. Setting `disable_exllama=True` and keeping `disable_exllamav2=False`"
+            )
+            self.disable_exllama = True
