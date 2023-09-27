@@ -1261,7 +1261,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
             self._no_split_modules.extend(language_model._no_split_modules)
 
         if language_model._keep_in_fp32_modules is not None:
-            self._keep_in_fp32_modules.extend(language_model._keep_in_fp32_modules)
+            self._keep_in_fp32_modules_in_instance = language_model._keep_in_fp32_modules
 
         self.language_model = language_model
 
