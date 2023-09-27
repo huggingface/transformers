@@ -101,6 +101,9 @@ else:
         def __getstate__(self):
             return self.__dict__
 
+        def __str__(self):
+            return self.content
+
     @dataclass
     class EncodingFast:
         """This is dummy class because without the `tokenizers` library we don't have these objects anyway"""
