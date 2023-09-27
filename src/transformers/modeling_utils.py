@@ -3320,7 +3320,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if use_keep_in_fp32_modules:
             if is_accelerate_available():
                 low_cpu_mem_usage = True
-            keep_in_fp32_modules = model._keep_in_fp32_full_modules()
+            keep_in_fp32_modules = model._keep_in_fp32_full_modules
         else:
             keep_in_fp32_modules = []
 
