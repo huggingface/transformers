@@ -59,7 +59,7 @@ the following guides:
 ### Types of models 
 
 The majority of modern LLMs are decoder-only transformers. Some examples include: [LLaMA](../model_doc/llama), 
-[Llama2](../model_doc/llama2), [Falcon](../model_doc/falcon), [GPT2](../model_doc/gpt2). However, you may encounter  
+[Llama2](../model_doc/llama2), [Falcon](../model_doc/falcon), [GPT2](../model_doc/gpt2). However, you may encounter
 encoder-decoder transformer LLMs as well, for instance, [Flan-T5](../model_doc/flan-t5) and [BART](../model_doc/bart).
 
 Encoder-decoder-style models are typically used in generative tasks where the output **heavily** relies on the input, for 
