@@ -13,11 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ HtDemucs model configuration"""
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
