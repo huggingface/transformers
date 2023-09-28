@@ -125,19 +125,25 @@ class ReccurrentFlowCompleteNet(nn.Module):
         super().__init__()
 
         self.Downsample = nn.Sequential(
-            nn.Conv3d(3,32,kernel_size=(1,5,3), stride=(1,2,2),
+            nn.Conv3d(3,32,kernel_size=(1,5,5), stride=(1,2,2),
                 padding=(0,2,2), padding_mode="replicate"),
             nn.LeakyReLU(config.threshold,  inplace=True)
         )
 
-        self.Encoder = []
-        for depth in range(config.encoder_depth):
-            self.Encoder += [P3DBlock(32*(depth+1),32*(depth+1),3,1,1)]
-            self.Encoder += [nn.LeakyReLU(config.threshold, inplace=True)]
-            self.Encoder += [P3DBlock(32*(depth+1),64*(depth+1),3,2,1)]
-            self.Encoder += [nn.LeakyReLU(config.threshold, inplace=True)]
+        self.Encoder1 = []
+        self.Encoder1 += [P3DBlock(32,32,3,1,1)]
+        self.Encoder1 += [nn.LeakyReLU(config.threshold, inplace=True)]
+        self.Encoder1 += [P3DBlock(32,64,3,2,1)]
+        self.Encoder1 += [nn.LeakyReLU(config.threshold, inplace=True)]
 
-        self.Encoder = nn.Sequential(nn.ModuleList(self.Encoder))
+        self.Encoder2 = []
+        self.Encoder2 += [P3DBlock(64,64,3,1,1)]
+        self.Encoder2 += [nn.LeakyReLU(config.threshold, inplace=True)]
+        self.Encoder2 += [P3DBlock(64,128,3,2,1)]
+        self.Encoder2 += [nn.LeakyReLU(config.threshold, inplace=True)]
+
+        self.Encoder1 = nn.Sequential(nn.ModuleList(self.Encoder1))
+        self.Encoder2 = nn.Sequential(nn.ModuleList(self.Encoder2))
 
         self.MidDilation = nn.Sequential(
             nn.Conv3d(128, 128, (1, 3, 3), (1, 1, 1), padding=(0, 3, 3), dilation=(1, 3, 3)),
@@ -323,6 +329,54 @@ class SepConvGRU(nn.Module):
 
         return h
 
+class ModulatedDeformConv2d(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
+                 deform_groups=1,
+                 bias=True):
+        super(ModulatedDeformConv2d, self).__init__()
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = _pair(kernel_size)
+        self.stride = stride
+        self.padding = padding
+        self.dilation = dilation
+        self.groups = groups
+        self.deform_groups = deform_groups
+        self.with_bias = bias
+        # enable compatibility with nn.Conv2d
+        self.transposed = False
+        self.output_padding = _single(0)
+
+        self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
+        if bias:
+            self.bias = nn.Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
+        self.init_weights()
+
+    def init_weights(self):
+        n = self.in_channels
+        for k in self.kernel_size:
+            n *= k
+        stdv = 1. / math.sqrt(n)
+        self.weight.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            self.bias.data.zero_()
+
+        if hasattr(self, 'conv_offset'):
+            self.conv_offset.weight.data.zero_()
+            self.conv_offset.bias.data.zero_()
+
+    def forward(self, x, offset, mask):
+        pass
 
 class FlowUpdateBlock(nn.Module):
     def __init__(self, args, hidden_dim=128, input_dim=128):
@@ -344,16 +398,16 @@ class FlowEncoder(nn.Module):
         self.norm_fn = norm_fn
 
         if self.norm_fn == 'group':
-            self.norm1 = nn.GroupNorm(num_groups=8, num_channels=64)
+            self.Norm1 = nn.GroupNorm(num_groups=8, num_channels=64)
             
         elif self.norm_fn == 'batch':
-            self.norm1 = nn.BatchNorm2d(64)
+            self.Norm1 = nn.BatchNorm2d(64)
 
         elif self.norm_fn == 'instance':
-            self.norm1 = nn.InstanceNorm2d(64)
+            self.Norm1 = nn.InstanceNorm2d(64)
 
         elif self.norm_fn == 'none':
-            self.norm1 = nn.Sequential()
+            self.Norm1 = nn.Sequential()
 
         self.Conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
         self.Relu1 = nn.ReLU(inplace=True)
@@ -542,7 +596,7 @@ def constant_init(module, val, bias=0):
         nn.init.constant_(module.bias, bias)
 
 
-class DeformableAlignment(nn.Module):
+class DeformableAlignment(ModulatedDeformConv2d):
     """Second-order deformable alignment module."""
     def __init__(self, *args, **kwargs):
         # self.max_residue_magnitude = kwargs.pop('max_residue_magnitude', 10)
@@ -637,54 +691,6 @@ class deconv(nn.Module):
                           align_corners=True)
         return self.Conv(x)
 
-class ModulatedDeformConv2d(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride=1,
-                 padding=0,
-                 dilation=1,
-                 groups=1,
-                 deform_groups=1,
-                 bias=True):
-        super(ModulatedDeformConv2d, self).__init__()
-
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.kernel_size = _pair(kernel_size)
-        self.stride = stride
-        self.padding = padding
-        self.dilation = dilation
-        self.groups = groups
-        self.deform_groups = deform_groups
-        self.with_bias = bias
-        # enable compatibility with nn.Conv2d
-        self.transposed = False
-        self.output_padding = _single(0)
-
-        self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
-        if bias:
-            self.bias = nn.Parameter(torch.Tensor(out_channels))
-        else:
-            self.register_parameter('bias', None)
-        self.init_weights()
-
-    def init_weights(self):
-        n = self.in_channels
-        for k in self.kernel_size:
-            n *= k
-        stdv = 1. / math.sqrt(n)
-        self.weight.data.uniform_(-stdv, stdv)
-        if self.bias is not None:
-            self.bias.data.zero_()
-
-        if hasattr(self, 'conv_offset'):
-            self.conv_offset.weight.data.zero_()
-            self.conv_offset.bias.data.zero_()
-
-    def forward(self, x, offset, mask):
-        pass
 
 class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
     """Second-order deformable alignment module."""
@@ -719,10 +725,90 @@ class SecondOrderDeformableAlignment(ModulatedDeformConv2d):
                                              self.stride, self.padding,
                                              self.dilation, mask)
 
-
 class BidirectionalPropagation(nn.Module):
-    def __init__(self, channel, learnable=True):
+    def __init__(self, channel):
         super(BidirectionalPropagation, self).__init__()
+        modules = ['backward_', 'forward_']
+        self.deform_align = nn.ModuleDict()
+        self.backbone = nn.ModuleDict()
+        self.channel = channel
+
+        for i, module in enumerate(modules):
+            self.deform_align[module] = SecondOrderDeformableAlignment(
+                2 * channel, channel, 3, padding=1, deform_groups=16)
+
+            self.backbone[module] = nn.Sequential(
+                nn.Conv2d((2 + i) * channel, channel, 3, 1, 1),
+                nn.LeakyReLU(negative_slope=0.1, inplace=True),
+                nn.Conv2d(channel, channel, 3, 1, 1),
+            )
+
+        self.fusion = nn.Conv2d(2 * channel, channel, 1, 1, 0)
+
+    def forward(self, x):
+        """
+        x shape : [b, t, c, h, w]
+        return [b, t, c, h, w]
+        """
+        b, t, c, h, w = x.shape
+        feats = {}
+        feats['spatial'] = [x[:, i, :, :, :] for i in range(0, t)]
+
+        for module_name in ['backward_', 'forward_']:
+
+            feats[module_name] = []
+
+            frame_idx = range(0, t)
+            mapping_idx = list(range(0, len(feats['spatial'])))
+            mapping_idx += mapping_idx[::-1]
+
+            if 'backward' in module_name:
+                frame_idx = frame_idx[::-1]
+
+            feat_prop = x.new_zeros(b, self.channel, h, w)
+            for i, idx in enumerate(frame_idx):
+                feat_current = feats['spatial'][mapping_idx[idx]]
+                if i > 0:
+                    cond_n1 = feat_prop
+
+                    # initialize second-order features
+                    feat_n2 = torch.zeros_like(feat_prop)
+                    cond_n2 = torch.zeros_like(cond_n1)
+                    if i > 1:  # second-order features
+                        feat_n2 = feats[module_name][-2]
+                        cond_n2 = feat_n2
+
+                    cond = torch.cat([cond_n1, feat_current, cond_n2], dim=1) # condition information, cond(flow warped 1st/2nd feature)
+                    feat_prop = torch.cat([feat_prop, feat_n2], dim=1) # two order feat_prop -1 & -2
+                    feat_prop = self.deform_align[module_name](feat_prop, cond)
+
+                # fuse current features
+                feat = [feat_current] + \
+                    [feats[k][idx] for k in feats if k not in ['spatial', module_name]] \
+                    + [feat_prop]
+
+                feat = torch.cat(feat, dim=1)
+                # embed current features
+                feat_prop = feat_prop + self.backbone[module_name](feat)
+
+                feats[module_name].append(feat_prop)
+
+            # end for
+            if 'backward' in module_name:
+                feats[module_name] = feats[module_name][::-1]
+
+        outputs = []
+        for i in range(0, t):
+            align_feats = [feats[k].pop(0) for k in feats if k != 'spatial']
+            align_feats = torch.cat(align_feats, dim=1)
+            outputs.append(self.fusion(align_feats))
+
+        return torch.stack(outputs, dim=1) + x
+
+
+class ProPainterBidirectionalPropagation(nn.Module):
+    def __init__(self, channel, learnable=True):
+        super(ProPainterBidirectionalPropagation, self).__init__()
         self.deform_align = nn.ModuleDict()
         self.backbone = nn.ModuleDict()
         self.channel = channel
@@ -731,7 +817,7 @@ class BidirectionalPropagation(nn.Module):
 
         if self.learnable:
             for i, module in enumerate(self.prop_list):
-                self.deform_align[module] = SecondOrderDeformableAlignment(
+                self.deform_align[module] = DeformableAlignment(
                     channel, channel, 3, padding=1, deform_groups=16)
 
                 self.backbone[module] = nn.Sequential(
@@ -739,12 +825,12 @@ class BidirectionalPropagation(nn.Module):
                     nn.LeakyReLU(negative_slope=0.2, inplace=True),
                     nn.Conv2d(channel, channel, 3, 1, 1),
                 )
-
             self.fuse = nn.Sequential(
-                    nn.Conv2d(2*channel+2, channel, 3, 1, 1),
-                    nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                    nn.Conv2d(channel, channel, 3, 1, 1),
-                ) 
+                nn.Conv2d(2*channel+2, channel, 3, 1, 1),
+                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.Conv2d(channel, channel, 3, 1, 1),
+            )
+
             
     def binary_mask(self, mask, th=0.1):
         mask[mask>th] = 1
@@ -1277,8 +1363,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
         self.max_pool = nn.MaxPool2d(kernel_size, stride, padding)
 
         # feature propagation module
-        self.img_prop_module = BidirectionalPropagation(3, learnable=False)
-        self.feat_prop_module = BidirectionalPropagation(128, learnable=True)
+        self.img_prop_module = ProPainterBidirectionalPropagation(3, learnable=False)
+        self.feat_prop_module = ProPainterBidirectionalPropagation(128, learnable=True)
 
         depths = 8
         num_heads = 4

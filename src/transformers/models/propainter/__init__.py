@@ -23,7 +23,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTOnnxConfig"]}
+_import_structure = {"configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProPainterConfig", "ViTOnnxConfig"]}
 
 try:
     if not is_vision_available():
@@ -73,7 +73,7 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig, ViTOnnxConfig
+    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ProPainterConfig, ViTOnnxConfig
 
     try:
         if not is_vision_available():
