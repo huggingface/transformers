@@ -369,6 +369,7 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
         if key.dtype != target_dtype:
             key = key.to(target_dtype)
 
+        # Permute to get the expected shape for Flash Attention
         query = query.permute(0, 2, 1, 3)
         key = key.permute(0, 2, 1, 3)
         value = value.permute(0, 2, 1, 3)
