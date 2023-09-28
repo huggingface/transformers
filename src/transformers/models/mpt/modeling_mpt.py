@@ -32,8 +32,12 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import is_flash_attn_available, logging
 from .configuration_mpt import MptConfig
+
+if is_flash_attn_available():
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  
 
 
 logger = logging.get_logger(__name__)
@@ -273,6 +277,7 @@ class MptPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]
     _keys_to_ignore_on_load_missing = [r"lm_head.*."]
+    _supports_flash_attn_2 = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
