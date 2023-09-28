@@ -444,7 +444,6 @@ class _BaseAutoModelClass:
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
-
             return model_class._from_config(config, **kwargs)
 
         raise ValueError(
