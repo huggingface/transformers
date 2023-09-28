@@ -16,7 +16,6 @@
 Feature extractor class for Audio Spectrogram Transformer.
 """
 
-import copy
 from typing import List, Optional, Union
 
 import numpy as np
@@ -26,7 +25,7 @@ import torchaudio.compliance.kaldi as ta_kaldi
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_speech_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -39,8 +38,8 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using TorchAudio, pads/truncates them to a fixed
-    length and normalizes them using a mean and standard deviation.
+    This class extracts mel-filter bank features from raw speech using TorchAudio if installed or using numpy
+    otherwise, pads/truncates them to a fixed length and normalizes them using a mean and standard deviation.
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):
@@ -60,9 +59,6 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
             by default.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
-        use_torchaudio (`bool`, *optional*, defaults to `True`):
-            Whether or not to use torchaudio implementation of mel-filter banks. If `False`, use a numpy porting of
-            torchaudio mel-filter banks implementation.
     """
 
     model_input_names = ["input_values", "attention_mask"]
@@ -90,7 +86,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         self.return_attention_mask = return_attention_mask
 
         self.use_torchaudio = use_torchaudio
-        if not use_torchaudio:
+        if not is_speech_available():
             mel_filters = mel_filter_bank(
                 num_frequency_bins=256,
                 num_mel_filters=self.num_mel_bins,
@@ -115,7 +111,7 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         and hence the waveform should not be normalized before feature extraction.
         """
         # waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
-        if self.use_torchaudio:
+        if is_speech_available():
             waveform = torch.from_numpy(waveform).unsqueeze(0)
             fbank = ta_kaldi.fbank(
                 waveform,
@@ -235,16 +231,3 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["feature_extractor_type"] = self.__class__.__name__
-        if "mel_filters" in output:
-            del output["mel_filters"]
-        if "window" in output:
-            del output["window"]
-        return output

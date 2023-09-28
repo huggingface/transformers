@@ -16,7 +16,6 @@
 Feature extractor class for Speech2Text
 """
 
-import copy
 from typing import List, Optional, Union
 
 import numpy as np
@@ -26,7 +25,7 @@ import torchaudio.compliance.kaldi as ta_kaldi
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import PaddingStrategy, TensorType, logging
+from ...utils import PaddingStrategy, TensorType, is_speech_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -39,8 +38,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`Speech2TextFeatureExtractor`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using TorchAudio and applies utterance-level cepstral
-    mean and variance normalization to the extracted features.
+    This class extracts mel-filter bank features from raw speech using TorchAudio if installed or using numpy
+    otherwise, and applies utterance-level cepstral mean and variance normalization to the extracted features.
 
     Args:
         feature_size (`int`, defaults to 80):
@@ -57,9 +56,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             Whether or not to zero-mean normalize the extracted features.
         normalize_vars (`bool`, *optional*, defaults to `True`):
             Whether or not to unit-variance normalize the extracted features.
-        use_torchaudio (`bool`, *optional*, defaults to `True`):
-            Whether or not to use torchaudio implementation of mel-filter banks. If `False`, use a numpy porting of
-            torchaudio mel-filter banks implementation.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -84,7 +80,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         self.return_attention_mask = True
 
         self.use_torchaudio = use_torchaudio
-        if not use_torchaudio:
+        if not is_speech_available():
             mel_filters = mel_filter_bank(
                 num_frequency_bins=256,
                 num_mel_filters=self.num_mel_bins,
@@ -108,7 +104,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         and hence the waveform should not be normalized before feature extraction.
         """
         waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
-        if self.use_torchaudio:
+        if is_speech_available():
             waveform = torch.from_numpy(waveform).unsqueeze(0)
             features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
             features = features.numpy()
@@ -299,16 +295,3 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["feature_extractor_type"] = self.__class__.__name__
-        if "mel_filters" in output:
-            del output["mel_filters"]
-        if "window" in output:
-            del output["window"]
-        return output
