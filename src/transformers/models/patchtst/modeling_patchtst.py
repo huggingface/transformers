@@ -1218,7 +1218,7 @@ class PredictionHead(nn.Module):
             self.linear = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)
             self.args_proj = None
         else:
-            self.linear = nn.Linearr(head_dim, config.prediction_length * self.dist_output_size)
+            self.linear = nn.Linear(head_dim, config.prediction_length * self.dist_output_size)
             self.args_proj = distribution_output.get_parameter_projection(self.dist_output_size)
         self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
 
