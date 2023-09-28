@@ -1054,26 +1054,26 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> import requests
         >>> import torch
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> url = "https://datasets-server.huggingface.co/assets/HuggingFaceM4/VQAv2/--/default/train/8/image/image.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
 
         >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
-        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+        >>> input = beit3_processor(text=["This is photo of a dog"], images=image)
 
         >>> language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
-        >>> language_masked_pos[0, 5] = 1
+        >>> language_masked_pos[0, 6] = 1
         >>> input_tokens = list(input["input_ids"][0])
-        >>> input_tokens[5] = 64001
+        >>> input_tokens[6] = 64001
         >>> output = model(
         ...     input_ids=torch.tensor([input_tokens]),
         ...     pixel_values=torch.tensor(input["pixel_values"]),
         ...     padding_mask=torch.zeros(language_masked_pos.shape),
         ...     language_masked_pos=language_masked_pos,
         ... )
-        >>> list(output.logits.shape)
-        [1, 64010]
+        >>> beit3_processor.tokenizer.decode([np.argmax(output.logits.cpu().detach().numpy())])
+        dog
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
