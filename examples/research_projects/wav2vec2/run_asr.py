@@ -355,10 +355,10 @@ def main():
     )
 
     train_dataset = datasets.load_dataset(
-        data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name, num_proc=data_args.preprocessing_num_workers,
     )
     val_dataset = datasets.load_dataset(
-        data_args.dataset_name, data_args.dataset_config_name, split=data_args.validation_split_name
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.validation_split_name, num_proc=data_args.preprocessing_num_workers,
     )
 
     wer_metric = datasets.load_metric("wer")
