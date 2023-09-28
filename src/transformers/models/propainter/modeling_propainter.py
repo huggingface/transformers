@@ -337,6 +337,7 @@ class FlowMotionEncoder(nn.Module):
         self.Conv_ = nn.Conv2d(64+192, 128-2, 3, padding=1)
 
     def forward(self, flow, corr):
+        print(flow.dtype)
         cor = F.relu(self.Conv_c1(corr))
         cor = F.relu(self.Conv_c2(cor))
         flo = F.relu(self.Conv_f1(flow))
@@ -438,6 +439,7 @@ class FlowUpdateBlock(nn.Module):
             nn.Conv2d(256, 64*9, 1, padding=0))
 
     def forward(self, net, inp, corr, flow, upsample=True):
+        print(corr.dtype,"---")
         motion_features = self.Encoder(flow, corr)
         inp = torch.cat([inp, motion_features], dim=1)
 
@@ -500,12 +502,12 @@ class FlowEncoder(nn.Module):
 
 
     def forward(self, x):
-
         # if input is list, combine batch dimension
         is_list = isinstance(x, tuple) or isinstance(x, list)
         if is_list:
             batch_dim = x[0].shape[0]
             x = torch.cat(x, dim=0)
+        print(x.dtype)
 
         x = self.Conv1(x)
         x = self.Norm1(x)
@@ -549,12 +551,13 @@ class CorrBlock:
         xgrid = 2*xgrid/(W-1) - 1
         ygrid = 2*ygrid/(H-1) - 1
 
-        grid = torch.cat([xgrid, ygrid], dim=-1)
+        grid = torch.cat([xgrid, ygrid], dim=-1).half()
+        print(grid.dtype,"++++")
         img = F.grid_sample(img, grid, align_corners=True)
 
         if mask:
             mask = (xgrid > -1) & (ygrid > -1) & (xgrid < 1) & (ygrid < 1)
-            return img, mask.float()
+            return img, mask
 
         return img
 
@@ -580,7 +583,7 @@ class CorrBlock:
             out_pyramid.append(corr)
 
         out = torch.cat(out_pyramid, dim=-1)
-        return out.permute(0, 3, 1, 2).contiguous().float()
+        return out.permute(0, 3, 1, 2).contiguous()
 
     @staticmethod
     def corr(fmap1, fmap2):
@@ -590,7 +593,7 @@ class CorrBlock:
 
         corr = torch.matmul(fmap1.transpose(1,2), fmap2)
         corr = corr.view(batch, ht, wd, 1, ht, wd)
-        return corr  / torch.sqrt(torch.tensor(dim).float())
+        return corr  / torch.sqrt(torch.tensor(dim))
 
 
 class CorrLayer(torch.autograd.Function):
@@ -612,137 +615,11 @@ class CorrLayer(torch.autograd.Function):
             correlation_cudaz.backward(fmap1, fmap2, coords, grad_corr, ctx.r)
         return fmap1_grad, fmap2_grad, coords_grad, None
 
-
-
-
-class OpticalFlow(nn.Module):
-    def __init__(self, config:ProPainterConfig, hidden_dim=128, context_dim=128):
-        super(OpticalFlow, self).__init__()
-        self.config = config
-
-        self.hidden_dim = hdim = 128
-        self.context_dim = cdim = 128
-        config.corr_levels = 4
-        config.corr_radius = 4
-
-        # feature network, context network, and update block
-        self.FeatureNet = FlowEncoder(output_dim=256, norm_fn='instance', dropout=config.dropout)
-        self.ContextNet = FlowEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=config.dropout)
-        self.UpdateBlock = FlowUpdateBlock(self.config, hidden_dim=hdim)
-
-        self.l1_criterion = nn.L1Loss()
-
-    def coords_grid(self, batch, ht, wd):
-        coords = torch.meshgrid(torch.arange(ht), torch.arange(wd))
-        coords = torch.stack(coords[::-1], dim=0).float()
-        return coords[None].repeat(batch, 1, 1, 1)
-
-    def initialize_flow(self, img):
-        """ Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
-        N, C, H, W = img.shape
-        coords0 = self.coords_grid(N, H//8, W//8).to(img.device)
-        coords1 = self.coords_grid(N, H//8, W//8).to(img.device)
-
-        # optical flow computed as difference: flow = coords1 - coords0
-        return coords0, coords1
-
-
-    def upsample_flow(self, flow, mask):
-        """ Upsample flow field [H/8, W/8, 2] -> [H, W, 2] using convex combination """
-        N, _, H, W = flow.shape
-        mask = mask.view(N, 1, 9, 8, 8, H, W)
-        mask = torch.softmax(mask, dim=2)
-
-        up_flow = F.unfold(8 * flow, [3,3], padding=1)
-        up_flow = up_flow.view(N, 2, 9, 1, 1, H, W)
-
-        up_flow = torch.sum(mask * up_flow, dim=2)
-        up_flow = up_flow.permute(0, 1, 4, 2, 5, 3)
-        return up_flow.reshape(N, 2, 8*H, 8*W)
-
-    def OpticalPairs(self, image1, image2, iters=12, flow_init=None, test_mode=True):
-        """ Estimate optical flow between pair of frames """
-
-        # image1 = 2 * (image1 / 255.0) - 1.0
-        # image2 = 2 * (image2 / 255.0) - 1.0
-
-        image1 = image1.contiguous()
-        image2 = image2.contiguous()
-
-        hdim = self.hidden_dim
-        cdim = self.context_dim
-
-        # run the feature network
-        fmap1, fmap2 = self.FeatureNet([image1, image2])
-
-        fmap1 = fmap1.float()
-        fmap2 = fmap2.float()
-        
-        if self.config.alternate_corr:
-            corr_fn = AlternateCorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
-        else:
-            corr_fn = CorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
-
-        # run the context network
-        cnet = self.ContextNet(image1)
-        net, inp = torch.split(cnet, [hdim, cdim], dim=1)
-        net = torch.tanh(net)
-        inp = torch.relu(inp)
-
-        coords0, coords1 = self.initialize_flow(image1)
-
-        if flow_init is not None:
-            coords1 = coords1 + flow_init
-
-        flow_predictions = []
-        for itr in range(iters):
-            coords1 = coords1.detach()
-            corr = corr_fn(coords1) # index correlation volume
-
-            flow = coords1 - coords0
-            net, up_mask, delta_flow = self.UpdateBlock(net, inp, corr, flow)
-
-            # F(t+1) = F(t) + \Delta(t)
-            coords1 = coords1 + delta_flow
-
-            # upsample predictions
-            if up_mask is None:
-                flow_up = upflow8(coords1 - coords0)
-            else:
-                flow_up = self.upsample_flow(coords1 - coords0, up_mask)
-
-            flow_predictions.append(flow_up)
-
-        if test_mode:
-            return coords1 - coords0, flow_up
-
-        return flow_predictions
-
-    def forward(self, gt_local_frames, iters=20):
-        b, l_t, c, h, w = gt_local_frames.size()
-        # print(gt_local_frames.shape)
-
-        with torch.no_grad():
-            gtlf_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, c, h, w)
-            gtlf_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, c, h, w)
-            # print(gtlf_1.shape)
-
-            _, gt_flows_forward = self.OpticalPairs(gtlf_1, gtlf_2, iters=iters, test_mode=True)
-            _, gt_flows_backward = self.OpticalPairs(gtlf_2, gtlf_1, iters=iters, test_mode=True)
-
-
-        gt_flows_forward = gt_flows_forward.view(b, l_t-1, 2, h, w)
-        gt_flows_backward = gt_flows_backward.view(b, l_t-1, 2, h, w)
-
-        return gt_flows_forward, gt_flows_backward
-
-
 def constant_init(module, val, bias=0):
     if hasattr(module, 'weight') and module.weight is not None:
         nn.init.constant_(module.weight, val)
     if hasattr(module, 'bias') and module.bias is not None:
         nn.init.constant_(module.bias, bias)
-
 
 class DeformableAlignment(ModulatedDeformConv2d):
     """Second-order deformable alignment module."""
@@ -1366,6 +1243,7 @@ class SparseWindowAttention(nn.Module):
 
         # output projection
         out = self.proj_drop(self.proj(out))
+      
         return out
 
 class FusionFeedForward(nn.Module):
@@ -1509,6 +1387,130 @@ class ProPainterPreTrainedModel(PreTrainedModel):
     #def _set_gradient_checkpointing(self, module: ViTEncoder, value: bool = False) -> None:
     #    if isinstance(module, ViTEncoder):
     #        module.gradient_checkpointing = value
+
+class OpticalFlow(ProPainterPreTrainedModel):
+    def __init__(self, config:ProPainterConfig, hidden_dim=128, context_dim=128):
+        super(OpticalFlow, self).__init__(config)
+        self.config = config
+
+        self.hidden_dim = hdim = 128
+        self.context_dim = cdim = 128
+        config.corr_levels = 4
+        config.corr_radius = 4
+
+        # feature network, context network, and update block
+        self.FeatureNet = FlowEncoder(output_dim=256, norm_fn='instance', dropout=config.dropout)
+        self.ContextNet = FlowEncoder(output_dim=hdim+cdim, norm_fn='batch', dropout=config.dropout)
+        self.UpdateBlock = FlowUpdateBlock(self.config, hidden_dim=hdim)
+
+        self.l1_criterion = nn.L1Loss()
+
+        self.post_init()
+
+    def coords_grid(self, batch, ht, wd):
+        coords = torch.meshgrid(torch.arange(ht), torch.arange(wd))
+        coords = torch.stack(coords[::-1], dim=0)
+        return coords[None].repeat(batch, 1, 1, 1)
+
+    def initialize_flow(self, img):
+        """ Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
+        N, C, H, W = img.shape
+        coords0 = self.coords_grid(N, H//8, W//8).to(img.device)
+        coords1 = self.coords_grid(N, H//8, W//8).to(img.device)
+
+        # optical flow computed as difference: flow = coords1 - coords0
+        return coords0, coords1
+
+
+    def upsample_flow(self, flow, mask):
+        """ Upsample flow field [H/8, W/8, 2] -> [H, W, 2] using convex combination """
+        N, _, H, W = flow.shape
+        mask = mask.view(N, 1, 9, 8, 8, H, W)
+        mask = torch.softmax(mask, dim=2)
+
+        up_flow = F.unfold(8 * flow, [3,3], padding=1)
+        up_flow = up_flow.view(N, 2, 9, 1, 1, H, W)
+
+        up_flow = torch.sum(mask * up_flow, dim=2)
+        up_flow = up_flow.permute(0, 1, 4, 2, 5, 3)
+        return up_flow.reshape(N, 2, 8*H, 8*W)
+
+    def OpticalPairs(self, image1, image2, iters=12, flow_init=None, test_mode=True):
+        """ Estimate optical flow between pair of frames """
+
+        # image1 = 2 * (image1 / 255.0) - 1.0
+        # image2 = 2 * (image2 / 255.0) - 1.0
+
+        image1 = image1.contiguous()
+        image2 = image2.contiguous()
+        print(image1.dtype)
+        hdim = self.hidden_dim
+        cdim = self.context_dim
+
+        # run the feature network
+        fmap1, fmap2 = self.FeatureNet([image1, image2])
+
+        fmap1 = fmap1
+        fmap2 = fmap2
+        
+        if self.config.alternate_corr:
+            corr_fn = AlternateCorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
+        else:
+            corr_fn = CorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
+
+        # run the context network
+        cnet = self.ContextNet(image1)
+        net, inp = torch.split(cnet, [hdim, cdim], dim=1)
+        net = torch.tanh(net)
+        inp = torch.relu(inp)
+
+        coords0, coords1 = self.initialize_flow(image1)
+
+        if flow_init is not None:
+            coords1 = coords1 + flow_init
+
+        flow_predictions = []
+        for itr in range(iters):
+            coords1 = coords1.detach()
+            corr = corr_fn(coords1) # index correlation volume
+
+            flow = coords1 - coords0
+            flow = flow.half()
+            net, up_mask, delta_flow = self.UpdateBlock(net, inp, corr, flow)
+
+            # F(t+1) = F(t) + \Delta(t)
+            coords1 = coords1 + delta_flow
+
+            # upsample predictions
+            if up_mask is None:
+                flow_up = upflow8(coords1 - coords0)
+            else:
+                flow_up = self.upsample_flow(coords1 - coords0, up_mask)
+
+            flow_predictions.append(flow_up)
+
+        if test_mode:
+            return coords1 - coords0, flow_up
+
+        return flow_predictions
+
+    def forward(self, gt_local_frames, iters=20):
+        b, l_t, c, h, w = gt_local_frames.size()
+        # print(gt_local_frames.shape)
+        print(gt_local_frames.dtype)
+        with torch.no_grad():
+            gtlf_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, c, h, w)
+            gtlf_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, c, h, w)
+            # print(gtlf_1.shape)
+            print(gtlf_1.dtype)
+            _, gt_flows_forward = self.OpticalPairs(gtlf_1, gtlf_2, iters=iters, test_mode=True)
+            _, gt_flows_backward = self.OpticalPairs(gtlf_2, gtlf_1, iters=iters, test_mode=True)
+
+
+        gt_flows_forward = gt_flows_forward.view(b, l_t-1, 2, h, w)
+        gt_flows_backward = gt_flows_backward.view(b, l_t-1, 2, h, w)
+
+        return gt_flows_forward, gt_flows_backward
 
 
 VIT_START_DOCSTRING = r"""
@@ -1726,7 +1728,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
 
         video_length = frames.size(1)
         h,w = frames.shape[-2],frames.shape[-1]
-  
+
         if frames.size(-1) <= 640:
             short_clip_len = 12
         elif frames.size(-1) < 720:
@@ -1735,7 +1737,11 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             short_clip_len = 4
         else:
             short_clip_len = 2
-              
+
+        #frames = frames.float()
+        #flow_masks = flow_masks.float()
+        #masks_dilated = masks_dilated.float()
+
         if frames.size(1) > short_clip_len:
             gt_flows_f_list, gt_flows_b_list = [], []
             for f in range(0, video_length, short_clip_len):
@@ -1752,6 +1758,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
             gt_flows_bi = (gt_flows_f, gt_flows_b)
         else:
+            print(frames.dtype)
             gt_flows_bi = self.OpticalFlow(frames, iters=self.config.raft_iter)
 
         flow_length = gt_flows_bi[0].size(1)
@@ -1781,7 +1788,12 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             print(gt_flows_bi[0].shape, flow_masks.shape)
             pred_flows_bi, _ = self.FlowComplete.forward_bidirect_flow(gt_flows_bi, flow_masks)
             pred_flows_bi = self.FlowComplete.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
+
+        #frames = frames.half()
+        #flow_masks = flow_masks.half()
+        #masks_dilated = masks_dilated.half()
         
+        #gt_flows_bi = (gt_flows_bi[0].half(), gt_flows_bi[1].half()) 
 
         masked_frames = frames * (1 - masks_dilated)
         subvideo_length_img_prop = min(100, self.config.subvideo_length) # ensure a minimum of 100 frames for image propagation
@@ -1861,20 +1873,19 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
                 comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
             ## to be removed
-            import os
-            out_size = (w,h)
-            def imwrite(img, file_path, params=None, auto_mkdir=True):
-                if auto_mkdir:
-                    dir_name = os.path.abspath(os.path.dirname(file_path))
-                    os.makedirs(dir_name, exist_ok=True)
-                return cv2.imwrite(file_path, img, params)
-
-            for idx in range(video_length):
-                f = comp_frames[idx]
-                f = cv2.resize(f, out_size, interpolation = cv2.INTER_CUBIC)
-                f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-                img_save_root = os.path.join("./", 'frames', str(idx).zfill(4)+'.png')
-                imwrite(f, img_save_root)
+        import os
+        out_size = (w,h)
+        def imwrite(img, file_path, params=None, auto_mkdir=True):
+            if auto_mkdir:
+                dir_name = os.path.abspath(os.path.dirname(file_path))
+                os.makedirs(dir_name, exist_ok=True)
+            return cv2.imwrite(file_path, img, params)
+        for idx in range(video_length):
+            f = comp_frames[idx]
+            f = cv2.resize(f, out_size, interpolation = cv2.INTER_CUBIC)
+            f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
+            img_save_root = os.path.join("./", 'frames', str(idx).zfill(4)+'.png')
+            imwrite(f, img_save_root)
 
         return 
 
@@ -1996,6 +2007,7 @@ class ProPainterForImageOutPainting(ProPainterPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 
 

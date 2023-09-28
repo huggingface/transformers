@@ -21,6 +21,19 @@ import os
 import re
 import cv2
 import imageio
+import pathlib
+
+from ...image_transforms import (
+    PaddingMode,
+    center_to_corners_format,
+    corners_to_center_format,
+    id_to_rgb,
+    pad,
+    rescale,
+    resize,
+    rgb_to_id,
+    to_channel_dimension_format,
+ )
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...utils import (
@@ -59,35 +72,26 @@ class ProPainterImageProcessor(BaseImageProcessor):
     Args:
         TODO
     """
-
+    model_input_names = ["pixel_values","pixel_masks"]
     def __init__(
         self,
-        video: str,
-        mask: str,
-        mode: str,
+        do_resize: bool = True,
+        size: Optional[Dict[str, int]] = {"height": -1, "width": -1},
         scale_h: float = 1.0,
         scale_w: float = 1.2,
         resize_ratio: float = 1.0,
-        do_resize: bool = True,
-        size: Optional[Dict[str, int]] = {"height": -1, "width": -1},
         mask_dilation: int = 4,
-        save_frames: bool = False,
-        save_path: str = 'results',
         save_fps: int = 24,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.video = video
-        self.mask = mask
-        self.mode = mode
+        size = size if size is not None else {"height": 224, "width": 224}
         self.scale_h = scale_h
         self.scale_w = scale_w
         self.resize_ratio = resize_ratio
         self.do_resize = do_resize
         self.size = size
         self.mask_dilation = mask_dilation
-        self.save_frames = save_frames
-        self.save_path = save_path
         self.save_fps = save_fps
 
 
@@ -97,8 +101,8 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
     def resize_frames(
         self,
-        frames,
-        size=None
+        frames: np.ndarray,
+        size: Optional[Dict[str, int]],
     ) -> Tuple[List[Image.Image], Tuple[int, int], Tuple[int, int]]:
         """
         TODO
@@ -253,7 +257,11 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
     def preprocess_inpainting(
         self,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        video_path: Optional[Union[str, pathlib.Path]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
+        return_tensors: Optional[Union[TensorType, str]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -263,8 +271,14 @@ class ProPainterImageProcessor(BaseImageProcessor):
             TODO
 
         """
+        size = self.size if size is None else size
+        size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
+        if do_resize is not None and size is None:
+            raise ValueError("Size and max_size must be specified if do_resize is True.")
 
-        frames, fps, size, video_name = self.read_frame_from_videos(self.video)
+        images = make_list_of_images(images)
+
+        frames, fps, size, video_name = self.read_frames_from_videos(self.video_path)
         if not self.size['width'] == -1 and not self.size['height'] == -1:
             size = (self.size['width'], self.size['height'])
         if not self.resize_ratio == 1.0:

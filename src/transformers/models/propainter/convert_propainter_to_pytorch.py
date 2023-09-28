@@ -150,10 +150,10 @@ def create_rename_keys(config):
 
     for enc in range(1,3):
         for i in range(0,config.encoder_depth,2):#7
-            rename_keys.append((f"encoder{enc}.{i}.conv1.0.weight", f"FlowComplete.Encoder{enc}.0.{i}.Conv1.0.weight"))
-            rename_keys.append((f"encoder{enc}.{i}.conv1.0.bias", f"FlowComplete.Encoder{enc}.0.{i}.Conv1.0.bias"))
-            rename_keys.append((f"encoder{enc}.{i}.conv2.0.weight", f"FlowComplete.Encoder{enc}.0.{i}.Conv2.0.weight"))
-            rename_keys.append((f"encoder{enc}.{i}.conv2.0.bias", f"FlowComplete.Encoder{enc}.0.{i}.Conv2.0.bias"))
+            rename_keys.append((f"encoder{enc}.{i}.conv1.weight", f"FlowComplete.Encoder{enc}.0.{i}.Conv1.0.weight"))
+            rename_keys.append((f"encoder{enc}.{i}.conv1.bias", f"FlowComplete.Encoder{enc}.0.{i}.Conv1.0.bias"))
+            rename_keys.append((f"encoder{enc}.{i}.conv2.weight", f"FlowComplete.Encoder{enc}.0.{i}.Conv2.0.weight"))
+            rename_keys.append((f"encoder{enc}.{i}.conv2.bias", f"FlowComplete.Encoder{enc}.0.{i}.Conv2.0.bias"))
     
     for i in range(0, config.mid_dilation_depth,2):#5
         rename_keys.append((f"mid_dilation.{i}.weight", f"FlowComplete.MidDilation.{i}.weight"))

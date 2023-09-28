@@ -26,7 +26,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+PROPAINTER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "shauray/ProPainter-hf": "https://huggingface.co/shauray/ProPainter-hf/resolve/main/config.json",
 }
 
@@ -76,13 +76,13 @@ class ProPainterConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ViTConfig, ViTModel
+    >>> from transformers import ProPainterConfig, ProPainterForImageInPainting
 
-    >>> # Initializing a ViT vit-base-patch16-224 style configuration
-    >>> configuration = ViTConfig()
+    >>> # Initializing a ProPainter style configuration
+    >>> configuration = ProPainterConfig()
 
-    >>> # Initializing a model (with random weights) from the vit-base-patch16-224 style configuration
-    >>> model = ViTModel(configuration)
+    >>> # Initializing a model (with random weights) from the ProPainter style configuration
+    >>> model = ProPainterForImageInPainting(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
