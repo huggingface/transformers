@@ -71,6 +71,7 @@ OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# TODO: @younesbelkada move that in pytorch_utils and document it
 if is_torch_fx_available():
 
     @torch.fx.wrap
