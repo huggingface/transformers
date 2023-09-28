@@ -23,7 +23,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProPainterConfig", "ViTOnnxConfig"]}
+_import_structure = {"configuration_propainter": ["PROPAINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProPainterConfig"]}
 
 try:
     if not is_vision_available():
@@ -31,8 +31,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_vit"] = ["ViTFeatureExtractor"]
-    _import_structure["image_processing_vit"] = ["ViTImageProcessor"]
+    _import_structure["image_processing_propainter"] = ["ProPainterImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -40,40 +39,16 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_vit"] = [
-        "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ViTForImageClassification",
-        "ViTForMaskedImageModeling",
-        "ViTModel",
-        "ViTPreTrainedModel",
+    _import_structure["modeling_propainter"] = [
+        "PROPAINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ProPainterModel",
+        "ProPainterPreTrainedModel",
+        "ProPainterForImageInPainting",
     ]
 
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_vit"] = [
-        "TFViTForImageClassification",
-        "TFViTModel",
-        "TFViTPreTrainedModel",
-    ]
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_vit"] = [
-        "FlaxViTForImageClassification",
-        "FlaxViTModel",
-        "FlaxViTPreTrainedModel",
-    ]
 
 if TYPE_CHECKING:
-    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ProPainterConfig, ViTOnnxConfig
+    from .configuration_propainter import PROPAINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, ProPainterConfig
 
     try:
         if not is_vision_available():
@@ -81,8 +56,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_vit import ViTFeatureExtractor
-        from .image_processing_vit import ViTImageProcessor
+        from .image_processing_propainter import ProPainterImageProcessor
 
     try:
         if not is_torch_available():
@@ -91,29 +65,11 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vit import (
-            VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ViTForImageClassification,
-            ViTForMaskedImageModeling,
-            ViTModel,
-            ViTPreTrainedModel,
+            PROPAINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ProPainterForImageInPainting,,
+            ProPainterModel,
+            ProPainterPreTrainedModel,
         )
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_flax_vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
-
 
 else:
     import sys

@@ -1686,6 +1686,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
         frames: Optional[torch.Tensor] = None,
         flow_masks: Optional[torch.BoolTensor] = None,
         masks_dilated: Optional[torch.Tensor] = None,
+        frames_inp: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
@@ -1815,7 +1816,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             updated_masks = updated_local_masks.view(b, t, 1, h, w)
 
         import numpy as np
-        ori_frames = np.ones([240,432,3])
+        ori_frames = frames_inp
         comp_frames = [None] * video_length
 
         neighbor_stride = self.config.neighbor_length // 2
@@ -1875,12 +1876,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
                 img_save_root = os.path.join("./", 'frames', str(idx).zfill(4)+'.png')
                 imwrite(f, img_save_root)
 
-        return MaskedImageModelingOutput(
-            loss=masked_im_loss,
-            reconstruction=reconstructed_pixel_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return 
 
     def get_ref_index(self, mid_neighbor_id, neighbor_ids, length, ref_stride=10, ref_num=-1):
         ref_index = []
@@ -2000,5 +1996,6 @@ class ProPainterForImageOutPainting(ProPainterPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 

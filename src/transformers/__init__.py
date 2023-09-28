@@ -585,6 +585,7 @@ _import_structure = {
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "models.propainter": ["PROPAINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProPainterConfig"],
     "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
@@ -990,6 +991,7 @@ else:
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
+    _import_structure["models.propainter"].extend(["ProPainterImageProcessor"])
 
 
 # PyTorch-backed objects
@@ -3123,6 +3125,14 @@ else:
             "XmodPreTrainedModel",
         ]
     )
+    _import_structure["models.propainter"].extend(
+        [
+            "PROPAINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ProPainterForImageInPainting",
+            "ProPainterModel",
+            "ProPainterPreTrainedModel",
+        ]
+    )
     _import_structure["models.yolos"].extend(
         [
             "YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4683,6 +4693,7 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .models.propainter import PROPAINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, ProPainterConfig
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
@@ -5046,6 +5057,7 @@ if TYPE_CHECKING:
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
+        from .models.propainter import ProPainterImageProcessor
 
     # Modeling
     try:
@@ -6790,6 +6802,12 @@ if TYPE_CHECKING:
             XmodForTokenClassification,
             XmodModel,
             XmodPreTrainedModel,
+        )
+        from .models.propainter import (
+            PROPAINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ProPainterForImageInPainting,
+            ProPainterModel,
+            ProPainterPreTrainedModel,
         )
         from .models.yolos import (
             YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST,
