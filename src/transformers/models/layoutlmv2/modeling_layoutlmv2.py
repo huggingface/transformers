@@ -429,14 +429,8 @@ class LayoutLMv2Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        rel_pos = (
-            self._calculate_1d_position_embeddings(position_ids)
-            if self.has_relative_attention_bias
-            else None
-        )
-        rel_2d_pos = (
-            self._calculate_2d_position_embeddings(bbox) if self.has_spatial_attention_bias else None
-        )
+        rel_pos = self._calculate_1d_position_embeddings(position_ids) if self.has_relative_attention_bias else None
+        rel_2d_pos = self._calculate_2d_position_embeddings(bbox) if self.has_spatial_attention_bias else None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
