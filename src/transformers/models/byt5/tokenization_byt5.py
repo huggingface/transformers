@@ -101,7 +101,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return self._utf_vocab_size
+        return self._utf_vocab_size + self.offset
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
