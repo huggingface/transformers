@@ -281,18 +281,18 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         # fmt: off
         EXPECTED_TOKENS = [
-            NOTIMESTAMPS + 1, 2471, 271, 610, 393, 360, 220, 31208, 377, 23150, 30, 50494,
+            NOTIMESTAMPS + 1, 41132, 610, 393, 360, 220, 31208, 377, 23150, 30, 50494,
         ]
         # fmt: on
 
-        encoding = tokenizer(input_text, split_special_tokens=False).input_ids
-        decoding = tokenizer.decode(encoding)
+        encoding = tokenizer(input_text, add_special_tokens=False).input_ids
+        decoding = tokenizer.decode(encoding, decode_with_timestamps=True)
 
         self.assertEqual(EXPECTED_TOKENS, encoding)
         self.assertEqual(input_text, decoding)
 
-        encoding = rust_tokenizer(input_text, split_special_tokens=False)
-        decoding = rust_tokenizer.decode(encoding)
+        encoding = rust_tokenizer(input_text, add_special_tokens=False)
+        decoding = rust_tokenizer.decode(encoding, decode_with_timestamps=True)
 
         self.assertEqual(EXPECTED_TOKENS, encoding)
         self.assertEqual(input_text, decoding)
