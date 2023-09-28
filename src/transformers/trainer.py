@@ -1139,6 +1139,8 @@ class Trainer:
             optimizer_cls = torch.optim.SGD
         elif args.optim == OptimizerNames.ADAGRAD:
             optimizer_cls = torch.optim.Adagrad
+        elif args.optim == OptimizerNames.RMSPROP:
+            optimizer_cls = torch.optim.RMSprop
         else:
             raise ValueError(f"Trainer cannot instantiate unsupported optimizer: {args.optim}")
         return optimizer_cls, optimizer_kwargs

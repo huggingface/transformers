@@ -265,9 +265,11 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 _ = model.generate(input_ids=dummy_input)
 
                 model.set_adapter("default")
+                self.assertTrue(model.active_adapters() == ["default"])
                 self.assertTrue(model.active_adapter() == "default")
 
                 model.set_adapter("adapter-2")
+                self.assertTrue(model.active_adapters() == ["adapter-2"])
                 self.assertTrue(model.active_adapter() == "adapter-2")
 
                 # Logits comparison
@@ -275,6 +277,23 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     torch.allclose(logits_adapter_1.logits, logits_adapter_2.logits, atol=1e-6, rtol=1e-6)
                 )
                 self.assertFalse(torch.allclose(logits_original_model, logits_adapter_2.logits, atol=1e-6, rtol=1e-6))
+
+                model.set_adapter(["adapter-2", "default"])
+                self.assertTrue(model.active_adapters() == ["adapter-2", "default"])
+                self.assertTrue(model.active_adapter() == "adapter-2")
+
+                logits_adapter_mixed = model(dummy_input)
+                self.assertFalse(
+                    torch.allclose(logits_adapter_1.logits, logits_adapter_mixed.logits, atol=1e-6, rtol=1e-6)
+                )
+
+                self.assertFalse(
+                    torch.allclose(logits_adapter_2.logits, logits_adapter_mixed.logits, atol=1e-6, rtol=1e-6)
+                )
+
+                # multi active adapter saving not supported
+                with self.assertRaises(ValueError), tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
 
     @require_torch_gpu
     def test_peft_from_pretrained_kwargs(self):
@@ -332,3 +351,30 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 # dummy generation
                 _ = model.generate(input_ids=dummy_input)
+
+    def test_peft_from_pretrained_hub_kwargs(self):
+        """
+        Tests different combinations of PEFT model + from_pretrained + hub kwargs
+        """
+        peft_model_id = "peft-internal-testing/tiny-opt-lora-revision"
+
+        # This should not work
+        with self.assertRaises(OSError):
+            _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
+
+        adapter_kwargs = {"revision": "test"}
+
+        # This should work
+        model = AutoModelForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
+
+        model = OPTForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
+
+        adapter_kwargs = {"revision": "main", "subfolder": "test_subfolder"}
+
+        model = AutoModelForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
+
+        model = OPTForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
