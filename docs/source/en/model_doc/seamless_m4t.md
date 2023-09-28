@@ -61,11 +61,11 @@ You can also translate directly from a speech waveform. Here is an example from 
 ```python
 >>> from datasets import load_dataset
 
->>> dataset = load_dataset("arabic_speech_corpus", split="test[0:1]")
+>>> dataset = load_dataset("arabic_speech_corpus", split="test", streaming=True)
 
->>> audio_sample = dataset["audio"][0]["array"]
+>>> audio_sample = next(iter(dataset))["audio"]
  
->>> inputs = processor(audios = audio_sample, return_tensors="pt")
+>>> inputs = processor(audios=audio_sample["array"], return_tensors="pt")
 
 >>> audio_array = model.generate(**inputs, tgt_lang="rus")
 >>> audio_array = audio_array[0].cpu().numpy().squeeze()
@@ -89,9 +89,9 @@ Similarly, you can generate translated text from text or audio files, this time 
 ```python
 >>> from transformers import SeamlessM4TForSpeechToText
 >>> model = SeamlessM4TForSpeechToText.from_pretrained("ylacombe/hf-seamless-m4t-medium")
->>> audio_sample = dataset["audio"][0]["array"]
+>>> audio_sample = next(iter(dataset))["audio"]
  
->>> inputs = processor(audios = audio_sample, return_tensors="pt")
+>>> inputs = processor(audios = audio_sample["array"], return_tensors="pt")
 
 >>> output_tokens = model.generate(**inputs, tgt_lang="fra")
 >>> translated_text = processor.decode(output_tokens.tolist()[0], skip_special_tokens=True)

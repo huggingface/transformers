@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Feature extractor class for Speech2Text
+Feature extractor class for SeamlessM4T
 """
 
 import copy
@@ -184,8 +184,8 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For Speech2TextTransformer models, `attention_mask` should always be passed for batched inference, to
-                avoid subtle bugs.
+                For SeamlessM4T models, `attention_mask` should always be passed for batched inference, to avoid subtle
+                bugs.
 
                 </Tip>
 
