@@ -116,9 +116,9 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         and hence the waveform should not be normalized before feature extraction.
         """
         # by default, it extracts the left channel if stereo
-        if len(waveform.shape)==2:
+        if len(waveform.shape) == 2:
             waveform = waveform[0]
-        
+
         waveform = np.squeeze(waveform) * (2**15)  # Kaldi compliance: 16-bit signed integers
         features = spectrogram(
             waveform,

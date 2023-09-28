@@ -963,7 +963,9 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         sampling_rate = 16000
         input_features = torch.rand((2, seq_len))
 
-        return self.processor(audios=[input_features.tolist()], sampling_rate=sampling_rate, return_tensors="pt").to(torch_device)
+        return self.processor(audios=[input_features.tolist()], sampling_rate=sampling_rate, return_tensors="pt").to(
+            torch_device
+        )
 
     def factory_test_task(self, class1, class2, inputs, class1_kwargs, class2_kwargs):
         model1 = class1.from_pretrained(self.repo_id).to(torch_device)

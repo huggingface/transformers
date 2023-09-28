@@ -45,77 +45,81 @@ First, load the processor and a checkpoint of the model:
 
 You can seamlessly use this model on text or on audio, to generated either translated text or translated audio.
 
+Here is how to use the processor to process text and audio:
+
+```python
+>>> # let's load an audio sample from an Arabic speech corpus
+>>> from datasets import load_dataset
+>>> dataset = load_dataset("arabic_speech_corpus", split="test", streaming=True)
+>>> audio_sample = next(iter(dataset))["audio"]
+
+>>> # now, process it
+>>> audio_inputs = processor(audios=audio_sample["array"], return_tensors="pt")
+
+>>> # now, process some English test as well
+>>> text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
+```
+
+
 ### Speech
 
-You can easily generate translated speech with [`SeamlessM4TModel.generate`]. Here is an example showing how to generate speech from English to Russian.
+[`SeamlessM4TModel`] can *seamlessly* generate text or speech with few or no changes. Let's target Russian voice translation:
 
 ```python
->>> inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
-
->>> audio_array = model.generate(**inputs, tgt_lang="rus")
->>> audio_array = audio_array[0].cpu().numpy().squeeze()
+>>> audio_array_from_text = model.generate(**text_inputs, tgt_lang="rus")[0].cpu().numpy().squeeze()
+>>> audio_array_from_audio = model.generate(**audio_inputs, tgt_lang="rus")[0].cpu().numpy().squeeze()
 ```
 
-You can also translate directly from a speech waveform. Here is an example from Arabic to English:
+With basically the same code, I've translated English text and Arabic speech to Russian speech samples.
 
-```python
->>> from datasets import load_dataset
+### Text
 
->>> dataset = load_dataset("arabic_speech_corpus", split="test", streaming=True)
+Similarly, you can generate translated text from audio files or from text with the same model. You only have to pass `generate_speech=False` to [`SeamlessM4TModel.generate`].
+This time, let's translate to French.
 
->>> audio_sample = next(iter(dataset))["audio"]
- 
->>> inputs = processor(audios=audio_sample["array"], return_tensors="pt")
+```python 
+>>> # from audio
+>>> output_tokens = model.generate(**audio_inputs, tgt_lang="fra", generate_speech=False)
+>>> translated_text_from_audio = processor.decode(output_tokens[0].tolist()[0], skip_special_tokens=True)
 
->>> audio_array = model.generate(**inputs, tgt_lang="rus")
->>> audio_array = audio_array[0].cpu().numpy().squeeze()
+>>> # from text
+>>> output_tokens = model.generate(**text_inputs, tgt_lang="fra", generate_speech=False)
+>>> translated_text_from_text = processor.decode(output_tokens[0].tolist()[0], skip_special_tokens=True)
 ```
 
-#### Tips
+### Tips
+
+
+#### 1. Use dedicated models
 
 [`SeamlessM4TModel`] is transformers top level model to generate speech and text, but you can also use dedicated models that perform the task without additional components, thus reducing the memory footprint.
-For example, you can replace the previous snippet with the model dedicated to the S2ST task:
+For example, you can replace the audio-to-audio generation snippet with the model dedicated to the S2ST task, the rest is exactly the same code: 
 
 ```python
 >>> from transformers import SeamlessM4TForSpeechToSpeech
 >>> model = SeamlessM4TForSpeechToSpeech.from_pretrained("facebook/hf-seamless-m4t-medium")
 ```
 
-
-### Text
-
-Similarly, you can generate translated text from text or audio files, this time using the dedicated models.
-
-```python
->>> from transformers import SeamlessM4TForSpeechToText
->>> model = SeamlessM4TForSpeechToText.from_pretrained("facebook/hf-seamless-m4t-medium")
->>> audio_sample = next(iter(dataset))["audio"]
- 
->>> inputs = processor(audios = audio_sample["array"], return_tensors="pt")
-
->>> output_tokens = model.generate(**inputs, tgt_lang="fra")
->>> translated_text = processor.decode(output_tokens.tolist()[0], skip_special_tokens=True)
-```
-
-And from text:
+Or you can replace the text-to-text generation snippet with the model dedicated to the T2TT task, you only have to remove `generate_speech=False`.
 
 ```python
 >>> from transformers import SeamlessM4TForTextToText
 >>> model = SeamlessM4TForTextToText.from_pretrained("facebook/hf-seamless-m4t-medium")
->>> inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
-
->>> output_tokens = model.generate(**inputs, tgt_lang="fra")
->>> translated_text = processor.decode(output_tokens.tolist()[0], skip_special_tokens=True)
 ```
 
-#### Tips
+Feel free to try out [`SeamlessM4TForSpeechToText`] and [`SeamlessM4TForTextToSpeech`] as well.
 
-Three last tips:
+#### 2. Change the speaker identity
 
-1. [`SeamlessM4TModel`] can generate text and/or speech. Pass `generate_speech=False` to [`SeamlessM4TModel.generate`] to only generate text. You also have the possibility to pass `return_intermediate_token_ids=True`, to get both text token ids and the generated speech.
-2. You have the possibility to change the speaker used for speech synthesis with the `spkr_id` argument.
-3. You can use different [generation strategies](./generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
+You have the possibility to change the speaker used for speech synthesis with the `spkr_id` argument. Some `spkr_id` works better than other for some languages!
 
+#### 3. Change the speaker identity
+
+You can use different [generation strategies](./generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
+
+#### 4. Generate speech and text at the same time
+
+Use `return_intermediate_token_ids=True` with [`SeamlessM4TModel`] to return both speech and text !
 
 
 This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/seamless_communication).
