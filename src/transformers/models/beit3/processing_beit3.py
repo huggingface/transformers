@@ -38,12 +38,7 @@ class Beit3Processor(ProcessorMixin):
     image_processor_class = "BeitImageProcessor"
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
+    def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
 
     def __call__(self, text=None, images=None, padding="max_length", return_tensors="np", **kwargs):
