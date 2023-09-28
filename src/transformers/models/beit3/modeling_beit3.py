@@ -1053,8 +1053,11 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> from PIL import Image
         >>> import requests
         >>> import torch
+        >>> import numpy as np
 
-        >>> url = "https://datasets-server.huggingface.co/assets/HuggingFaceM4/VQAv2/--/default/train/8/image/image.jpg"
+        >>> url = (
+        ...     "https://datasets-server.huggingface.co/assets/HuggingFaceM4/VQAv2/--/default/train/8/image/image.jpg"
+        ... )
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
