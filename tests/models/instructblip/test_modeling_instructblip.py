@@ -517,11 +517,11 @@ def prepare_img():
     return image
 
 
-@require_vision
-@require_torch
-@slow
+# @require_vision
+# @require_torch
+# @slow
 class InstructBlipModelIntegrationTest(unittest.TestCase):
-    @require_bitsandbytes
+    # @require_bitsandbytes
     def test_inference_vicuna_7b(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
