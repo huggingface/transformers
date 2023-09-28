@@ -1740,6 +1740,7 @@ class ImageBindImuTransformer(nn.Module):
         self.embeddings = ImageBindImuEmbeddings(config)
         self.encoder = ImageBindEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.post_dropout = nn.Dropout(p=self.final_dropout)
 
     @add_start_docstrings_to_model_forward(IMAGEBIND_IMU_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ImageBindImuConfig)
@@ -1775,6 +1776,7 @@ class ImageBindImuTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
+        pooled_output = self.post_dropout(pooled_output)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]

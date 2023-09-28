@@ -724,6 +724,9 @@ class ImageBindImuConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.7):
             The dropout probability for the DropPath (stochastic) regularization layers.
+        final_dropout (`float`, *optional*, defaults to 0.5):
+            The dropout probability for the dropout layer that occurs after the post layer norm and before the linear
+            projection is applied.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -762,6 +765,7 @@ class ImageBindImuConfig(PretrainedConfig):
         add_kv_bias=True,
         attention_dropout=0.0,
         drop_path_rate=0.7,
+        final_dropout=0.5,
         initializer_range=0.02,
         initializer_factor=1.0,
         logit_scale_init_value=5.0,
@@ -782,6 +786,7 @@ class ImageBindImuConfig(PretrainedConfig):
         self.add_kv_bias = add_kv_bias
         self.attention_dropout = attention_dropout
         self.drop_path_rate = drop_path_rate
+        self.final_dropout = final_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.logit_scale_init_value = logit_scale_init_value
