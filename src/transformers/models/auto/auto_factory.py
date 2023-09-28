@@ -439,7 +439,6 @@ class _BaseAutoModelClass:
                 model_class.register_for_auto_class(cls.__name__)
             else:
                 cls.register(config.__class__, model_class, exist_ok=True)
-
             _ = kwargs.pop("code_revision", None)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
