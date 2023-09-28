@@ -19,7 +19,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, TripletMarginWithDistanceLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
@@ -37,8 +37,9 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging, is_flash_attn_available
+from ...utils import is_flash_attn_available, logging
 from .configuration_gpt_neox import GPTNeoXConfig
+
 
 if is_flash_attn_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -299,7 +300,7 @@ class GPTNeoXAttention(nn.Module):
 
         attn_output = torch.matmul(attn_weights, value)
         return attn_output, attn_weights
-    
+
 
 class GPTNeoXFlashAttention2(GPTNeoXAttention):
     """
@@ -392,10 +393,14 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
         attention_dropout = self.config.attention_dropout if self.training else 0.0
 
         # Compute attention
-        attn_weights = self._flash_attention_forward(query, key, value, padding_mask, query_length, dropout=attention_dropout, softmax_scale=self.norm_factor)
+        attn_weights = self._flash_attention_forward(
+            query, key, value, padding_mask, query_length, dropout=attention_dropout, softmax_scale=self.norm_factor
+        )
 
         # Reshape outputs
-        attn_output = attn_weights.reshape(attn_weights.shape[0],attn_weights.shape[1], self.num_attention_heads * self.head_size)
+        attn_output = attn_weights.reshape(
+            attn_weights.shape[0], attn_weights.shape[1], self.num_attention_heads * self.head_size
+        )
         attn_output = self.dense(attn_output)
 
         outputs = (attn_output, present)
@@ -492,7 +497,6 @@ class GPTNeoXFlashAttention2(GPTNeoXAttention):
             (cu_seqlens_q, cu_seqlens_k),
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
-
 
 
 def attention_mask_func(attention_scores, ltor_mask):
@@ -614,7 +618,11 @@ class GPTNeoXLayer(nn.Module):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_dropout = nn.Dropout(config.hidden_dropout)
         self.post_mlp_dropout = nn.Dropout(config.hidden_dropout)
-        self.attention = GPTNeoXAttention(config) if not getattr(config, "_flash_attn_2_enabled", False) else GPTNeoXFlashAttention2(config)
+        self.attention = (
+            GPTNeoXAttention(config)
+            if not getattr(config, "_flash_attn_2_enabled", False)
+            else GPTNeoXFlashAttention2(config)
+        )
         self.mlp = GPTNeoXMLP(config)
 
     def forward(
