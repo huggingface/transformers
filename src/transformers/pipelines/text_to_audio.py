@@ -59,7 +59,7 @@ class TextToAudioPipeline(Pipeline):
     >>> forward_params = {
     ...     "do_sample": True,
     ...     "temperature": 0.7,
-    ...     "max_new_tokens": 250,
+    ...     "max_new_tokens": 35,
     ... }
 
     >>> outputs = music_generator("This is a test", forward_params=forward_params)
