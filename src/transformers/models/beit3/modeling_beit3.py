@@ -851,20 +851,17 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Beit3ForVisualReasoning, BeitImageProcessor, Beit3Processor, XLMRobertaTokenizer
+        >>> from transformers import Beit3ForVisualReasoning, Beit3Processor
         >>> from PIL import Image
         >>> import requests
         >>> import torch
 
         >>> model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
-        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
-
-        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
         >>> pixel_values = torch.cat(
@@ -956,12 +953,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import (
-        ...     Beit3ForImageClassification,
-        ...     BeitImageProcessor,
-        ...     Beit3Processor,
-        ...     XLMRobertaTokenizer,
-        ... )
+        >>> from transformers import Beit3ForImageClassification, Beit3Processor
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -972,11 +964,8 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 
         >>> model = Beit3ForImageClassification.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
 
-        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
 
-        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
-
-        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
         >>> # forward pass
@@ -1060,7 +1049,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Beit3ForCaptioning, BeitImageProcessor, Beit3Processor, XLMRobertaTokenizer
+        >>> from transformers import Beit3ForCaptioning, Beit3Processor
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -1070,11 +1059,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
 
         >>> model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
 
-        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
-
-        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
-
-        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
         >>> language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
@@ -1218,12 +1203,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import (
-        ...     Beit3ForVisualQuestionAnswering,
-        ...     BeitImageProcessor,
-        ...     Beit3Processor,
-        ...     XLMRobertaTokenizer,
-        ... )
+        >>> from transformers import Beit3ForVisualQuestionAnswering, Beit3Processor
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -1233,11 +1213,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
 
         >>> model = Beit3ForVisualQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
 
-        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
-
-        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
-
-        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
         >>> output = model(
@@ -1344,12 +1320,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import (
-        ...     Beit3ForImageTextRetrieval,
-        ...     BeitImageProcessor,
-        ...     Beit3Processor,
-        ...     XLMRobertaTokenizer,
-        ... )
+        >>> from transformers import Beit3ForImageTextRetrieval, Beit3Processor
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -1359,11 +1330,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
 
         >>> model = Beit3ForImageTextRetrieval.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
 
-        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
-
-        >>> image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
-
-        >>> beit3_processor = Beit3Processor(image_processor, tokenizer)
+        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
 
         >>> another_input_ids = beit3_processor(text=["This is photo of a dog"], images=image)["input_ids"]
