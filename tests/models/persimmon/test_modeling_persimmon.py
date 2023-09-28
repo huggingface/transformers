@@ -385,7 +385,9 @@ class PersimmonIntegrationTest(unittest.TestCase):
     @slow
     def test_model_8b_chat_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-chat", device_map="auto", torch_dtype = torch.float16)
+        model = PersimmonForCausalLM.from_pretrained(
+            "ArthurZ/persimmon-8b-chat", device_map="auto", torch_dtype=torch.float16
+        )
         out = model(torch.tensor([input_ids])).logits
 
         EXPECTED_MEAN = torch.tensor(
@@ -404,7 +406,9 @@ class PersimmonIntegrationTest(unittest.TestCase):
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
         tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-chat", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
-        model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-chat", torch_dtype = torch.float16).to(torch_device)
+        model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-chat", torch_dtype=torch.float16).to(
+            torch_device
+        )
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64)
