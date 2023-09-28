@@ -1590,7 +1590,8 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
 
 
 @add_start_docstrings(
-    "Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers. Each layer is a [`SeamlessM4TConformerEncoderLayer`].",
+    """Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers.
+    Each layer is a [`SeamlessM4TConformerEncoderLayer`].""",
     SEAMLESS_M4T_START_DOCSTRING,
 )
 class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
@@ -1625,7 +1626,8 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
 
         if input_features is None:
             raise ValueError(
-                "Both `input_features` and `inputs_embeds` are `None` in `SeamlessM4TSpeechEncoder.forward`. Make sure one of them is not `None`."
+                """Both `input_features` and `inputs_embeds` are `None` in `SeamlessM4TSpeechEncoder.forward`.
+                Make sure one of them is not `None`."""
             )
 
         hidden_states = self.feature_projection(input_features)
@@ -3023,19 +3025,22 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
                 tgt_lang = tgt_lang.replace("__", "")
                 if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
                     raise ValueError(
-                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
+                        f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in
+                        {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
                     )
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
                 text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
             else:
                 raise ValueError(
-                    "This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
+                    """This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps
+                    the target language to the right token id. Make sure to load the right generation config."""
                 )
         else:
             # only a warning, otherwise errors appear in the tests
             logger.warning(
-                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
+                """You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get
+                a correct generation, otherwise the generation will probably make no sense."""
             )
 
         return super().generate(
@@ -3311,19 +3316,22 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
                 tgt_lang = tgt_lang.replace("__", "")
                 if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
                     raise ValueError(
-                        f"`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"
+                        f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in
+                        {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
                     )
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
                 text_decoder_input_ids = torch.tensor([[text_tgt_lang_id]] * batch_size).to(self.device)
             else:
                 raise ValueError(
-                    "This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps the target language to the right token id. Make sure to load the right generation config."
+                    """This model generation config doesn't have a `text_decoder_lang_to_code_id` key which maps
+                    the target language to the right token id. Make sure to load the right generation config."""
                 )
         else:
             # only a warning, otherwise errors appear in the tests
             logger.warning(
-                "You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get a correct generation, otherwise the generation will probably make no sense."
+                """You must either specify a `tgt_lang` or pass a correct `text_decoder_input_ids` to get
+                a correct generation, otherwise the generation will probably make no sense."""
             )
         return super().generate(
             input_features,
@@ -3597,7 +3605,8 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
                 lang_code_to_id = getattr(self.generation_config, key, None)
                 if lang_code_to_id is None:
                     raise ValueError(
-                        f"This model generation config doesn't have a `{key}` key which maps the target language to the right token id. Make sure to load the right generation config."
+                        f"""This model generation config doesn't have a `{key}` key which maps the target language
+                        to the right token id. Make sure to load the right generation config."""
                     )
                 elif tgt_lang not in lang_code_to_id:
                     raise ValueError(
@@ -3970,7 +3979,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                 lang_code_to_id = getattr(self.generation_config, key, None)
                 if lang_code_to_id is None:
                     raise ValueError(
-                        f"This model generation config doesn't have a `{key}` key which maps the target language to the right token id. Make sure to load the right generation config."
+                        f"""This model generation config doesn't have a `{key}` key which maps the target language
+                        to the right token id. Make sure to load the right generation config."""
                     )
                 elif tgt_lang not in lang_code_to_id:
                     raise ValueError(
@@ -4237,20 +4247,22 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         elif input_features is not None:
             if input_ids is not None:
                 logger.warning(
-                    "`input_ids` is not `None` but `input_features` has been given. `input_features` will be used in priority through the `speech_encoder`. "
+                    "`input_ids` is not `None` but `input_features` has been given."
+                    "`input_features` will be used in priority through the `speech_encoder`. "
                     "Make sure that `input_features` and `input_ids` are mutually exclusive."
                 )
 
             if inputs_embeds is not None:
                 logger.warning(
-                    "`inputs_embeds` is not `None` but `input_features` has been given. `input_features` will be used in priority through `speech_encoder`. "
+                    "`inputs_embeds` is not `None` but `input_features` has been given."
+                    "`input_features` will be used in priority through `speech_encoder`. "
                     "`inputs_embeds` will be ignored."
                 )
 
             # if encoder_outputs is not None, it's probably used within a .generate method so no need to warn
             logger.warning(
-                "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText` depending on the input modality."
-                "If you want to generate speech, use the `generate` method."
+                "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText`"
+                "depending on the input modality. If you want to generate speech, use the `generate` method."
             )
 
             self.set_modality("speech")
@@ -4266,8 +4278,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         elif input_ids is not None or inputs_embeds is not None:
             # if encoder_outputs is not None, it's probably used within a .generate method so no need to warn
             logger.warning(
-                "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText` depending on the input modality."
-                "If you want to generate speech, use the `generate` method."
+                "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText`"
+                "depending on the input modality. If you want to generate speech, use the `generate` method."
             )
             self.set_modality("text")
             encoder_outputs = self.text_encoder(
@@ -4420,7 +4432,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 lang_code_to_id = getattr(self.generation_config, key, None)
                 if lang_code_to_id is None:
                     raise ValueError(
-                        f"This model generation config doesn't have a `{key}` key which maps the target language to the right token id. Make sure to load the right generation config."
+                        f"""This model generation config doesn't have a `{key}` key which maps the target language
+                        to the right token id. Make sure to load the right generation config."""
                     )
                 elif tgt_lang not in lang_code_to_id:
                     raise ValueError(
