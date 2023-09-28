@@ -666,7 +666,11 @@ class Blip2ModelTester:
 class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Blip2Model, "image-to-text": Blip2ForConditionalGeneration}
+        {
+            "feature-extraction": Blip2Model,
+            "image-to-text": Blip2ForConditionalGeneration,
+            "visual-question-answering": Blip2ForConditionalGeneration,
+        }
         if is_torch_available()
         else {}
     )
