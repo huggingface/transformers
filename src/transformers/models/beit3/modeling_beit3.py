@@ -1076,7 +1076,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         ...     language_masked_pos=language_masked_pos,
         ... )
         >>> beit3_processor.tokenizer.decode([np.argmax(output.logits.cpu().detach().numpy())])
-        dog
+        'dog'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
