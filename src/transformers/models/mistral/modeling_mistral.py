@@ -23,24 +23,29 @@ import inspect
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-import torch.nn.functional as F
-
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings, is_flash_attn_available
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_flash_attn_available,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_mistral import MistralConfig
+
 
 if is_flash_attn_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
     _is_flash_using_slicing_windows = "window_size" in list(inspect.signature(flash_attn_func).parameters)
-
 
 
 logger = logging.get_logger(__name__)
@@ -511,7 +516,11 @@ class MistralDecoderLayer(nn.Module):
     def __init__(self, config: MistralConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = MistralAttention(config=config) if not getattr(config, "_flash_attn_2_enabled", False) else MistralFlashAttention2(config)
+        self.self_attn = (
+            MistralAttention(config=config)
+            if not getattr(config, "_flash_attn_2_enabled", False)
+            else MistralFlashAttention2(config)
+        )
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
