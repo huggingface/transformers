@@ -452,7 +452,6 @@ PERSIMMON_START_DOCSTRING = r"""
     "The bare Persimmon Model outputting raw hidden-states without any specific head on top.",
     PERSIMMON_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Persimmon
 class PersimmonPreTrainedModel(PreTrainedModel):
     config_class = PersimmonConfig
     base_model_prefix = "model"
@@ -544,7 +543,6 @@ PERSIMMON_INPUTS_DOCSTRING = r"""
     "The bare Persimmon Model outputting raw hidden-states without any specific head on top.",
     PERSIMMON_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with LLAMA->PERSIMMON,Llama->Persimmon,PersimmonRMSNorm->nn.LayerNorm,norm->final_layernorm,rms_final_layernorm_eps->layer_norm_eps
 class PersimmonModel(PersimmonPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`PersimmonDecoderLayer`]
@@ -553,6 +551,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
         config: PersimmonConfig
     """
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel.__init__ with LLAMA->PERSIMMON,Llama->Persimmon,PersimmonRMSNorm->nn.LayerNorm,norm->final_layernorm,rms_final_layernorm_eps->layer_norm_eps
     def __init__(self, config: PersimmonConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -790,11 +789,11 @@ class PersimmonForCausalLM(PersimmonPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, PersimmonForCausalLM
 
-        >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base").cuda()
+        >>> model = PersimmonForCausalLM.from_pretrained("ArthurZ/persimmon-8b-base")
         >>> tokenizer = AutoTokenizer.from_pretrained("ArthurZ/persimmon-8b-base")
 
         >>> prompt = "human: Hey, what should I eat for dinner?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt").cuda()
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
