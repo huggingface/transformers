@@ -14,254 +14,445 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 import numpy as np
+import os
+import re
+import cv2
+import imageio
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import resize, to_channel_dimension_format
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...utils import (
+    TensorType,
+    is_scipy_available,
+    is_torchvision_available,
+    is_torch_available,
+    is_vision_available,
+    logging,
 )
-from ...utils import TensorType, logging
 
+
+if is_torch_available():
+    import torch
+
+
+if is_torchvision_available():
+    import torchvision
+    from torchvision import transforms
+
+
+if is_vision_available():
+    from PIL import Image
+
+
+if is_scipy_available():
+    import scipy
 
 logger = logging.get_logger(__name__)
 
 
-class ViTImageProcessor(BaseImageProcessor):
+class ProPainterImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a ViT image processor.
+    Constructs a ProPainter image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
-            size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
-            `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        TODO
     """
-
-    model_input_names = ["pixel_values"]
 
     def __init__(
         self,
+        video: str,
+        mask: str,
+        mode: str,
+        scale_h: float = 1.0,
+        scale_w: float = 1.2,
+        resize_ratio: float = 1.0,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        size: Optional[Dict[str, int]] = {"height": -1, "width": -1},
+        mask_dilation: int = 4,
+        save_frames: bool = False,
+        save_path: str = 'results',
+        save_fps: int = 24,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 224, "width": 224}
-        size = get_size_dict(size)
+        self.video = video
+        self.mask = mask
+        self.mode = mode
+        self.scale_h = scale_h
+        self.scale_w = scale_w
+        self.resize_ratio = resize_ratio
         self.do_resize = do_resize
-        self.do_rescale = do_rescale
-        self.do_normalize = do_normalize
         self.size = size
-        self.resample = resample
-        self.rescale_factor = rescale_factor
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.mask_dilation = mask_dilation
+        self.save_frames = save_frames
+        self.save_path = save_path
+        self.save_fps = save_fps
 
-    def resize(
+
+    def to_tensors(self) -> torch.Tensor:
+        return transforms.Compose([Stack(), ToTorchFormatTensor()])
+
+
+    def resize_frames(
         self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
+        frames,
+        size=None
+    ) -> Tuple[List[Image.Image], Tuple[int, int], Tuple[int, int]]:
+        """
+        TODO
+        """
+        if size is not None:
+            out_size = size
+            process_size = (out_size[0]-out_size[0]%8, out_size[1]-out_size[1]%8)
+            frames = [f.resize(process_size) for f in frames]
+        else:
+            out_size = frames[0].size
+            process_size = (out_size[0]-out_size[0]%8, out_size[1]-out_size[1]%8)
+            if not out_size == process_size:
+                frames = [f.resize(process_size) for f in frames]
+
+        return frames, process_size, out_size
+
+
+    def read_frame_from_videos(
+        self,
+        frame_root : str
+    ) -> Tuple[List[Image.Image], Optional[float], Tuple[int, int], str]:
+        """
+        TODO
+        """
+        if frame_root.endswith(('mp4', 'mov', 'avi', 'MP4', 'MOV', 'AVI')): # input video path
+            video_name = os.path.basename(frame_root)[:-4]
+            vframes, aframes, info = torchvision.io.read_video(filename=frame_root, pts_unit='sec') # RGB
+            frames = list(vframes.numpy())
+            frames = [Image.fromarray(f) for f in frames]
+            fps = info['video_fps']
+        else:
+            video_name = os.path.basename(frame_root)
+            frames = []
+            fr_lst = sorted(os.listdir(frame_root))
+            for fr in fr_lst:
+                frame = cv2.imread(os.path.join(frame_root, fr))
+                frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                frames.append(frame)
+            fps = None
+        size = frames[0].size
+
+        return frames, fps, size, video_name
+
+    def binary_mask(
+        self,
+        mask: np.ndarray,
+        th: float = 0.1
     ) -> np.ndarray:
         """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            size (`Dict[str, int]`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
-            data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-
-        Returns:
-            `np.ndarray`: The resized image.
+        TODO
         """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = (size["height"], size["width"])
-        return resize(
-            image,
-            size=output_size,
-            resample=resample,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
+        mask[mask>th] = 1
+        mask[mask<=th] = 0
+        return mask
 
-    def preprocess(
+
+    def read_mask(
         self,
-        images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        mpath,
+        length,
+        size,
+        flow_mask_dilates : int = 8,
+        mask_dilates : int = 5
+    ) -> Tuple[List[Image.Image], List[Image.Image]]:
+        """
+        TODO
+        """
+        masks_img = []
+        masks_dilated = []
+        flow_masks = []
+
+        if mpath.endswith(('jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG')): # input single img path
+            masks_img = [Image.open(mpath)]
+        else:
+            mnames = sorted(os.listdir(mpath))
+            for mp in mnames:
+                masks_img.append(Image.open(os.path.join(mpath, mp)))
+
+        for mask_img in masks_img:
+            if size is not None:
+                mask_img = mask_img.resize(size, Image.NEAREST)
+            mask_img = np.array(mask_img.convert('L'))
+
+            # Dilate 8 pixel so that all known pixel is trustworthy
+            if flow_mask_dilates > 0:
+                flow_mask_img = scipy.ndimage.binary_dilation(mask_img, iterations=flow_mask_dilates).astype(np.uint8)
+            else:
+                flow_mask_img = self.binary_mask(mask_img).astype(np.uint8)
+            # Close the small holes inside the foreground objects
+            flow_mask_img = cv2.morphologyEx(flow_mask_img, cv2.MORPH_CLOSE, np.ones((21, 21),np.uint8)).astype(bool)
+            flow_mask_img = scipy.ndimage.binary_fill_holes(flow_mask_img).astype(np.uint8)
+            flow_masks.append(Image.fromarray(flow_mask_img * 255))
+
+            if mask_dilates > 0:
+                mask_img = scipy.ndimage.binary_dilation(mask_img, iterations=mask_dilates).astype(np.uint8)
+            else:
+                mask_img = self.binary_mask(mask_img).astype(np.uint8)
+            masks_dilated.append(Image.fromarray(mask_img * 255))
+
+        if len(masks_img) == 1:
+            flow_masks = flow_masks * length
+            masks_dilated = masks_dilated * length
+
+        return flow_masks, masks_dilated
+
+
+    def extrapolation(
+        self,
+        video_ori,
+        scale : Tuple
+    ) -> Tuple[List[Image.Image], List[Image.Image], List[Image.Image], Tuple[int, int]]:
+        """Prepares the data for video outpainting.
+        """
+        nFrame = len(video_ori)
+        imgW, imgH = video_ori[0].size
+
+        # Defines new FOV.
+        imgH_extr = int(scale[0] * imgH)
+        imgW_extr = int(scale[1] * imgW)
+        imgH_extr = imgH_extr - imgH_extr % 8
+        imgW_extr = imgW_extr - imgW_extr % 8
+        H_start = int((imgH_extr - imgH) / 2)
+        W_start = int((imgW_extr - imgW) / 2)
+
+        # Extrapolates the FOV for video.
+        frames = []
+        for v in video_ori:
+            frame = np.zeros(((imgH_extr, imgW_extr, 3)), dtype=np.uint8)
+            frame[H_start: H_start + imgH, W_start: W_start + imgW, :] = v
+            frames.append(Image.fromarray(frame))
+
+        # Generates the mask for missing region.
+        masks_dilated = []
+        flow_masks = []
+
+        dilate_h = 4 if H_start > 10 else 0
+        dilate_w = 4 if W_start > 10 else 0
+        mask = np.ones(((imgH_extr, imgW_extr)), dtype=np.uint8)
+
+        mask[H_start+dilate_h: H_start+imgH-dilate_h,
+            W_start+dilate_w: W_start+imgW-dilate_w] = 0
+        flow_masks.append(Image.fromarray(mask * 255))
+
+        mask[H_start: H_start+imgH, W_start: W_start+imgW] = 0
+        masks_dilated.append(Image.fromarray(mask * 255))
+
+        flow_masks = flow_masks * nFrame
+        masks_dilated = masks_dilated * nFrame
+
+        return frames, flow_masks, masks_dilated, (imgW_extr, imgH_extr)
+
+
+    def preprocess_inpainting(
+        self,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
-    ):
+    ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
 
         Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
-                resizing.
-            resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
-                an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use if `do_normalize` is set to `True`.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            TODO
+
         """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        resample = resample if resample is not None else self.resample
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
 
-        size = size if size is not None else self.size
-        size_dict = get_size_dict(size)
+        frames, fps, size, video_name = self.read_frame_from_videos(self.video)
+        if not self.size['width'] == -1 and not self.size['height'] == -1:
+            size = (self.size['width'], self.size['height'])
+        if not self.resize_ratio == 1.0:
+            size = (int(self.resize_ratio * size[0]), int(self.resize_ratio * size[1]))
 
-        images = make_list_of_images(images)
+        if self.do_resize:
+            frames, size, out_size = self.resize_frames(frames, size)
 
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+        frames_len = len(frames)
+        flow_masks, masks_dilated = self.read_mask(self.mask, frames_len, size,
+                                            flow_mask_dilates=self.mask_dilation,
+                                            mask_dilates=self.mask_dilation)
 
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
+        frames = self.to_tensors()(frames).unsqueeze(0) * 2 - 1
+        flow_masks = self.to_tensors()(flow_masks).unsqueeze(0)
+        masks_dilated = self.to_tensors()(masks_dilated).unsqueeze(0)
 
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+        data = {"frames": frames,
+                "flow_masks": flow_masks,
+                "distil_masks": masks_dilated}
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        details = {"video_name": video_name,
+                "out_size": out_size}
 
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
+        return BatchFeature(data=data, tensor_type=return_tensors), details
 
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
 
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size_dict, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+    def preprocess_outpainting(
+        self,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Preprocess an image or batch of images.
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+        Args:
+            TODO
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+        """
 
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
+        frames, fps, size, video_name = self.read_frame_from_videos(self.video)
+        if not self.size['width'] == -1 and not self.size['height'] == -1:
+            size = (self.size['width'], self.size['height'])
+        if not self.resize_ratio == 1.0:
+            size = (int(self.resize_ratio * size[0]), int(self.resize_ratio * size[1]))
 
-        data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        if self.do_resize:
+            frames, size, out_size = self.resize_frames(frames, size)
+
+        frames, flow_masks, masks_dilated, size = self.extrapolation(frames, (self.scale_h, self.scale_w))
+
+        frames = self.to_tensors()(frames).unsqueeze(0) * 2 - 1
+        flow_masks = self.to_tensors()(flow_masks).unsqueeze(0)
+        masks_dilated = self.to_tensors()(masks_dilated).unsqueeze(0)
+
+        data = {"frames": frames,
+                "flow_masks": flow_masks,
+                "distil_masks": masks_dilated}
+
+        details = {"video_name": video_name,
+                "out_size": out_size}
+
+        return BatchFeature(data=data, tensor_type=return_tensors), details
+
+
+    def save_videos_frame(
+        self,
+        save_root : str,
+        masked_frame_for_save,
+        comp_frames,
+    ) -> None:
+        """
+        Save the frames of the video.
+
+        Args:
+            TODO
+
+        """
+        imageio.mimwrite(os.path.join(save_root, 'masked_in.mp4'), masked_frame_for_save, fps=self.save_fps, quality=7)
+        imageio.mimwrite(os.path.join(save_root, 'inpaint_out.mp4'), comp_frames, fps=self.save_fps, quality=7)
+        return None
+
+
+    def imwrite(
+        self,
+        img,
+        file_path,
+        params=None,
+        auto_mkdir=True
+    ) -> bool:
+        if auto_mkdir:
+            dir_name = os.path.abspath(os.path.dirname(file_path))
+            os.makedirs(dir_name, exist_ok=True)
+
+        return cv2.imwrite(file_path, img, params)
+
+
+    def save_frame(
+        self,
+        comp_frames,
+        video_length,
+        out_size,
+        save_root : str,
+    ) -> None:
+        for idx in range(video_length):
+            f = comp_frames[idx]
+            f = cv2.resize(f, out_size, interpolation = cv2.INTER_CUBIC)
+            f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
+            img_save_root = os.path.join(save_root, 'frames', str(idx).zfill(4)+'.png')
+            self.imwrite(f, img_save_root)
+
+        return None
+
+
+    def post_process(
+        self,
+        video_name: str,
+        comp_frames,
+        video_length,
+        out_size,
+    ) -> None:
+        """
+        Postporcess the outputs of the model.
+
+        Args:
+            TODO
+
+        """
+        # Save the frames of the video.
+        save_root = os.path.join(self.save_path, video_name)
+        if not os.path.exists(save_root):
+            os.makedirs(save_root, exist_ok=True)
+
+        if self.save_frames:
+            self.save_frame(comp_frames, video_length, out_size, save_root)
+
+        # Save the video.
+        if self.mode == 'video_outpainting':
+            comp_frames = [i[10:-10,10:-10] for i in comp_frames]
+            masked_frame_for_save = [i[10:-10,10:-10] for i in masked_frame_for_save]
+        elif self.mode == 'video_inpainting':
+            masked_frame_for_save = [cv2.resize(f, out_size) for f in masked_frame_for_save]
+            comp_frames = [cv2.resize(f, out_size) for f in comp_frames]
+        else:
+            raise NotImplementedError(f"Image mode {self.mode}")
+
+        self.save_videos_frame(save_root, masked_frame_for_save, comp_frames)
+
+        return None
+
+class Stack(object):
+    def __init__(self, roll=False) -> None:
+        self.roll = roll
+
+    def __call__(self, img_group) -> np.ndarray:
+        mode = img_group[0].mode
+        if mode == '1':
+            img_group = [img.convert('L') for img in img_group]
+            mode = 'L'
+        if mode == 'L':
+            return np.stack([np.expand_dims(x, 2) for x in img_group], axis=2)
+        elif mode == 'RGB':
+            if self.roll:
+                return np.stack([np.array(x)[:, :, ::-1] for x in img_group],
+                                axis=2)
+            else:
+                return np.stack(img_group, axis=2)
+        else:
+            raise NotImplementedError(f"Image mode {mode}")
+
+
+class ToTorchFormatTensor(object):
+    """ Converts a PIL.Image (RGB) or numpy.ndarray (H x W x C) in the range [0, 255]
+    to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0] """
+    def __init__(self, div=True) -> None:
+        self.div = div
+
+    def __call__(self, pic) -> torch.Tensor:
+        if isinstance(pic, np.ndarray):
+            # numpy img: [L, C, H, W]
+            img = torch.from_numpy(pic).permute(2, 3, 0, 1).contiguous()
+        else:
+            # handle PIL Image
+            img = torch.ByteTensor(torch.ByteStorage.from_buffer(
+                pic.tobytes()))
+            img = img.view(pic.size[1], pic.size[0], len(pic.mode))
+            # put it from HWC to CHW format
+            # yikes, this transpose takes 80% of the loading time/CPU
+            img = img.transpose(0, 1).transpose(0, 2).contiguous()
+        img = img.float().div(255) if self.div else img.float()
+        return img
