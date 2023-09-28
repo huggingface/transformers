@@ -46,11 +46,11 @@ from .configuration_seamless_m4t import SeamlessM4TConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ylacombe/hf-seamless-m4t-medium"
+_CHECKPOINT_FOR_DOC = "facebook/hf-seamless-m4t-medium"
 _CONFIG_FOR_DOC = "SeamlessM4TConfig"
 
 SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ylacombe/hf-seamless-m4t-medium",
+    "facebook/hf-seamless-m4t-medium",
     # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
 ]
 

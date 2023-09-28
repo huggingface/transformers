@@ -32,8 +32,8 @@ logger = logging.get_logger(__name__)
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "ylacombe/hf-seamless-m4t-medium": (
-            "https://huggingface.co/ylacombe/hf-seamless-m4t-medium/blob/main/sentencepiece.bpe.model"
+        "facebook/hf-seamless-m4t-medium": (
+            "https://huggingface.co/facebook/hf-seamless-m4t-medium/blob/main/sentencepiece.bpe.model"
         ),
     }
 }
@@ -45,7 +45,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "ylacombe/hf-seamless-m4t-medium": 2048,
+    "facebook/hf-seamless-m4t-medium": 2048,
 }
 
 # fmt: off
@@ -69,7 +69,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     >>> from transformers import SeamlessM4TTokenizer
 
     >>> tokenizer = SeamlessM4TTokenizer.from_pretrained(
-    ...     "ylacombe/hf-seamless-m4t-medium", src_lang="eng", tgt_lang="fra"
+    ...     "facebook/hf-seamless-m4t-medium", src_lang="eng", tgt_lang="fra"
     ... )
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_french = "Le chef de l'ONU affirme qu'il n'y a pas de solution militaire en Syrie."

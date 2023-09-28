@@ -423,7 +423,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
-    checkpoint_name = "ylacombe/hf-seamless-m4t-medium"
+    checkpoint_name = "facebook/hf-seamless-m4t-medium"
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
         """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",

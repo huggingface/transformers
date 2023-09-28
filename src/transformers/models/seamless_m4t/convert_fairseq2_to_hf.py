@@ -444,7 +444,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--repo_id",
-        default="ylacombe/hf-seamless-m4t-medium",
+        default="facebook/hf-seamless-m4t-medium",
         type=str,
         help="Repo ID.",
     )

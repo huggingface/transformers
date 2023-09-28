@@ -39,8 +39,8 @@ First, load the processor and a checkpoint of the model:
 ```python
 >>> from transformers import AutoProcessor, SeamlessM4TModel
 
->>> processor = AutoProcessor.from_pretrained("ylacombe/hf-seamless-m4t-medium")
->>> model = SeamlessM4TModel.from_pretrained("ylacombe/hf-seamless-m4t-medium")
+>>> processor = AutoProcessor.from_pretrained("facebook/hf-seamless-m4t-medium")
+>>> model = SeamlessM4TModel.from_pretrained("facebook/hf-seamless-m4t-medium")
 ```
 
 You can seamlessly use this model on text or on audio, to generated either translated text or translated audio.
@@ -78,7 +78,7 @@ For example, you can replace the previous snippet with the model dedicated to th
 
 ```python
 >>> from transformers import SeamlessM4TForSpeechToSpeech
->>> model = SeamlessM4TForSpeechToSpeech.from_pretrained("ylacombe/hf-seamless-m4t-medium")
+>>> model = SeamlessM4TForSpeechToSpeech.from_pretrained("facebook/hf-seamless-m4t-medium")
 ```
 
 
@@ -88,7 +88,7 @@ Similarly, you can generate translated text from text or audio files, this time 
 
 ```python
 >>> from transformers import SeamlessM4TForSpeechToText
->>> model = SeamlessM4TForSpeechToText.from_pretrained("ylacombe/hf-seamless-m4t-medium")
+>>> model = SeamlessM4TForSpeechToText.from_pretrained("facebook/hf-seamless-m4t-medium")
 >>> audio_sample = next(iter(dataset))["audio"]
  
 >>> inputs = processor(audios = audio_sample["array"], return_tensors="pt")
@@ -101,7 +101,7 @@ And from text:
 
 ```python
 >>> from transformers import SeamlessM4TForTextToText
->>> model = SeamlessM4TForTextToText.from_pretrained("ylacombe/hf-seamless-m4t-medium")
+>>> model = SeamlessM4TForTextToText.from_pretrained("facebook/hf-seamless-m4t-medium")
 >>> inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
 
 >>> output_tokens = model.generate(**inputs, tgt_lang="fra")

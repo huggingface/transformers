@@ -37,15 +37,15 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": 
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "ylacombe/hf-seamless-m4t-medium": "https://huggingface.co/ylacombe/hf-seamless-m4t-medium/resolve/main/vocab.txt",
+        "facebook/hf-seamless-m4t-medium": "https://huggingface.co/facebook/hf-seamless-m4t-medium/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "ylacombe/hf-seamless-m4t-medium": "https://huggingface.co/ylacombe/hf-seamless-m4t-medium/resolve/main/tokenizer.json",
+        "facebook/hf-seamless-m4t-medium": "https://huggingface.co/facebook/hf-seamless-m4t-medium/resolve/main/tokenizer.json",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "ylacombe/hf-seamless-m4t-medium": 2048,
+    "facebook/hf-seamless-m4t-medium": 2048,
 }
 
 
@@ -66,7 +66,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     >>> from transformers import SeamlessM4TTokenizerFast
 
     >>> tokenizer = SeamlessM4TTokenizerFast.from_pretrained(
-    ...     "ylacombe/hf-seamless-m4t-medium", src_lang="eng", tgt_lang="fra"
+    ...     "facebook/hf-seamless-m4t-medium", src_lang="eng", tgt_lang="fra"
     ... )
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_french = "Le chef de l'ONU affirme qu'il n'y a pas de solution militaire en Syrie."
