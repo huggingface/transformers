@@ -55,6 +55,7 @@ from .utils import (
     is_auto_gptq_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_cv2_available,
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
@@ -69,8 +70,10 @@ from .utils import (
     is_jinja_available,
     is_jumanpp_available,
     is_keras_nlp_available,
+    is_levenshtein_available,
     is_librosa_available,
     is_natten_available,
+    is_nltk_available,
     is_onnx_available,
     is_optimum_available,
     is_pandas_available,
@@ -309,6 +312,36 @@ def require_bs4(test_case):
     Decorator marking a test that requires BeautifulSoup4. These tests are skipped when BeautifulSoup4 isn't installed.
     """
     return unittest.skipUnless(is_bs4_available(), "test requires BeautifulSoup4")(test_case)
+
+
+def require_cv2(test_case):
+    """
+    Decorator marking a test that requires OpenCV.
+
+    These tests are skipped when OpenCV isn't installed.
+
+    """
+    return unittest.skipUnless(is_cv2_available(), "test requires OpenCV")(test_case)
+
+
+def require_levenshtein(test_case):
+    """
+    Decorator marking a test that requires Levenshtein.
+
+    These tests are skipped when Levenshtein isn't installed.
+
+    """
+    return unittest.skipUnless(is_levenshtein_available(), "test requires Levenshtein")(test_case)
+
+
+def require_nltk(test_case):
+    """
+    Decorator marking a test that requires NLTK.
+
+    These tests are skipped when NLTK isn't installed.
+
+    """
+    return unittest.skipUnless(is_nltk_available(), "test requires NLTK")(test_case)
 
 
 def require_accelerate(test_case):

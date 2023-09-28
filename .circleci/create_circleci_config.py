@@ -466,13 +466,15 @@ exotic_models_job = CircleCIJob(
         "sudo apt install tesseract-ocr",
         "pip install -U --upgrade-strategy eager pytesseract",
         "pip install -U --upgrade-strategy eager natten",
-        # TODO (ydshieh): Remove this line once `https://github.com/facebookresearch/detectron2/issues/5010` is resolved
-        'pip install -U --upgrade-strategy eager "Pillow<10.0.0"',
+        "pip install -U --upgrade-strategy eager python-Levenshtein",
+        "pip install -U --upgrade-strategy eager opencv-python",
+        "pip install -U --upgrade-strategy eager nltk",
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
         "tests/models/deta",
+        "tests/models/nougat",
     ],
     pytest_num_workers=1,
     pytest_options={"durations": 100},

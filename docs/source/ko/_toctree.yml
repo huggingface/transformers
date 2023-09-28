@@ -49,11 +49,11 @@
     title: 자연어처리
     isExpanded: false
   - sections:
-      - local: in_translation
-        title: (번역중) Audio classification
+      - local: tasks/audio_classification
+        title: 오디오 분류
       - local: tasks/asr
         title: 자동 음성 인식
-    title: (번역중) 오디오
+    title: 오디오
     isExpanded: false
   - sections:
       - local: tasks/image_classification
@@ -117,8 +117,8 @@
       title: 성능 및 확장성
     - local: in_translation
       title: (번역중) Training on one GPU
-    - local: in_translation
-      title: (번역중) Training on many GPUs
+    - local: perf_train_gpu_many
+      title: 다중 GPU에서 훈련 진행하기
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_cpu_many
@@ -141,8 +141,8 @@
       title: 훈련용 사용자 맞춤형 하드웨어
     - local: in_translation
       title: (번역중) Instantiating a big model
-    - local: in_translation
-      title: (번역중) Debugging
+    - local: debugging
+      title: 디버깅
     - local: hpo_train
       title: Trainer API를 사용한 하이퍼파라미터 탐색
     - local: tf_xla
@@ -152,7 +152,7 @@
     - local: contributing
       title: 🤗 Transformers에 기여하는 방법
     - local: add_new_model
-      title: 🤗 Transformers에 새로운 모델을 추가하는 방법 
+      title: 🤗 Transformers에 새로운 모델을 추가하는 방법
     - local: add_tensorflow_model
       title: 어떻게 🤗 Transformers 모델을 TensorFlow로 변환하나요?
     - local: add_new_pipeline
