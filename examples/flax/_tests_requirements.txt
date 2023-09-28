@@ -7,3 +7,4 @@ seqeval
 tensorboard
 evaluate >= 0.2.0
 torch
+accelerate
