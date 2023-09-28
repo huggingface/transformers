@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_vision, require_torch
 from transformers.utils import is_torch_available, is_vision_available
 
 
@@ -38,7 +38,7 @@ if is_vision_available():
     )
 
 
-@require_vision
+@require_torch
 class LlavaProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
