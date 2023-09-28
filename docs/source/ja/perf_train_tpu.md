@@ -17,8 +17,8 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
- Note: Most of the strategies introduced in the [single GPU section](perf_train_gpu_one) (such as mixed precision training or gradient accumulation) and [multi-GPU section](perf_train_gpu_many) are generic and apply to training models in general so make sure to have a look at it before diving into this section.
+ 注意: [シングルGPUセクション](perf_train_gpu_one)で紹介されているほとんどの戦略（混合精度トレーニングや勾配蓄積など）および[マルチGPUセクション](perf_train_gpu_many)は一般的なモデルのトレーニングに適用できますので、このセクションに入る前にそれを確認してください。
 
 </Tip>
 
-This document will be completed soon with information on how to train on TPUs.
+このドキュメントは、TPUでのトレーニング方法に関する情報をまもなく追加いたします。
