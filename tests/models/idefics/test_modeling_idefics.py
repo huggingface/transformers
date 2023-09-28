@@ -260,7 +260,7 @@ class IdeficsModelTester:
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
-    pipeline_model_mapping = {}
+    pipeline_model_mapping = {"feature-extraction": IdeficsModel} if is_torch_available() else {}
     test_pruning = False
     test_headmasking = False
     test_torchscript = False

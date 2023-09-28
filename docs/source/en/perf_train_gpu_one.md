@@ -228,6 +228,10 @@ For additional information on tf32 vs other precisions, please refer to the foll
 [RTX-3090](https://github.com/huggingface/transformers/issues/14608#issuecomment-1004390803) and
 [A100](https://github.com/huggingface/transformers/issues/15026#issuecomment-1004543189).
 
+## Flash Attention 2
+
+You can speedup the training throughput by using Flash Attention 2 integration in transformers. Check out the appropriate section in the [single GPU section](./perf_infer_gpu_one#Flash-Attention-2) to learn more about how to load a model with Flash Attention 2 modules. 
+
 ## Optimizer choice
 
 The most common optimizer used to train transformer models is Adam or AdamW (Adam with weight decay). Adam achieves 

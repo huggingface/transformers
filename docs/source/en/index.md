@@ -174,6 +174,7 @@ The documentation is organized into five sections:
 1. **[Megatron-BERT](model_doc/megatron-bert)** (from NVIDIA) released with the paper [Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism](https://arxiv.org/abs/1909.08053) by Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley, Jared Casper and Bryan Catanzaro.
 1. **[Megatron-GPT2](model_doc/megatron_gpt2)** (from NVIDIA) released with the paper [Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism](https://arxiv.org/abs/1909.08053) by Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley, Jared Casper and Bryan Catanzaro.
 1. **[MGP-STR](model_doc/mgp-str)** (from Alibaba Research) released with the paper [Multi-Granularity Prediction for Scene Text Recognition](https://arxiv.org/abs/2209.03592) by Peng Wang, Cheng Da, and Cong Yao.
+1. **[Mistral](model_doc/mistral)** (from Mistral AI) by The [Mistral AI](https://mistral.ai) team: Albert Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lélio Renard Lavaud, Lucile Saulnier, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas Wang, Timothée Lacroix, William El Sayed.
 1. **[mLUKE](model_doc/mluke)** (from Studio Ousia) released with the paper [mLUKE: The Power of Entity Representations in Multilingual Pretrained Language Models](https://arxiv.org/abs/2110.08151) by Ryokan Ri, Ikuya Yamada, and Yoshimasa Tsuruoka.
 1. **[MMS](model_doc/mms)** (from Facebook) released with the paper [Scaling Speech Technology to 1,000+ Languages](https://arxiv.org/abs/2305.13516) by Vineel Pratap, Andros Tjandra, Bowen Shi, Paden Tomasello, Arun Babu, Sayani Kundu, Ali Elkahky, Zhaoheng Ni, Apoorv Vyas, Maryam Fazel-Zarandi, Alexei Baevski, Yossi Adi, Xiaohui Zhang, Wei-Ning Hsu, Alexis Conneau, Michael Auli.
 1. **[MobileBERT](model_doc/mobilebert)** (from CMU/Google Brain) released with the paper [MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited Devices](https://arxiv.org/abs/2004.02984) by Zhiqing Sun, Hongkun Yu, Xiaodan Song, Renjie Liu, Yiming Yang, and Denny Zhou.
@@ -191,6 +192,7 @@ The documentation is organized into five sections:
 1. **[Nezha](model_doc/nezha)** (from Huawei Noah’s Ark Lab) released with the paper [NEZHA: Neural Contextualized Representation for Chinese Language Understanding](https://arxiv.org/abs/1909.00204) by Junqiu Wei, Xiaozhe Ren, Xiaoguang Li, Wenyong Huang, Yi Liao, Yasheng Wang, Jiashu Lin, Xin Jiang, Xiao Chen and Qun Liu.
 1. **[NLLB](model_doc/nllb)** (from Meta) released with the paper [No Language Left Behind: Scaling Human-Centered Machine Translation](https://arxiv.org/abs/2207.04672) by the NLLB team.
 1. **[NLLB-MOE](model_doc/nllb-moe)** (from Meta) released with the paper [No Language Left Behind: Scaling Human-Centered Machine Translation](https://arxiv.org/abs/2207.04672) by the NLLB team.
+1. **[Nougat](model_doc/nougat)** (from Meta AI) released with the paper [Nougat: Neural Optical Understanding for Academic Documents](https://arxiv.org/abs/2308.13418) by Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic.
 1. **[Nyströmformer](model_doc/nystromformer)** (from the University of Wisconsin - Madison) released with the paper [Nyströmformer: A Nyström-Based Algorithm for Approximating Self-Attention](https://arxiv.org/abs/2102.03902) by Yunyang Xiong, Zhanpeng Zeng, Rudrasis Chakraborty, Mingxing Tan, Glenn Fung, Yin Li, Vikas Singh.
 1. **[OneFormer](model_doc/oneformer)** (from SHI Labs) released with the paper [OneFormer: One Transformer to Rule Universal Image Segmentation](https://arxiv.org/abs/2211.06220) by Jitesh Jain, Jiachen Li, MangTik Chiu, Ali Hassani, Nikita Orlov, Humphrey Shi.
 1. **[OpenLlama](model_doc/open-llama)** (from [s-JoL](https://huggingface.co/s-JoL)) released in [Open-Llama](https://github.com/s-JoL/Open-Llama).
@@ -393,11 +395,11 @@ Flax), PyTorch, and/or TensorFlow.
 |           MarkupLM            |       ✅        |         ❌         |      ❌      |
 |          Mask2Former          |       ✅        |         ❌         |      ❌      |
 |          MaskFormer           |       ✅        |         ❌         |      ❌      |
-|        MaskFormerSwin         |       ❌        |         ❌         |      ❌      |
 |             mBART             |       ✅        |         ✅         |      ✅      |
 |             MEGA              |       ✅        |         ❌         |      ❌      |
 |         Megatron-BERT         |       ✅        |         ❌         |      ❌      |
 |            MGP-STR            |       ✅        |         ❌         |      ❌      |
+|            Mistral            |       ✅        |         ❌         |      ❌      |
 |          MobileBERT           |       ✅        |         ✅         |      ❌      |
 |          MobileNetV1          |       ✅        |         ❌         |      ❌      |
 |          MobileNetV2          |       ✅        |         ❌         |      ❌      |
@@ -412,6 +414,7 @@ Flax), PyTorch, and/or TensorFlow.
 |              NAT              |       ✅        |         ❌         |      ❌      |
 |             Nezha             |       ✅        |         ❌         |      ❌      |
 |           NLLB-MOE            |       ✅        |         ❌         |      ❌      |
+|            Nougat             |       ✅        |         ✅         |      ✅      |
 |         Nyströmformer         |       ✅        |         ❌         |      ❌      |
 |           OneFormer           |       ✅        |         ❌         |      ❌      |
 |          OpenAI GPT           |       ✅        |         ✅         |      ❌      |
@@ -462,7 +465,6 @@ Flax), PyTorch, and/or TensorFlow.
 |             TAPAS             |       ✅        |         ✅         |      ❌      |
 |    Time Series Transformer    |       ✅        |         ❌         |      ❌      |
 |          TimeSformer          |       ✅        |         ❌         |      ❌      |
-|         TimmBackbone          |       ❌        |         ❌         |      ❌      |
 |    Trajectory Transformer     |       ✅        |         ❌         |      ❌      |
 |        Transformer-XL         |       ✅        |         ✅         |      ❌      |
 |             TrOCR             |       ✅        |         ❌         |      ❌      |
