@@ -114,6 +114,11 @@ class ProPainterConfig(PretrainedConfig):
         small = False,
         dropout = 0,
         encoder_depth = 2,
+        raft_iter = 20,
+        alternate_corr = False,
+        subvideo_length = 80,
+        neighbor_length = 10,
+        ref_stride = 10,
 
 
         **kwargs,
@@ -138,4 +143,9 @@ class ProPainterConfig(PretrainedConfig):
         self.dropout = dropout
         self.threshold = threshold
         self.encoder_depth = 2
+        self.raft_iter = raft_iter
+        self.alternate_corr = alternate_corr
+        self.subvideo_length = subvideo_length
+        self.neighbor_length = neighbor_length
+        self.ref_stride = ref_stride
 

@@ -19,11 +19,14 @@ import collections.abc
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
 from functools import reduce
+from einops import rearrange
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
+import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+import torchvision
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -43,6 +46,8 @@ from ...utils import (
 )
 from .configuration_propainter import ProPainterConfig
 from torch.nn.modules.utils import _pair, _single
+
+import cv2
 
 logger = logging.get_logger(__name__)
 
@@ -130,20 +135,22 @@ class ReccurrentFlowCompleteNet(nn.Module):
             nn.LeakyReLU(config.threshold,  inplace=True)
         )
 
-        self.Encoder1 = []
-        self.Encoder1 += [P3DBlock(32,32,3,1,1)]
-        self.Encoder1 += [nn.LeakyReLU(config.threshold, inplace=True)]
-        self.Encoder1 += [P3DBlock(32,64,3,2,1)]
-        self.Encoder1 += [nn.LeakyReLU(config.threshold, inplace=True)]
+        self.Encoder1 = nn.Sequential(
+            P3DBlock(32,32,3,1,1),
+            nn.LeakyReLU(config.threshold, inplace=True),
+            P3DBlock(32,64,3,2,1),
+            nn.LeakyReLU(config.threshold, inplace=True),
+        )
 
-        self.Encoder2 = []
-        self.Encoder2 += [P3DBlock(64,64,3,1,1)]
-        self.Encoder2 += [nn.LeakyReLU(config.threshold, inplace=True)]
-        self.Encoder2 += [P3DBlock(64,128,3,2,1)]
-        self.Encoder2 += [nn.LeakyReLU(config.threshold, inplace=True)]
+        self.Encoder2 = nn.Sequential(
+            P3DBlock(64,64,3,1,1),
+            nn.LeakyReLU(config.threshold, inplace=True),
+            P3DBlock(64,128,3,2,1),
+            nn.LeakyReLU(config.threshold, inplace=True),
+        )
 
-        self.Encoder1 = nn.Sequential(nn.ModuleList(self.Encoder1))
-        self.Encoder2 = nn.Sequential(nn.ModuleList(self.Encoder2))
+        #self.Encoder1 = nn.Sequential(nn.ModuleList(self.Encoder1))
+        #self.Encoder2 = nn.Sequential(nn.ModuleList(self.Encoder2))
 
         self.MidDilation = nn.Sequential(
             nn.Conv3d(128, 128, (1, 3, 3), (1, 1, 1), padding=(0, 3, 3), dilation=(1, 3, 3)),
@@ -218,6 +225,45 @@ class ReccurrentFlowCompleteNet(nn.Module):
         flow = flow.view(b, t, 2, h, w)
 
         return flow, edge
+
+    def forward_bidirect_flow(self, masked_flows_bi, masks):
+        """
+        Args:
+            masked_flows_bi: [masked_flows_f, masked_flows_b] | (b t-1 2 h w), (b t-1 2 h w)
+            masks: b t 1 h w
+        """
+        print(masks.shape)
+        masks_forward = masks[:, :-1, ...].contiguous()
+        masks_backward = masks[:, 1:, ...].contiguous()
+
+        # mask flow
+        print(masked_flows_bi[0].shape, masks_forward.shape)
+        masked_flows_forward = masked_flows_bi[0] * (1-masks_forward)
+        masked_flows_backward = masked_flows_bi[1] * (1-masks_backward)
+
+        # -- completion --
+        # forward
+        pred_flows_forward, pred_edges_forward = self.forward(masked_flows_forward, masks_forward)
+
+        # backward
+        masked_flows_backward = torch.flip(masked_flows_backward, dims=[1])
+        masks_backward = torch.flip(masks_backward, dims=[1])
+        pred_flows_backward, pred_edges_backward = self.forward(masked_flows_backward, masks_backward)
+        pred_flows_backward = torch.flip(pred_flows_backward, dims=[1])
+        if self.training:
+            pred_edges_backward = torch.flip(pred_edges_backward, dims=[1])
+
+        return [pred_flows_forward, pred_flows_backward], [pred_edges_forward, pred_edges_backward]
+
+
+    def combine_flow(self, masked_flows_bi, pred_flows_bi, masks):
+        masks_forward = masks[:, :-1, ...].contiguous()
+        masks_backward = masks[:, 1:, ...].contiguous()
+
+        pred_flows_forward = pred_flows_bi[0] * masks_forward + masked_flows_bi[0] * (1-masks_forward)
+        pred_flows_backward = pred_flows_bi[1] * masks_backward + masked_flows_bi[1] * (1-masks_backward)
+
+        return pred_flows_forward, pred_flows_backward
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_planes, planes, norm_fn='group', stride=1):
@@ -391,6 +437,17 @@ class FlowUpdateBlock(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(256, 64*9, 1, padding=0))
 
+    def forward(self, net, inp, corr, flow, upsample=True):
+        motion_features = self.Encoder(flow, corr)
+        inp = torch.cat([inp, motion_features], dim=1)
+
+        net = self.GRU(net, inp)
+        delta_flow = self.FlowHead(net)
+
+        # scale mask to balence gradients
+        mask = .25 * self.Mask(net)
+        return net, mask, delta_flow
+
 
 class FlowEncoder(nn.Module):
     def __init__(self, output_dim=128, norm_fn='batch', dropout=0.0):
@@ -468,6 +525,94 @@ class FlowEncoder(nn.Module):
 
         return x
 
+class CorrBlock:
+    def __init__(self, fmap1, fmap2, num_levels=4, radius=4):
+        self.num_levels = num_levels
+        self.radius = radius
+        self.corr_pyramid = []
+
+        # all pairs correlation
+        corr = CorrBlock.corr(fmap1, fmap2)
+
+        batch, h1, w1, dim, h2, w2 = corr.shape
+        corr = corr.reshape(batch*h1*w1, dim, h2, w2)
+
+        self.corr_pyramid.append(corr)
+        for i in range(self.num_levels-1):
+            corr = F.avg_pool2d(corr, 2, stride=2)
+            self.corr_pyramid.append(corr)
+
+    def bilinear_sampler(self, img, coords, mode='bilinear', mask=False):
+        """ Wrapper for grid_sample, uses pixel coordinates """
+        H, W = img.shape[-2:]
+        xgrid, ygrid = coords.split([1,1], dim=-1)
+        xgrid = 2*xgrid/(W-1) - 1
+        ygrid = 2*ygrid/(H-1) - 1
+
+        grid = torch.cat([xgrid, ygrid], dim=-1)
+        img = F.grid_sample(img, grid, align_corners=True)
+
+        if mask:
+            mask = (xgrid > -1) & (ygrid > -1) & (xgrid < 1) & (ygrid < 1)
+            return img, mask.float()
+
+        return img
+
+
+    def __call__(self, coords):
+        r = self.radius
+        coords = coords.permute(0, 2, 3, 1)
+        batch, h1, w1, _ = coords.shape
+
+        out_pyramid = []
+        for i in range(self.num_levels):
+            corr = self.corr_pyramid[i]
+            dx = torch.linspace(-r, r, 2*r+1)
+            dy = torch.linspace(-r, r, 2*r+1)
+            delta = torch.stack(torch.meshgrid(dy, dx), axis=-1).to(coords.device)
+
+            centroid_lvl = coords.reshape(batch*h1*w1, 1, 1, 2) / 2**i
+            delta_lvl = delta.view(1, 2*r+1, 2*r+1, 2)
+            coords_lvl = centroid_lvl + delta_lvl
+
+            corr = self.bilinear_sampler(corr, coords_lvl)
+            corr = corr.view(batch, h1, w1, -1)
+            out_pyramid.append(corr)
+
+        out = torch.cat(out_pyramid, dim=-1)
+        return out.permute(0, 3, 1, 2).contiguous().float()
+
+    @staticmethod
+    def corr(fmap1, fmap2):
+        batch, dim, ht, wd = fmap1.shape
+        fmap1 = fmap1.view(batch, dim, ht*wd)
+        fmap2 = fmap2.view(batch, dim, ht*wd)
+
+        corr = torch.matmul(fmap1.transpose(1,2), fmap2)
+        corr = corr.view(batch, ht, wd, 1, ht, wd)
+        return corr  / torch.sqrt(torch.tensor(dim).float())
+
+
+class CorrLayer(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, fmap1, fmap2, coords, r):
+        fmap1 = fmap1.contiguous()
+        fmap2 = fmap2.contiguous()
+        coords = coords.contiguous()
+        ctx.save_for_backward(fmap1, fmap2, coords)
+        ctx.r = r
+        corr, = correlation_cudaz.forward(fmap1, fmap2, coords, ctx.r)
+        return corr
+
+    @staticmethod
+    def backward(ctx, grad_corr):
+        fmap1, fmap2, coords = ctx.saved_tensors
+        grad_corr = grad_corr.contiguous()
+        fmap1_grad, fmap2_grad, coords_grad = \
+            correlation_cudaz.backward(fmap1, fmap2, coords, grad_corr, ctx.r)
+        return fmap1_grad, fmap2_grad, coords_grad, None
+
+
 
 
 class OpticalFlow(nn.Module):
@@ -487,14 +632,20 @@ class OpticalFlow(nn.Module):
 
         self.l1_criterion = nn.L1Loss()
 
+    def coords_grid(self, batch, ht, wd):
+        coords = torch.meshgrid(torch.arange(ht), torch.arange(wd))
+        coords = torch.stack(coords[::-1], dim=0).float()
+        return coords[None].repeat(batch, 1, 1, 1)
+
     def initialize_flow(self, img):
         """ Flow is represented as difference between two coordinate grids flow = coords1 - coords0"""
         N, C, H, W = img.shape
-        coords0 = coords_grid(N, H//8, W//8).to(img.device)
-        coords1 = coords_grid(N, H//8, W//8).to(img.device)
+        coords0 = self.coords_grid(N, H//8, W//8).to(img.device)
+        coords1 = self.coords_grid(N, H//8, W//8).to(img.device)
 
         # optical flow computed as difference: flow = coords1 - coords0
         return coords0, coords1
+
 
     def upsample_flow(self, flow, mask):
         """ Upsample flow field [H/8, W/8, 2] -> [H, W, 2] using convex combination """
@@ -522,8 +673,7 @@ class OpticalFlow(nn.Module):
         cdim = self.context_dim
 
         # run the feature network
-        with autocast(enabled=self.config.mixed_precision):
-            fmap1, fmap2 = self.FeatureNet([image1, image2])
+        fmap1, fmap2 = self.FeatureNet([image1, image2])
 
         fmap1 = fmap1.float()
         fmap2 = fmap2.float()
@@ -534,11 +684,10 @@ class OpticalFlow(nn.Module):
             corr_fn = CorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
 
         # run the context network
-        with autocast(enabled=self.config.mixed_precision):
-            cnet = self.ContextNet(image1)
-            net, inp = torch.split(cnet, [hdim, cdim], dim=1)
-            net = torch.tanh(net)
-            inp = torch.relu(inp)
+        cnet = self.ContextNet(image1)
+        net, inp = torch.split(cnet, [hdim, cdim], dim=1)
+        net = torch.tanh(net)
+        inp = torch.relu(inp)
 
         coords0, coords1 = self.initialize_flow(image1)
 
@@ -551,8 +700,7 @@ class OpticalFlow(nn.Module):
             corr = corr_fn(coords1) # index correlation volume
 
             flow = coords1 - coords0
-            with autocast(enabled=self.config.mixed_precision):
-                net, up_mask, delta_flow = self.UpdateBlock(net, inp, corr, flow)
+            net, up_mask, delta_flow = self.UpdateBlock(net, inp, corr, flow)
 
             # F(t+1) = F(t) + \Delta(t)
             coords1 = coords1 + delta_flow
@@ -831,12 +979,70 @@ class ProPainterBidirectionalPropagation(nn.Module):
                 nn.Conv2d(channel, channel, 3, 1, 1),
             )
 
+    def flow_warp(self,
+              x,
+              flow,
+              interpolation='bilinear',
+              padding_mode='zeros',
+              align_corners=True):
+        """Warp an image or a feature map with optical flow.
+        Args:
+            x (Tensor): Tensor with size (n, c, h, w).
+            flow (Tensor): Tensor with size (n, h, w, 2). The last dimension is
+                a two-channel, denoting the width and height relative offsets.
+                Note that the values are not normalized to [-1, 1].
+            interpolation (str): Interpolation mode: 'nearest' or 'bilinear'.
+                Default: 'bilinear'.
+            padding_mode (str): Padding mode: 'zeros' or 'border' or 'reflection'.
+                Default: 'zeros'.
+            align_corners (bool): Whether align corners. Default: True.
+        Returns:
+            Tensor: Warped image or feature map.
+        """
+        if x.size()[-2:] != flow.size()[1:3]:
+            raise ValueError(f'The spatial sizes of input ({x.size()[-2:]}) and '
+                             f'flow ({flow.size()[1:3]}) are not the same.')
+        _, _, h, w = x.size()
+        # create mesh grid
+        device = flow.device
+        grid_y, grid_x = torch.meshgrid(torch.arange(0, h, device=device), torch.arange(0, w, device=device))
+        grid = torch.stack((grid_x, grid_y), 2).type_as(x)  # (w, h, 2)
+        grid.requires_grad = False
+
+        grid_flow = grid + flow
+        # scale grid_flow to [-1,1]
+        grid_flow_x = 2.0 * grid_flow[:, :, :, 0] / max(w - 1, 1) - 1.0
+        grid_flow_y = 2.0 * grid_flow[:, :, :, 1] / max(h - 1, 1) - 1.0
+        grid_flow = torch.stack((grid_flow_x, grid_flow_y), dim=3)
+        output = F.grid_sample(x,
+                               grid_flow,
+                               mode=interpolation,
+                               padding_mode=padding_mode,
+                               align_corners=align_corners)
+        return output
+
             
     def binary_mask(self, mask, th=0.1):
         mask[mask>th] = 1
         mask[mask<=th] = 0
         # return mask.float()
         return mask.to(mask)
+
+    def fbConsistencyCheck(self,flow_fw, flow_bw, alpha1=0.01, alpha2=0.5):
+        def length_sq(x):
+            return torch.sum(torch.square(x), dim=1, keepdim=True)
+        flow_bw_warped = self.flow_warp(flow_bw, flow_fw.permute(0, 2, 3, 1))  # wb(wf(x))
+        flow_diff_fw = flow_fw + flow_bw_warped  # wf + wb(wf(x))
+
+        mag_sq_fw = length_sq(flow_fw) + length_sq(flow_bw_warped)  # |wf| + |wb(wf(x))|
+        occ_thresh_fw = alpha1 * mag_sq_fw + alpha2
+
+        # fb_valid_fw = (length_sq(flow_diff_fw) < occ_thresh_fw).float()
+        fb_valid_fw = (length_sq(flow_diff_fw) < occ_thresh_fw).to(flow_fw)
+        return fb_valid_fw
+
+
+
 
     def forward(self, x, flows_forward, flows_backward, mask, interpolation='bilinear'):
         """
@@ -881,15 +1087,15 @@ class ProPainterBidirectionalPropagation(nn.Module):
                 else:
                     flow_prop = flows_for_prop[:, flow_idx[i], :, :, :]
                     flow_check = flows_for_check[:, flow_idx[i], :, :, :]
-                    flow_vaild_mask = fbConsistencyCheck(flow_prop, flow_check)
-                    feat_warped = flow_warp(feat_prop, flow_prop.permute(0, 2, 3, 1), interpolation)
+                    flow_vaild_mask = self.fbConsistencyCheck(flow_prop, flow_check)
+                    feat_warped = self.flow_warp(feat_prop, flow_prop.permute(0, 2, 3, 1), interpolation)
 
                     if self.learnable:
                         cond = torch.cat([feat_current, feat_warped, flow_prop, flow_vaild_mask, mask_current], dim=1)
                         feat_prop = self.deform_align[module_name](feat_prop, cond, flow_prop)
                         mask_prop = mask_current
                     else:
-                        mask_prop_valid = flow_warp(mask_prop, flow_prop.permute(0, 2, 3, 1))
+                        mask_prop_valid = self.flow_warp(mask_prop, flow_prop.permute(0, 2, 3, 1))
                         mask_prop_valid = self.binary_mask(mask_prop_valid)
 
                         union_vaild_mask = self.binary_mask(mask_current*flow_vaild_mask*(1-mask_prop_valid))
@@ -1022,6 +1228,20 @@ class SparseWindowAttention(nn.Module):
 
         self.max_pool = nn.MaxPool2d(window_size, window_size, (0, 0))
 
+    def window_partition(self, x, window_size, n_head):
+        """
+        Args:
+            x: shape is (B, T, H, W, C)
+            window_size (tuple[int]): window size
+        Returns:
+            windows: (B, num_windows_h, num_windows_w, n_head, T, window_size, window_size, C//n_head)
+        """
+        B, T, H, W, C = x.shape
+        x = x.view(B, T, H // window_size[0], window_size[0], W // window_size[1], window_size[1], n_head, C//n_head)
+        windows = x.permute(0, 2, 4, 6, 1, 3, 5, 7).contiguous()
+        return windows
+
+
 
     def forward(self, x, mask=None, T_ind=None, attn_mask=None):
         b, t, h, w, c = x.shape # 20 36
@@ -1042,9 +1262,9 @@ class SparseWindowAttention(nn.Module):
         q = self.query(x)
         k = self.key(x)
         v = self.value(x)
-        win_q = window_partition(q.contiguous(), self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head)
-        win_k = window_partition(k.contiguous(), self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head)
-        win_v = window_partition(v.contiguous(), self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head)
+        win_q = self.window_partition(q.contiguous(), self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head)
+        win_k = self.window_partition(k.contiguous(), self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head)
+        win_v = self.window_partition(v.contiguous(), self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head)
         # roll_k and roll_v
         if any(i > 0 for i in self.expand_size):
             (k_tl, v_tl) = map(lambda a: torch.roll(a, shifts=(-self.expand_size[0], -self.expand_size[1]), dims=(2, 3)), (k, v))
@@ -1053,10 +1273,10 @@ class SparseWindowAttention(nn.Module):
             (k_br, v_br) = map(lambda a: torch.roll(a, shifts=(self.expand_size[0], self.expand_size[1]), dims=(2, 3)), (k, v))
 
             (k_tl_windows, k_tr_windows, k_bl_windows, k_br_windows) = map(
-                lambda a: window_partition(a, self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head), 
+                lambda a: self.window_partition(a, self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head), 
                 (k_tl, k_tr, k_bl, k_br))
             (v_tl_windows, v_tr_windows, v_bl_windows, v_br_windows) = map(
-                lambda a: window_partition(a, self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head), 
+                lambda a: self.window_partition(a, self.window_size, self.n_head).view(b, n_wh*n_ww, self.n_head, t, w_h*w_w, c_head), 
                 (v_tl, v_tr, v_bl, v_br))
             rool_k = torch.cat((k_tl_windows, k_tr_windows, k_bl_windows, k_br_windows), 4).contiguous()
             rool_v = torch.cat((v_tl_windows, v_tr_windows, v_bl_windows, v_br_windows), 4).contiguous() # [b, n_wh*n_ww, n_head, t, w_h*w_w, c_head]
@@ -1385,7 +1605,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
         _, _, prop_frames, updated_masks = self.img_prop_module(masked_frames, completed_flows[0], completed_flows[1], masks, interpolation)
         return prop_frames, updated_masks
 
-    def forward(self, masked_frames, compeleted_flows, masks_in, masks_updated, num_local_frames, interpolation='bilinear', t_dilation=2):
+    def forward(self, masked_frames, completed_flows, masks_in, masks_updated, num_local_frames, interpolation='bilinear', t_dilation=2):
 
         l_t = num_local_frames
         b, t, _, ori_h, ori_w = masked_frames.size()
@@ -1502,13 +1722,10 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if bool_masked_pos is not None and (self.config.patch_size != self.config.encoder_stride):
-            raise ValueError(
-                "When `bool_masked_pos` is provided, `patch_size` must be equal to `encoder_stride` to ensure that "
-                "the reconstructed image has the same dimensions as the input."
-                f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
-            )
 
+        video_length = frames.size(1)
+        h,w = frames.shape[-2],frames.shape[-1]
+  
         if frames.size(-1) <= 640:
             short_clip_len = 12
         elif frames.size(-1) < 720:
@@ -1536,16 +1753,15 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
         else:
             gt_flows_bi = self.OpticalFlow(frames, iters=self.config.raft_iter)
 
-
         flow_length = gt_flows_bi[0].size(1)
-        if flow_length > args.subvideo_length:
+        if flow_length > self.config.subvideo_length:
             pred_flows_f, pred_flows_b = [], []
             pad_len = 5
-            for f in range(0, flow_length, args.subvideo_length):
+            for f in range(0, flow_length, self.config.subvideo_length):
                 s_f = max(0, f - pad_len)
-                e_f = min(flow_length, f + args.subvideo_length + pad_len)
+                e_f = min(flow_length, f + self.config.subvideo_length + pad_len)
                 pad_len_s = max(0, f) - s_f
-                pad_len_e = e_f - min(flow_length, f + args.subvideo_length)
+                pad_len_e = e_f - min(flow_length, f + self.config.subvideo_length)
                 pred_flows_bi_sub, _ = self.FlowComplete.forward_bidirect_flow(
                     (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), 
                     flow_masks[:, s_f:e_f+1])
@@ -1561,12 +1777,13 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             pred_flows_b = torch.cat(pred_flows_b, dim=1)
             pred_flows_bi = (pred_flows_f, pred_flows_b)
         else:
+            print(gt_flows_bi[0].shape, flow_masks.shape)
             pred_flows_bi, _ = self.FlowComplete.forward_bidirect_flow(gt_flows_bi, flow_masks)
             pred_flows_bi = self.FlowComplete.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
         
 
         masked_frames = frames * (1 - masks_dilated)
-        subvideo_length_img_prop = min(100, args.subvideo_length) # ensure a minimum of 100 frames for image propagation
+        subvideo_length_img_prop = min(100, self.config.subvideo_length) # ensure a minimum of 100 frames for image propagation
         if video_length > subvideo_length_img_prop:
             updated_frames, updated_masks = [], []
             pad_len = 10
@@ -1597,12 +1814,13 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             updated_frames = frames * (1 - masks_dilated) + prop_imgs.view(b, t, 3, h, w) * masks_dilated
             updated_masks = updated_local_masks.view(b, t, 1, h, w)
 
-        ori_frames = frames_inp
+        import numpy as np
+        ori_frames = np.ones([240,432,3])
         comp_frames = [None] * video_length
 
-        neighbor_stride = args.neighbor_length // 2
-        if video_length > args.subvideo_length:
-            ref_num = args.subvideo_length // args.ref_stride
+        neighbor_stride = self.config.neighbor_length // 2
+        if video_length > self.config.subvideo_length:
+            ref_num = self.config.subvideo_length // self.config.ref_stride
         else:
             ref_num = -1
 
@@ -1612,7 +1830,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
                 i for i in range(max(0, f - neighbor_stride),
                                     min(video_length, f + neighbor_stride + 1))
             ]
-            ref_ids = get_ref_index(f, neighbor_ids, video_length, args.ref_stride, ref_num)
+            ref_ids = self.get_ref_index(f, neighbor_ids, video_length, self.config.ref_stride, ref_num)
             selected_imgs = updated_frames[:, neighbor_ids + ref_ids, :, :, :]
             selected_masks = masks_dilated[:, neighbor_ids + ref_ids, :, :, :]
             selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, :, :, :]
@@ -1627,7 +1845,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             pred_img = pred_img.view(-1, 3, h, w)
 
             pred_img = (pred_img + 1) / 2
-            pred_img = pred_img.cpu().permute(0, 2, 3, 1).numpy() * 255
+            pred_img = pred_img.detach().cpu().permute(0, 2, 3, 1).numpy() * 255
             binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(
                 0, 2, 3, 1).numpy().astype(np.uint8)
             for i in range(len(neighbor_ids)):
@@ -1642,11 +1860,19 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
                 comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
             ## to be removed
+            import os
+            out_size = (w,h)
+            def imwrite(img, file_path, params=None, auto_mkdir=True):
+                if auto_mkdir:
+                    dir_name = os.path.abspath(os.path.dirname(file_path))
+                    os.makedirs(dir_name, exist_ok=True)
+                return cv2.imwrite(file_path, img, params)
+
             for idx in range(video_length):
                 f = comp_frames[idx]
                 f = cv2.resize(f, out_size, interpolation = cv2.INTER_CUBIC)
                 f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-                img_save_root = os.path.join(save_root, 'frames', str(idx).zfill(4)+'.png')
+                img_save_root = os.path.join("./", 'frames', str(idx).zfill(4)+'.png')
                 imwrite(f, img_save_root)
 
         return MaskedImageModelingOutput(
@@ -1656,6 +1882,21 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    def get_ref_index(self, mid_neighbor_id, neighbor_ids, length, ref_stride=10, ref_num=-1):
+        ref_index = []
+        if ref_num == -1:
+            for i in range(0, length, ref_stride):
+                if i not in neighbor_ids:
+                    ref_index.append(i)
+        else:
+            start_idx = max(0, mid_neighbor_id - ref_stride * (ref_num // 2))
+            end_idx = min(length, mid_neighbor_id + ref_stride * (ref_num // 2))
+            for i in range(start_idx, end_idx, ref_stride):
+                if i not in neighbor_ids:
+                    if len(ref_index) > ref_num:
+                        break
+                    ref_index.append(i)
+        return ref_index
 
 @add_start_docstrings(
     """
