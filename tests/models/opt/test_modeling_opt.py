@@ -216,6 +216,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else {}
     )
     is_encoder_decoder = False
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
