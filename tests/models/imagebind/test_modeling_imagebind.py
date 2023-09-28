@@ -91,9 +91,6 @@ if is_flax_available():
     )
 
 
-# NOTE: currently copied from previous PR (#23284)
-
-
 class ImageBindTextModelTester:
     def __init__(
         self,
@@ -109,8 +106,8 @@ class ImageBindTextModelTester:
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
+        dropout=0.0,
+        attention_dropout=0.0,
         max_position_embeddings=512,
         layer_norm_eps=1e-6,
         initializer_range=0.02,
@@ -271,9 +268,9 @@ class ImageBindVisionModelTester:
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
-        dropout=0.1,
+        dropout=0.0,
         layer_norm_eps=1e-6,
-        attention_dropout=0.1,
+        attention_dropout=0.0,
         initializer_range=0.02,
         logit_scale_init_value=None,
         learnable_logit_scale=False,
@@ -468,7 +465,7 @@ class ImageBindAudioModelTester:
         dropout=0.0,
         layer_norm_eps=1e-6,
         add_kv_bias=True,
-        attention_dropout=0.1,
+        attention_dropout=0.0,
         drop_path_rate=0.1,
         initializer_range=0.02,
         logit_scale_init_value=20.0,
@@ -663,8 +660,8 @@ class ImageBindDepthModelTester:
         dropout=0.0,
         layer_norm_eps=1e-6,
         add_kv_bias=True,
-        attention_dropout=0.1,
-        drop_path_rate=0.1,
+        attention_dropout=0.0,
+        drop_path_rate=0.0,
         initializer_range=0.02,
         logit_scale_init_value=5.0,
         learnable_logit_scale=False,
@@ -854,8 +851,8 @@ class ImageBindThermalModelTester:
         dropout=0.0,
         layer_norm_eps=1e-6,
         add_kv_bias=True,
-        attention_dropout=0.1,
-        drop_path_rate=0.1,
+        attention_dropout=0.0,
+        drop_path_rate=0.0,
         initializer_range=0.02,
         logit_scale_init_value=10.0,
         learnable_logit_scale=False,
@@ -1043,8 +1040,8 @@ class ImageBindImuModelTester:
         dropout=0.0,
         layer_norm_eps=1e-6,
         add_kv_bias=True,
-        attention_dropout=0.1,
-        drop_path_rate=0.1,
+        attention_dropout=0.0,
+        drop_path_rate=0.7,
         initializer_range=0.02,
         logit_scale_init_value=5.0,
         learnable_logit_scale=False,
