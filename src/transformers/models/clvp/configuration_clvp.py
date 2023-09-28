@@ -74,8 +74,8 @@ class ClvpEncoderConfig(PretrainedConfig):
         summary_type (`str`, *optional*, defaults to `"mean"`):
             What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
             `"cls_index"` are supported.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+        initializer_factor (`float`, *optional*, defaults to 1.0):
+            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
             testing).
 
     Example:
@@ -226,8 +226,8 @@ class ClvpDecoderConfig(PretrainedConfig):
             The feature dimension of the extracted mel features. This value is used in `CLVPConditioningEncoder`.
         use_attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in Query, Key and Value layers during self attention.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+        initializer_factor (`float`, *optional*, defaults to 1.0):
+            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
             testing).
         decoder_fixing_codes (`list`, *optional*, defaults to `[83, 45, 45, 248]`):
             These values are used in the method `fix_speech_decoder_output` to fix decoder generated outputs.
@@ -374,6 +374,9 @@ class ClvpConfig(PretrainedConfig):
             Dimentionality of text and speech projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original Clvp implementation.
+        initializer_factor (`float`, *optional*, defaults to 1.0):
+            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
+            testing).
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -412,6 +415,7 @@ class ClvpConfig(PretrainedConfig):
         decoder_config=None,
         projection_dim=768,
         logit_scale_init_value=2.6592,
+        initializer_factor=1.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -434,7 +438,7 @@ class ClvpConfig(PretrainedConfig):
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = 1.0
+        self.initializer_factor = initializer_factor
 
     @classmethod
     def from_sub_model_configs(

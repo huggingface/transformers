@@ -1644,7 +1644,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 Speech Tokens. Padding will be ignored by default should you provide it. If speech_ids are provided
                 then input_ids and input_features will be automatically ignored.
             input_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Input text Tokens. Generated from the `CLVPTokenizer`. If speech_ids is not provided, then input_ids
+                Input text Tokens. Processed from the `CLVPTokenizer`. If speech_ids is not provided, then input_ids
                 and input_features will be used.
             input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`, *optional*):
                 Indicates log-melspectrogram representations for audio returned by `CLVPFeatureExtractor`. If
@@ -1874,6 +1874,29 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         generation_config: Optional[GenerationConfig] = None,
         **kwargs,
     ):
+        """
+        Generate method for `ClvpModelForConditionalGeneration`, this method calls the `generate` method of
+        `ClvpForCausalLM` and then uses those generated `speech_ids` to process `text_embeds` and `speech_embeds` using
+        `ClvpEncoder`.
+
+        Args:
+            input_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Input text Tokens. Processed from the `CLVPTokenizer`.
+            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`, *optional*):
+                Indicates log-melspectrogram representations for audio returned by `CLVPFeatureExtractor`.
+            generation_config (`~generation.GenerationConfig`, *optional*):
+                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
+                passed to generate matching the attributes of `generation_config` will override them. If
+                `generation_config` is not provided, the default will be used, which had the following loading
+                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
+                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
+                default values, whose documentation should be checked to parameterize generation.
+
+        Returns:
+            `ClvpOutput` or tuple: A `ClvpOutput` (if `return_dict_in_generate=True` or when
+            `config.return_dict_in_generate=True`) or a tuple.
+        """
+
         if generation_config is None:
             generation_config = self.generation_config
         generation_config.update(**kwargs)
