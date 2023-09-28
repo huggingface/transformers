@@ -45,7 +45,7 @@ if is_flash_attn_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
-    _is_flash_using_slicing_windows = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+    _is_flash_using_sliding_windows = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
 logger = logging.get_logger(__name__)
@@ -353,7 +353,7 @@ class MistralFlashAttention2(MistralAttention):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        use_sliding_windows = _is_flash_using_slicing_windows and kv_seq_len > self.config.sliding_window and not self.training
+        use_sliding_windows = _is_flash_using_sliding_windows and self.config.sliding_window is not None
 
         if past_key_value is not None:
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
@@ -470,9 +470,7 @@ class MistralFlashAttention2(MistralAttention):
                     query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
                 )
             else:
-                attn_output = flash_attn_func(
-                    query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True, window_size=(self.config.sliding_window // 2, self.config.sliding_window // 2)
-                )
+                attn_output = flash_attn_func(query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True, window_size=(self.config.sliding_window, self.config.sliding_window))
 
         return attn_output
 
