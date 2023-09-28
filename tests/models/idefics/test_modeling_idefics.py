@@ -503,12 +503,11 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
 class IdeficsModelIntegrationTest(TestCasePlus):
     @cached_property
     def default_processor(self):
-        return IdeficsProcessor.from_pretrained("HuggingFaceM4/idefics-9b") if is_vision_available() else None
+        return IdeficsProcessor.from_pretrained("HuggingFaceM4/idefics-9b", revision = "refs/pr/11") if is_vision_available() else None
 
     @require_bitsandbytes
     @slow
     def test_inference_natural_language_visual_reasoning(self):
-        # TODO tokenizer updates seem to have broken this
         cat_image_path = self.tests_dir / "fixtures/tests_samples/COCO/000000039769.png"
         cats_image_obj = Image.open(cat_image_path)  # 2 cats
         dogs_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
