@@ -19,6 +19,7 @@
 # limitations under the License.
 """ PyTorch Mistral model."""
 import math
+import inspect
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -37,6 +38,8 @@ from .configuration_mistral import MistralConfig
 if is_flash_attn_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
+    _is_flash_using_slicing_windows = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
 
@@ -342,10 +345,12 @@ class MistralFlashAttention2(MistralAttention):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
+        use_sliding_windows = _is_flash_using_slicing_windows and kv_seq_len > self.config.sliding_window and not self.training
+
         if past_key_value is not None:
-            # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
@@ -382,7 +387,7 @@ class MistralFlashAttention2(MistralAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
         
-        attn_output = self._flash_attention_forward(query_states, key_states, value_states, padding_mask, q_len, dropout=dropout_rate)
+        attn_output = self._flash_attention_forward(query_states,  key_states,  value_states, padding_mask, q_len, dropout=dropout_rate,  use_sliding_windows=use_sliding_windows)
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -394,7 +399,7 @@ class MistralFlashAttention2(MistralAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None, use_sliding_windows=False
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -425,24 +430,44 @@ class MistralFlashAttention2(MistralAttention):
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
 
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=True,
-            )
+            if not use_sliding_windows:
+                attn_output_unpad = flash_attn_varlen_func(
+                    query_states,
+                    key_states,
+                    value_states,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_k,
+                    max_seqlen_q=max_seqlen_in_batch_q,
+                    max_seqlen_k=max_seqlen_in_batch_k,
+                    dropout_p=dropout,
+                    softmax_scale=softmax_scale,
+                    causal=True,
+                )
+            else:
+                attn_output_unpad = flash_attn_varlen_func(
+                    query_states,
+                    key_states,
+                    value_states,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_k,
+                    max_seqlen_q=max_seqlen_in_batch_q,
+                    max_seqlen_k=max_seqlen_in_batch_k,
+                    dropout_p=dropout,
+                    softmax_scale=softmax_scale,
+                    causal=True,
+                    window_size=(self.config.sliding_window, self.config.sliding_window)
+                )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
-            )
+            if not use_sliding_windows:
+                attn_output = flash_attn_func(
+                    query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+                )
+            else:
+                attn_output = flash_attn_func(
+                    query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True, window_size=(self.config.sliding_window // 2, self.config.sliding_window // 2)
+                )
 
         return attn_output
 
