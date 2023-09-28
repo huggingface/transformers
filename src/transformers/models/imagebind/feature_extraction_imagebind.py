@@ -41,7 +41,7 @@ class ImageBindFeatureExtractor(ImageBindImageProcessor):
 
 
 # NOTE: ImageBind follow Audio Spectrogram Transformer for audio processing
-# Copied from transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer.ASTFeatureExtractor with AST->ImageBindAudio
+# Based on ASTFeatureExtractor
 class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Audio Spectrogram Transformer (AST) feature extractor.
@@ -59,13 +59,13 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         num_mel_bins (`int`, *optional*, defaults to 128):
             Number of Mel-frequency bins.
-        max_length (`int`, *optional*, defaults to 1024):
+        max_length (`int`, *optional*, defaults to 204):
             Maximum length to which to pad/truncate the extracted features.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the log-Mel features using `mean` and `std`.
-        mean (`float`, *optional*, defaults to -4.2677393):
+        mean (`float`, *optional*, defaults to -4.268):
             The mean value used to normalize the log-Mel features. Uses the AudioSet mean by default.
-        std (`float`, *optional*, defaults to 4.5689974):
+        std (`float`, *optional*, defaults to 9.138):
             The standard deviation value used to normalize the log-Mel features. Uses the AudioSet standard deviation
             by default.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
@@ -79,11 +79,11 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
         feature_size=1,
         sampling_rate=16000,
         num_mel_bins=128,
-        max_length=1024,
+        max_length=204,
         padding_value=0.0,
         do_normalize=True,
-        mean=-4.2677393,
-        std=4.5689974,
+        mean=-4.268,
+        std=9.138,
         return_attention_mask=False,
         **kwargs,
     ):
@@ -105,6 +105,8 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
         and hence the waveform should not be normalized before feature extraction.
         """
         # waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
+        # Mean center the waveform
+        waveform -= waveform.mean()
         waveform = torch.from_numpy(waveform).unsqueeze(0)
         fbank = ta_kaldi.fbank(
             waveform,
