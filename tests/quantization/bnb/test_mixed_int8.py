@@ -139,7 +139,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         )
         with init_empty_weights():
             model = AutoModelForCausalLM.from_config(
-                config, trust_remote_code=True, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
+                config, trust_remote_code=True, code_revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
             )
         self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
         # without trust_remote_code
