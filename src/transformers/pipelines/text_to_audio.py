@@ -43,6 +43,29 @@ class TextToAudioPipeline(Pipeline):
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
+    <Tip>
+
+    You can specify parameters passed to the model generation/forward method by using
+    [`TextToAudioPipeline.__call__.forward_params`].
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+
+    >>> # diversify the music generation by adding randomness with a high temperature and set a maximum music length
+    >>> forward_params = {
+    ...     "do_sample": True,
+    ...     "temperature": 0.7,
+    ...     "max_new_tokens": 250,
+    ... }
+
+    >>> outputs = music_generator("This is a test", forward_params=forward_params)
+    ```
+
+    </Tip>
 
     This pipeline can currently be loaded from [`pipeline`] using the following task identifiers: `"text-to-speech"` or
     `"text-to-audio"`.
