@@ -2463,7 +2463,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
-        _adapter_model_path = kwargs.pop("_adapter_model_path", None)
+        adapter_kwargs = kwargs.pop("adapter_kwargs", {})
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
@@ -2516,6 +2516,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 commit_hash = getattr(config, "_commit_hash", None)
 
         if is_peft_available():
+            _adapter_model_path = adapter_kwargs.pop("_adapter_model_path", None)
+
             if _adapter_model_path is None:
                 _adapter_model_path = find_adapter_config_file(
                     pretrained_model_name_or_path,
@@ -2525,14 +2527,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     proxies=proxies,
                     local_files_only=local_files_only,
                     token=token,
-                    revision=revision,
-                    subfolder=subfolder,
                     _commit_hash=commit_hash,
+                    **adapter_kwargs,
                 )
             if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
                 with open(_adapter_model_path, "r", encoding="utf-8") as f:
                     _adapter_model_path = pretrained_model_name_or_path
                     pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+        else:
+            _adapter_model_path = None
 
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
@@ -3371,8 +3374,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
-                revision=revision,
                 token=token,
+                adapter_kwargs=adapter_kwargs,
             )
 
         if output_loading_info:

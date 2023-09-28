@@ -469,6 +469,7 @@ class _BaseAutoModelClass:
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
         code_revision = kwargs.pop("code_revision", None)
         commit_hash = kwargs.pop("_commit_hash", None)
+        adapter_kwargs = kwargs.pop("adapter_kwargs", None)
 
         revision = hub_kwargs.pop("revision", None)
         hub_kwargs["revision"] = sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code)
@@ -503,15 +504,18 @@ class _BaseAutoModelClass:
                 commit_hash = getattr(config, "_commit_hash", None)
 
         if is_peft_available():
+            if adapter_kwargs is None:
+                adapter_kwargs = {}
+
             maybe_adapter_path = find_adapter_config_file(
-                pretrained_model_name_or_path, _commit_hash=commit_hash, **hub_kwargs
+                pretrained_model_name_or_path, _commit_hash=commit_hash, **adapter_kwargs
             )
 
             if maybe_adapter_path is not None:
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
                     adapter_config = json.load(f)
 
-                    kwargs["_adapter_model_path"] = pretrained_model_name_or_path
+                    adapter_kwargs["_adapter_model_path"] = pretrained_model_name_or_path
                     pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
 
         if not isinstance(config, PretrainedConfig):
@@ -545,6 +549,10 @@ class _BaseAutoModelClass:
         trust_remote_code = resolve_trust_remote_code(
             trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )
+
+        # Set the adapter kwargs
+        kwargs["adapter_kwargs"] = adapter_kwargs
+
         if has_remote_code and trust_remote_code:
             class_ref = config.auto_map[cls.__name__]
             model_class = get_class_from_dynamic_module(

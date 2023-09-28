@@ -351,3 +351,30 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 # dummy generation
                 _ = model.generate(input_ids=dummy_input)
+
+    def test_peft_from_pretrained_hub_kwargs(self):
+        """
+        Tests different combinations of PEFT model + from_pretrained + hub kwargs
+        """
+        peft_model_id = "peft-internal-testing/tiny-opt-lora-revision"
+
+        # This should not work
+        with self.assertRaises(OSError):
+            _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
+
+        adapter_kwargs = {"revision": "test"}
+
+        # This should work
+        model = AutoModelForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
+
+        model = OPTForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
+
+        adapter_kwargs = {"revision": "main", "subfolder": "test_subfolder"}
+
+        model = AutoModelForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
+
+        model = OPTForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
+        self.assertTrue(self._check_lora_correctly_converted(model))
