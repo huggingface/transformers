@@ -34,6 +34,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_available,
+    is_torch_fx_available,
     logging,
     replace_return_docstrings,
 )
@@ -68,6 +69,22 @@ OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/opt-30b",
     # See all OPT models at https://huggingface.co/models?filter=opt
 ]
+
+
+if is_torch_fx_available():
+
+    @torch.fx.wrap
+    def check_padding_in_attention_mask(attention_mask):
+        if 0 in attention_mask:
+            return attention_mask
+        return None
+
+else:
+
+    def check_padding_in_attention_mask(attention_mask):
+        if 0 in attention_mask:
+            return attention_mask
+        return None
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -359,7 +376,6 @@ class OptFlashAttention2(OPTAttention):
         query_states = query_states.view(bsz, query_length, self.num_heads, self.head_dim)
         key_states = key_states.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
         value_states = value_states.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
-
 
         attn_dropout = self.dropout if self.training else 0.0
 
@@ -870,10 +886,7 @@ class OPTDecoder(OPTPreTrainedModel):
                 f"{mask_seq_length} (sum of the lengths of current and past inputs)"
             )
         else:
-            if 0 in attention_mask:
-                padding_mask = attention_mask
-            else:
-                padding_mask = None
+            padding_mask = check_padding_in_attention_mask(attention_mask)
 
         causal_attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
