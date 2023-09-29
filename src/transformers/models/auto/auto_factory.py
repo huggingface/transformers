@@ -513,9 +513,6 @@ class _BaseAutoModelClass:
                 pretrained_model_name_or_path, _commit_hash=commit_hash, **adapter_kwargs
             )
 
-            if token is not None:
-                adapter_kwargs.pop("token", None)
-
             if maybe_adapter_path is not None:
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
                     adapter_config = json.load(f)
