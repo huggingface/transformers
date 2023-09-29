@@ -2227,9 +2227,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
                 # legacy: we have to init with (rstrip=True, lstrip=True)
-                strip = True if "Fast" not in cls.__name__ else False
                 added_tokens_decoder = {
-                    index: AddedToken(token, rstrip=strip, lstrip=strip) for token, index in added_tok_encoder.items()
+                    index: AddedToken(token, rstrip=True, lstrip=True) for token, index in added_tok_encoder.items()
                 }
             # end legacy
 
