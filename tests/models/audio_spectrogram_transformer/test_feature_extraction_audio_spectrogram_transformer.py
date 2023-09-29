@@ -134,7 +134,7 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-    
+
     @require_torch
     def test_double_precision_pad(self):
         import torch
@@ -174,7 +174,7 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
         input_values = feature_extractor(input_speech, return_tensors="pt").input_values
         self.assertEquals(input_values.shape, (1, 1024, 128))
         self.assertTrue(torch.allclose(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, atol=1e-4))
-    
+
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
@@ -201,16 +201,20 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
 
 
 @require_torch
-@unittest.mock.patch("transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer.is_speech_available", lambda: False)
+@unittest.mock.patch(
+    "transformers.models.audio_spectrogram_transformer.feature_extraction_audio_spectrogram_transformer.is_speech_available",
+    lambda: False,
+)
 class ASTFeatureExtractionWithoutTorchaudioTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = ASTFeatureExtractor
+
     def setUp(self):
         self.feat_extract_tester = ASTFeatureExtractionTester(self)
-        
+
     def test_using_audio_utils(self):
         # Tests that it uses audio_utils instead of torchaudio
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        
+
         self.assertTrue(hasattr(feat_extract, "window"))
         self.assertTrue(hasattr(feat_extract, "mel_filters"))
 

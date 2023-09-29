@@ -22,12 +22,11 @@ import unittest
 
 import numpy as np
 
+from transformers import Speech2TextFeatureExtractor
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
-
-from transformers import Speech2TextFeatureExtractor
 
 global_rng = random.Random()
 
@@ -306,7 +305,9 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
 
 @require_torch
-@unittest.mock.patch("transformers.models.speech_to_text.feature_extraction_speech_to_text.is_speech_available", lambda: False)
+@unittest.mock.patch(
+    "transformers.models.speech_to_text.feature_extraction_speech_to_text.is_speech_available", lambda: False
+)
 class Speech2TextFeatureExtractionWithoutTorchaudioTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = Speech2TextFeatureExtractor
 
@@ -320,7 +321,7 @@ class Speech2TextFeatureExtractionWithoutTorchaudioTest(SequenceFeatureExtractio
     def test_using_audio_utils(self):
         # Tests that it uses audio_utils instead of torchaudio
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        
+
         self.assertTrue(hasattr(feat_extract, "window"))
         self.assertTrue(hasattr(feat_extract, "mel_filters"))
 

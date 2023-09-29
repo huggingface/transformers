@@ -26,6 +26,7 @@ from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_speech_available, logging
 
+
 if is_speech_available():
     import torchaudio.compliance.kaldi as ta_kaldi
 
