@@ -39,9 +39,9 @@ if is_vision_available():
         AutoProcessor,
         Kosmos2ImageProcessor,
         Kosmos2Processor,
-        Kosmos2Tokenizer,
-        Kosmos2TokenizerFast,
         PreTrainedTokenizerFast,
+        XLMRobertaTokenizer,
+        XLMRobertaTokenizerFast,
     )
 
 
@@ -58,8 +58,8 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         image_processor = Kosmos2ImageProcessor()
 
         # We have a SentencePiece fixture for testing
-        slow_tokenizer = Kosmos2Tokenizer(SAMPLE_VOCAB)
-        fast_tokenizer = Kosmos2TokenizerFast(__slow_tokenizer=slow_tokenizer)
+        slow_tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB)
+        fast_tokenizer = XLMRobertaTokenizerFast(__slow_tokenizer=slow_tokenizer)
 
         processor = Kosmos2Processor(image_processor, fast_tokenizer)
         processor.save_pretrained(self.tmpdirname)
