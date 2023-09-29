@@ -115,10 +115,11 @@ class ProPainterConfig(PretrainedConfig):
         dropout = 0,
         encoder_depth = 2,
         raft_iter = 20,
-        alternate_corr = False,
         subvideo_length = 80,
         neighbor_length = 10,
         ref_stride = 10,
+        transformer_depth = 8,
+        transformer_heads = 4,
 
 
         **kwargs,

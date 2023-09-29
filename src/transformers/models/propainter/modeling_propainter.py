@@ -19,7 +19,6 @@ import collections.abc
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
 from functools import reduce
-from einops import rearrange
 
 import torch
 import torch.utils.checkpoint
@@ -34,6 +33,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
     MaskedImageModelingOutput,
+    ImageSuperResolutionOutput
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -918,9 +918,6 @@ class ProPainterBidirectionalPropagation(nn.Module):
         fb_valid_fw = (length_sq(flow_diff_fw) < occ_thresh_fw).to(flow_fw)
         return fb_valid_fw
 
-
-
-
     def forward(self, x, flows_forward, flows_backward, mask, interpolation='bilinear'):
         """
         x shape : [b, t, c, h, w]
@@ -1117,8 +1114,6 @@ class SparseWindowAttention(nn.Module):
         x = x.view(B, T, H // window_size[0], window_size[0], W // window_size[1], window_size[1], n_head, C//n_head)
         windows = x.permute(0, 2, 4, 6, 1, 3, 5, 7).contiguous()
         return windows
-
-
 
     def forward(self, x, mask=None, T_ind=None, attn_mask=None):
         b, t, h, w, c = x.shape # 20 36
@@ -1340,10 +1335,8 @@ class TemporalSparseTransformerBlock(nn.Module):
         assert self.depths % t_dilation == 0, 'wrong t_dilation input.'
         T = x.size(1)
         T_ind = [torch.arange(i, T, t_dilation) for i in range(t_dilation)] * (self.depths // t_dilation)
-
         for i in range(0, self.depths):
             x = self.transformer[i](x, fold_x_size, l_mask, T_ind[i])
-
         return x
 
 class ProPainterPreTrainedModel(PreTrainedModel):
@@ -1351,7 +1344,6 @@ class ProPainterPreTrainedModel(PreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-
     config_class = ProPainterConfig
     base_model_prefix = "propainter"
     main_input_name = "pixel_values"
@@ -1393,8 +1385,8 @@ class OpticalFlow(ProPainterPreTrainedModel):
         super(OpticalFlow, self).__init__(config)
         self.config = config
 
-        self.hidden_dim = hdim = 128
-        self.context_dim = cdim = 128
+        self.hidden_dim = hidden_dim
+        self.context_dim = contect_dim
         config.corr_levels = 4
         config.corr_radius = 4
 
@@ -1435,7 +1427,11 @@ class OpticalFlow(ProPainterPreTrainedModel):
         up_flow = up_flow.permute(0, 1, 4, 2, 5, 3)
         return up_flow.reshape(N, 2, 8*H, 8*W)
 
-    def OpticalPairs(self, image1, image2, iters=12, flow_init=None, test_mode=True):
+    def upflow8(self, flow, mode='bilinear'):
+        new_size = (8 * flow.shape[2], 8 * flow.shape[3])
+        return  8 * F.interpolate(flow, size=new_size, mode=mode, align_corners=True)
+
+    def OpticalPairs(self, image1, image2, iters=12, flow_init=None, is_training=True):
         """ Estimate optical flow between pair of frames """
 
         # image1 = 2 * (image1 / 255.0) - 1.0
@@ -1443,20 +1439,12 @@ class OpticalFlow(ProPainterPreTrainedModel):
 
         image1 = image1.contiguous()
         image2 = image2.contiguous()
-        print(image1.dtype)
         hdim = self.hidden_dim
         cdim = self.context_dim
 
         # run the feature network
         fmap1, fmap2 = self.FeatureNet([image1, image2])
-
-        fmap1 = fmap1
-        fmap2 = fmap2
-        
-        if self.config.alternate_corr:
-            corr_fn = AlternateCorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
-        else:
-            corr_fn = CorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
+        corr_fn = CorrBlock(fmap1, fmap2, radius=self.config.corr_radius)
 
         # run the context network
         cnet = self.ContextNet(image1)
@@ -1477,35 +1465,28 @@ class OpticalFlow(ProPainterPreTrainedModel):
             flow = coords1 - coords0
             flow = flow.to(image1.dtype)
             net, up_mask, delta_flow = self.UpdateBlock(net, inp, corr, flow)
-
-            # F(t+1) = F(t) + \Delta(t)
             coords1 = coords1 + delta_flow
 
             # upsample predictions
             if up_mask is None:
-                flow_up = upflow8(coords1 - coords0)
+                flow_up = self.upflow8(coords1 - coords0)
             else:
                 flow_up = self.upsample_flow(coords1 - coords0, up_mask)
 
             flow_predictions.append(flow_up)
 
-        if test_mode:
+        if not is_training:
             return coords1 - coords0, flow_up
 
         return flow_predictions
 
     def forward(self, gt_local_frames, iters=20):
         b, l_t, c, h, w = gt_local_frames.size()
-        # print(gt_local_frames.shape)
-        print(gt_local_frames.dtype)
         with torch.no_grad():
             gtlf_1 = gt_local_frames[:, :-1, :, :, :].reshape(-1, c, h, w)
             gtlf_2 = gt_local_frames[:, 1:, :, :, :].reshape(-1, c, h, w)
-            # print(gtlf_1.shape)
-            print(gtlf_1.dtype)
             _, gt_flows_forward = self.OpticalPairs(gtlf_1, gtlf_2, iters=iters, test_mode=True)
             _, gt_flows_backward = self.OpticalPairs(gtlf_2, gtlf_1, iters=iters, test_mode=True)
-
 
         gt_flows_forward = gt_flows_forward.view(b, l_t-1, 2, h, w)
         gt_flows_backward = gt_flows_backward.view(b, l_t-1, 2, h, w)
@@ -1556,28 +1537,25 @@ VIT_INPUTS_DOCSTRING = r"""
 class ProPainterModel(ProPainterPreTrainedModel):
     def __init__(self, config:ProPainterConfig):
         super(ProPainterModel, self).__init__(config)
-        channel = 128
-        hidden = 512
+        channel = config.num_channel 
+        hidden = config.hidden_size 
 
         self.encoder = Encoder()
 
         self.decoder = nn.Sequential(
-            deconv(channel, 128, kernel_size=3, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            deconv(64, 64, kernel_size=3, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1)
+            deconv(channel, channel, kernel_size=3, padding=1),
+            nn.LeakyReLU(config.threshold, inplace=True),
+            nn.Conv2d(channel, channel//2, kernel_size=3, stride=1, padding=1),
+            nn.LeakyReLU(config.threshold, inplace=True),
+            deconv(channel//2, channel//2, kernel_size=3, padding=1),
+            nn.LeakyReLU(config.threshold, inplace=True),
+            nn.Conv2d(channel//2, 3, kernel_size=3, stride=1, padding=1)
         )
 
-        kernel_size = (7,7)
-        padding = (3,3)
-        stride = (3,3)
         t2t_params = {
-            'kernel_size': kernel_size,
-            'stride': stride,
-            'padding': padding
+            'kernel_size': config.kernel_size,
+            'stride': config.stride,
+            'padding': config.padding
         }
 
         self.ss = SoftSplit(channel, hidden, kernel_size, stride, padding)
@@ -1588,8 +1566,8 @@ class ProPainterModel(ProPainterPreTrainedModel):
         self.img_prop_module = ProPainterBidirectionalPropagation(3, learnable=False)
         self.feat_prop_module = ProPainterBidirectionalPropagation(128, learnable=True)
 
-        depths = 8
-        num_heads = 4
+        depths = config.transformer_depth
+        num_heads = config.transformer_heads
         window_size = (5, 9)
         pool_size = (4, 4)
         self.transformers = TemporalSparseTransformerBlock(dim=hidden,
@@ -1598,8 +1576,6 @@ class ProPainterModel(ProPainterPreTrainedModel):
                                                 pool_size=pool_size,
                                                 depths=depths,
                                                 t2t_params=t2t_params)
-
-        
         self.post_init()
 
 
@@ -1641,7 +1617,11 @@ class ProPainterModel(ProPainterPreTrainedModel):
         enc_feat = torch.cat((local_feat, ref_feat), dim=1)
 
         trans_feat = self.ss(enc_feat.view(-1, c, h, w), b, fold_feat_size)
-        mask_pool_l = rearrange(mask_pool_l, 'b t c h w -> b t h w c').contiguous()
+        batch_size, time_steps, channels, height, width = mask_pool_l.shape
+
+        mask_pool_l = mask_pool_l.view(batch_size, time_steps, height, width, channels)
+        mask_pool_l = mask_pool_l.contiguous()
+
         trans_feat = self.transformers(trans_feat, fold_feat_size, mask_pool_l, t_dilation=t_dilation)
         trans_feat = self.sc(trans_feat, t, fold_feat_size)
         trans_feat = trans_feat.view(b, t, -1, h, w)
@@ -1873,6 +1853,9 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
                 comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
             ## to be removed
+        return ImageSuperResolutionOutput(
+          reconstruction = comp_frames,
+        )
         import os
         out_size = (w,h)
         def imwrite(img, file_path, params=None, auto_mkdir=True):
@@ -2007,7 +1990,3 @@ class ProPainterForImageOutPainting(ProPainterPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-
-

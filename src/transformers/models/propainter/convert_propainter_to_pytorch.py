@@ -30,6 +30,7 @@ from collections import OrderedDict
 
 from transformers.models.propainter.configuration_propainter import ProPainterConfig
 from transformers.models.propainter.modeling_propainter import ProPainterForImageInPainting
+from transformers.models.propainter.image_processing_propainter import ProPainterImageProcessor
 from transformers.utils import logging
 
 
@@ -150,10 +151,10 @@ def create_rename_keys(config):
 
     for enc in range(1,3):
         for i in range(0,config.encoder_depth,2):#7
-            rename_keys.append((f"encoder{enc}.{i}.conv1.weight", f"FlowComplete.Encoder{enc}.0.{i}.Conv1.0.weight"))
-            rename_keys.append((f"encoder{enc}.{i}.conv1.bias", f"FlowComplete.Encoder{enc}.0.{i}.Conv1.0.bias"))
-            rename_keys.append((f"encoder{enc}.{i}.conv2.weight", f"FlowComplete.Encoder{enc}.0.{i}.Conv2.0.weight"))
-            rename_keys.append((f"encoder{enc}.{i}.conv2.bias", f"FlowComplete.Encoder{enc}.0.{i}.Conv2.0.bias"))
+            rename_keys.append((f"encoder{enc}.{i}.conv1.0.weight", f"FlowComplete.Encoder{enc}.{i}.Conv1.0.weight"))
+            rename_keys.append((f"encoder{enc}.{i}.conv1.0.bias", f"FlowComplete.Encoder{enc}.{i}.Conv1.0.bias"))
+            rename_keys.append((f"encoder{enc}.{i}.conv2.0.weight", f"FlowComplete.Encoder{enc}.{i}.Conv2.0.weight"))
+            rename_keys.append((f"encoder{enc}.{i}.conv2.0.bias", f"FlowComplete.Encoder{enc}.{i}.Conv2.0.bias"))
     
     for i in range(0, config.mid_dilation_depth,2):#5
         rename_keys.append((f"mid_dilation.{i}.weight", f"FlowComplete.MidDilation.{i}.weight"))
@@ -340,44 +341,29 @@ def convert_propainter_checkpoint(
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    aa
 
-    # Check outputs on an image, prepared by ViTImageProcessor/DeiTImageProcessor
-    if "deit" in vit_name:
-        image_processor = DeiTImageProcessor(size=config.image_size)
-    else:
-        image_processor = ViTImageProcessor(size=config.image_size)
-    encoding = image_processor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
-    outputs = model(pixel_values)
-
-    if base_model:
-        timm_pooled_output = timm_model.forward_features(pixel_values)
-        assert timm_pooled_output.shape == outputs.pooler_output.shape
-        assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-3)
-    else:
-        timm_logits = timm_model(pixel_values)
-        assert timm_logits.shape == outputs.logits.shape
-        assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
+    image_processor = ProPainterImageProcessor(size=config.image_size)
+    #encoding = image_processor(images=prepare_img(), return_tensors="pt")
+    #pixel_values = encoding["pixel_values"]
+    #outputs = model(pixel_values)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")
+    print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
     print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument( 
-        "--checkpoint_path_optical_flow", default=None, type=str, help="Path to the original state dict (.pth file)."
+        "--checkpoint_path_optical_flow", default="./raft-things.pth", type=str, help="Path to the original state dict (.pth file)."
     )
     parser.add_argument( 
-        "--checkpoint_path_recurrent_flow", default=None, type=str, help="Path to the original state dict (.pth file)."
+        "--checkpoint_path_recurrent_flow", default="./recurrent_flow_completion.pth", type=str, help="Path to the original state dict (.pth file)."
     )
     parser.add_argument( 
-        "--checkpoint_path_pro_painter", default=None, type=str, help="Path to the original state dict (.pth file)."
+        "--checkpoint_path_pro_painter", default="./ProPainter.pth", type=str, help="Path to the original state dict (.pth file)."
     )
 
     parser.add_argument(
