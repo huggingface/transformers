@@ -114,6 +114,7 @@ class LlamaConfig(PretrainedConfig):
         rope_theta=10000.0,
         rope_scaling=None,
         mm_hidden_size=1024,
+        attention_bias=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
