@@ -84,7 +84,7 @@ transcriber(
 )
 ```
 
-If you want to iterate over a whole dataset, or want to use it for inference in a webserver, check out the dedicated parts
+Pipelines are great for experimentation as switching from one model to another is trivial; however, there are some ways to optimize them for larger workloads than experimentation. See the following guides that dive into iterating over whole datasets or using pipelines in a webserver:
 of the docs:
 * [Using pipelines on a dataset](#using-pipelines-on-a-dataset)
 * [Using pipelines for a webserver](./pipeline_webserver)
