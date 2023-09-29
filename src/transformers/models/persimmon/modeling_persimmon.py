@@ -295,7 +295,7 @@ class PersimmonAttention(nn.Module):
             query_states = self.q_layernorm(query_states)
             key_states = self.k_layernorm(key_states)
 
-        # [batch_size, num_heads, seq_length, head_dim] -> [batch_size, seq_length, num_heads, head_dim]
+        # [batch_size, seq_length, num_heads, head_dim] -> [batch_size, num_heads, seq_length, head_dim]
         query_states = query_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -314,10 +314,10 @@ class PersimmonAttention(nn.Module):
             key_states[..., : self.rotary_emb.dim],
             key_states[..., self.rotary_emb.dim :],
         )
-        # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
+        # [batch_size, num_heads, seq_length, head_dim // config.partial_rotary_factor]
         query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
 
-        # [batch_size, seq_length, num_heads, head_dim]
+        # [batch_size, num_heads, seq_length, head_dim]
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
@@ -397,7 +397,7 @@ class PersimmonFlashAttention2(PersimmonAttention):
             query_states = self.q_layernorm(query_states)
             key_states = self.k_layernorm(key_states)
 
-        # [batch_size, num_heads, seq_length, head_dim] -> [batch_size, seq_length, num_heads, head_dim]
+        # [batch_size, seq_length, num_heads, head_dim] -> [batch_size, num_heads, seq_length, head_dim]
         query_states = query_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -416,10 +416,10 @@ class PersimmonFlashAttention2(PersimmonAttention):
             key_states[..., : self.rotary_emb.dim],
             key_states[..., self.rotary_emb.dim :],
         )
-        # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
+        # [batch_size, num_heads, seq_length, head_dim // config.partial_rotary_factor]
         query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
 
-        # [batch_size, seq_length, num_heads, head_dim]
+        # [batch_size,  num_heads, seq_length, head_dim]
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
