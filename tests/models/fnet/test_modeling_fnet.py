@@ -552,10 +552,6 @@ class FNetModelIntegrationTest(unittest.TestCase):
         model = FNetForMaskedLM.from_pretrained("google/fnet-base")
         model.to(torch_device)
         logits = model(**inputs).logits
-
-        # torch.testing.assert_allclose(logits[0, 6].topk(5).indices.cpu().data, torch.tensor([ 283, 821, 4638, 3806, 2063]))
-        # torch.testing.assert_allclose(logits[0, 6].topk(5).indices.cpu().data, torch.tensor([ 394, 4059, 1499, 1587, 1316]))
-
         predictions_mask_1 = tokenizer.decode(logits[0, 6].topk(5).indices)
         predictions_mask_2 = tokenizer.decode(logits[0, 12].topk(5).indices)
 
