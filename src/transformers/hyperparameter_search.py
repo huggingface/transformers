@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from packaging.version import Version
+
 from .integrations import (
     is_optuna_available,
     is_ray_tune_available,
