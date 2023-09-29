@@ -238,7 +238,7 @@ class TrainingArguments:
             when all data is exhausted
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
-        lr_scheduler_kwargs ('dict', *optional*, defaults to None):
+        lr_scheduler_kwargs ('dict', *optional*, defaults to {}):
             The extra arguments for the lr_scheduler. See the documentation of each scheduler for possible values.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
@@ -732,7 +732,7 @@ class TrainingArguments:
         metadata={"help": "The scheduler type to use."},
     )
     lr_scheduler_kwargs: Optional[Dict] = field(
-        default=None,
+        default_factory = dict,
         metadata={
             "help": (
                 "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts"

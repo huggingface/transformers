@@ -354,8 +354,8 @@ def get_scheduler(
             The number of training steps to do. This is not required by all schedulers (hence the argument being
             optional), the function will raise an error if it's unset and the scheduler type requires it.
         scheduler_specific_kwargs (`dict`, *optional*):
-            Extra parameters for schedulers such as cosine with restarts. Mismatched scheduler types and
-            scheduler parameters will cause the scheduler function to raise a TypeError.
+            Extra parameters for schedulers such as cosine with restarts. Mismatched scheduler types and scheduler
+            parameters will cause the scheduler function to raise a TypeError.
     """
     name = SchedulerType(name)
     schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
@@ -376,10 +376,15 @@ def get_scheduler(
     if num_training_steps is None:
         raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
 
-    return schedule_func(optimizer,
-                         num_warmup_steps=num_warmup_steps,
-                         num_training_steps=num_training_steps,
-                         **scheduler_specific_kwargs)
+    if scheduler_specific_kwargs is None:
+        scheduler_specific_kwargs = {}
+
+    return schedule_func(
+        optimizer,
+        num_warmup_steps=num_warmup_steps,
+        num_training_steps=num_training_steps,
+        **scheduler_specific_kwargs,
+    )
 
 
 class AdamW(Optimizer):
