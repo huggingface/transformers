@@ -55,19 +55,6 @@ Kosmos-2 modeling code in Transformers is for finetuning and inferencing the pre
 [[autodoc]] Kosmos2Processor
     - __call__
 
-## Kosmos2Tokenizer
-
-[[autodoc]] Kosmos2Tokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-## Kosmos2TokenizerFast
-
-[[autodoc]] Kosmos2TokenizerFast
-    - build_inputs_with_special_tokens
-
 ## Kosmos2Model
 
 [[autodoc]] Kosmos2Model

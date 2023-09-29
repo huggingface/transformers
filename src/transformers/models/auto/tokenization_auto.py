@@ -184,8 +184,8 @@ else:
             (
                 "kosmos-2",
                 (
-                    "Kosmos2Tokenizer" if is_sentencepiece_available() else None,
-                    "Kosmos2TokenizerFast" if is_tokenizers_available() else None,
+                    "XLMRobertaTokenizer" if is_sentencepiece_available() else None,
+                    "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
