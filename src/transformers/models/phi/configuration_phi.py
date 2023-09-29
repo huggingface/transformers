@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Microsoft and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
