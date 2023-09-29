@@ -2220,6 +2220,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             continue
                         if isinstance(value, dict):
                             value = AddedToken(**value)
+                            init_kwargs[key] = value
                         elif key == "additional_special_tokens" and isinstance(value, list):
                             for token in value:
                                 token = AddedToken(**token) if isinstance(token, dict) else token
@@ -2232,7 +2233,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
                 # legacy: we have to init with (rstrip=True, lstrip=True)
-                strip = True if not "Fast" in cls.__name__ else False
+                strip = True if "Fast" not in cls.__name__ else False
                 added_tokens_decoder = {
                     index: AddedToken(token, rstrip=strip, lstrip=strip) for token, index in added_tok_encoder.items()
                 }

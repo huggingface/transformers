@@ -548,7 +548,6 @@ class FNetModelIntegrationTest(unittest.TestCase):
 
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
 
-
         model = FNetForMaskedLM.from_pretrained("google/fnet-base")
         model.to(torch_device)
         logits = model(**inputs).logits
