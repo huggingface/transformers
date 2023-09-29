@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -44,10 +45,17 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_available,
+    is_torch_fx_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_distilbert import DistilBertConfig
+
+
+if is_flash_attn_available():
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
 logger = logging.get_logger(__name__)
@@ -67,6 +75,36 @@ DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
+
+
+# TODO: @younesbelkada move that in pytorch_utils and document it
+if is_torch_fx_available():
+
+    @torch.fx.wrap
+    def check_padding_in_attention_mask(attention_mask):
+        if 0 in attention_mask:
+            return attention_mask
+        return None
+
+else:
+
+    def check_padding_in_attention_mask(attention_mask):
+        if 0 in attention_mask:
+            return attention_mask
+        return None
+
+
+# Copied from transformers.models.llama.modeling_llama._get_unpad_data
+def _get_unpad_data(padding_mask):
+    seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(padding_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
 
 
 def create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
@@ -183,6 +221,7 @@ class MultiHeadSelfAttention(nn.Module):
         mask: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        padding_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, ...]:
         """
         Parameters:
@@ -240,6 +279,165 @@ class MultiHeadSelfAttention(nn.Module):
             return (context,)
 
 
+class DistilBertFlashAttention2(MultiHeadSelfAttention):
+    """
+    DistilBert flash attention module. This module inherits from `MultiHeadSelfAttention` as the weights of the module
+    stays untouched. The only required change would be on the forward pass where it needs to correctly call the public
+    API of flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        mask: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        padding_mask: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, ...]:
+        """
+        Parameters:
+            query: torch.tensor(bs, seq_length, dim)
+            key: torch.tensor(bs, seq_length, dim)
+            value: torch.tensor(bs, seq_length, dim)
+            mask: torch.tensor(bs, seq_length)
+
+        Returns:
+            weights: torch.tensor(bs, n_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
+            seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
+        """
+        bs, q_length, dim = query.size()
+
+        dim_per_head = self.dim // self.n_heads
+
+        def shape(x: torch.Tensor) -> torch.Tensor:
+            """separate heads"""
+            return x.view(bs, -1, self.n_heads, dim_per_head)
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        q = shape(self.q_lin(query))
+        k = shape(self.k_lin(key))
+        v = shape(self.v_lin(value))
+
+        attn_dropout = self.config.attention_dropout if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in float16 just to be sure everything works as expected.
+        input_dtype = q.dtype
+        if input_dtype == torch.float32:
+            logger.warning_once(
+                "The input hidden states seems to be silently casted in float32, this might be related to"
+                " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                " float16."
+            )
+
+            q = q.to(torch.float16)
+            k = k.to(torch.float16)
+            v = v.to(torch.float16)
+
+        attn_weights = self._flash_attention_forward(q, k, v, padding_mask, q_length, dropout=attn_dropout)
+
+        attn_weights_reshaped = attn_weights.reshape(bs, q_length, self.n_heads * dim_per_head)
+        attn_output = self.out_lin(attn_weights_reshaped)
+
+        if output_attentions:
+            return (attn_output, attn_weights)
+        else:
+            return (attn_output,)
+
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward with causal=True->causal=False
+    def _flash_attention_forward(
+        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None
+    ):
+        """
+        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
+        first unpad the input, then computes the attention scores and pad the final attention scores.
+
+        Args:
+            query_states (`torch.Tensor`):
+                Input query states to be passed to Flash Attention API
+            key_states (`torch.Tensor`):
+                Input key states to be passed to Flash Attention API
+            value_states (`torch.Tensor`):
+                Input value states to be passed to Flash Attention API
+            padding_mask (`torch.Tensor`):
+                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+                position of padding tokens and 1 for the position of non-padding tokens.
+            dropout (`int`, *optional*):
+                Attention dropout
+            softmax_scale (`float`, *optional*):
+                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        """
+        # Contains at least one padding token in the sequence
+        if padding_mask is not None:
+            batch_size = query_states.shape[0]
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, padding_mask, query_length
+            )
+
+            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
+                dropout_p=dropout,
+                softmax_scale=softmax_scale,
+                causal=False,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+        else:
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=False
+            )
+
+        return attn_output
+
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
+    def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
+
+        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        if query_length == kv_seq_len:
+            query_layer = index_first_axis(
+                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+            )
+            cu_seqlens_q = cu_seqlens_k
+            max_seqlen_in_batch_q = max_seqlen_in_batch_k
+            indices_q = indices_k
+        elif query_length == 1:
+            max_seqlen_in_batch_q = 1
+            cu_seqlens_q = torch.arange(
+                batch_size + 1, dtype=torch.int32, device=query_layer.device
+            )  # There is a memcpy here, that is very bad.
+            indices_q = cu_seqlens_q[:-1]
+            query_layer = query_layer.squeeze(1)
+        else:
+            # The -q_len: slice assumes left padding.
+            padding_mask = padding_mask[:, -query_length:]
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
+
+        return (
+            query_layer,
+            key_layer,
+            value_layer,
+            indices_q,
+            (cu_seqlens_q, cu_seqlens_k),
+            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
+        )
+
+
 class FFN(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
@@ -269,7 +467,11 @@ class TransformerBlock(nn.Module):
         if config.dim % config.n_heads != 0:
             raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
-        self.attention = MultiHeadSelfAttention(config)
+        self.attention = (
+            MultiHeadSelfAttention(config)
+            if not getattr(config, "_flash_attn_2_enabled", False)
+            else DistilBertFlashAttention2(config)
+        )
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)
@@ -281,6 +483,7 @@ class TransformerBlock(nn.Module):
         attn_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        padding_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, ...]:
         """
         Parameters:
@@ -299,6 +502,7 @@ class TransformerBlock(nn.Module):
             mask=attn_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
+            padding_mask=padding_mask,
         )
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
@@ -352,6 +556,8 @@ class Transformer(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
+        padding_mask = check_padding_in_attention_mask(attn_mask)
+
         hidden_state = x
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -361,7 +567,7 @@ class Transformer(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
+                        return module(*inputs, output_attentions, padding_mask=padding_mask)
 
                     return custom_forward
 
@@ -377,6 +583,7 @@ class Transformer(nn.Module):
                     attn_mask,
                     head_mask[i],
                     output_attentions,
+                    padding_mask,
                 )
 
             hidden_state = layer_outputs[-1]
@@ -413,6 +620,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     load_tf_weights = None
     base_model_prefix = "distilbert"
     supports_gradient_checkpointing = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
