@@ -352,6 +352,7 @@ class MistralFlashAttention2(MistralAttention):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
 
+        # Extrapolate the RoPE in case of sliding windows
         rotary_seq_len = max(kv_seq_len, position_ids.max().item()) + 1
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
@@ -366,8 +367,8 @@ class MistralFlashAttention2(MistralAttention):
                 past_key = past_key_value[0]
                 past_value = past_key_value[1]
 
-                past_key = past_key[:, :, :-slicing_tokens, :].contiguous()            
-                past_value = past_value[:, :, :-slicing_tokens, :].contiguous()  
+                past_key = past_key[:, :, kv_seq_len-slicing_tokens:, :].contiguous()            
+                past_value = past_value[:, :, kv_seq_len-slicing_tokens:, :].contiguous()  
 
                 past_key_value = (past_key, past_value)
 
