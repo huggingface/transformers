@@ -735,8 +735,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the"
-                "cosine with hard restarts"
+                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts"
             )
         },
     )
