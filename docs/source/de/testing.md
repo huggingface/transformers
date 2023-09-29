@@ -173,26 +173,26 @@ Um zum Beispiel sowohl `test_adafactor` als auch `test_adam_w` auszuführen, kö
 pytest -k "test_adam_w or test_adam_w" tests/test_optimization.py
 ```
 
-Note that we use `or` here, since we want either of the keywords to match to include both.
+Beachten Sie, dass wir hier `oder` verwenden, da wir wollen, dass eines der Schlüsselwörter übereinstimmt, um beide einzuschließen.
 
-If you want to include only tests that include both patterns, `and` is to be used:
+Wenn Sie nur Tests einschließen möchten, die beide Muster enthalten, müssen Sie `und` verwenden:
 
 ```bash
 pytest -k "test and ada" tests/test_optimization.py
 ```
 
-### Run `accelerate` tests
+### Führen Sie `accelerate` Tests durch
 
-Sometimes you need to run `accelerate` tests on your models. For that you can just add `-m accelerate_tests` to your command, if let's say you want to run these tests on `OPT` run:
+Manchmal müssen Sie `accelerate` Tests für Ihre Modelle ausführen. Dazu fügen Sie einfach `-m accelerate_tests` zu Ihrem Befehl hinzu, wenn Sie diese Tests bei einem `OPT`-Lauf ausführen möchten:
 ```bash
 RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
 ```
 
 
-### Run documentation tests 
+### Dokumentationstests ausführen 
 
-In order to test whether the documentation examples are correct, you should check that the `doctests` are passing. 
-As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035): 
+Um zu testen, ob die Dokumentationsbeispiele korrekt sind, sollten Sie überprüfen, ob die `doctests` erfolgreich sind. 
+Lassen Sie uns als Beispiel den docstring von [WhisperModel.forward](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035) verwenden: 
 
 ```python 
 r"""
@@ -217,16 +217,16 @@ Example:
 
 ```
 
-Just run the following line to automatically test every docstring example in the desired file: 
+Führen Sie einfach die folgende Zeile aus, um automatisch jedes docstring-Beispiel in der gewünschten Datei zu testen: 
 ```bash 
 pytest --doctest-modules <path_to_file_or_dir>
 ```
-If the file has a markdown extention, you should add the `--doctest-glob="*.md"` argument.
+Wenn die Datei eine Markdown-Erweiterung hat, sollten Sie das Argument `--doctest-glob="*.md"` hinzufügen.
 
-### Run only modified tests
+### Nur geänderte Tests ausführen
 
-You can run the tests related to the unstaged files or the current branch (according to Git) by using [pytest-picked](https://github.com/anapaulagomes/pytest-picked). This is a great way of quickly testing your changes didn't break
-anything, since it won't run the tests related to files you didn't touch.
+Mit [pytest-picked](https://github.com/anapaulagomes/pytest-picked) können Sie die Tests ausführen, die sich auf die unstaged Dateien oder den aktuellen Zweig (gemäß Git) beziehen. Auf diese Weise können Sie schnell testen, ob Ihre Änderungen nichts kaputt gemacht haben.
+nichts kaputt gemacht haben, da die Tests für Dateien, die Sie nicht verändert haben, nicht ausgeführt werden.
 
 ```bash
 pip install pytest-picked
@@ -236,80 +236,80 @@ pip install pytest-picked
 pytest --picked
 ```
 
-All tests will be run from files and folders which are modified, but not yet committed.
+Alle Tests werden von Dateien und Ordnern ausgeführt, die geändert, aber noch nicht übergeben wurden.
 
-### Automatically rerun failed tests on source modification
+### Fehlgeschlagene Tests bei Änderung der Quelle automatisch wiederholen
 
-[pytest-xdist](https://github.com/pytest-dev/pytest-xdist) provides a very useful feature of detecting all failed
-tests, and then waiting for you to modify files and continuously re-rerun those failing tests until they pass while you
-fix them. So that you don't need to re start pytest after you made the fix. This is repeated until all tests pass after
-which again a full run is performed.
+[pytest-xdist](https://github.com/pytest-dev/pytest-xdist) bietet eine sehr nützliche Funktion zur Erkennung aller fehlgeschlagenen
+Tests zu erkennen und dann darauf zu warten, dass Sie Dateien ändern, um die fehlgeschlagenen Tests so lange zu wiederholen, bis sie erfolgreich sind, während Sie die
+sie reparieren. So müssen Sie pytest nicht erneut starten, nachdem Sie die Korrektur vorgenommen haben. Dies wird so lange wiederholt, bis alle Tests bestanden sind.
+Danach wird erneut ein vollständiger Durchlauf durchgeführt.
 
 ```bash
 pip install pytest-xdist
 ```
 
-To enter the mode: `pytest -f` or `pytest --looponfail`
+So rufen Sie den Modus auf: `pytest -f` oder `pytest --looponfail`
 
-File changes are detected by looking at `looponfailroots` root directories and all of their contents (recursively).
-If the default for this value does not work for you, you can change it in your project by setting a configuration
-option in `setup.cfg`:
+Datei-Änderungen werden erkannt, indem die Wurzelverzeichnisse von `looponfailroots` und alle ihre Inhalte (rekursiv) untersucht werden.
+Wenn die Vorgabe für diesen Wert für Sie nicht funktioniert, können Sie ihn in Ihrem Projekt ändern, indem Sie eine Konfigurations
+Option in der Datei `setup.cfg` ändern:
 
 ```ini
 [tool:pytest]
 looponfailroots = transformers tests
 ```
 
-or `pytest.ini`/``tox.ini`` files:
+oder die Dateien `pytest.ini`/`tox.ini``:
 
 ```ini
 [pytest]
 looponfailroots = transformers tests
 ```
 
-This would lead to only looking for file changes in the respective directories, specified relatively to the ini-file’s
-directory.
+Dies würde dazu führen, dass nur nach Dateiänderungen in den jeweiligen Verzeichnissen gesucht wird, die relativ zum Verzeichnis der ini-Datei angegeben sind.
+Verzeichnis.
 
-[pytest-watch](https://github.com/joeyespo/pytest-watch) is an alternative implementation of this functionality.
+[pytest-watch](https://github.com/joeyespo/pytest-watch) ist eine alternative Implementierung dieser Funktionalität.
 
 
-### Skip a test module
+### Überspringen eines Testmoduls
 
-If you want to run all test modules, except a few you can exclude them by giving an explicit list of tests to run. For
-example, to run all except `test_modeling_*.py` tests:
+Wenn Sie alle Testmodule ausführen möchten, mit Ausnahme einiger weniger, können Sie diese ausschließen, indem Sie eine explizite Liste der auszuführenden Tests angeben. Für
+Beispiel: Um alle Tests außer `test_modeling_*.py` auszuführen:
 
 ```bash
 pytest *ls -1 tests/*py | grep -v test_modeling*
 ```
 
-### Clearing state
+### Status leeren
 
-CI builds and when isolation is important (against speed), cache should be cleared:
+CI-Builds und wenn Isolation wichtig ist (gegen Geschwindigkeit), sollte der Cache geleert werden:
 
 ```bash
 pytest --cache-clear tests
 ```
 
-### Running tests in parallel
+### Tests parallel ausführen
 
-As mentioned earlier `make test` runs tests in parallel via `pytest-xdist` plugin (`-n X` argument, e.g. `-n 2`
-to run 2 parallel jobs).
+Wie bereits erwähnt, führt `make test` über das Plugin `pytest-xdist` Tests parallel aus (Argument `-n X`, z.B. `-n 2`
+um 2 Jobs parallel laufen zu lassen).
 
-`pytest-xdist`'s `--dist=` option allows one to control how the tests are grouped. `--dist=loadfile` puts the
-tests located in one file onto the same process.
+Mit der Option `--dist=` von `pytest-xdist` können Sie steuern, wie die Tests gruppiert werden. Mit `--dist=loadfile` werden die
+Tests, die sich in einer Datei befinden, in denselben Prozess.
 
-Since the order of executed tests is different and unpredictable, if running the test suite with `pytest-xdist`
-produces failures (meaning we have some undetected coupled tests), use [pytest-replay](https://github.com/ESSS/pytest-replay) to replay the tests in the same order, which should help with then somehow
-reducing that failing sequence to a minimum.
+Da die Reihenfolge der ausgeführten Tests unterschiedlich und nicht vorhersehbar ist, kann die Ausführung der Testsuite mit `pytest-xdist`
+zu Fehlern führt (was bedeutet, dass wir einige unentdeckte gekoppelte Tests haben), verwenden Sie [pytest-replay](https://github.com/ESSS/pytest-replay), um die Tests in der gleichen Reihenfolge abzuspielen, was dabei helfen sollte
+diese fehlgeschlagene Sequenz auf ein Minimum zu reduzieren.
 
-### Test order and repetition
+### Testreihenfolge und Wiederholung
 
-It's good to repeat the tests several times, in sequence, randomly, or in sets, to detect any potential
-inter-dependency and state-related bugs (tear down). And the straightforward multiple repetition is just good to detect
-some problems that get uncovered by randomness of DL.
+Es ist gut, die Tests mehrmals zu wiederholen, nacheinander, zufällig oder in Gruppen, um mögliche
+Abhängigkeiten und zustandsbezogene Fehler zu erkennen (Abriss). Und die einfache, mehrfache Wiederholung ist einfach gut, um
+einige Probleme zu erkennen, die durch die Zufälligkeit von DL aufgedeckt werden.
 
 
-#### Repeat tests
+#### Wiederholungstests
 
 - [pytest-flakefinder](https://github.com/dropbox/pytest-flakefinder):
 
@@ -317,7 +317,7 @@ some problems that get uncovered by randomness of DL.
 pip install pytest-flakefinder
 ```
 
-And then run every test multiple times (50 by default):
+Und führen Sie dann jeden Test mehrmals durch (standardmäßig 50):
 
 ```bash
 pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
@@ -325,13 +325,13 @@ pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
 
 <Tip>
 
-This plugin doesn't work with `-n` flag from `pytest-xdist`.
+Dieses Plugin funktioniert nicht mit dem `-n` Flag von `pytest-xdist`.
 
 </Tip>
 
 <Tip>
 
-There is another plugin `pytest-repeat`, but it doesn't work with `unittest`.
+Es gibt noch ein anderes Plugin `pytest-repeat`, aber es funktioniert nicht mit `unittest`.
 
 </Tip>
 
@@ -341,11 +341,11 @@ There is another plugin `pytest-repeat`, but it doesn't work with `unittest`.
 pip install pytest-random-order
 ```
 
-Important: the presence of `pytest-random-order` will automatically randomize tests, no configuration change or
-command line options is required.
+Wichtig: Das Vorhandensein von `pytest-random-order` sorgt für eine automatische Zufallsanordnung der Tests, es sind keine Konfigurationsänderungen oder
+Befehlszeilenoptionen sind nicht erforderlich.
 
-As explained earlier this allows detection of coupled tests - where one test's state affects the state of another. When
-`pytest-random-order` is installed it will print the random seed it used for that session, e.g:
+Wie bereits erläutert, ermöglicht dies die Erkennung von gekoppelten Tests - bei denen der Zustand eines Tests den Zustand eines anderen beeinflusst. Wenn
+`pytest-random-order` installiert ist, gibt es den Zufallswert aus, der für diese Sitzung verwendet wurde, z.B:
 
 ```bash
 pytest tests
@@ -354,7 +354,7 @@ Using --random-order-bucket=module
 Using --random-order-seed=573663
 ```
 
-So that if the given particular sequence fails, you can reproduce it by adding that exact seed, e.g.:
+Wenn eine bestimmte Sequenz fehlschlägt, können Sie sie reproduzieren, indem Sie genau diesen Seed hinzufügen, z.B:
 
 ```bash
 pytest --random-order-seed=573663
@@ -363,61 +363,61 @@ Using --random-order-bucket=module
 Using --random-order-seed=573663
 ```
 
-It will only reproduce the exact order if you use the exact same list of tests (or no list at all). Once you start to
-manually narrowing down the list you can no longer rely on the seed, but have to list them manually in the exact order
-they failed and tell pytest to not randomize them instead using `--random-order-bucket=none`, e.g.:
+Es wird nur dann die exakte Reihenfolge reproduzieren, wenn Sie genau dieselbe Liste von Tests (oder gar keine Liste) verwenden. Sobald Sie beginnen, die Liste
+die Liste manuell einzugrenzen, können Sie sich nicht mehr auf den Seed verlassen, sondern müssen die Tests manuell in der genauen Reihenfolge auflisten
+auflisten und pytest anweisen, sie nicht zu randomisieren, indem Sie `--random-order-bucket=none` verwenden, z.B.:
 
 ```bash
 pytest --random-order-bucket=none tests/test_a.py tests/test_c.py tests/test_b.py
 ```
 
-To disable the shuffling for all tests:
+So deaktivieren Sie das Shuffling für alle Tests:
 
 ```bash
 pytest --random-order-bucket=none
 ```
 
-By default `--random-order-bucket=module` is implied, which will shuffle the files on the module levels. It can also
-shuffle on `class`, `package`, `global` and `none` levels. For the complete details please see its
-[documentation](https://github.com/jbasko/pytest-random-order).
+Standardmäßig ist `--random-order-bucket=module` impliziert, wodurch die Dateien auf den Modulebenen gemischt werden. Es kann auch
+auf den Ebenen `class`, `package`, `global` und `none` mischen. Die vollständigen Details entnehmen Sie bitte der
+[Dokumentation] (https://github.com/jbasko/pytest-random-order).
 
-Another randomization alternative is: [`pytest-randomly`](https://github.com/pytest-dev/pytest-randomly). This
-module has a very similar functionality/interface, but it doesn't have the bucket modes available in
-`pytest-random-order`. It has the same problem of imposing itself once installed.
+Eine weitere Alternative zur Randomisierung ist: [`pytest-random`](https://github.com/pytest-dev/pytest-randomly). Dieses
+Modul hat eine sehr ähnliche Funktionalität/Schnittstelle, aber es hat nicht die Eimermodi, die in
+`pytest-random-order` zur Verfügung. Es hat das gleiche Problem, dass es sich nach der Installation aufdrängt.
 
-### Look and feel variations
+### Variationen von Aussehen und Bedienung
 
-#### pytest-sugar
+#### pytest-zucker
 
-[pytest-sugar](https://github.com/Frozenball/pytest-sugar) is a plugin that improves the look-n-feel, adds a
-progressbar, and show tests that fail and the assert instantly. It gets activated automatically upon installation.
+[pytest-sugar](https://github.com/Frozenball/pytest-sugar) ist ein Plugin, das das Erscheinungsbild verbessert, eine
+Fortschrittsbalken hinzufügt und Tests, die fehlschlagen, sowie die Bestätigung sofort anzeigt. Es wird bei der Installation automatisch aktiviert.
 
 ```bash
 pip install pytest-sugar
 ```
 
-To run tests without it, run:
+Um Tests ohne sie durchzuführen, führen Sie aus:
 
 ```bash
 pytest -p no:sugar
 ```
 
-or uninstall it.
+oder deinstallieren Sie es.
 
 
 
-#### Report each sub-test name and its progress
+#### Melden Sie den Namen jedes Subtests und seinen Fortschritt
 
-For a single or a group of tests via `pytest` (after `pip install pytest-pspec`):
+Für einen einzelnen oder eine Gruppe von Tests über `pytest` (nach `pip install pytest-pspec`):
 
 ```bash
 pytest --pspec tests/test_optimization.py
 ```
 
-#### Instantly shows failed tests
+#### Zeigt fehlgeschlagene Tests sofort an
 
-[pytest-instafail](https://github.com/pytest-dev/pytest-instafail) shows failures and errors instantly instead of
-waiting until the end of test session.
+[pytest-instafail](https://github.com/pytest-dev/pytest-instafail) zeigt Fehlschläge und Fehler sofort an, anstatt
+bis zum Ende der Testsitzung zu warten.
 
 ```bash
 pip install pytest-instafail
@@ -427,34 +427,34 @@ pip install pytest-instafail
 pytest --instafail
 ```
 
-### To GPU or not to GPU
+### Zu GPU oder nicht zu GPU
 
-On a GPU-enabled setup, to test in CPU-only mode add `CUDA_VISIBLE_DEVICES=""`:
+Bei einem GPU-aktivierten Setup fügen Sie zum Testen im reinen CPU-Modus `CUDA_VISIBLE_DEVICES=""` hinzu:
 
 ```bash
 CUDA_VISIBLE_DEVICES="" pytest tests/utils/test_logging.py
 ```
 
-or if you have multiple gpus, you can specify which one is to be used by `pytest`. For example, to use only the
-second gpu if you have gpus `0` and `1`, you can run:
+oder wenn Sie mehrere Grafikprozessoren haben, können Sie angeben, welcher von `pytest` verwendet werden soll. Wenn Sie zum Beispiel nur den
+zweiten Grafikkarte zu verwenden, wenn Sie die Grafikkarten `0` und `1` haben, können Sie folgendes ausführen:
 
 ```bash
 CUDA_VISIBLE_DEVICES="1" pytest tests/utils/test_logging.py
 ```
 
-This is handy when you want to run different tasks on different GPUs.
+Dies ist praktisch, wenn Sie verschiedene Aufgaben auf verschiedenen GPUs ausführen möchten.
 
-Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet others on multiple-GPUs. The following skip
-decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
+Einige Tests müssen nur auf der CPU ausgeführt werden, andere entweder auf der CPU, der GPU oder der TPU und wieder andere auf mehreren GPUs. Die folgenden skip
+Dekorateure werden verwendet, um die Anforderungen von Tests in Bezug auf CPU/GPU/TPU festzulegen:
 
-- `require_torch` - this test will run only under torch
-- `require_torch_gpu` - as `require_torch` plus requires at least 1 GPU
-- `require_torch_multi_gpu` - as `require_torch` plus requires at least 2 GPUs
-- `require_torch_non_multi_gpu` - as `require_torch` plus requires 0 or 1 GPUs
-- `require_torch_up_to_2_gpus` - as `require_torch` plus requires 0 or 1 or 2 GPUs
-- `require_torch_tpu` - as `require_torch` plus requires at least 1 TPU
+- `require_torch` - dieser Test wird nur unter Torch ausgeführt
+- `require_torch_gpu` - wie `require_torch` plus erfordert mindestens 1 GPU
+- `require_torch_multi_gpu` - wie `require_torch` und zusätzlich mindestens 2 GPUs erforderlich
+- `require_torch_non_multi_gpu` - wie `require_torch` plus benötigt 0 oder 1 GPUs
+- `require_torch_up_to_2_gpus` - wie `require_torch` plus erfordert 0 oder 1 oder 2 GPUs
+- `require_torch_tpu` - wie `require_torch` plus erfordert mindestens 1 TPU
 
-Let's depict the GPU requirements in the following table:
+Lassen Sie uns die GPU-Anforderungen in der folgenden Tabelle darstellen:
 
 
 | n gpus | decorator                      |
@@ -466,22 +466,22 @@ Let's depict the GPU requirements in the following table:
 | `< 3`  | `@require_torch_up_to_2_gpus`  |
 
 
-For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
+Hier ist zum Beispiel ein Test, der nur ausgeführt werden muss, wenn 2 oder mehr GPUs verfügbar sind und pytorch installiert ist:
 
 ```python no-style
 @require_torch_multi_gpu
 def test_example_with_multi_gpu():
 ```
 
-If a test requires `tensorflow` use the `require_tf` decorator. For example:
+Wenn ein Test `tensorflow` benötigt, verwenden Sie den Dekorator `require_tf`. Zum Beispiel:
 
 ```python no-style
 @require_tf
 def test_tf_thing_with_tensorflow():
 ```
 
-These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is
-how to set it up:
+Diese Dekors können gestapelt werden. Wenn zum Beispiel ein Test langsam ist und mindestens eine GPU unter pytorch benötigt, können Sie
+wie Sie ihn einrichten können:
 
 ```python no-style
 @require_torch_gpu
@@ -489,8 +489,8 @@ how to set it up:
 def test_example_slow_on_gpu():
 ```
 
-Some decorators like `@parametrized` rewrite test names, therefore `@require_*` skip decorators have to be listed
-last for them to work correctly. Here is an example of the correct usage:
+Einige Dekoratoren wie `@parametrized` schreiben Testnamen um, daher müssen `@require_*`-Sprungdekoratoren als letztes aufgeführt werden.
+zuletzt aufgeführt werden, damit sie korrekt funktionieren. Hier ist ein Beispiel für die korrekte Verwendung:
 
 ```python no-style
 @parameterized.expand(...)
@@ -498,12 +498,12 @@ last for them to work correctly. Here is an example of the correct usage:
 def test_integration_foo():
 ```
 
-This order problem doesn't exist with `@pytest.mark.parametrize`, you can put it first or last and it will still
-work. But it only works with non-unittests.
+Dieses Problem mit der Reihenfolge gibt es bei `@pytest.mark.parametrize` nicht, Sie können es an den Anfang oder an den Schluss setzen und es wird trotzdem funktionieren.
+funktionieren. Aber es funktioniert nur bei Nicht-Unittests.
 
-Inside tests:
+Innerhalb von Tests:
 
-- How many GPUs are available:
+- Wie viele GPUs sind verfügbar:
 
 ```python
 from transformers.testing_utils import get_gpu_count
@@ -511,96 +511,96 @@ from transformers.testing_utils import get_gpu_count
 n_gpu = get_gpu_count()  # works with torch and tf
 ```
 
-### Testing with a specific PyTorch backend or device
+### Testen mit einem bestimmten PyTorch-Backend oder Gerät
 
-To run the test suite on a specific torch device add `TRANSFORMERS_TEST_DEVICE="$device"` where `$device` is the target backend. For example, to test on CPU only:
+Um die Testsuite auf einem bestimmten Torch-Gerät auszuführen, fügen Sie `TRANSFORMERS_TEST_DEVICE="$Gerät"` hinzu, wobei `$Gerät` das Ziel-Backend ist. Zum Beispiel, um nur auf der CPU zu testen:
 ```bash
 TRANSFORMERS_TEST_DEVICE="cpu" pytest tests/utils/test_logging.py
 ```
 
-This variable is useful for testing custom or less common PyTorch backends such as `mps`. It can also be used to achieve the same effect as `CUDA_VISIBLE_DEVICES` by targeting specific GPUs or testing in CPU-only mode.
+Diese Variable ist nützlich, um benutzerdefinierte oder weniger verbreitete PyTorch-Backends wie `mps` zu testen. Sie kann auch verwendet werden, um den gleichen Effekt wie `CUDA_VISIBLE_DEVICES` zu erzielen, indem Sie bestimmte GPUs anvisieren oder im reinen CPU-Modus testen.
 
-Certain devices will require an additional import after importing `torch` for the first time. This can be specified using the environment variable `TRANSFORMERS_TEST_BACKEND`:
+Bestimmte Geräte erfordern einen zusätzlichen Import, nachdem Sie `torch` zum ersten Mal importiert haben. Dies kann über die Umgebungsvariable `TRANSFORMERS_TEST_BACKEND` festgelegt werden:
 ```bash
 TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/utils/test_logging.py
 ```
 
 
-### Distributed training
+### Verteiltes Training
 
-`pytest` can't deal with distributed training directly. If this is attempted - the sub-processes don't do the right
-thing and end up thinking they are `pytest` and start running the test suite in loops. It works, however, if one
-spawns a normal process that then spawns off multiple workers and manages the IO pipes.
+`pytest` kann nicht direkt mit verteiltem Training umgehen. Wenn dies versucht wird, tun die Unterprozesse nicht das Richtige
+und denken am Ende, sie seien `pytest` und beginnen, die Testsuite in Schleifen auszuführen. Es funktioniert jedoch, wenn man
+einen normalen Prozess erzeugt, der dann mehrere Worker erzeugt und die IO-Pipes verwaltet.
 
-Here are some tests that use it:
+Hier sind einige Tests, die dies verwenden:
 
 - [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/test_trainer_distributed.py)
 - [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
 
-To jump right into the execution point, search for the `execute_subprocess_async` call in those tests.
+Um direkt mit der Ausführung zu beginnen, suchen Sie in diesen Tests nach dem Aufruf `execute_subprocess_async`.
 
-You will need at least 2 GPUs to see these tests in action:
+Sie benötigen mindestens 2 GPUs, um diese Tests in Aktion zu sehen:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/test_trainer_distributed.py
 ```
 
-### Output capture
+### Erfassung von Ausgaben
 
-During test execution any output sent to `stdout` and `stderr` is captured. If a test or a setup method fails, its
-according captured output will usually be shown along with the failure traceback.
+Während der Testausführung werden alle Ausgaben, die an `stdout` und `stderr` gesendet werden, aufgezeichnet. Wenn ein Test oder eine Setup-Methode fehlschlägt, wird die
+wird die entsprechende aufgezeichnete Ausgabe in der Regel zusammen mit dem Fehler-Traceback angezeigt.
 
-To disable output capturing and to get the `stdout` and `stderr` normally, use `-s` or `--capture=no`:
+Um die Aufzeichnung von Ausgaben zu deaktivieren und `stdout` und `stderr` normal zu erhalten, verwenden Sie `-s` oder `--capture=no`:
 
 ```bash
 pytest -s tests/utils/test_logging.py
 ```
 
-To send test results to JUnit format output:
+So senden Sie Testergebnisse an die JUnit-Formatausgabe:
 
 ```bash
 py.test tests --junitxml=result.xml
 ```
 
-### Color control
+### Farbsteuerung
 
-To have no color (e.g., yellow on white background is not readable):
+Keine Farbe zu haben (z.B. gelb auf weißem Hintergrund ist nicht lesbar):
 
 ```bash
 pytest --color=no tests/utils/test_logging.py
 ```
 
-### Sending test report to online pastebin service
+### Testbericht an den Online-Dienst pastebin senden
 
-Creating a URL for each test failure:
+Erstellen Sie eine URL für jeden Testfehler:
 
 ```bash
 pytest --pastebin=failed tests/utils/test_logging.py
 ```
 
-This will submit test run information to a remote Paste service and provide a URL for each failure. You may select
-tests as usual or add for example -x if you only want to send one particular failure.
+Dadurch werden Informationen über den Testlauf an einen entfernten Paste-Dienst übermittelt und eine URL für jeden Fehlschlag bereitgestellt. Sie können die
+Tests wie gewohnt auswählen oder z.B. -x hinzufügen, wenn Sie nur einen bestimmten Fehler senden möchten.
 
-Creating a URL for a whole test session log:
+Erstellen einer URL für ein ganzes Testsitzungsprotokoll:
 
 ```bash
 pytest --pastebin=all tests/utils/test_logging.py
 ```
 
-## Writing tests
+## Tests schreiben
 
-🤗 transformers tests are based on `unittest`, but run by `pytest`, so most of the time features from both systems
-can be used.
+🤗 Die Tests von Transformers basieren auf `unittest`, werden aber von `pytest` ausgeführt, so dass die meiste Zeit Funktionen aus beiden Systemen
+verwendet werden können.
 
-You can read [here](https://docs.pytest.org/en/stable/unittest.html) which features are supported, but the important
-thing to remember is that most `pytest` fixtures don't work. Neither parametrization, but we use the module
-`parameterized` that works in a similar way.
+Sie können [hier](https://docs.pytest.org/en/stable/unittest.html) nachlesen, welche Funktionen unterstützt werden, aber das Wichtigste ist
+Wichtig ist, dass die meisten `pytest`-Fixtures nicht funktionieren. Auch die Parametrisierung nicht, aber wir verwenden das Modul
+`parametrisiert`, das auf ähnliche Weise funktioniert.
 
 
-### Parametrization
+### Parametrisierung
 
-Often, there is a need to run the same test multiple times, but with different arguments. It could be done from within
-the test, but then there is no way of running that test for just one set of arguments.
+Oft besteht die Notwendigkeit, denselben Test mehrmals auszuführen, aber mit unterschiedlichen Argumenten. Das könnte innerhalb des Tests geschehen
+des Tests gemacht werden, aber dann gibt es keine Möglichkeit, den Test mit nur einem Satz von Argumenten auszuführen.
 
 ```python
 # test_this1.py
@@ -620,29 +620,29 @@ class TestMathUnitTest(unittest.TestCase):
         assert_equal(math.floor(input), expected)
 ```
 
-Now, by default this test will be run 3 times, each time with the last 3 arguments of `test_floor` being assigned the
-corresponding arguments in the parameter list.
+Nun wird dieser Test standardmäßig 3 Mal ausgeführt, wobei jedes Mal die letzten 3 Argumente von `test_floor` den entsprechenden Argumenten in der Parameterliste zugeordnet werden.
+die entsprechenden Argumente in der Parameterliste.
 
-and you could run just the `negative` and `integer` sets of params with:
+Sie können auch nur die Parameter `negativ` und `ganzzahlig` mit ausführen:
 
 ```bash
 pytest -k "negative and integer" tests/test_mytest.py
 ```
 
-or all but `negative` sub-tests, with:
+oder alle Untertests außer `negativ`, mit:
 
 ```bash
 pytest -k "not negative" tests/test_mytest.py
 ```
 
-Besides using the `-k` filter that was just mentioned, you can find out the exact name of each sub-test and run any
-or all of them using their exact names.
+Neben der Verwendung des gerade erwähnten Filters `-k` können Sie auch den genauen Namen jedes Untertests herausfinden und jeden
+oder alle unter Verwendung ihrer genauen Namen ausführen.
 
 ```bash
 pytest test_this1.py --collect-only -q
 ```
 
-and it will list:
+und es wird aufgelistet:
 
 ```bash
 test_this1.py::TestMathUnitTest::test_floor_0_negative
@@ -650,19 +650,19 @@ test_this1.py::TestMathUnitTest::test_floor_1_integer
 test_this1.py::TestMathUnitTest::test_floor_2_large_fraction
 ```
 
-So now you can run just 2 specific sub-tests:
+Jetzt können Sie also nur 2 spezifische Untertests durchführen:
 
 ```bash
 pytest test_this1.py::TestMathUnitTest::test_floor_0_negative  test_this1.py::TestMathUnitTest::test_floor_1_integer
 ```
 
-The module [parameterized](https://pypi.org/project/parameterized/) which is already in the developer dependencies
-of `transformers` works for both: `unittests` and `pytest` tests.
+Das Modul [parametrisiert](https://pypi.org/project/parameterized/), das sich bereits in den Entwickler-Abhängigkeiten befindet
+von `transformers` befindet, funktioniert sowohl für `unittests` als auch für `pytest` Tests.
 
-If, however, the test is not a `unittest`, you may use `pytest.mark.parametrize` (or you may see it being used in
-some existing tests, mostly under `examples`).
+Wenn es sich bei dem Test jedoch nicht um einen `Unittest` handelt, können Sie `pytest.mark.parametrize` verwenden (oder Sie können sehen, dass es in
+einigen bestehenden Tests verwendet wird, meist unter `Beispiele`).
 
-Here is the same example, this time using `pytest`'s `parametrize` marker:
+Hier ist das gleiche Beispiel, diesmal unter Verwendung der `parametrize`-Markierung von `pytest`:
 
 ```python
 # test_this2.py
@@ -681,15 +681,15 @@ def test_floor(name, input, expected):
     assert_equal(math.floor(input), expected)
 ```
 
-Same as with `parameterized`, with `pytest.mark.parametrize` you can have a fine control over which sub-tests are
-run, if the `-k` filter doesn't do the job. Except, this parametrization function creates a slightly different set of
-names for the sub-tests. Here is what they look like:
+Genau wie bei `parametrisiert` können Sie mit `pytest.mark.parametrize` genau steuern, welche Subtests ausgeführt werden
+ausgeführt werden, wenn der Filter `-k` nicht ausreicht. Allerdings erzeugt diese Parametrisierungsfunktion einen etwas anderen Satz von
+Namen für die Untertests. Sie sehen folgendermaßen aus:
 
 ```bash
 pytest test_this2.py --collect-only -q
 ```
 
-and it will list:
+und es wird aufgelistet:
 
 ```bash
 test_this2.py::test_floor[integer-1-1.0]
@@ -697,33 +697,33 @@ test_this2.py::test_floor[negative--1.5--2.0]
 test_this2.py::test_floor[large fraction-1.6-1]
 ```
 
-So now you can run just the specific test:
+Jetzt können Sie also nur den spezifischen Test durchführen:
 
 ```bash
 pytest test_this2.py::test_floor[negative--1.5--2.0] test_this2.py::test_floor[integer-1-1.0]
 ```
 
-as in the previous example.
+wie im vorherigen Beispiel.
 
 
 
-### Files and directories
+### Dateien und Verzeichnisse
 
-In tests often we need to know where things are relative to the current test file, and it's not trivial since the test
-could be invoked from more than one directory or could reside in sub-directories with different depths. A helper class
-`transformers.test_utils.TestCasePlus` solves this problem by sorting out all the basic paths and provides easy
-accessors to them:
+In Tests müssen wir oft wissen, wo sich Dinge relativ zur aktuellen Testdatei befinden, und das ist nicht trivial, da der Test
+von mehreren Verzeichnissen aus aufgerufen werden kann oder sich in Unterverzeichnissen mit unterschiedlicher Tiefe befinden kann. Eine Hilfsklasse
+`transformers.test_utils.TestCasePlus` löst dieses Problem, indem sie alle grundlegenden Pfade sortiert und einfache
+Zugriffsmöglichkeiten auf sie bietet:
 
-- `pathlib` objects (all fully resolved):
+- `pathlib`-Objekte (alle vollständig aufgelöst):
 
-  - `test_file_path` - the current test file path, i.e. `__file__`
-  - `test_file_dir` - the directory containing the current test file
-  - `tests_dir` - the directory of the `tests` test suite
-  - `examples_dir` - the directory of the `examples` test suite
-  - `repo_root_dir` - the directory of the repository
-  - `src_dir` - the directory of `src` (i.e. where the `transformers` sub-dir resides)
+  - `test_file_path` - der aktuelle Testdateipfad, d.h. `__file__`
+  - `test_file_dir` - das Verzeichnis, das die aktuelle Testdatei enthält
+  - `tests_dir` - das Verzeichnis der `tests` Testreihe
+  - `examples_dir` - das Verzeichnis der `examples` Test-Suite
+  - repo_root_dir` - das Verzeichnis des Repositorys
+  - src_dir` - das Verzeichnis von `src` (d.h. wo sich das Unterverzeichnis `transformers` befindet)
 
-- stringified paths---same as above but these return paths as strings, rather than `pathlib` objects:
+- stringifizierte Pfade - wie oben, aber diese geben Pfade als Strings zurück, anstatt als `pathlib`-Objekte:
 
   - `test_file_path_str`
   - `test_file_dir_str`
@@ -732,8 +732,8 @@ accessors to them:
   - `repo_root_dir_str`
   - `src_dir_str`
 
-To start using those all you need is to make sure that the test resides in a subclass of
-`transformers.test_utils.TestCasePlus`. For example:
+Um diese zu verwenden, müssen Sie lediglich sicherstellen, dass der Test in einer Unterklasse von
+`transformers.test_utils.TestCasePlus` befindet. Zum Beispiel:
 
 ```python
 from transformers.testing_utils import TestCasePlus
@@ -744,8 +744,8 @@ class PathExampleTest(TestCasePlus):
         data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
 ```
 
-If you don't need to manipulate paths via `pathlib` or you just need a path as a string, you can always invoked
-`str()` on the `pathlib` object or use the accessors ending with `_str`. For example:
+Wenn Sie Pfade nicht über `pathlib` manipulieren müssen oder nur einen Pfad als String benötigen, können Sie jederzeit
+`str()` auf das `pathlib`-Objekt anwenden oder die Accessoren mit der Endung `_str` verwenden. Zum Beispiel:
 
 ```python
 from transformers.testing_utils import TestCasePlus
@@ -756,19 +756,19 @@ class PathExampleTest(TestCasePlus):
         examples_dir = self.examples_dir_str
 ```
 
-### Temporary files and directories
+### Temporäre Dateien und Verzeichnisse
 
-Using unique temporary files and directories are essential for parallel test running, so that the tests won't overwrite
-each other's data. Also we want to get the temporary files and directories removed at the end of each test that created
-them. Therefore, using packages like `tempfile`, which address these needs is essential.
+Die Verwendung eindeutiger temporärer Dateien und Verzeichnisse ist für die parallele Durchführung von Tests unerlässlich, damit sich die Tests nicht gegenseitig überschreiben.
+Daten gegenseitig überschreiben. Außerdem möchten wir, dass die temporären Dateien und Verzeichnisse am Ende jedes Tests, der sie erstellt hat, gelöscht werden.
+erstellt hat. Daher ist die Verwendung von Paketen wie `tempfile`, die diese Anforderungen erfüllen, unerlässlich.
 
-However, when debugging tests, you need to be able to see what goes into the temporary file or directory and you want
-to know it's exact path and not having it randomized on every test re-run.
+Beim Debuggen von Tests müssen Sie jedoch sehen können, was in der temporären Datei oder dem temporären Verzeichnis gespeichert wird und Sie möchten
+Sie müssen den genauen Pfad kennen und dürfen ihn nicht bei jedem neuen Testdurchlauf zufällig ändern.
 
-A helper class `transformers.test_utils.TestCasePlus` is best used for such purposes. It's a sub-class of
-`unittest.TestCase`, so we can easily inherit from it in the test modules.
+Für solche Zwecke ist die Hilfsklasse `transformers.test_utils.TestCasePlus` am besten geeignet. Sie ist eine Unterklasse von
+Unittest.TestCase`, so dass wir in den Testmodulen einfach von ihr erben können.
 
-Here is an example of its usage:
+Hier ist ein Beispiel für die Verwendung dieser Klasse:
 
 ```python
 from transformers.testing_utils import TestCasePlus
@@ -779,55 +779,55 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
 ```
 
-This code creates a unique temporary directory, and sets `tmp_dir` to its location.
+Dieser Code erstellt ein eindeutiges temporäres Verzeichnis und setzt `tmp_dir` auf dessen Speicherort.
 
-- Create a unique temporary dir:
+- Erstellen Sie ein eindeutiges temporäres Verzeichnis:
 
 ```python
 def test_whatever(self):
     tmp_dir = self.get_auto_remove_tmp_dir()
 ```
 
-`tmp_dir` will contain the path to the created temporary dir. It will be automatically removed at the end of the
-test.
+tmp_dir" enthält den Pfad zu dem erstellten temporären Verzeichnis. Es wird am Ende des Tests automatisch entfernt.
+Tests entfernt.
 
-- Create a temporary dir of my choice, ensure it's empty before the test starts and don't empty it after the test.
+- Erstellen Sie ein temporäres Verzeichnis meiner Wahl, stellen Sie sicher, dass es leer ist, bevor der Test beginnt, und leeren Sie es nach dem Test nicht.
 
 ```python
 def test_whatever(self):
     tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
 ```
 
-This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests didn't
-leave any data in there.
+Dies ist nützlich für die Fehlersuche, wenn Sie ein bestimmtes Verzeichnis überwachen und sicherstellen möchten, dass die vorherigen Tests keine Daten darin hinterlassen haben.
+keine Daten dort hinterlassen haben.
 
-- You can override the default behavior by directly overriding the `before` and `after` args, leading to one of the
-  following behaviors:
+- Sie können das Standardverhalten außer Kraft setzen, indem Sie die Argumente `before` und `after` direkt überschreiben, was zu einem der folgenden Verhaltensweisen führt
+  folgenden Verhaltensweisen:
 
-  - `before=True`: the temporary dir will always be cleared at the beginning of the test.
-  - `before=False`: if the temporary dir already existed, any existing files will remain there.
-  - `after=True`: the temporary dir will always be deleted at the end of the test.
-  - `after=False`: the temporary dir will always be left intact at the end of the test.
+  - `before=True`: das temporäre Verzeichnis wird immer zu Beginn des Tests gelöscht.
+  - `before=False`: wenn das temporäre Verzeichnis bereits existiert, bleiben alle vorhandenen Dateien dort erhalten.
+  - `after=True`: das temporäre Verzeichnis wird immer am Ende des Tests gelöscht.
+  - `after=False`: das temporäre Verzeichnis wird am Ende des Tests immer beibehalten.
 
 <Tip>
 
-In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are allowed if
-an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem will
-get nuked. i.e. please always pass paths that start with `./`.
+Um das Äquivalent von `rm -r` sicher ausführen zu können, sind nur Unterverzeichnisse des Projektarchivs checkout erlaubt, wenn
+ein explizites `tmp_dir` verwendet wird, so dass nicht versehentlich ein `/tmp` oder ein ähnlich wichtiger Teil des Dateisystems vernichtet wird.
+d.h. geben Sie bitte immer Pfade an, die mit `./` beginnen.
 
 </Tip>
 
 <Tip>
 
-Each test can register multiple temporary directories and they all will get auto-removed, unless requested
-otherwise.
+Jeder Test kann mehrere temporäre Verzeichnisse registrieren, die alle automatisch entfernt werden, sofern nicht anders gewünscht.
+anders.
 
 </Tip>
 
-### Temporary sys.path override
+### Temporäre Überschreibung von sys.path
 
-If you need to temporary override `sys.path` to import from another test for example, you can use the
-`ExtendSysPath` context manager. Example:
+Wenn Sie `sys.path` vorübergehend überschreiben müssen, um z.B. von einem anderen Test zu importieren, können Sie den
+Kontextmanager `ExtendSysPath` verwenden. Beispiel:
 
 
 ```python
@@ -839,47 +839,47 @@ with ExtendSysPath(f"{bindir}/.."):
     from test_trainer import TrainerIntegrationCommon  # noqa
 ```
 
-### Skipping tests
+### Überspringen von Tests
 
-This is useful when a bug is found and a new test is written, yet the bug is not fixed yet. In order to be able to
-commit it to the main repository we need make sure it's skipped during `make test`.
+Dies ist nützlich, wenn ein Fehler gefunden und ein neuer Test geschrieben wird, der Fehler aber noch nicht behoben ist. Damit wir ihn
+in das Haupt-Repository zu übertragen, müssen wir sicherstellen, dass er bei `make test` übersprungen wird.
 
-Methods:
+Methoden:
 
--  A **skip** means that you expect your test to pass only if some conditions are met, otherwise pytest should skip
-  running the test altogether. Common examples are skipping windows-only tests on non-windows platforms, or skipping
-  tests that depend on an external resource which is not available at the moment (for example a database).
+- Ein **Skip** bedeutet, dass Sie erwarten, dass Ihr Test nur dann erfolgreich ist, wenn einige Bedingungen erfüllt sind, andernfalls sollte pytest den Test überspringen.
+  die Ausführung des Tests ganz überspringen. Übliche Beispiele sind das Überspringen von Tests, die nur unter Windows laufen, auf Nicht-Windows-Plattformen oder das Überspringen von
+  Tests, die von einer externen Ressource abhängen, die im Moment nicht verfügbar ist (z.B. eine Datenbank).
 
--  A **xfail** means that you expect a test to fail for some reason. A common example is a test for a feature not yet
-  implemented, or a bug not yet fixed. When a test passes despite being expected to fail (marked with
-  pytest.mark.xfail), it’s an xpass and will be reported in the test summary.
+- Ein **xfail** bedeutet, dass Sie erwarten, dass ein Test aus irgendeinem Grund fehlschlägt. Ein gängiges Beispiel ist ein Test für eine Funktion, die noch nicht
+  noch nicht implementiert oder ein noch nicht behobener Fehler. Wenn ein Test trotz eines erwarteten Fehlschlags bestanden wird (markiert mit
+  pytest.mark.xfail), ist dies ein xpass und wird in der Testzusammenfassung gemeldet.
 
-One of the important differences between the two is that `skip` doesn't run the test, and `xfail` does. So if the
-code that's buggy causes some bad state that will affect other tests, do not use `xfail`.
+Einer der wichtigsten Unterschiede zwischen den beiden ist, dass `skip` den Test nicht ausführt, während `xfail` dies tut. Wenn also der
+Code, der fehlerhaft ist, einen schlechten Zustand verursacht, der sich auf andere Tests auswirkt, sollten Sie also nicht `xfail` verwenden.
 
-#### Implementation
+#### Implementierung
 
-- Here is how to skip whole test unconditionally:
+- Hier sehen Sie, wie Sie einen ganzen Test bedingungslos überspringen können:
 
 ```python no-style
 @unittest.skip("this bug needs to be fixed")
 def test_feature_x():
 ```
 
-or via pytest:
+oder mit pytest:
 
 ```python no-style
 @pytest.mark.skip(reason="this bug needs to be fixed")
 ```
 
-or the `xfail` way:
+oder mit dem `xfail` Weg:
 
 ```python no-style
 @pytest.mark.xfail
 def test_feature_x():
 ```
 
-- Here is how to skip a test based on some internal check inside the test:
+- Hier erfahren Sie, wie Sie einen Test aufgrund einer internen Prüfung innerhalb des Tests auslassen können:
 
 ```python
 def test_feature_x():
@@ -887,7 +887,7 @@ def test_feature_x():
         pytest.skip("unsupported configuration")
 ```
 
-or the whole module:
+oder das ganze Modul:
 
 ```python
 import pytest
@@ -896,34 +896,34 @@ if not pytest.config.getoption("--custom-flag"):
     pytest.skip("--custom-flag is missing, skipping tests", allow_module_level=True)
 ```
 
-or the `xfail` way:
+oder mit dem `xfail` Weg:
 
 ```python
 def test_feature_x():
     pytest.xfail("expected to fail until bug XYZ is fixed")
 ```
 
-- Here is how to skip all tests in a module if some import is missing:
+- Hier erfahren Sie, wie Sie alle Tests in einem Modul überspringen können, wenn ein Import fehlt:
 
 ```python
 docutils = pytest.importorskip("docutils", minversion="0.3")
 ```
 
--  Skip a test based on a condition:
+- Einen Test aufgrund einer Bedingung überspringen:
 
 ```python no-style
 @pytest.mark.skipif(sys.version_info < (3,6), reason="requires python3.6 or higher")
 def test_feature_x():
 ```
 
-or:
+oder:
 
 ```python no-style
 @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
 def test_feature_x():
 ```
 
-or skip the whole module:
+oder überspringen Sie das ganze Modul:
 
 ```python no-style
 @pytest.mark.skipif(sys.platform == 'win32', reason="does not run on windows")
@@ -931,13 +931,13 @@ class TestClass():
     def test_feature_x(self):
 ```
 
-More details, example and ways are [here](https://docs.pytest.org/en/latest/skipping.html).
+Weitere Details, Beispiele und Möglichkeiten finden Sie [hier](https://docs.pytest.org/en/latest/skipping.html).
 
-### Slow tests
+### Langsame Tests
 
-The library of tests is ever-growing, and some of the tests take minutes to run, therefore we can't afford waiting for
-an hour for the test suite to complete on CI. Therefore, with some exceptions for essential tests, slow tests should be
-marked as in the example below:
+Die Bibliothek der Tests wächst ständig, und einige der Tests brauchen Minuten, um ausgeführt zu werden, daher können wir es uns nicht leisten, eine Stunde zu warten, bis die
+eine Stunde auf die Fertigstellung der Testsuite auf CI zu warten. Daher sollten langsame Tests, mit einigen Ausnahmen für wichtige Tests, wie im folgenden Beispiel
+wie im folgenden Beispiel markiert werden:
 
 ```python no-style
 from transformers.testing_utils import slow
@@ -945,14 +945,14 @@ from transformers.testing_utils import slow
 def test_integration_foo():
 ```
 
-Once a test is marked as `@slow`, to run such tests set `RUN_SLOW=1` env var, e.g.:
+Sobald ein Test als `@langsam` markiert ist, setzen Sie die Umgebungsvariable `RUN_SLOW=1`, um solche Tests auszuführen, z.B:
 
 ```bash
 RUN_SLOW=1 pytest tests
 ```
 
-Some decorators like `@parameterized` rewrite test names, therefore `@slow` and the rest of the skip decorators
-`@require_*` have to be listed last for them to work correctly. Here is an example of the correct usage:
+Einige Dekoratoren wie `@parameterized` schreiben Testnamen um, daher müssen `@slow` und die übrigen Skip-Dekoratoren
+`@require_*` müssen als letztes aufgeführt werden, damit sie korrekt funktionieren. Hier ist ein Beispiel für die korrekte Verwendung:
 
 ```python no-style
 @parameteriz ed.expand(...)
@@ -960,54 +960,54 @@ Some decorators like `@parameterized` rewrite test names, therefore `@slow` and 
 def test_integration_foo():
 ```
 
-As explained at the beginning of this document, slow tests get to run on a scheduled basis, rather than in PRs CI
-checks. So it's possible that some problems will be missed during a PR submission and get merged. Such problems will
-get caught during the next scheduled CI job. But it also means that it's important to run the slow tests on your
-machine before submitting the PR.
+Wie zu Beginn dieses Dokuments erläutert, werden langsame Tests nach einem Zeitplan ausgeführt und nicht in PRs CI
+Prüfungen. Es ist also möglich, dass einige Probleme bei der Einreichung eines PRs übersehen werden und zusammengeführt werden. Solche Probleme werden
+werden beim nächsten geplanten CI-Job abgefangen. Das bedeutet aber auch, dass es wichtig ist, die langsamen Tests auf Ihrem
+Rechner auszuführen, bevor Sie den PR einreichen.
 
-Here is a rough decision making mechanism for choosing which tests should be marked as slow:
+Hier ist ein grober Entscheidungsmechanismus für die Auswahl der Tests, die als langsam markiert werden sollen:
 
-If the test is focused on one of the library's internal components (e.g., modeling files, tokenization files,
-pipelines), then we should run that test in the non-slow test suite. If it's focused on an other aspect of the library,
-such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine
-this approach we should have exceptions:
+Wenn der Test auf eine der internen Komponenten der Bibliothek ausgerichtet ist (z.B. Modellierungsdateien, Tokenisierungsdateien,
+Pipelines), dann sollten wir diesen Test in der nicht langsamen Testsuite ausführen. Wenn er sich auf einen anderen Aspekt der Bibliothek bezieht,
+wie z.B. die Dokumentation oder die Beispiele, dann sollten wir diese Tests in der langsamen Testsuite durchführen. Und dann, zur Verfeinerung
+Ansatz zu verfeinern, sollten wir Ausnahmen einführen:
 
-- All tests that need to download a heavy set of weights or a dataset that is larger than ~50MB (e.g., model or
-  tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you
-  should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is
-  discussed in the following paragraphs.
-- All tests that need to do a training not specifically optimized to be fast should be set to slow.
-- We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to
-  `@slow`. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked
-  as `@slow`.
-- If a test completes under 1 second on CI (including downloads if any) then it should be a normal test regardless.
+- Alle Tests, die einen umfangreichen Satz von Gewichten oder einen Datensatz mit einer Größe von mehr als ~50MB herunterladen müssen (z.B. Modell- oder
+  Tokenizer-Integrationstests, Pipeline-Integrationstests) sollten auf langsam gesetzt werden. Wenn Sie ein neues Modell hinzufügen, sollten Sie
+  sollten Sie eine kleine Version des Modells (mit zufälligen Gewichtungen) für Integrationstests erstellen und in den Hub hochladen. Dies wird
+  wird in den folgenden Abschnitten erläutert.
+- Alle Tests, die ein Training durchführen müssen, das nicht speziell auf Schnelligkeit optimiert ist, sollten auf langsam gesetzt werden.
+- Wir können Ausnahmen einführen, wenn einige dieser Tests, die nicht langsam sein sollten, unerträglich langsam sind, und sie auf
+  @langsam`. Auto-Modellierungstests, die große Dateien auf der Festplatte speichern und laden, sind ein gutes Beispiel für Tests, die als
+  als `@langsam` markiert sind.
+- Wenn ein Test in weniger als 1 Sekunde auf CI abgeschlossen wird (einschließlich eventueller Downloads), sollte es sich trotzdem um einen normalen Test handeln.
 
-Collectively, all the non-slow tests need to cover entirely the different internals, while remaining fast. For example,
-a significant coverage can be achieved by testing with specially created tiny models with random weights. Such models
-have the very minimal number of layers (e.g., 2), vocab size (e.g., 1000), etc. Then the `@slow` tests can use large
-slow models to do qualitative testing. To see the use of these simply look for *tiny* models with:
+Insgesamt müssen alle nicht langsamen Tests die verschiedenen Interna abdecken und dabei schnell bleiben. Zum Beispiel,
+kann eine signifikante Abdeckung erreicht werden, indem Sie mit speziell erstellten kleinen Modellen mit zufälligen Gewichten testen. Solche Modelle
+haben eine sehr geringe Anzahl von Schichten (z.B. 2), Vokabeln (z.B. 1000), usw. Dann können die `@slow`-Tests große
+langsame Modelle verwenden, um qualitative Tests durchzuführen. Um die Verwendung dieser Modelle zu sehen, suchen Sie einfach nach *winzigen* Modellen mit:
 
 ```bash
 grep tiny tests examples
 ```
 
-Here is a an example of a [script](https://github.com/huggingface/transformers/tree/main/scripts/fsmt/fsmt-make-tiny-model.py) that created the tiny model
-[stas/tiny-wmt19-en-de](https://huggingface.co/stas/tiny-wmt19-en-de). You can easily adjust it to your specific
-model's architecture.
+Hier ist ein Beispiel für ein [Skript](https://github.com/huggingface/transformers/tree/main/scripts/fsmt/fsmt-make-tiny-model.py), das das winzige Modell erstellt hat
+[stas/tiny-wmt19-en-de](https://huggingface.co/stas/tiny-wmt19-en-de). Sie können es ganz einfach an Ihre eigene
+Architektur Ihres Modells anpassen.
 
-It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if
-you test it locally the downloaded files would be cached and thus the download time not measured. Hence check the
-execution speed report in CI logs instead (the output of `pytest --durations=0 tests`).
+Es ist leicht, die Laufzeit falsch zu messen, wenn zum Beispiel ein großes Modell heruntergeladen wird, aber wenn
+Sie es lokal testen, würden die heruntergeladenen Dateien zwischengespeichert und somit die Download-Zeit nicht gemessen werden. Prüfen Sie daher den
+Ausführungsgeschwindigkeitsbericht in den CI-Protokollen (die Ausgabe von `pytest --durations=0 tests`).
 
-That report is also useful to find slow outliers that aren't marked as such, or which need to be re-written to be fast.
-If you notice that the test suite starts getting slow on CI, the top listing of this report will show the slowest
-tests.
+Dieser Bericht ist auch nützlich, um langsame Ausreißer zu finden, die nicht als solche gekennzeichnet sind oder die neu geschrieben werden müssen, um schnell zu sein.
+Wenn Sie bemerken, dass die Testsuite beim CI langsam wird, zeigt die oberste Liste dieses Berichts die langsamsten
+Tests.
 
 
-### Testing the stdout/stderr output
+### Testen der stdout/stderr-Ausgabe
 
-In order to test functions that write to `stdout` and/or `stderr`, the test can access those streams using the
-`pytest`'s [capsys system](https://docs.pytest.org/en/latest/capture.html). Here is how this is accomplished:
+Um Funktionen zu testen, die in `stdout` und/oder `stderr` schreiben, kann der Test auf diese Ströme zugreifen, indem er die
+[capsys system](https://docs.pytest.org/en/latest/capture.html) von `pytest` zugreifen. So wird dies bewerkstelligt:
 
 ```python
 import sys
@@ -1034,8 +1034,8 @@ def test_result_and_stdout(capsys):
     assert msg in err
 ```
 
-And, of course, most of the time, `stderr` will come as a part of an exception, so try/except has to be used in such
-a case:
+Und natürlich wird `stderr` in den meisten Fällen als Teil einer Ausnahme auftreten, so dass try/except in einem solchen Fall verwendet werden muss
+Fall verwendet werden:
 
 ```python
 def raise_exception(msg):
@@ -1052,7 +1052,7 @@ def test_something_exception():
         assert msg in error, f"{msg} is in the exception:\n{error}"
 ```
 
-Another approach to capturing stdout is via `contextlib.redirect_stdout`:
+Ein anderer Ansatz zur Erfassung von stdout ist `contextlib.redirect_stdout`:
 
 ```python
 from io import StringIO
@@ -1075,13 +1075,13 @@ def test_result_and_stdout():
     assert msg in out
 ```
 
-An important potential issue with capturing stdout is that it may contain `\r` characters that in normal `print`
-reset everything that has been printed so far. There is no problem with `pytest`, but with `pytest -s` these
-characters get included in the buffer, so to be able to have the test run with and without `-s`, you have to make an
-extra cleanup to the captured output, using `re.sub(r'~.*\r', '', buf, 0, re.M)`.
+Ein wichtiges potenzielles Problem beim Erfassen von stdout ist, dass es `r` Zeichen enthalten kann, die bei normalem `print`
+alles zurücksetzen, was bisher gedruckt wurde. Mit `pytest` gibt es kein Problem, aber mit `pytest -s` werden diese
+werden diese Zeichen in den Puffer aufgenommen. Um den Test mit und ohne `-s` laufen zu lassen, müssen Sie also eine zusätzliche Bereinigung
+zusätzliche Bereinigung der erfassten Ausgabe vornehmen, indem Sie `re.sub(r'~.*\r', '', buf, 0, re.M)` verwenden.
 
-But, then we have a helper context manager wrapper to automatically take care of it all, regardless of whether it has
-some `\r`'s in it or not, so it's a simple:
+Aber dann haben wir einen Hilfskontextmanager-Wrapper, der sich automatisch um alles kümmert, unabhängig davon, ob er
+einige "*.*.*.*" enthält oder nicht:
 
 ```python
 from transformers.testing_utils import CaptureStdout
@@ -1091,7 +1091,7 @@ with CaptureStdout() as cs:
 print(cs.out)
 ```
 
-Here is a full test example:
+Hier ist ein vollständiges Testbeispiel:
 
 ```python
 from transformers.testing_utils import CaptureStdout
@@ -1103,7 +1103,7 @@ with CaptureStdout() as cs:
 assert cs.out == final + "\n", f"captured: {cs.out}, expecting {final}"
 ```
 
-If you'd like to capture `stderr` use the `CaptureStderr` class instead:
+Wenn Sie `stderr` aufzeichnen möchten, verwenden Sie stattdessen die Klasse `CaptureStderr`:
 
 ```python
 from transformers.testing_utils import CaptureStderr
@@ -1113,7 +1113,7 @@ with CaptureStderr() as cs:
 print(cs.err)
 ```
 
-If you need to capture both streams at once, use the parent `CaptureStd` class:
+Wenn Sie beide Streams auf einmal erfassen müssen, verwenden Sie die übergeordnete Klasse `CaptureStd`:
 
 ```python
 from transformers.testing_utils import CaptureStd
@@ -1123,13 +1123,13 @@ with CaptureStd() as cs:
 print(cs.err, cs.out)
 ```
 
-Also, to aid debugging test issues, by default these context managers automatically replay the captured streams on exit
-from the context.
+Um das Debuggen von Testproblemen zu erleichtern, geben diese Kontextmanager standardmäßig die aufgezeichneten Streams beim Verlassen
+aus dem Kontext wieder.
 
 
-### Capturing logger stream
+### Erfassen von Logger-Streams
 
-If you need to validate the output of a logger, you can use `CaptureLogger`:
+Wenn Sie die Ausgabe eines Loggers validieren müssen, können Sie `CaptureLogger` verwenden:
 
 ```python
 from transformers import logging
@@ -1143,9 +1143,9 @@ with CaptureLogger(logger) as cl:
 assert cl.out, msg + "\n"
 ```
 
-### Testing with environment variables
+### Testen mit Umgebungsvariablen
 
-If you want to test the impact of environment variables for a specific test you can use a helper decorator
+Wenn Sie die Auswirkungen von Umgebungsvariablen für einen bestimmten Test testen möchten, können Sie einen Hilfsdekorator verwenden
 `transformers.testing_utils.mockenv`
 
 ```python
@@ -1158,8 +1158,8 @@ class HfArgumentParserTest(unittest.TestCase):
         env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
 ```
 
-At times an external program needs to be called, which requires setting `PYTHONPATH` in `os.environ` to include
-multiple local paths. A helper class `transformers.test_utils.TestCasePlus` comes to help:
+Manchmal muss ein externes Programm aufgerufen werden, was die Einstellung von `PYTHONPATH` in `os.environ` erfordert, um mehrere lokale Pfade einzuschließen.
+mehrere lokale Pfade. Eine Hilfsklasse `transformers.test_utils.TestCasePlus` hilft Ihnen dabei:
 
 ```python
 from transformers.testing_utils import TestCasePlus
@@ -1171,18 +1171,18 @@ class EnvExampleTest(TestCasePlus):
         # now call the external program, passing `env` to it
 ```
 
-Depending on whether the test file was under the `tests` test suite or `examples` it'll correctly set up
-`env[PYTHONPATH]` to include one of these two directories, and also the `src` directory to ensure the testing is
-done against the current repo, and finally with whatever `env[PYTHONPATH]` was already set to before the test was
-called if anything.
+Je nachdem, ob die Testdatei in der Testsuite `tests` oder in `examples` war, wird sie korrekt eingerichtet
+env[PYTHONPATH]` eines dieser beiden Verzeichnisse und auch das `src` Verzeichnis, um sicherzustellen, dass der Test gegen das aktuelle
+um sicherzustellen, dass der Test mit dem aktuellen Projektarchiv durchgeführt wird, und schließlich mit dem, was in `env[PYTHONPATH]` bereits eingestellt war, bevor der Test aufgerufen wurde.
+wenn überhaupt.
 
-This helper method creates a copy of the `os.environ` object, so the original remains intact.
+Diese Hilfsmethode erstellt eine Kopie des Objekts `os.environ`, so dass das Original intakt bleibt.
 
 
-### Getting reproducible results
+### Reproduzierbare Ergebnisse erhalten
 
-In some situations you may want to remove randomness for your tests. To get identical reproducible results set, you
-will need to fix the seed:
+In manchen Situationen möchten Sie vielleicht die Zufälligkeit Ihrer Tests beseitigen. Um identische, reproduzierbare Ergebnisse zu erhalten, müssen Sie
+müssen Sie den Seed festlegen:
 
 ```python
 seed = 42
@@ -1209,55 +1209,55 @@ np.random.seed(seed)
 tf.random.set_seed(seed)
 ```
 
-### Debugging tests
+### Tests debuggen
 
-To start a debugger at the point of the warning, do this:
+Um einen Debugger an der Stelle zu starten, an der die Warnung auftritt, gehen Sie wie folgt vor:
 
 ```bash
 pytest tests/utils/test_logging.py -W error::UserWarning --pdb
 ```
 
-## Working with github actions workflows
+## Arbeiten mit Github-Aktionen-Workflows
 
-To trigger a self-push workflow CI job, you must:
+Um einen CI-Job für einen Self-Push-Workflow auszulösen, müssen Sie:
 
-1. Create a new branch on `transformers` origin (not a fork!).
-2. The branch name has to start with either `ci_` or `ci-` (`main` triggers it too, but we can't do PRs on
-   `main`). It also gets triggered only for specific paths - you can find the up-to-date definition in case it
-   changed since this document has been written [here](https://github.com/huggingface/transformers/blob/main/.github/workflows/self-push.yml) under *push:*
-3. Create a PR from this branch.
-4. Then you can see the job appear [here](https://github.com/huggingface/transformers/actions/workflows/self-push.yml). It may not run right away if there
-   is a backlog.
-
-
+1. Erstellen Sie einen neuen Zweig auf `transformers` Ursprung (keine Gabelung!).
+2. Der Name der Verzweigung muss entweder mit `ci_` oder `ci-` beginnen (`main` löst ihn auch aus, aber wir können keine PRs auf
+   `main`). Es wird auch nur für bestimmte Pfade ausgelöst - Sie können die aktuelle Definition finden, falls sie
+   falls sie sich seit der Erstellung dieses Dokuments geändert hat [hier] (https://github.com/huggingface/transformers/blob/main/.github/workflows/self-push.yml) unter *push:*
+3. Erstellen Sie einen PR von diesem Zweig.
+4. Dann können Sie sehen, wie der Job erscheint [hier](https://github.com/huggingface/transformers/actions/workflows/self-push.yml). Er wird möglicherweise nicht sofort ausgeführt, wenn es
+   ein Backlog vorhanden ist.
 
 
-## Testing Experimental CI Features
 
-Testing CI features can be potentially problematic as it can interfere with the normal CI functioning. Therefore if a
-new CI feature is to be added, it should be done as following.
 
-1. Create a new dedicated job that tests what needs to be tested
-2. The new job must always succeed so that it gives us a green ✓ (details below).
-3. Let it run for some days to see that a variety of different PR types get to run on it (user fork branches,
-   non-forked branches, branches originating from github.com UI direct file edit, various forced pushes, etc. - there
-   are so many) while monitoring the experimental job's logs (not the overall job green as it's purposefully always
-   green)
-4. When it's clear that everything is solid, then merge the new changes into existing jobs.
+## Testen experimenteller CI-Funktionen
 
-That way experiments on CI functionality itself won't interfere with the normal workflow.
+Das Testen von CI-Funktionen kann potenziell problematisch sein, da es die normale CI-Funktion beeinträchtigen kann. Wenn also eine
+neue CI-Funktion hinzugefügt werden soll, sollte dies wie folgt geschehen.
 
-Now how can we make the job always succeed while the new CI feature is being developed?
+1. Erstellen Sie einen neuen Auftrag, der die zu testende Funktion testet.
+2. Der neue Job muss immer erfolgreich sein, so dass er uns ein grünes ✓ gibt (Details unten).
+3. Lassen Sie ihn einige Tage lang laufen, um zu sehen, dass eine Vielzahl verschiedener PR-Typen darauf laufen (Benutzer-Gabelzweige,
+   nicht geforkte Zweige, Zweige, die von github.com UI direct file edit stammen, verschiedene erzwungene Pushes, etc. - es gibt
+   es gibt so viele), während Sie die Protokolle des experimentellen Jobs überwachen (nicht den gesamten Job grün, da er absichtlich immer
+   grün)
+4. Wenn klar ist, dass alles in Ordnung ist, fügen Sie die neuen Änderungen in die bestehenden Jobs ein.
 
-Some CIs, like TravisCI support ignore-step-failure and will report the overall job as successful, but CircleCI and
-Github Actions as of this writing don't support that.
+Auf diese Weise wird der normale Arbeitsablauf nicht durch Experimente mit der CI-Funktionalität selbst beeinträchtigt.
 
-So the following workaround can be used:
+Wie können wir nun dafür sorgen, dass der Auftrag immer erfolgreich ist, während die neue CI-Funktion entwickelt wird?
 
-1. `set +euo pipefail` at the beginning of the run command to suppress most potential failures in the bash script.
-2. the last command must be a success: `echo "done"` or just `true` will do
+Einige CIs, wie TravisCI, unterstützen ignore-step-failure und melden den gesamten Job als erfolgreich, aber CircleCI und
+Github Actions unterstützen dies zum jetzigen Zeitpunkt nicht.
 
-Here is an example:
+Sie können also die folgende Abhilfe verwenden:
+
+1. Setzen Sie `set +euo pipefail` am Anfang des Ausführungsbefehls, um die meisten potenziellen Fehler im Bash-Skript zu unterdrücken.
+2. Der letzte Befehl muss ein Erfolg sein: `echo "done"` oder einfach `true` reicht aus.
+
+Hier ist ein Beispiel:
 
 ```yaml
 - run:
@@ -1273,21 +1273,21 @@ Here is an example:
         echo "during experiment do not remove: reporting success to CI, even if there were failures"
 ```
 
-For simple commands you could also do:
+Für einfache Befehle können Sie auch Folgendes tun:
 
 ```bash
 cmd_that_may_fail || true
 ```
 
-Of course, once satisfied with the results, integrate the experimental step or job with the rest of the normal jobs,
-while removing `set +euo pipefail` or any other things you may have added to ensure that the experimental job doesn't
-interfere with the normal CI functioning.
+Wenn Sie mit den Ergebnissen zufrieden sind, integrieren Sie den experimentellen Schritt oder Job natürlich in den Rest der normalen Jobs,
+Entfernen Sie dabei `set +euo pipefail` oder andere Dinge, die Sie eventuell hinzugefügt haben, um sicherzustellen, dass der experimentelle Auftrag nicht
+den normalen CI-Betrieb nicht beeinträchtigt.
 
-This whole process would have been much easier if we only could set something like `allow-failure` for the
-experimental step, and let it fail without impacting the overall status of PRs. But as mentioned earlier CircleCI and
-Github Actions don't support it at the moment.
+Dieser ganze Prozess wäre viel einfacher gewesen, wenn wir nur etwas wie `allow-failure` für den
+experimentellen Schritt festlegen könnten und ihn scheitern lassen würden, ohne den Gesamtstatus der PRs zu beeinträchtigen. Aber wie bereits erwähnt, haben CircleCI und
+Github Actions dies im Moment nicht unterstützen.
 
-You can vote for this feature and see where it is at these CI-specific threads:
+Sie können in diesen CI-spezifischen Threads für diese Funktion stimmen und sehen, wo sie steht:
 
 - [Github Actions:](https://github.com/actions/toolkit/issues/399)
 - [CircleCI:](https://ideas.circleci.com/ideas/CCI-I-344)
