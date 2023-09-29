@@ -80,7 +80,7 @@ class MCTCTConfig(PretrainedConfig):
             The probability of randomly dropping the `Conv1dSubsampler` layer during training.
         num_conv_layers (`int`, *optional*, defaults to 1):
             Number of convolution layers before applying transformer encoder layers.
-        conv_kernel (`List[int]`, *optional*, defaults to `(7,)`):
+        conv_kernel (`Sequence[int]`, *optional*, defaults to `(7,)`):
             The kernel size of the 1D convolution applied before transformer layers. `len(conv_kernel)` must be equal
             to `num_conv_layers`.
         conv_stride (`Sequence[int]`, *optional*, defaults to `(3,)`):
