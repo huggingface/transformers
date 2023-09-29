@@ -139,6 +139,7 @@ class LlamaConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
+        self.attention_bias = attention_bias
 
         super().__init__(
             pad_token_id=pad_token_id,
