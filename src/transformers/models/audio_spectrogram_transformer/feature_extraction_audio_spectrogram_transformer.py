@@ -29,7 +29,7 @@ from ...utils import TensorType, is_speech_available, is_torch_available, loggin
 if is_speech_available():
     import torchaudio.compliance.kaldi as ta_kaldi
 
-if is_torch_available:
+if is_torch_available():
     import torch
 
 
