@@ -46,6 +46,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("bridgetower", "BridgeTowerImageProcessor"),
         ("chinese_clip", "ChineseCLIPImageProcessor"),
         ("clip", "CLIPImageProcessor"),
+        ("siglip", "SiglipImageProcessor"),
         ("clipseg", "ViTImageProcessor"),
         ("conditional_detr", "ConditionalDetrImageProcessor"),
         ("convnext", "ConvNextImageProcessor"),

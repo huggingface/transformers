@@ -249,6 +249,14 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
+    "models.siglip": [
+        "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SiglipConfig",
+       
+        "SiglipTextConfig",
+       
+        "SiglipVisionConfig",
+    ],
     "models.clipseg": [
         "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPSegConfig",
@@ -1471,6 +1479,17 @@ else:
             "CLIPTextModelWithProjection",
             "CLIPVisionModel",
             "CLIPVisionModelWithProjection",
+        ]
+    )
+    _import_structure["models.siglip"].extend(
+        [
+            "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SiglipModel",
+            "SiglipPreTrainedModel",
+            "SiglipTextModel",
+            "SiglipTextModelWithProjection",
+            "SiglipVisionModel",
+            "SiglipVisionModelWithProjection",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -4510,6 +4529,14 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
+    from .models.siglip import (
+        SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SiglipConfig,
+       
+        SiglipTextConfig,
+       
+        SiglipVisionConfig,
+    )
     from .models.clipseg import (
         CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPSegConfig,
@@ -5603,6 +5630,15 @@ if TYPE_CHECKING:
             CLIPTextModelWithProjection,
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
+        )
+        from .models.siglip import (
+            SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SiglipModel,
+            SiglipPreTrainedModel,
+            SiglipTextModel,
+            SiglipTextModelWithProjection,
+            SiglipVisionModel,
+            SiglipVisionModelWithProjection,
         )
         from .models.clipseg import (
             CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,

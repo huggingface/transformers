@@ -115,6 +115,12 @@ else:
                 ),
             ),
             (
+                "siglip",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            (
                 "clipseg",
                 (
                     "CLIPTokenizer",
