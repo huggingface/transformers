@@ -1224,7 +1224,7 @@ Um einen CI-Job für einen Self-Push-Workflow auszulösen, müssen Sie:
 1. Erstellen Sie einen neuen Zweig auf `transformers` Ursprung (keine Gabelung!).
 2. Der Name der Verzweigung muss entweder mit `ci_` oder `ci-` beginnen (`main` löst ihn auch aus, aber wir können keine PRs auf
    `main`). Es wird auch nur für bestimmte Pfade ausgelöst - Sie können die aktuelle Definition finden, falls sie
-   falls sie sich seit der Erstellung dieses Dokuments geändert hat [hier] (https://github.com/huggingface/transformers/blob/main/.github/workflows/self-push.yml) unter *push:*
+   falls sie sich seit der Erstellung dieses Dokuments geändert hat [hier](https://github.com/huggingface/transformers/blob/main/.github/workflows/self-push.yml) unter *push:*
 3. Erstellen Sie einen PR von diesem Zweig.
 4. Dann können Sie sehen, wie der Job erscheint [hier](https://github.com/huggingface/transformers/actions/workflows/self-push.yml). Er wird möglicherweise nicht sofort ausgeführt, wenn es
    ein Backlog vorhanden ist.
