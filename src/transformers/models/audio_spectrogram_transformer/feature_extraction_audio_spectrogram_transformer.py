@@ -19,16 +19,19 @@ Feature extractor class for Audio Spectrogram Transformer.
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
 
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, is_speech_available, logging
+from ...utils import TensorType, is_speech_available, is_torch_available, logging
 
 
 if is_speech_available():
     import torchaudio.compliance.kaldi as ta_kaldi
+
+if is_torch_available:
+    import torch
+
 
 logger = logging.get_logger(__name__)
 

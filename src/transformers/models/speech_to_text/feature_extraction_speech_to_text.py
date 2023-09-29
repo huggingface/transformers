@@ -19,7 +19,6 @@ Feature extractor class for Speech2Text
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
 
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -28,6 +27,7 @@ from ...utils import PaddingStrategy, TensorType, is_speech_available, logging
 
 
 if is_speech_available():
+    import torch
     import torchaudio.compliance.kaldi as ta_kaldi
 
 logger = logging.get_logger(__name__)
