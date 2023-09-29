@@ -26,6 +26,7 @@ import sys
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
+import tempfile
 from typing import TYPE_CHECKING, Dict, Optional
 
 import numpy as np
@@ -236,8 +237,9 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import ray
+    import ray.train
 
-    def _objective(trial, local_trainer, checkpoint_dir=None):
+    def _objective(trial: dict, local_trainer):
         try:
             from transformers.utils.notebook import NotebookProgressCallback
 
@@ -246,19 +248,28 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         except ModuleNotFoundError:
             pass
 
-        checkpoint = None
-        if checkpoint_dir:
-            for subdir in os.listdir(checkpoint_dir):
-                if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    checkpoint = os.path.join(checkpoint_dir, subdir)
+        checkpoint = ray.train.get_checkpoint()
+        checkpoint_path = None
+        if checkpoint:
+            with checkpoint.as_directory() as checkpoint_dir:
+                for subdir in os.listdir(checkpoint_dir):
+                    if subdir.startswith(PREFIX_CHECKPOINT_DIR):
+                        checkpoint_path = os.path.join(checkpoint_dir, subdir)
+
         local_trainer.objective = None
-        local_trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
+        local_trainer.train(resume_from_checkpoint=checkpoint_path, trial=trial)
+
         # If there hasn't been any evaluation during the training loop.
         if getattr(local_trainer, "objective", None) is None:
             metrics = local_trainer.evaluate()
             local_trainer.objective = local_trainer.compute_objective(metrics)
-            local_trainer._tune_save_checkpoint()
-            ray.tune.report(objective=local_trainer.objective, **metrics, done=True)
+            with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
+                did_save_checkpoint = local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
+                checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir) if did_save_checkpoint else None
+                ray.train.report(
+                    {"objective": local_trainer.objective, "done": True, **metrics},
+                    checkpoint=checkpoint,
+                )
 
     if not trainer._memory_tracker.skip_memory_metrics:
         from ..trainer_utils import TrainerMemoryTracker
@@ -296,27 +307,11 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         from ray.tune import CLIReporter
 
         kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
-    if "keep_checkpoints_num" in kwargs and kwargs["keep_checkpoints_num"] > 0:
-        # `keep_checkpoints_num=0` would disabled checkpointing
-        trainer.use_tune_checkpoints = True
-        if kwargs["keep_checkpoints_num"] > 1:
-            logger.warning(
-                f"Currently keeping {kwargs['keep_checkpoints_num']} checkpoints for each trial. "
-                "Checkpoints are usually huge, "
-                "consider setting `keep_checkpoints_num=1`."
-            )
+
+    trainer.use_tune_checkpoints = True
+
     if "scheduler" in kwargs:
         from ray.tune.schedulers import ASHAScheduler, HyperBandForBOHB, MedianStoppingRule, PopulationBasedTraining
-
-        # Check if checkpointing is enabled for PopulationBasedTraining
-        if isinstance(kwargs["scheduler"], PopulationBasedTraining):
-            if not trainer.use_tune_checkpoints:
-                logger.warning(
-                    "You are using PopulationBasedTraining but you haven't enabled checkpointing. "
-                    "This means your trials will train from scratch everytime they are exploiting "
-                    "new configurations. Consider enabling checkpointing by passing "
-                    "`keep_checkpoints_num=1` as an additional argument to `Trainer.hyperparameter_search`."
-                )
 
         # Check for `do_eval` and `eval_during_training` for schedulers that require intermediate reporting.
         if isinstance(
