@@ -174,12 +174,8 @@ class ProPainterImageProcessor(BaseImageProcessor):
         masks_dilated = []
         flow_masks = []
 
-        if mpath.endswith(('jpg', 'jpeg', 'png', 'JPG', 'JPEG', 'PNG')): # input single img path
-            masks_img = [Image.open(mpath)]
-        else:
-            mnames = sorted(os.listdir(mpath))
-            for mp in mnames:
-                masks_img.append(Image.open(os.path.join(mpath, mp)))
+        for mp in mpath:
+            masks_img.append(mp)
 
         for mask_img in masks_img:
             if size is not None:
@@ -272,13 +268,14 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         """
         size = self.size if size is None else size
-        size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
+        #size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
         if do_resize is not None and size is None:
             raise ValueError("Size and max_size must be specified if do_resize is True.")
 
-        images = make_list_of_images(images)
+        #images = make_list_of_images(images)
 
-        frames, fps, size, video_name = self.read_frames_from_videos(self.video_path)
+        frames, fps, size, video_name = self.read_frame_from_videos(video_path)
+        masks, fps, size, video_name = self.read_frame_from_videos(masks_path)
         if not self.size['width'] == -1 and not self.size['height'] == -1:
             size = (self.size['width'], self.size['height'])
         if not self.resize_ratio == 1.0:
@@ -288,7 +285,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
             frames, size, out_size = self.resize_frames(frames, size)
 
         frames_len = len(frames)
-        flow_masks, masks_dilated = self.read_mask(self.mask, frames_len, size,
+        flow_masks, masks_dilated = self.read_mask(masks, frames_len, size,
                                             flow_mask_dilates=self.mask_dilation,
                                             mask_dilates=self.mask_dilation)
 
