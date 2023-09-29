@@ -175,8 +175,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
+
     cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -349,13 +351,26 @@ class MistralFlashAttention2(MistralAttention):
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+
+        rotary_seq_len = max(kv_seq_len, position_ids.max().item()) + 1
+        cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        use_sliding_windows = _is_flash_using_sliding_windows and self.config.sliding_window is not None
+        use_sliding_windows = _is_flash_using_sliding_windows and self.config.sliding_window is not None and kv_seq_len > self.config.sliding_window
 
         if past_key_value is not None:
+            if use_sliding_windows and kv_seq_len > self.config.sliding_window:
+                slicing_tokens = kv_seq_len - self.config.sliding_window
+
+                past_key = past_key_value[0]
+                past_value = past_key_value[1]
+
+                past_key = past_key[:, :, :-slicing_tokens, :].contiguous()            
+                past_value = past_value[:, :, :-slicing_tokens, :].contiguous()  
+
+                past_key_value = (past_key, past_value)
+
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
