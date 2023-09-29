@@ -54,7 +54,12 @@ speech-to-text.
 Not the result you had in mind? Check out some of the [most downloaded automatic speech recognition models](https://huggingface.co/models?pipeline_tag=automatic-speech-recognition&sort=trending) 
 on the Hub to see if you can get a better transcription.
 
-Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large) model from OpenAI:
+Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large) model from OpenAI. Whisper was released 
+2 years later than Wav2Vec2, and was trained on close to 10x more data. As such, it beats Wav2Vec2 on most downstream 
+benchmarks. It also has the added benefit of predicting punctuation and casing, neither of which are possible with  
+Wav2Vec2.
+
+Let's give it a try here to see how it performs:
 
 ```py
 >>> transcriber = pipeline(model="openai/whisper-large-v2")
@@ -62,7 +67,7 @@ Let's try the [Whisper large-v2](https://huggingface.co/openai/whisper-large) mo
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
 
-Now this result looks more accurate!
+Now this result looks more accurate! For a deep-dive comparison on Wav2Vec2 vs Whisper, refer to the [Audio Transformers Course](https://huggingface.co/learn/audio-course/chapter5/asr_models).
 We really encourage you to check out the Hub for models in different languages, models specialized in your field, and more.
 You can check out and compare model results directly from your browser on the Hub to see if it fits or 
 handles corner cases better than other ones.
