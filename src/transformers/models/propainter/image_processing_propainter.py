@@ -289,18 +289,16 @@ class ProPainterImageProcessor(BaseImageProcessor):
                                             flow_mask_dilates=self.mask_dilation,
                                             mask_dilates=self.mask_dilation)
 
+        frames_inp = [np.array(f).astype(np.uint8) for f in frames]
         frames = self.to_tensors()(frames).unsqueeze(0) * 2 - 1
         flow_masks = self.to_tensors()(flow_masks).unsqueeze(0)
         masks_dilated = self.to_tensors()(masks_dilated).unsqueeze(0)
 
         data = {"frames": frames,
                 "flow_masks": flow_masks,
-                "distil_masks": masks_dilated}
+                "masks_dilated": masks_dilated}
 
-        details = {"video_name": video_name,
-                "out_size": out_size}
-
-        return BatchFeature(data=data, tensor_type=return_tensors), details
+        return BatchFeature(data=data, tensor_type=return_tensors), frames_inp
 
 
     def preprocess_outpainting(
@@ -326,19 +324,16 @@ class ProPainterImageProcessor(BaseImageProcessor):
             frames, size, out_size = self.resize_frames(frames, size)
 
         frames, flow_masks, masks_dilated, size = self.extrapolation(frames, (self.scale_h, self.scale_w))
-
+        frames_inp = [np.array(f).astype(np.uint8) for f in frames]
         frames = self.to_tensors()(frames).unsqueeze(0) * 2 - 1
         flow_masks = self.to_tensors()(flow_masks).unsqueeze(0)
         masks_dilated = self.to_tensors()(masks_dilated).unsqueeze(0)
 
-        data = {"frames": frames,
-                "flow_masks": flow_masks,
-                "distil_masks": masks_dilated}
+        data = {"frames": frames[:,:2,:,:,:],
+                "flow_masks": flow_masks[:,:2,:,:,:],
+                "distil_masks": masks_dilated[:,:2,:,:,:],}
 
-        details = {"video_name": video_name,
-                "out_size": out_size}
-
-        return BatchFeature(data=data, tensor_type=return_tensors), details
+        return BatchFeature(data=data, tensor_type=return_tensors), frames_inp
 
 
     def save_videos_frame(

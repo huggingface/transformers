@@ -550,8 +550,8 @@ class CorrBlock:
         xgrid, ygrid = coords.split([1,1], dim=-1)
         xgrid = 2*xgrid/(W-1) - 1
         ygrid = 2*ygrid/(H-1) - 1
-
-        grid = torch.cat([xgrid, ygrid], dim=-1).half()
+        print(img.dtype,"dtype -------------------------------------------------")
+        grid = torch.cat([xgrid, ygrid], dim=-1).to(img.dtype)
         print(grid.dtype,"++++")
         img = F.grid_sample(img, grid, align_corners=True)
 
@@ -1475,7 +1475,7 @@ class OpticalFlow(ProPainterPreTrainedModel):
             corr = corr_fn(coords1) # index correlation volume
 
             flow = coords1 - coords0
-            flow = flow.half()
+            flow = flow.to(image1.dtype)
             net, up_mask, delta_flow = self.UpdateBlock(net, inp, corr, flow)
 
             # F(t+1) = F(t) + \Delta(t)
