@@ -506,10 +506,15 @@ class _BaseAutoModelClass:
         if is_peft_available():
             if adapter_kwargs is None:
                 adapter_kwargs = {}
+                if token is not None:
+                    adapter_kwargs["token"] = token
 
             maybe_adapter_path = find_adapter_config_file(
                 pretrained_model_name_or_path, _commit_hash=commit_hash, **adapter_kwargs
             )
+
+            if token is not None:
+                adapter_kwargs.pop("token")
 
             if maybe_adapter_path is not None:
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
