@@ -49,7 +49,7 @@ RUN_SLOW=1 pytest tests/
 RUN_SLOW=1 pytest examples/
 ```
 
-   Die Ergebnisse können Sie [hier] sehen (https://github.com/huggingface/transformers/actions).
+   Die Ergebnisse können Sie [hier](https://github.com/huggingface/transformers/actions) sehen.
 
 
 
