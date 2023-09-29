@@ -134,18 +134,18 @@ class Beit3ModelTester:
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
-        padding_mask = torch.zeros((self.batch_size, self.seq_length))
-        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "padding_mask": padding_mask}
+        text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
+        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "text_padding_mask": text_padding_mask}
 
     def prepare_config_and_inputs_for_visual_reasoning(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, 2, self.in_chans, self.img_size, self.img_size])
-        padding_mask = torch.zeros((self.batch_size, self.seq_length))
+        text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
         config = self.get_config()
         model_input = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
-            "padding_mask": padding_mask,
+            "text_padding_mask": text_padding_mask,
         }
         labels = ids_tensor([self.batch_size], self.num_labels)
         if self.use_labels:
@@ -181,14 +181,14 @@ class Beit3ModelTester:
     def prepare_config_and_inputs_for_visual_question_answering(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
-        padding_mask = torch.zeros((self.batch_size, self.seq_length))
-        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "padding_mask": padding_mask}
+        text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
+        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "text_padding_mask": text_padding_mask}
 
     def prepare_config_and_inputs_for_text_retrieval(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
-        padding_mask = torch.zeros((self.batch_size, self.seq_length))
-        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "padding_mask": padding_mask}
+        text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
+        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "text_padding_mask": text_padding_mask}
 
     def create_and_check_model(self, config, input_dict):
         model = Beit3Model(config=config)
@@ -245,7 +245,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict_to_return["pixel_values"] = torch.cat(
                 (inputs_dict["pixel_values"].unsqueeze(1), inputs_dict["pixel_values"].unsqueeze(1)), dim=1
             )
-            inputs_dict_to_return["padding_mask"] = inputs_dict["padding_mask"]
+            inputs_dict_to_return["text_padding_mask"] = inputs_dict["text_padding_mask"]
             inputs_dict_to_return["input_ids"] = inputs_dict["input_ids"]
             return inputs_dict_to_return
         elif model_class.__name__ == "Beit3ForImageClassification":
@@ -256,7 +256,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
             inputs_dict_to_return.update(inputs_dict)
             del inputs_dict_to_return["input_ids"]
-            del inputs_dict_to_return["padding_mask"]
+            del inputs_dict_to_return["text_padding_mask"]
             return inputs_dict_to_return
         elif model_class.__name__ == "Beit3ForImageTextRetrieval":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_text_retrieval()[1]
@@ -272,7 +272,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         elif model_class.__name__ == "Beit3Model":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_basemodel()[1]
             inputs_dict_to_return.update(inputs_dict)
-            del inputs_dict_to_return["padding_mask"]
+            del inputs_dict_to_return["text_padding_mask"]
             return inputs_dict_to_return
         inputs_dict_to_return.update(inputs_dict)
         return inputs_dict_to_return
@@ -506,7 +506,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=torch.tensor(input["pixel_values"]),
-            padding_mask=torch.ones(input["input_ids"].shape),
+            text_padding_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 3129])
         np.testing.assert_allclose(
@@ -532,7 +532,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=pixel_values,
-            padding_mask=torch.ones(input["input_ids"].shape),
+            text_padding_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 2])
         np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[6.593818, -6.582055]]), rtol=1e-05)
@@ -556,7 +556,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         output = model(
             input_ids=torch.tensor([input_tokens]),
             pixel_values=torch.tensor(input["pixel_values"]),
-            padding_mask=torch.zeros(language_masked_pos.shape),
+            text_padding_mask=torch.zeros(language_masked_pos.shape),
             language_masked_pos=language_masked_pos,
         )
         assert output.logits.shape == torch.Size([1, 64010])

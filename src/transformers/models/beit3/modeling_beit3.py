@@ -61,7 +61,7 @@ BEIT3_MODEL = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        text_padding_position (`torch.LongTensor` of shape `({0})`):
+        text_padding_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
 
             - 1 indicates the token is **not masked**,
@@ -101,7 +101,7 @@ BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, 2 ,num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        padding_mask (`torch.LongTensor` of shape `({0})`):
+        text_padding_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
@@ -172,7 +172,7 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        padding_mask (`torch.LongTensor` of shape `({0})`):
+        text_padding_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
 
             - 1 indicates the token is **not masked**,
@@ -199,7 +199,7 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        padding_mask (`torch.LongTensor` of shape `({0})`):
+        text_padding_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
 
             - 1 indicates the token is **not masked**,
@@ -770,7 +770,7 @@ class Beit3Model(Beit3PreTrainedModel):
         self,
         input_ids=None,
         pixel_values=None,
-        text_padding_position=None,
+        text_padding_mask=None,
         attention_mask=None,
         vision_masked_position=None,
         incremental_state=None,
@@ -785,7 +785,7 @@ class Beit3Model(Beit3PreTrainedModel):
             multiway_split_position = -1
         elif pixel_values is None:
             x = self.text_embedding(input_ids)
-            encoder_padding_mask = text_padding_position
+            encoder_padding_mask = text_padding_mask
             multiway_split_position = 0
         else:
             x1 = self.vision_embedding(pixel_values, vision_masked_position)
@@ -793,11 +793,11 @@ class Beit3Model(Beit3PreTrainedModel):
             x2 = self.text_embedding(input_ids)
             x = torch.cat([x1, x2], dim=1)
 
-            if text_padding_position is not None:
+            if text_padding_mask is not None:
                 encoder_padding_mask = torch.cat(
                     [
                         torch.zeros(x1.shape[:-1]).to(x1.device).bool(),
-                        text_padding_position,
+                        text_padding_mask,
                     ],
                     dim=1,
                 )
@@ -840,7 +840,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         self,
         input_ids,
         pixel_values,
-        padding_mask,
+        text_padding_mask,
         output_hidden_states=None,
         return_dict=None,
         labels=None,
@@ -873,7 +873,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         >>> output = model(
         ...     input_ids=torch.tensor(input["input_ids"]),
         ...     pixel_values=pixel_values,
-        ...     padding_mask=torch.ones(input["input_ids"].shape),
+        ...     text_padding_mask=torch.ones(input["input_ids"].shape),
         ... )
         >>> list(output.logits.shape)
         [1, 2]
@@ -885,12 +885,12 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         image2_values = image2_values.squeeze(1)
         vision_input = torch.cat((image1_values, image2_values), dim=0)
         language_input = torch.cat((input_ids, input_ids), dim=0)
-        padding_mask = torch.cat((padding_mask, padding_mask), dim=0)
+        text_padding_mask = torch.cat((text_padding_mask, text_padding_mask), dim=0)
 
         outputs = self.beit3(
             input_ids=language_input,
             pixel_values=vision_input,
-            text_padding_position=padding_mask,
+            text_padding_mask=text_padding_mask,
         )
         x = outputs.encoder_out
         multiway_split_position = outputs.multiway_split_position
@@ -1035,7 +1035,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         self,
         input_ids,
         pixel_values,
-        padding_mask,
+        text_padding_mask,
         language_masked_pos,
         text_len=None,
         incremental_state=None,
@@ -1072,7 +1072,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> output = model(
         ...     input_ids=torch.tensor([input_tokens]),
         ...     pixel_values=torch.tensor(input["pixel_values"]),
-        ...     padding_mask=torch.zeros(language_masked_pos.shape),
+        ...     text_padding_mask=torch.zeros(language_masked_pos.shape),
         ...     language_masked_pos=language_masked_pos,
         ... )
         >>> beit3_processor.tokenizer.decode([np.argmax(output.logits.cpu().detach().numpy())])
@@ -1105,7 +1105,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         positions = None
         if pixel_values is None:
             uni_mask = uni_mask[-2:]
-            padding_mask = None
+            text_padding_mask = None
             # start position (2 (fairseq starts at 2) + cur_position) is equal to text_len
             positions = (
                 torch.arange(text_len, input_ids.size(1) + text_len, device=input_ids.device).long().unsqueeze(0)
@@ -1114,7 +1114,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            text_padding_position=padding_mask,
+            text_padding_mask=text_padding_mask,
             attention_mask=uni_mask,
             incremental_state=incremental_state,
             positions=positions,
@@ -1195,7 +1195,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         self,
         input_ids,
         pixel_values,
-        padding_mask,
+        text_padding_mask,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1222,7 +1222,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         >>> output = model(
         ...     input_ids=torch.tensor(input["input_ids"]),
         ...     pixel_values=torch.tensor(input["pixel_values"]),
-        ...     padding_mask=torch.ones(input["input_ids"].shape),
+        ...     text_padding_mask=torch.ones(input["input_ids"].shape),
         ... )
         >>> list(output.logits.shape)
         [1, 3129]
@@ -1230,7 +1230,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         encoder_outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            text_padding_position=padding_mask,
+            text_padding_mask=text_padding_mask,
         )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1313,7 +1313,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
-        padding_mask: Optional[torch.Tensor] = None,
+        text_padding_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[Any], Beit3ImageTextMatchingModelOutput]:
@@ -1347,7 +1347,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         outputs = self.beit3(
             input_ids=None,
             pixel_values=pixel_values,
-            text_padding_position=None,
+            text_padding_mask=None,
         )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1359,7 +1359,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=None,
-            text_padding_position=padding_mask,
+            text_padding_mask=text_padding_mask,
         )
         text_out = outputs.encoder_out
         text_cls = self.language_classifier(text_out[:, 0, :])
