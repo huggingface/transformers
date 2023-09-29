@@ -39,6 +39,7 @@ logger = logging.get_logger(__name__)
 FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
+        ("maest", "MAESTFeatureExtractor"),
         ("beit", "BeitFeatureExtractor"),
         ("chinese_clip", "ChineseCLIPFeatureExtractor"),
         ("clap", "ClapFeatureExtractor"),

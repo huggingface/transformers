@@ -32,6 +32,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
+        ("maest", "MAESTModel"),
         ("autoformer", "AutoformerModel"),
         ("bark", "BarkModel"),
         ("bart", "BartModel"),
@@ -978,6 +979,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("audio-spectrogram-transformer", "ASTForAudioClassification"),
+        ("maest", "MAESTForAudioClassification"),
         ("data2vec-audio", "Data2VecAudioForSequenceClassification"),
         ("hubert", "HubertForSequenceClassification"),
         ("sew", "SEWForSequenceClassification"),

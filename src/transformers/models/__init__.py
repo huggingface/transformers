@@ -121,6 +121,7 @@ from . import (
     luke,
     lxmert,
     m2m_100,
+    maest,
     marian,
     markuplm,
     mask2former,

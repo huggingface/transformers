@@ -414,6 +414,10 @@ _import_structure = {
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
+    "models.maest": [
+        "MAEST_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MAESTConfig",
+    ],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
         "MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -902,6 +906,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
+    _import_structure["models.maest"].append("MAESTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
 # Tensorflow-text-specific objects
@@ -2146,6 +2151,14 @@ else:
             "M2M100ForConditionalGeneration",
             "M2M100Model",
             "M2M100PreTrainedModel",
+        ]
+    )
+    _import_structure["models.maest"].extend(
+        [
+            "MAEST_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MAESTForAudioClassification",
+            "MAESTModel",
+            "MAESTPreTrainedModel",
         ]
     )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
@@ -4537,6 +4550,10 @@ if TYPE_CHECKING:
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
+    from .models.maest import (
+        MAEST_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MAESTConfig,
+    )
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4980,6 +4997,7 @@ if TYPE_CHECKING:
         from .utils.dummy_speech_objects import *
     else:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
+        from .models.maest import MAESTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:
@@ -6008,6 +6026,12 @@ if TYPE_CHECKING:
             M2M100ForConditionalGeneration,
             M2M100Model,
             M2M100PreTrainedModel,
+        )
+        from .models.maest import (
+            MAEST_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MAESTForAudioClassification,
+            MAESTModel,
+            MAESTPreTrainedModel,
         )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (
