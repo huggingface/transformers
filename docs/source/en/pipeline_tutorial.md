@@ -113,14 +113,15 @@ This will work regardless of whether you are using PyTorch or Tensorflow.
 transcriber = pipeline(model="openai/whisper-large-v2", device=0)
 ```
 
-If the model is too large for a single GPU, you can set `device_map="auto"` to allow 🤗 [Accelerate](https://huggingface.co/docs/accelerate) to automatically determine how to load and store the model weights.
-Ensure Accelerate is installed before using an auto-map:
+If the model is too large for a single GPU and you are using PyTorch, you can set `device_map="auto"` to automatically 
+determine how to load and store the model weights. Using the `device_map` argument requires the 🤗 [Accelerate](https://huggingface.co/docs/accelerate)
+package:
 
 ```bash
 pip install --upgrade accelerate
 ```
 
-The following code then automatically loads and stores model weights across devices:
+The following code automatically loads and stores model weights across devices:
 
 ```py
 transcriber = pipeline(model="openai/whisper-large-v2", device_map="auto")
