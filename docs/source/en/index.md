@@ -163,6 +163,7 @@ The documentation is organized into five sections:
 1. **[LXMERT](model_doc/lxmert)** (from UNC Chapel Hill) released with the paper [LXMERT: Learning Cross-Modality Encoder Representations from Transformers for Open-Domain Question Answering](https://arxiv.org/abs/1908.07490) by Hao Tan and Mohit Bansal.
 1. **[M-CTC-T](model_doc/mctct)** (from Facebook) released with the paper [Pseudo-Labeling For Massively Multilingual Speech Recognition](https://arxiv.org/abs/2111.00161) by Loren Lugosch, Tatiana Likhomanenko, Gabriel Synnaeve, and Ronan Collobert.
 1. **[M2M100](model_doc/m2m_100)** (from Facebook) released with the paper [Beyond English-Centric Multilingual Machine Translation](https://arxiv.org/abs/2010.11125) by Angela Fan, Shruti Bhosale, Holger Schwenk, Zhiyi Ma, Ahmed El-Kishky, Siddharth Goyal, Mandeep Baines, Onur Celebi, Guillaume Wenzek, Vishrav Chaudhary, Naman Goyal, Tom Birch, Vitaliy Liptchinsky, Sergey Edunov, Edouard Grave, Michael Auli, Armand Joulin.
+1. **[MAEST](model_doc/maest)** (from the Music Technology Group, Universitat Pompeu Fabra) released with the paper [Efficient Supervised Training of Audio Transformers for Music Representation Learning](http://arxiv.org/abs/2309.16418) by Pablo Alonso Jiménez, Xavier Serra, Dmitry Bogdanov.
 1. **[MarianMT](model_doc/marian)** Machine translation models trained using [OPUS](http://opus.nlpl.eu/) data by Jörg Tiedemann. The [Marian Framework](https://marian-nmt.github.io/) is being developed by the Microsoft Translator Team.
 1. **[MarkupLM](model_doc/markuplm)** (from Microsoft Research Asia) released with the paper [MarkupLM: Pre-training of Text and Markup Language for Visually-rich Document Understanding](https://arxiv.org/abs/2110.08518) by Junlong Li, Yiheng Xu, Lei Cui, Furu Wei.
 1. **[Mask2Former](model_doc/mask2former)** (from FAIR and UIUC) released with the paper [Masked-attention Mask Transformer for Universal Image Segmentation](https://arxiv.org/abs/2112.01527) by Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar.
@@ -390,6 +391,7 @@ Flax), PyTorch, and/or TensorFlow.
 |            LXMERT             |       ✅        |         ✅         |      ❌      |
 |            M-CTC-T            |       ✅        |         ❌         |      ❌      |
 |            M2M100             |       ✅        |         ❌         |      ❌      |
+|             MAEST             |       ✅        |         ❌         |      ❌      |
 |            Marian             |       ✅        |         ✅         |      ✅      |
 |           MarkupLM            |       ✅        |         ❌         |      ❌      |
 |          Mask2Former          |       ✅        |         ❌         |      ❌      |

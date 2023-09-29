@@ -594,6 +594,8 @@
         title: EnCodec
       - local: model_doc/hubert
         title: Hubert
+      - local: model_doc/maest
+        title: MAEST
       - local: model_doc/mctct
         title: MCTCT
       - local: model_doc/mms
