@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ArthurZ/persimmon-8b-base": "https://huggingface.co/ArthurZ/persimmon-8b-base/resolve/main/config.json",
+    "adept/persimmon-8b-base": "https://huggingface.co/adept/persimmon-8b-base/resolve/main/config.json",
 }
 
 
@@ -30,7 +30,7 @@ class PersimmonConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`PersimmonModel`]. It is used to instantiate an
     Persimmon model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [ArthurZ/persimmon-8b-base](https://huggingface.co/ArthurZ/persimmon-8b-base).
+    [adept/persimmon-8b-base](https://huggingface.co/adept/persimmon-8b-base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
