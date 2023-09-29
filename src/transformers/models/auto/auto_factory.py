@@ -514,7 +514,7 @@ class _BaseAutoModelClass:
             )
 
             if token is not None:
-                adapter_kwargs.pop("token")
+                adapter_kwargs.pop("token", None)
 
             if maybe_adapter_path is not None:
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
