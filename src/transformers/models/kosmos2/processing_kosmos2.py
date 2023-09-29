@@ -43,8 +43,8 @@ class Kosmos2Processor(ProcessorMixin):
     processor.
 
     [`Kosmos2Processor`] offers all the functionalities of [`Kosmos2ImageProcessor`] and some functionalities of
-    [`XLMRobertaTokenizerFast`]. See the docstring of [`~Kosmos2Processor.__call__`] and [`~Kosmos2Processor.decode`] for
-    more information.
+    [`XLMRobertaTokenizerFast`]. See the docstring of [`~Kosmos2Processor.__call__`] and [`~Kosmos2Processor.decode`]
+    for more information.
 
     Args:
         image_processor (`Kosmos2ImageProcessor`):
