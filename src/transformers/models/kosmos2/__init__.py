@@ -17,8 +17,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_sentencepiece_available,
-    is_tokenizers_available,
     is_torch_available,
     is_vision_available,
 )
@@ -28,22 +26,6 @@ _import_structure = {
     "configuration_kosmos2": ["KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Kosmos2Config"],
     "processing_kosmos2": ["Kosmos2Processor"],
 }
-
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_kosmos2"] = ["Kosmos2Tokenizer"]
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_kosmos2_fast"] = ["Kosmos2TokenizerFast"]
 
 try:
     if not is_vision_available():
@@ -70,22 +52,6 @@ else:
 if TYPE_CHECKING:
     from .configuration_kosmos2 import KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP, Kosmos2Config
     from .processing_kosmos2 import Kosmos2Processor
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from tokenization_kosmos2 import Kosmos2Tokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from tokenization_kosmos2_fast import Kosmos2TokenizerFast
 
     try:
         if not is_vision_available():

@@ -24,6 +24,7 @@ import numpy as np
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
 from ...processing_utils import ProcessorMixin
+from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType, is_torch_available
 
@@ -42,21 +43,62 @@ class Kosmos2Processor(ProcessorMixin):
     processor.
 
     [`Kosmos2Processor`] offers all the functionalities of [`Kosmos2ImageProcessor`] and some functionalities of
-    [`Kosmos2TokenizerFast`]. See the docstring of [`~Kosmos2Processor.__call__`] and [`~Kosmos2Processor.decode`] for
+    [`XLMRobertaTokenizerFast`]. See the docstring of [`~Kosmos2Processor.__call__`] and [`~Kosmos2Processor.decode`] for
     more information.
 
     Args:
         image_processor (`Kosmos2ImageProcessor`):
             An instance of [`Kosmos2ImageProcessor`]. The image processor is a required input.
-        tokenizer (`Kosmos2TokenizerFast`):
-            An instance of ['Kosmos2TokenizerFast`]. The tokenizer is a required input.
+        tokenizer (`XLMRobertaTokenizerFast`):
+            An instance of ['XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Kosmos2ImageProcessor"
-    tokenizer_class = ("Kosmos2Tokenizer", "Kosmos2TokenizerFast")
+    tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
 
-    def __init__(self, image_processor, tokenizer):
+    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024):
         tokenizer.return_token_type_ids = False
+
+        self.eod_token = "</doc>"
+
+        self.boi_token = "<image>"
+        self.eoi_token = "</image>"
+
+        self.eoc_token = "</chunk>"
+        self.eol_token = "</line>"
+
+        self.bop_token = "<phrase>"
+        self.eop_token = "</phrase>"
+
+        self.boo_token = "<object>"
+        self.eoo_token = "</object>"
+
+        self.dom_token = "</delimiter_of_multi_objects/>"
+
+        self.grd_token = "<grounding>"
+
+        self.tag_tokens = [
+            self.eod_token,
+            self.boi_token,
+            self.eoi_token,
+            self.eoc_token,
+            self.eol_token,
+            self.bop_token,
+            self.eop_token,
+            self.boo_token,
+            self.eoo_token,
+            self.dom_token,
+            self.grd_token,
+        ]
+
+        self.num_patch_index_tokens = num_patch_index_tokens
+        patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
+
+        tokens_to_add = []
+        for token in self.tag_tokens + patch_index_tokens:
+            tokens_to_add.append(AddedToken(token, lstrip=True, rstrip=False))
+        tokenizer.add_tokens(tokens_to_add)
+
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -80,7 +122,7 @@ class Kosmos2Processor(ProcessorMixin):
     ) -> BatchFeature:
         """
         This method uses [`Kosmos2ImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`Kosmos2TokenizerFast.__call__`] to prepare text for the model.
+        [`XLMRobertaTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
 
@@ -414,7 +456,7 @@ class Kosmos2Processor(ProcessorMixin):
         # bbox specified with (normalized) coordinates
         else:
             # use `self.tokenizer` to get `num_patches_per_side`
-            num_patches_per_side = int(math.sqrt(self.tokenizer.num_patch_index_tokens))
+            num_patches_per_side = int(math.sqrt(self.num_patch_index_tokens))
             idx_1, idx_2 = coordinate_to_patch_index(bbox, num_patches_per_side)
 
         token_1 = f"<patch_index_{str(idx_1).zfill(4)}>"
@@ -430,8 +472,7 @@ class Kosmos2Processor(ProcessorMixin):
         """
 
         tag_tokens = set(
-            self.tokenizer.tag_tokens
-            + [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.tokenizer.num_patch_index_tokens)]
+            self.tag_tokens + [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
         )
         pattern = "|".join(tag_tokens)
         splits = re.split(rf"({pattern})", text)

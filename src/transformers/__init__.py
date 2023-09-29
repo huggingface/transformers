@@ -803,7 +803,6 @@ else:
     _import_structure["models.ernie_m"].append("ErnieMTokenizer")
     _import_structure["models.fnet"].append("FNetTokenizer")
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
-    _import_structure["models.kosmos2"].append("Kosmos2Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
     _import_structure["models.llama"].append("LlamaTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
@@ -866,7 +865,6 @@ else:
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
-    _import_structure["models.kosmos2"].append("Kosmos2TokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
     _import_structure["models.layoutlmv2"].append("LayoutLMv2TokenizerFast")
     _import_structure["models.layoutlmv3"].append("LayoutLMv3TokenizerFast")
@@ -4964,7 +4962,6 @@ if TYPE_CHECKING:
         from .models.ernie_m import ErnieMTokenizer
         from .models.fnet import FNetTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
-        from .models.kosmos2 import Kosmos2Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
         from .models.llama import LlamaTokenizer
         from .models.m2m_100 import M2M100Tokenizer
@@ -5019,7 +5016,6 @@ if TYPE_CHECKING:
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
-        from .models.kosmos2 import Kosmos2TokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.layoutlmv2 import LayoutLMv2TokenizerFast
         from .models.layoutlmv3 import LayoutLMv3TokenizerFast
