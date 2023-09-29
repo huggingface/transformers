@@ -458,7 +458,7 @@ Lassen Sie uns die GPU-Anforderungen in der folgenden Tabelle darstellen:
 
 
 | n gpus | decorator                      |
-|--------+--------------------------------|
+|--------|--------------------------------|
 | `>= 0` | `@require_torch`               |
 | `>= 1` | `@require_torch_gpu`           |
 | `>= 2` | `@require_torch_multi_gpu`     |
