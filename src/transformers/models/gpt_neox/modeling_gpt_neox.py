@@ -308,13 +308,13 @@ class GPTNeoXRotaryEmbedding(torch.nn.Module):
         self.cos_cached = emb.cos()[None, None, :, :]
         self.sin_cached = emb.sin()[None, None, :, :]
 
-    def rotate_half(x):
+    def rotate_half(self, x):
         """Rotates half the hidden dims of the input."""
         x1 = x[..., : x.shape[-1] // 2]
         x2 = x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
-    def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
+    def apply_rotary_pos_emb(self, q, k, cos, sin, position_ids):
         gather_indices = position_ids[:, None, :, None]  # [bs, 1, seq_len, 1]
         gather_indices = gather_indices.repeat(1, cos.shape[1], 1, cos.shape[3])
         cos = torch.gather(cos.repeat(gather_indices.shape[0], 1, 1, 1), 2, gather_indices)
@@ -328,8 +328,8 @@ class GPTNeoXRotaryEmbedding(torch.nn.Module):
         if seq_len > self.max_seq_len_cached:
             self._set_cos_sin_cache(seq_len=seq_len, device=q.device)
         cos, sin = (
-            self.cos_cached[:seq_len, ...].to(x.device),
-            self.sin_cached[:seq_len, ...].to(x.device),
+            self.cos_cached[:seq_len, ...].to(q.device),
+            self.sin_cached[:seq_len, ...].to(q.device),
         )
         return self.apply_rotary_pos_emb(q, k, cos, sin, position_ids)
 

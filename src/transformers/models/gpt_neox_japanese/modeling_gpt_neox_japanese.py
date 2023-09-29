@@ -260,13 +260,13 @@ class RotaryEmbedding(torch.nn.Module):
         self.cos_cached = emb.cos()[None, None, :, :]
         self.sin_cached = emb.sin()[None, None, :, :]
 
-    def rotate_half(x):
+    def rotate_half(self, x):
         """Rotates half the hidden dims of the input."""
         x1 = x[..., : x.shape[-1] // 2]
         x2 = x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
-    def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
+    def apply_rotary_pos_emb(self, q, k, cos, sin, offset: int = 0):
         cos = cos[..., offset : q.shape[-2] + offset, :]
         sin = sin[..., offset : q.shape[-2] + offset, :]
         q_embed = (q * cos) + (self.rotate_half(q) * sin)
