@@ -15,7 +15,7 @@
 
 from .integrations import (
     is_optuna_available,
-    is_ray_available,
+    is_ray_tune_available,
     is_sigopt_available,
     is_wandb_available,
     run_hp_search_optuna,
@@ -81,7 +81,13 @@ class RayTuneBackend(HyperParamSearchBackendBase):
 
     @staticmethod
     def is_available():
-        return is_ray_available()
+        tune_available = is_ray_tune_available()
+        if not tune_available:
+            return False
+
+        import ray
+
+        return tune_available and Version(ray.__version__) >= Version("2.7.0")
 
     def run(self, trainer, n_trials: int, direction: str, **kwargs):
         return run_hp_search_ray(trainer, n_trials, direction, **kwargs)
