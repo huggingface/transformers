@@ -59,7 +59,7 @@ TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LARGE_NEGATIVE = -1e8
 
 
-def sinusoidal_embedding_init(shape, dtype=None) -> tf.Tensor:
+def sinusoidal_embedding_init(shape, dtype=tf.float32) -> tf.Tensor:
     """Returns sinusoids for positional embedding"""
     length, channels = shape
     if channels % 2 != 0:
@@ -70,10 +70,7 @@ def sinusoidal_embedding_init(shape, dtype=None) -> tf.Tensor:
     log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
     inv_timescales = tf.exp(-log_timescale_increment * tf.range(channels // 2, dtype=tf.float32))
     scaled_time = tf.reshape(tf.range(length, dtype=tf.float32), (-1, 1)) * tf.reshape(inv_timescales, (1, -1))
-    sinusoids = tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=1)
-    if dtype is not None:
-        sinusoids = tf.cast(sinusoids, dtype)
-    return sinusoids
+    return tf.cast(tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=1), dtype)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
