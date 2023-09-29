@@ -135,7 +135,11 @@ class Beit3ModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
         text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
-        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "text_padding_mask": text_padding_mask}
+        return self.get_config(), {
+            "input_ids": input_ids,
+            "pixel_values": pixel_values,
+            "text_padding_mask": text_padding_mask,
+        }
 
     def prepare_config_and_inputs_for_visual_reasoning(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -182,13 +186,21 @@ class Beit3ModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
         text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
-        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "text_padding_mask": text_padding_mask}
+        return self.get_config(), {
+            "input_ids": input_ids,
+            "pixel_values": pixel_values,
+            "text_padding_mask": text_padding_mask,
+        }
 
     def prepare_config_and_inputs_for_text_retrieval(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
         text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
-        return self.get_config(), {"input_ids": input_ids, "pixel_values": pixel_values, "text_padding_mask": text_padding_mask}
+        return self.get_config(), {
+            "input_ids": input_ids,
+            "pixel_values": pixel_values,
+            "text_padding_mask": text_padding_mask,
+        }
 
     def create_and_check_model(self, config, input_dict):
         model = Beit3Model(config=config)
