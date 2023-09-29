@@ -194,7 +194,9 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     logger.warning_once(
-        "Using the global `rotate_half` function is deprecated. Please use `LlamaRotaryEmbedding.rotate_half` instead."
+        "Using the global `rotate_half` function is deprecated. Please use `LlamaRotaryEmbedding.rotate_half` instead. "
+        "This is deprecated to improve the export to ONNX by applying the rotary embeddings during the forward call in "
+        "the rotary embedding class. "
     )
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
@@ -204,7 +206,9 @@ def rotate_half(x):
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     logger.warning_once(
-        "Using the global `apply_rotary_pos_emb` function is deprecated. Please use `LlamaRotaryEmbedding.apply_rotary_pos_emb` instead."
+        "Using the global `apply_rotary_pos_emb` function is deprecated. Please use `LlamaRotaryEmbedding.apply_rotary_pos_emb` instead. "
+        "This is deprecated to improve the export to ONNX by applying the rotary embeddings during the forward call in "
+        "the rotary embedding class. "
     )
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]

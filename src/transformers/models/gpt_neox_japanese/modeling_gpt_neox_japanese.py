@@ -130,8 +130,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         if has_layer_past:
             offset = layer_past[0].shape[-2]
             seq_len += offset
-        cos, sin = self.rotary_emb(value, seq_len=seq_len)
-        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, offset=offset)
+        query, key = self.rotary_emb(query_rot, key_rot, offset=offset, seq_len=seq_len)
         query = torch.cat((query, query_pass), dim=-1)
         key = torch.cat((key, key_pass), dim=-1)
 
@@ -238,7 +237,6 @@ class GPTNeoXJapaneseAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding
 class RotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings, base=10000, device=None):
         super().__init__()
@@ -262,21 +260,48 @@ class RotaryEmbedding(torch.nn.Module):
         self.cos_cached = emb.cos()[None, None, :, :]
         self.sin_cached = emb.sin()[None, None, :, :]
 
-    def forward(self, x, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
+    def rotate_half(x):
+        """Rotates half the hidden dims of the input."""
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
+
+    def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
+        cos = cos[..., offset : q.shape[-2] + offset, :]
+        sin = sin[..., offset : q.shape[-2] + offset, :]
+        q_embed = (q * cos) + (self.rotate_half(q) * sin)
+        k_embed = (k * cos) + (self.rotate_half(k) * sin)
+        return q_embed, k_embed
+
+    def forward(self, q, k, offset=0, seq_len=None):
+        # q/k: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device)
-        return self.cos_cached[:seq_len, ...].to(x.device), self.sin_cached[:seq_len, ...].to(x.device)
+            self._set_cos_sin_cache(seq_len=seq_len, device=q.device)
+        cos, sin = (
+            self.cos_cached[:seq_len, ...].to(q.device),
+            self.sin_cached[:seq_len, ...].to(q.device),
+        )
+        return self.apply_rotary_pos_emb(q, k, cos, sin, offset)
 
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
+    logger.warning_once(
+        "Using the global `rotate_half` function is deprecated. Please use `RotaryEmbedding.rotate_half` instead. "
+        "This is deprecated to improve the export to ONNX by applying the rotary embeddings during the forward call in "
+        "the rotary embedding class. "
+    )
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
+    logger.warning_once(
+        "Using the global `apply_rotary_pos_emb` function is deprecated. Please use `RotaryEmbedding.apply_rotary_pos_emb` instead. "
+        "This is deprecated to improve the export to ONNX by applying the rotary embeddings during the forward call in "
+        "the rotary embedding class. "
+    )
     cos = cos[..., offset : q.shape[-2] + offset, :]
     sin = sin[..., offset : q.shape[-2] + offset, :]
     q_embed = (q * cos) + (rotate_half(q) * sin)
