@@ -4,32 +4,41 @@
   - local: installation
     title: インストール
   title: はじめに
+
 - sections:
   - local: quicktour
     title: クイックツアー
+
 - sections:
   - local: accelerate
     title: 🤗 Accelerate を用いた分散学習
   title: チュートリアル
+
 - sections:
   - sections:
     - local: multilingual
       title: 多言語モデル
+
 - sections:
   - local: autoclass_tutorial
     title: AutoClassを使用してポータブルなコードを書く
+
 - sections:
   - local: preprocessing
     title: データ前処理
+
 - sections:
   - local: training
     title: 訓練
+
 - sections:
   - local: model_sharing
     title: モデル共有
+
 - sections:
   - local: pipeline_tutorial
-     title: パイプラインチュートリアル
+    title: パイプラインチュートリアル
+
 - sections:
   - local: add_new_model
-     title: 新しいモデルを追加する
+    title: 新しいモデルを追加する
