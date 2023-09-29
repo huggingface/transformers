@@ -54,15 +54,6 @@ MAEST_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "mtg-upf/discogs-maest-20s-pw-129e",
     "mtg-upf/discogs-maest-30s-pw-129e",
     "mtg-upf/discogs-maest-30s-pw-73e-ts",
-    # stochastic weight averaging
-    "mtg-upf/discogs-maest-30s-pw-129e-swa",
-    "mtg-upf/discogs-maest-10s-fs-129e-swa",
-    "mtg-upf/discogs-maest-10s-pw-129e-swa",
-    "mtg-upf/discogs-maest-10s-dw-75e-swa",
-    "mtg-upf/discogs-maest-5s-pw-129e-swa",
-    "mtg-upf/discogs-maest-20s-pw-129e-swa",
-    "mtg-upf/discogs-maest-30s-pw-129e-swa",
-    "mtg-upf/discogs-maest-30s-pw-73e-ts-swa",
 ]
 
 
