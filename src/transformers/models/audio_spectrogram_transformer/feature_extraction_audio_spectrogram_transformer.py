@@ -20,13 +20,14 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torch
-import torchaudio.compliance.kaldi as ta_kaldi
 
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_speech_available, logging
 
+if is_speech_available():
+    import torchaudio.compliance.kaldi as ta_kaldi
 
 logger = logging.get_logger(__name__)
 
@@ -74,7 +75,6 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         mean=-4.2677393,
         std=4.5689974,
         return_attention_mask=False,
-        use_torchaudio=True,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -85,7 +85,6 @@ class ASTFeatureExtractor(SequenceFeatureExtractor):
         self.std = std
         self.return_attention_mask = return_attention_mask
 
-        self.use_torchaudio = use_torchaudio
         if not is_speech_available():
             mel_filters = mel_filter_bank(
                 num_frequency_bins=256,

@@ -69,7 +69,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         do_ceptral_normalize=True,
         normalize_means=True,
         normalize_vars=True,
-        use_torchaudio=True,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -79,7 +78,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_vars = normalize_vars
         self.return_attention_mask = True
 
-        self.use_torchaudio = use_torchaudio
         if not is_speech_available():
             mel_filters = mel_filter_bank(
                 num_frequency_bins=256,
