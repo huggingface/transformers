@@ -1128,9 +1128,25 @@ class GPT2Model(GPT2PreTrainedModel):
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, use_cache, None, output_attentions, padding_mask=padding_mask)
+                    def custom_forward(
+                        hidden_states,
+                        layer_past,
+                        attention_mask,
+                        head_mask,
+                        encoder_hidden_states,
+                        encoder_attention_mask,
+                    ):
+                        return module(
+                            hidden_states,
+                            layer_past,
+                            attention_mask,
+                            head_mask,
+                            encoder_hidden_states,
+                            encoder_attention_mask,
+                            use_cache=use_cache,
+                            output_attentions=output_attentions,
+                            padding_mask=padding_mask,
+                        )
 
                     return custom_forward
 
