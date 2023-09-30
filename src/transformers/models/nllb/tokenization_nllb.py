@@ -141,6 +141,7 @@ class NllbTokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         additional_special_tokens=None,
         legacy_behaviour=False,
+        language_codes: Optional[List[str]] = None,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -148,6 +149,9 @@ class NllbTokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         self.legacy_behaviour = legacy_behaviour
+        if language_codes is None:
+            language_codes = FAIRSEQ_LANGUAGE_CODES
+        self.language_codes = language_codes
 
         super().__init__(
             bos_token=bos_token,
@@ -163,6 +167,7 @@ class NllbTokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy_behaviour=legacy_behaviour,
+            language_codes=language_codes,
             **kwargs,
         )
 
@@ -183,7 +188,7 @@ class NllbTokenizer(PreTrainedTokenizer):
 
         self.sp_model_size = len(self.sp_model)
         self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
+            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(self.language_codes)
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
         self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset

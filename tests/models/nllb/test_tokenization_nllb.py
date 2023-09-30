@@ -288,6 +288,19 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
 
+    def test_custom_language_codes(self):
+        # TODO: implement me
+        # from transformers import NllbTokenizer
+        # from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES
+        # new_codes = FAIRSEQ_LANGUAGE_CODES + ['myv_Cyrl', 'myv_Latn']
+        # tok1 = NllbTokenizer.from_pretrained('facebook/nllb-200-distilled-600M')
+        # tok2 = NllbTokenizer.from_pretrained('facebook/nllb-200-distilled-600M', language_codes=new_codes)
+        # assert len(tok2) == len(tok1) + 2
+        # tok2.save_pretrained('tmp_tok')
+        # tok3 = NllbTokenizer.from_pretrained('tmp_tok')
+        # assert len(tok3) == len(tok1) + 2
+        pass
+
 
 @require_torch
 @require_sentencepiece
