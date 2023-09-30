@@ -568,8 +568,7 @@ class GPT2Block(nn.Module):
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = GPT2Attention(config, layer_idx=layer_idx)
-        (
+        self.attn = (
             GPT2Attention(config, layer_idx=layer_idx)
             if not getattr(config, "_flash_attn_2_enabled", False)
             else GPT2FlashAttention2(config, layer_idx=layer_idx)
