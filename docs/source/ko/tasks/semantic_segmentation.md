@@ -20,7 +20,8 @@ rendered properly in your Markdown viewer.
 
 <Youtube id="dKE8SIt9C-w"/>
 
-Semantic segmentation assigns a label or class to each individual pixel of an image. There are several types of segmentation, and in the case of semantic segmentation, no distinction is made between unique instances of the same object. Both objects are given the same label (for example, "car" instead of "car-1" and "car-2"). Common real-world applications of semantic segmentation include training self-driving cars to identify pedestrians and important traffic information, identifying cells and abnormalities in medical imagery, and monitoring environmental changes from satellite imagery.
+의미적 분할(semantic segmentation)은 이미지의 각 픽셀에 레이블 또는 클래스를 할당합니다. 분할(segmentation)에는 여러 종류가 있으며, 의미적 분할의 경우 동일한 물체의 고유 인스턴스를 구분하지 않습니다. 두 물체 모두 동일한 레이블이 지정됩니다(예시로, "car-1" 과 "car-2" 대신 "car"로 지정합니다).
+실생활에서 흔히 볼 수 있는 의미적 분할의 적용 사례로는 보행자와 중요한 교통 정보를 식별하는 자율 주행 자동차 학습, 의료 이미지의 세포와 이상 징후 식별, 그리고 위성 이미지의 환경 변화 모니터링등이 있습니다.
 
 This guide will show you how to:
 
