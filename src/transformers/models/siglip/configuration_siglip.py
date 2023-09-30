@@ -61,10 +61,10 @@ class SiglipTextConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 77):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -99,8 +99,8 @@ class SiglipTextConfig(PretrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=8,
         max_position_embeddings=77,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
@@ -168,10 +168,10 @@ class SiglipVisionConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
             The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -208,8 +208,8 @@ class SiglipVisionConfig(PretrainedConfig):
         num_channels=3,
         image_size=224,
         patch_size=32,
-        hidden_act="quick_gelu",
-        layer_norm_eps=1e-5,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
