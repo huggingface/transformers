@@ -14,7 +14,7 @@
 """ Testing suite for the Flax GPTNeoX model. """
 
 import unittest
-
+from parameterized import parameterized
 import numpy as np
 
 from transformers import AutoTokenizer, GPTNeoXConfig, is_flax_available, is_torch_available
@@ -219,6 +219,33 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
+
+    @parameterized.expand([("linear",), ("dynamic",)])
+    def test_model_rope_scaling(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # config.max_position_embeddings = int(config.max_position_embeddings * 1.5)
+        
+        short_input = ids_tensor([1, 10], config.vocab_size)
+        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+
+        original_model = FlaxGPTNeoXModel(config, seed=42)
+        original_short_output = original_model(short_input).last_hidden_state
+        original_long_output = original_model(long_input).last_hidden_state
+
+        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        scaled_model = FlaxGPTNeoXModel(config, seed=42)
+        scaled_short_output = scaled_model(short_input).last_hidden_state
+        scaled_long_output = scaled_model(long_input).last_hidden_state
+
+        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+        # maximum sequence length, so the outputs for the short input should match.
+        if scaling_type == "dynamic":
+            self.assertTrue(np.allclose(original_short_output, scaled_short_output, atol=1e-5))
+        else:
+            self.assertFalse(np.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+        # The output should be different for long inputs
+        self.assertFalse(np.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
 @require_flax
 class FlaxGPTNeoXLanguageGenerationTest(unittest.TestCase):

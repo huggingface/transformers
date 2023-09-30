@@ -127,15 +127,16 @@ def rotate_half(hidden_states):
 
 class FlaxGPTNeoXRotaryEmbedding(nn.Module):
     dim: int
-    max_seq_len_cached: int
+    max_position_embeddings: int
     base: int = 10000
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(self.dtype) / self.dim))
-        self._init_cache(self.max_seq_len_cached)
+        self._set_cos_sin_cache(self.max_position_embeddings)
 
-    def _init_cache(self, seq_len: int):
+    def _set_cos_sin_cache(self, seq_len: int):
+        self.max_seq_len_cached = seq_len
         t = jnp.arange(seq_len, dtype=self.inv_freq.dtype)
         freqs = jnp.outer(t, self.inv_freq)
         emb = jnp.concatenate((freqs, freqs), axis=-1)
@@ -144,10 +145,45 @@ class FlaxGPTNeoXRotaryEmbedding(nn.Module):
 
     def __call__(self, seq_len=None):
         if seq_len > self.max_seq_len_cached:
-            self._init_cache(seq_len)
-            self.max_seq_len_cached = seq_len
+            self._set_cos_sin_cache(seq_len)
 
         return self.cos_cached[:seq_len, ...], self.sin_cached[:seq_len, ...]
+
+
+class FlaxGPTNeoXLinearScalingRotaryEmbedding(FlaxGPTNeoXRotaryEmbedding):
+    """FlaxGPTNeoXRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+    scaling_factor: float = 1.0
+
+    def _set_cos_sin_cache(self, seq_len):
+        self.max_seq_len_cached = seq_len
+        t = jnp.arange(seq_len, dtype=self.dtype)
+        t = t / self.scaling_factor
+
+        freqs = jnp.outer(t, self.inv_freq)
+        emb = jnp.concatenate((freqs, freqs), axis=-1)
+        self.cos_cached = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
+        self.sin_cached = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
+
+
+class FlaxGPTNeoXDynamicNTKScalingRotaryEmbedding(FlaxGPTNeoXRotaryEmbedding):
+    """FlaxGPTNeoXRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+    scaling_factor: float = 1.0
+
+    def _set_cos_sin_cache(self, seq_len):
+        self.max_seq_len_cached = seq_len
+
+        if seq_len > self.max_position_embeddings:
+            base = self.base * (
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+            ) ** (self.dim / (self.dim - 2))
+            self.inv_freq = 1.0 / (base ** (jnp.arange(0, self.dim, 2, dtype=self.dtype) / self.dim))
+        
+        t = jnp.arange(seq_len, dtype=self.dtype)
+
+        freqs = jnp.outer(t, self.inv_freq)
+        emb = jnp.concatenate((freqs, freqs), axis=-1)
+        self.cos_cached = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
+        self.sin_cached = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
@@ -185,13 +221,32 @@ class FlaxGPTNeoXAttention(nn.Module):
         )
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
+        self._init_rope()
 
-        self.rotary_emb = FlaxGPTNeoXRotaryEmbedding(
-            dim=self.rotary_ndims,
-            max_seq_len_cached=config.max_position_embeddings,
-            base=config.rotary_emb_base,
-            dtype=self.dtype,
-        )
+    def _init_rope(self):
+        if self.config.rope_scaling is None:
+            self.rotary_emb = FlaxGPTNeoXRotaryEmbedding(
+                self.rotary_ndims, self.config.max_position_embeddings, base=self.config.rotary_emb_base
+            )
+        else:
+            scaling_type = self.config.rope_scaling["type"]
+            scaling_factor = self.config.rope_scaling["factor"]
+            if scaling_type == "linear":
+                self.rotary_emb = FlaxGPTNeoXLinearScalingRotaryEmbedding(
+                    self.rotary_ndims,
+                    self.config.max_position_embeddings,
+                    base=self.config.rotary_emb_base,
+                    scaling_factor=scaling_factor,
+                )
+            elif scaling_type == "dynamic":
+                self.rotary_emb = FlaxGPTNeoXDynamicNTKScalingRotaryEmbedding(
+                    self.rotary_ndims,
+                    self.config.max_position_embeddings,
+                    base=self.config.rotary_emb_base,
+                    scaling_factor=scaling_factor,
+                )
+            else:
+                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
     @nn.compact
