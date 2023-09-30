@@ -32,7 +32,11 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_flash_attn_available, logging
+from ...utils import (
+    is_flash_attn_available,
+    is_torch_fx_available,
+    logging
+)
 from .configuration_mpt import MptConfig
 
 if is_flash_attn_available():
@@ -59,6 +63,34 @@ MPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# TODO: @younesbelkada move that in pytorch_utils and document it
+if is_torch_fx_available():
+
+    @torch.fx.wrap
+    def check_padding_in_attention_mask(attention_mask):
+        if 0 in attention_mask:
+            return attention_mask
+        return None
+
+else:
+
+    def check_padding_in_attention_mask(attention_mask):
+        if 0 in attention_mask:
+            return attention_mask
+        return None
+
+
+# Copied from transformers.models.llama.modeling_llama._get_unpad_data
+def _get_unpad_data(padding_mask):
+    seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(padding_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
 # Copied from transformers.models.bloom.modeling_bloom._make_causal_mask
 def _make_causal_mask(
     input_ids_shape: torch.Size, device: torch.device, past_key_values_length: int
@@ -139,6 +171,8 @@ class MptAttention(nn.Module):
         position_bias: torch.Tensor,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        encoder_padding_mask: Optional[torch.LongTensor] = None,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -184,6 +218,10 @@ class MptAttention(nn.Module):
         attn_output = self.out_proj(context_states)
 
         return attn_output, attn_weights, past_key_value
+
+#implement flash attention2 for Mosaic Pretrained transformer by inheriting the above MPTAttention class
+class MPTAttention2(MptAttention):
+    pass
 
 
 class MptMLP(nn.Module):
