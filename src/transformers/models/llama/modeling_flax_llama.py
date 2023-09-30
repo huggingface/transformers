@@ -328,16 +328,18 @@ class FlaxLlamaMLP(nn.Module):
         embed_dim = self.config.hidden_size
         inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * embed_dim
 
-        jax.nn.initializers.normal(self.config.initializer_range)
+        kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
         self.act = ACT2FN[self.config.hidden_act]
 
-        self.gate_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype)
-        self.down_proj = nn.Dense(embed_dim, use_bias=False, dtype=self.dtype)
-        self.up_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype)
+        self.gate_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
+        self.down_proj = nn.Dense(embed_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
+        self.up_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
 
     def __call__(self, hidden_states):
-        hidden_states = self.up_proj(hidden_states) * self.act(self.gate_proj(hidden_states))
-        hidden_states = self.down_proj(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        gate_states = self.act(self.gate_proj(hidden_states))
+
+        hidden_states = self.down_proj(hidden_states * gate_states)
         return hidden_states
 
 

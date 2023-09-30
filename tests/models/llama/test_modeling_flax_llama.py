@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import LlamaConfig, is_flax_available, is_torch_available
+from transformers import LlamaConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -29,10 +29,6 @@ if is_flax_available():
 
     from transformers import LlamaTokenizerFast
     from transformers.models.llama.modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel
-
-
-if is_torch_available():
-    pass
 
 
 class FlaxLlamaModelTester:
@@ -99,7 +95,7 @@ class FlaxLlamaModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
-            use_cache=False,
+            use_cache=True,
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
