@@ -234,8 +234,14 @@ class SiglipTextEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
+        print("Shape of inputs_embeds: ", inputs_embeds.shape)
+        print("First values of embeddings:", inputs_embeds[0, :3, :3])
+
         position_embeddings = self.position_embedding(position_ids)
         embeddings = inputs_embeds + position_embeddings
+
+        print("Shape of embeddings after position embeddings: ", embeddings.shape)
+        print("First values of embeddings after position embeddings:", embeddings[0, :3, :3])
 
         return embeddings
 
@@ -760,9 +766,7 @@ class SiglipTextTransformer(nn.Module):
 
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
-        # SIGLIP's text model uses causal mask, prepare it here.
-        # https://github.com/openai/SIGLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/siglip/model.py#L324
-        causal_attention_mask = _make_causal_mask(input_shape, hidden_states.dtype, device=hidden_states.device)
+        # note: SigLIP's text model does not use q causal mask, unlike the original CLIP model.
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -770,8 +774,8 @@ class SiglipTextTransformer(nn.Module):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
+            attention_mask=None,
+            causal_attention_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -779,6 +783,8 @@ class SiglipTextTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
+
+        print("Final text hidden states:", last_hidden_state[0, :3, :3])
 
         if self.eos_token_id == 2:
             # The `eos_token_id` was incorrect before PR #24773: Let's keep what have been done here.

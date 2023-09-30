@@ -48,6 +48,7 @@ def get_siglip_config(model_name):
         config.text_config.hidden_size = 768
         config.text_config.intermediate_size = 3072
         config.text_config.max_position_embeddings = 64
+        config.text_config.num_attention_heads = 12
     elif "large" in model_name:
         config.vision_config.hidden_size = 1024
         config.vision_config.num_hidden_layers = 24
@@ -204,9 +205,6 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     data = load("/Users/nielsrogge/Documents/SigLIP/webli_en_b16_224_63724782.npz")
     state_dict = flatten_nested_dict(data)
 
-    for name, param in state_dict.items():
-        print(name, param.shape)
-
     # remove and rename some keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -231,11 +229,15 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="pixel_values_siglip.npy", repo_type="dataset")
     pixel_values = np.load(filepath)
     pixel_values = torch.from_numpy(pixel_values).permute(0, 3, 1, 2)
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_siglip.npy", repo_type="dataset")
+    input_ids = np.load(filepath)
+    input_ids = torch.from_numpy(input_ids)
 
     print("Shape of pixel values:", pixel_values.shape)
+    print("Shape of input ids:", input_ids.shape)
 
     with torch.no_grad():
-        model(pixel_values=pixel_values)
+        model(input_ids=input_ids, pixel_values=pixel_values)
 
     # TODO assert values
     # assert outputs.last_hidden_state[:, 0].shape == original_outputs.shape
