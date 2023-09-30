@@ -100,14 +100,15 @@ class TextGenerationPipeline(Pipeline):
         prefix=None,
         handle_long_generation=None,
         stop_sequence=None,
+        add_special_tokens=False,
         **generate_kwargs,
     ):
-        preprocess_params = {}
+        preprocess_params = {"add_special_tokens": add_special_tokens}
         if prefix is not None:
             preprocess_params["prefix"] = prefix
         if prefix:
             prefix_inputs = self.tokenizer(
-                prefix, padding=False, add_special_tokens=False, return_tensors=self.framework
+                prefix, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
             )
             generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
 
@@ -203,9 +204,11 @@ class TextGenerationPipeline(Pipeline):
         """
         return super().__call__(text_inputs, **kwargs)
 
-    def preprocess(self, prompt_text, prefix="", handle_long_generation=None, **generate_kwargs):
+    def preprocess(
+        self, prompt_text, prefix="", handle_long_generation=None, add_special_tokens=False, **generate_kwargs
+    ):
         inputs = self.tokenizer(
-            prefix + prompt_text, padding=False, add_special_tokens=False, return_tensors=self.framework
+            prefix + prompt_text, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
         )
         inputs["prompt_text"] = prompt_text
 
@@ -299,10 +302,9 @@ class TextGenerationPipeline(Pipeline):
                         )
                     )
 
+                all_text = text[prompt_length:]
                 if return_type == ReturnType.FULL_TEXT:
-                    all_text = prompt_text + text[prompt_length:]
-                else:
-                    all_text = text[prompt_length:]
+                    all_text = prompt_text + all_text
 
                 record = {"generated_text": all_text}
             records.append(record)

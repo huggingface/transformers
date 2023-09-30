@@ -50,7 +50,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
 # Add auto-gptq for gtpq quantization testing
-RUN python3 -m pip install --no-cache-dir auto-gptq 
+RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
 
 # Add einops for additional model testing
 RUN python3 -m pip install --no-cache-dir einops

@@ -40,6 +40,7 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_coco_detection_annotations,
@@ -1033,7 +1034,8 @@ class YolosImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image or batch of images to preprocess.
+                Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
+                from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
                 List of annotations associated with the image or batch of images. If annotionation is for object
                 detection, the annotations should be a dictionary with the following keys:
@@ -1162,6 +1164,12 @@ class YolosImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
+
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.

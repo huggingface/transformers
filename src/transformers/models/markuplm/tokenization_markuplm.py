@@ -232,27 +232,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            tags_dict=tags_dict,
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            max_depth=max_depth,
-            max_width=max_width,
-            pad_width=pad_width,
-            pad_token_label=pad_token_label,
-            only_label_first_subword=only_label_first_subword,
-            **kwargs,
-        )
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
 
@@ -279,6 +258,28 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self.pad_tag_id = self.unk_tag_id + 1
         self.pad_xpath_tags_seq = [self.pad_tag_id] * self.max_depth
         self.pad_xpath_subs_seq = [self.pad_width] * self.max_depth
+
+        super().__init__(
+            vocab_file=vocab_file,
+            merges_file=merges_file,
+            tags_dict=tags_dict,
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            max_depth=max_depth,
+            max_width=max_width,
+            pad_width=pad_width,
+            pad_token_label=pad_token_label,
+            only_label_first_subword=only_label_first_subword,
+            **kwargs,
+        )
+
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
 
@@ -312,7 +313,9 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return len(self.encoder)
 
     def get_vocab(self):
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = self.encoder.copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def bpe(self, token):
         if token in self.cache:

@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from ...utils import (
+from ..utils import (
     check_peft_version,
     find_adapter_config_file,
     is_accelerate_available,
     is_peft_available,
+    is_torch_available,
     logging,
 )
 
@@ -29,6 +30,11 @@ if is_accelerate_available():
 
 # Minimum PEFT version supported for the integration
 MIN_PEFT_VERSION = "0.5.0"
+
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
+
 
 logger = logging.get_logger(__name__)
 
@@ -61,7 +67,7 @@ class PeftAdapterMixin:
 
     def load_adapter(
         self,
-        peft_model_id: str,
+        peft_model_id: Optional[str] = None,
         adapter_name: Optional[str] = None,
         revision: Optional[str] = None,
         token: Optional[str] = None,
@@ -69,6 +75,8 @@ class PeftAdapterMixin:
         max_memory: Optional[str] = None,
         offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
+        peft_config: Dict[str, Any] = None,
+        adapter_state_dict: Optional[Dict[str, "torch.Tensor"]] = None,
     ) -> None:
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
@@ -77,7 +85,7 @@ class PeftAdapterMixin:
         Requires peft as a backend to load the adapter weights.
 
         Args:
-            peft_model_id (`str`):
+            peft_model_id (`str`, *optional*):
                 The identifier of the model to look for on the Hub, or a local path to the saved adapter config file
                 and adapter weights.
             adapter_name (`str`, *optional*):
@@ -114,6 +122,12 @@ class PeftAdapterMixin:
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_index (`int`, `optional`):
                 `offload_index` argument to be passed to `accelerate.dispatch_model` method.
+            peft_config (`Dict[str, Any]`, *optional*):
+                The configuration of the adapter to add, supported adapters are non-prefix tuning and adaption prompts
+                methods. This argument is used in case users directly pass PEFT state dicts
+            adapter_state_dict (`Dict[str, torch.Tensor]`, *optional*):
+                The state dict of the adapter to load. This argument is used in case users directly pass PEFT state
+                dicts
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
 
@@ -122,33 +136,41 @@ class PeftAdapterMixin:
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
 
-        if not self._hf_peft_config_loaded:
-            self._hf_peft_config_loaded = True
-        elif adapter_name in self.peft_config:
+        if self._hf_peft_config_loaded and adapter_name in self.peft_config:
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
-        adapter_config_file = find_adapter_config_file(
-            peft_model_id,
-            revision=revision,
-            token=token,
-        )
-
-        if adapter_config_file is None:
+        if peft_model_id is None and (adapter_state_dict is None and peft_config is None):
             raise ValueError(
-                f"adapter model file not found in {peft_model_id}. Make sure you are passing the correct path to the "
-                "adapter model."
+                "You should either pass a `peft_model_id` or a `peft_config` and `adapter_state_dict` to load an adapter."
             )
 
-        loaded_peft_config = PeftConfig.from_pretrained(
-            peft_model_id,
-            revision=revision,
-            use_auth_token=token,
-        )
+        if peft_config is None:
+            adapter_config_file = find_adapter_config_file(
+                peft_model_id,
+                revision=revision,
+                token=token,
+            )
+
+            if adapter_config_file is None:
+                raise ValueError(
+                    f"adapter model file not found in {peft_model_id}. Make sure you are passing the correct path to the "
+                    "adapter model."
+                )
+
+            peft_config = PeftConfig.from_pretrained(
+                peft_model_id,
+                revision=revision,
+                use_auth_token=token,
+            )
 
         # Create and add fresh new adapters into the model.
-        inject_adapter_in_model(loaded_peft_config, self, adapter_name)
+        inject_adapter_in_model(peft_config, self, adapter_name)
 
-        adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=token)
+        if not self._hf_peft_config_loaded:
+            self._hf_peft_config_loaded = True
+
+        if peft_model_id is not None:
+            adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=token)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
@@ -216,6 +238,9 @@ class PeftAdapterMixin:
                 f"adapter_config should be an instance of PeftConfig. Got {type(adapter_config)} instead."
             )
 
+        # Retrieve the name or path of the model, one could also use self.config._name_or_path
+        # but to be consistent with what we do in PEFT: https://github.com/huggingface/peft/blob/6e783780ca9df3a623992cc4d1d665001232eae0/src/peft/mapping.py#L100
+        adapter_config.base_model_name_or_path = self.__dict__.get("name_or_path", None)
         inject_adapter_in_model(adapter_config, self, adapter_name)
 
         self.set_adapter(adapter_name)
@@ -343,7 +368,7 @@ class PeftAdapterMixin:
         offload_index: Optional[int] = None,
     ) -> None:
         """
-        Optionnal re-dispatch the model and attach new hooks to the model in case the model has been loaded with
+        Optional re-dispatch the model and attach new hooks to the model in case the model has been loaded with
         accelerate (i.e. with `device_map=xxx`)
 
         Args:
