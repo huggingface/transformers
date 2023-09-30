@@ -24,7 +24,8 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import FastViTConfig, FastViTForImageClassification, ViTFeatureExtractor
+from transformers import BitImageProcessor, FastViTConfig, FastViTForImageClassification
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from transformers.utils import logging
 
 
@@ -188,7 +189,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path):
+def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path, push_to_hub):
     # load original model from timm
     timm_model = timm.create_model(fastvit_name, pretrained=True)
     timm_model.eval()
@@ -204,20 +205,47 @@ def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path):
 
     model.load_state_dict(new_state_dict)
 
-    feature_extractor = ViTFeatureExtractor(size=config.image_size)
-    inputs = feature_extractor(images=prepare_img(), return_tensors="pt")
+    processor = BitImageProcessor(
+        do_resize=True,
+        size={"shortest_edge": 256},
+        resample=PILImageResampling.BICUBIC,
+        do_center_crop=True,
+        crop_size=224,
+        do_normalize=True,
+        image_mean=IMAGENET_DEFAULT_MEAN,
+        image_std=IMAGENET_DEFAULT_STD,
+    )
+    inputs = processor(images=prepare_img(), return_tensors="pt")
 
     outputs = model(**inputs).logits
     timm_logits = timm_model(inputs["pixel_values"])
 
     assert outputs.shape == timm_logits.shape, f"Shape is not equal: {outputs.shape} and {timm_logits.shape}"
     assert torch.allclose(timm_logits, outputs, atol=1e-3), "The predicted logits are not the same."
+    print("Looks OK!!! 🤗")
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {fastvit_name} to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    if pytorch_dump_folder_path is not None:
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        print(f"Saving model {fastvit_name} to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+        processor.save_pretrained(pytorch_dump_folder_path)
+
+    if push_to_hub:
+        tag_to_name = {
+            "fastvit_t8.apple_in1k": "fastvit-t8",
+            "fastvit_t12.apple_in1k": "fastvit-t12",
+            "fastvit_s12.apple_in1k": "fastvit-s12",
+            "fastvit_sa12.apple_in1k": "fastvit-sa12",
+            "fastvit_sa24.apple_in1k": "fastvit-sa24",
+            "fastvit_sa36.apple_in1k": "fastvit-sa36",
+            "fastvit_ma36.apple_in1k": "fastvit-ma36",
+        }
+
+        model_name = tag_to_name[fastvit_name]
+
+        model.push_to_hub(f"apple/{model_name}")
+        processor.push_to_hub(f"apple/{model_name}")
 
 
 if __name__ == "__main__":
@@ -230,8 +258,16 @@ if __name__ == "__main__":
         help="Name of the FastViT timm model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        required=False,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
-
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model and processor to the 🤗 hub.",
+    )
     args = parser.parse_args()
-    convert_fastvit_checkpoint(args.fastvit_name, args.pytorch_dump_folder_path)
+    convert_fastvit_checkpoint(args.fastvit_name, args.pytorch_dump_folder_path, args.push_to_hub)

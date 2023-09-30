@@ -61,11 +61,11 @@ class FastViTConfig(PretrainedConfig):
         hidden_sizes (`List[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
             Dimensionality of the encoder layers in each FastViTLayer Block.
         pos_embeds (`List[Bool]`, *optional*, defaults to `None`, equivalent to `[None, None, None, None]`)
-            Wheter to add a Conditional Positional Encoding in each FastViTLayer Block. `"RepCPE"` is the option to put
-            CPE in a specific Layer.
+            Whether to add a Conditional Positional Encoding in each FastViTLayer Block. `"RepCPE"` is the option to
+            put CPE in a specific Layer.
         token_mixers (`List[str]` *optional*, defaults to `[repmixer, repmixer, repmixer, repmixer]`)
-            Wheter to use RepMixer block or Attention block per each FastViTLayer Block. `"repmixer"` and `"attention"`
-            are supported.
+            Whether to use RepMixer block or Attention block per each FastViTLayer Block. `"repmixer"` and
+            `"attention"` are supported.
         mlp_ratio (`float`, *optional*, defaults to 3.0):
             The ratio of the number of channels in the output of the MLP to the number of channels in the input.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -81,6 +81,8 @@ class FastViTConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
+        inference (`bool`, *optional*, defaults to `True`):
+            Whether to delete batchnorms and residual connections for much faster inference (more info in the paper)
 
     Example:
     ```python
@@ -113,6 +115,7 @@ class FastViTConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         qkv_bias=False,
+        inference=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -131,6 +134,7 @@ class FastViTConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.num_attention_heads = num_attention_heads
+        self.inference = inference
 
 
 class FastViTOnnxConfig(OnnxConfig):

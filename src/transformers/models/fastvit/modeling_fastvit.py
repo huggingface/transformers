@@ -61,11 +61,10 @@ class FastViTEmbeddings(nn.Module):
     Construct the patch embeddings. Optionally, also the mask token.
     """
 
-    def __init__(self, config: FastViTConfig, inference_mode: bool = False) -> None:
+    def __init__(self, config: FastViTConfig) -> None:
         super().__init__()
-        self.inference_mode = inference_mode
 
-        self.patch_embeddings = FastViTPatchEmbeddings(config, inference_mode=inference_mode)
+        self.patch_embeddings = FastViTPatchEmbeddings(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
@@ -80,7 +79,7 @@ class FastViTPatchEmbeddings(nn.Module):
     Construction of the Stem Block, following paper structure here <https://arxiv.org/abs/2303.14189>.
     """
 
-    def __init__(self, config: FastViTConfig, inference_mode: bool = False) -> None:
+    def __init__(self, config: FastViTConfig) -> None:
         super().__init__()
         image_size = config.image_size
         num_channels, hidden_size = config.num_channels, config.hidden_sizes[0]
@@ -88,7 +87,7 @@ class FastViTPatchEmbeddings(nn.Module):
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         self.image_size = image_size
         self.num_channels = num_channels
-        self.inference_mode = inference_mode
+        self.inference = config.inference
         self.config = config
 
         self.projection = nn.Sequential(
@@ -99,7 +98,7 @@ class FastViTPatchEmbeddings(nn.Module):
                 stride=2,
                 padding=1,
                 groups=1,
-                inference_mode=self.inference_mode,
+                inference=self.inference,
             ),
             FastViTConvLayer(
                 in_channels=hidden_size,
@@ -108,7 +107,7 @@ class FastViTPatchEmbeddings(nn.Module):
                 stride=2,
                 padding=1,
                 groups=hidden_size,
-                inference_mode=self.inference_mode,
+                inference=self.inference,
             ),
             FastViTConvLayer(
                 in_channels=hidden_size,
@@ -117,7 +116,7 @@ class FastViTPatchEmbeddings(nn.Module):
                 stride=1,
                 padding=0,
                 groups=1,
-                inference_mode=self.inference_mode,
+                inference=self.inference,
             ),
         )
 
@@ -150,7 +149,7 @@ class FastViTConvLayer(nn.Module):
         padding: int = 0,
         dilation: int = 1,
         groups: int = 1,
-        inference_mode: bool = False,
+        inference: bool = False,
         num_conv_branches: int = 1,
         use_scale_branch: bool = True,
         use_act: bool = True,
@@ -165,7 +164,7 @@ class FastViTConvLayer(nn.Module):
         self.padding = padding
         self.dilation = dilation
         self.groups = groups
-        self.inference_mode = inference_mode
+        self.inference = inference
         self.num_conv_branches = num_conv_branches
         self.use_scale_branch = use_scale_branch
         self.use_act = use_act
@@ -179,7 +178,7 @@ class FastViTConvLayer(nn.Module):
         if use_act:
             self.activation = activation
 
-        if inference_mode:
+        if self.inference:
             self.reparam_conv = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -237,7 +236,7 @@ class FastViTConvLayer(nn.Module):
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
         # inference step
-        if self.inference_mode:
+        if self.inference:
             features = self.reparam_conv(embeddings)
             # SE block
             if self.use_se:
@@ -333,7 +332,7 @@ class FastViTReparamLKConv(nn.Module):
         stride: int,
         groups: int,
         small_kernel: int,
-        inference_mode: bool = False,
+        inference: bool = False,
     ) -> None:
         super().__init__()
 
@@ -344,9 +343,9 @@ class FastViTReparamLKConv(nn.Module):
         self.kernel_size = kernel_size
         self.small_kernel = small_kernel
         self.padding = kernel_size // 2
-        self.inference_mode = inference_mode
+        self.inference = inference
 
-        if inference_mode:
+        if inference:
             self.lkb_reparam = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -399,7 +398,7 @@ class FastViTReparamLKConv(nn.Module):
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         """Apply forward pass."""
-        if self.inference_mode:
+        if self.inference:
             output_features = self.lkb_reparam(features)
         else:
             output_features = self.large_conv(features)
@@ -474,16 +473,16 @@ class FastViTRepMixer(nn.Module):
     Vision <https://arxiv.org/pdf/2111.11418.pdf>`_
     """
 
-    def __init__(self, config: FastViTConfig, stage: str, inference_mode: bool = False) -> None:
+    def __init__(self, config: FastViTConfig, stage: str) -> None:
         super().__init__()
         dimension = config.hidden_sizes[stage]
         kernel_size = 3  # Always apply kernel of 3
         layer_norm_eps = config.layer_norm_eps
-        self.inference_mode = inference_mode
+        self.inference = config.inference
         self.dimension = dimension
         self.kernel_size = kernel_size
 
-        if self.inference_mode:
+        if self.inference:
             self.reparam_conv = nn.Conv2d(
                 in_channels=dimension,
                 out_channels=dimension,
@@ -519,7 +518,7 @@ class FastViTRepMixer(nn.Module):
             self.layer_scale = nn.Parameter(layer_norm_eps * torch.ones((dimension, 1, 1)), requires_grad=True)
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
-        if self.inference_mode:
+        if self.inference:
             features_probs = self.reparam_conv(features)
         else:
             features_norm = self.norm(features)
@@ -564,10 +563,11 @@ class FastViTConvFFN(nn.Module):
 
 
 class FastViTDownsample(nn.Module):
-    def __init__(self, config: FastViTConfig, stage: str, inference_mode: bool = False) -> None:
+    def __init__(self, config: FastViTConfig, stage: str) -> None:
         super().__init__()
         hidden_size = config.hidden_sizes[stage]
         hidden_size_next = config.hidden_sizes[stage + 1]
+        inference = config.inference
 
         self.reparam_large_conv = FastViTReparamLKConv(
             in_channels=hidden_size,
@@ -576,7 +576,7 @@ class FastViTDownsample(nn.Module):
             stride=2,
             groups=hidden_size,
             small_kernel=3,
-            inference_mode=inference_mode,
+            inference=inference,
         )
         self.conv = FastViTConvLayer(
             in_channels=hidden_size_next,
@@ -585,7 +585,7 @@ class FastViTDownsample(nn.Module):
             stride=1,
             padding=0,
             groups=1,
-            inference_mode=inference_mode,
+            inference=inference,
         )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
@@ -661,7 +661,7 @@ class FastViTCPE(nn.Module):
         in_channels: int,
         embed_dim: int = 768,
         spatial_shape: Union[int, Tuple[int, int]] = (7, 7),
-        inference_mode: bool = False,
+        inference: bool = False,
     ) -> None:
         super().__init__()
         if isinstance(spatial_shape, int):
@@ -677,8 +677,8 @@ class FastViTCPE(nn.Module):
         self.embed_dim = embed_dim
         self.in_channels = in_channels
         self.groups = embed_dim
-        self.inference_mode = inference_mode
-        if inference_mode:
+        self.inference = inference
+        if self.inference:
             self.reparam_conv = nn.Conv2d(
                 in_channels=self.in_channels,
                 out_channels=self.embed_dim,
@@ -700,7 +700,7 @@ class FastViTCPE(nn.Module):
             )
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
-        if self.inference_mode:
+        if self.inference:
             embeddings = self.reparam_conv(embeddings)
         else:
             embeddings = self.pos_enc(embeddings) + embeddings
@@ -754,11 +754,12 @@ class FastViTIntermediate(nn.Module):
 class FastViTLayer(nn.Module):
     """This corresponds to the Block class."""
 
-    def __init__(self, config: FastViTConfig, stage: int, inference_mode: bool = False) -> None:
+    def __init__(self, config: FastViTConfig, stage: int) -> None:
         super().__init__()
         self.stage = stage
         pos_embeds = config.pos_embeds
         depth = config.depths[stage]
+        inference = config.inference
 
         if pos_embeds is None:
             pos_embeds = [None] * len(config.depths)
@@ -769,7 +770,7 @@ class FastViTLayer(nn.Module):
                 config.hidden_sizes[stage],
                 config.hidden_sizes[stage],
                 spatial_shape=(7, 7),  # Always 7
-                inference_mode=inference_mode,
+                inference=inference,
             )
 
         self.stage_conv = nn.ModuleList()
@@ -1006,11 +1007,11 @@ class FastViTModel(FastViTPreTrainedModel):
     FASTVIT_START_DOCSTRING,
 )
 class FastViTForImageClassification(FastViTPreTrainedModel):
-    def __init__(self, config: FastViTConfig, inference_mode: bool = False) -> None:
+    def __init__(self, config: FastViTConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.inference_mode = inference_mode
+        self.inference = config.inference
         self.fastvit = FastViTModel(config)
 
         # Classifier head
@@ -1022,7 +1023,7 @@ class FastViTForImageClassification(FastViTPreTrainedModel):
             stride=1,
             padding=1,
             groups=hidden_size,
-            inference_mode=self.inference_mode,
+            inference=self.inference,
             use_se=True,
             num_conv_branches=1,
         )
