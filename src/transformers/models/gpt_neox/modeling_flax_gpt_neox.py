@@ -119,19 +119,20 @@ def create_sinusoidal_positions(num_pos, dim):
     return jnp.array(out)
 
 
-def rotate_half(x):
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return jnp.concatenate((-x2, x1), axis=-1)
+def rotate_half(hidden_states):
+    first_half = hidden_states[..., : hidden_states.shape[-1] // 2]
+    second_half = hidden_states[..., hidden_states.shape[-1] // 2 :]
+    return jnp.concatenate((-second_half, first_half), axis=-1)
 
 
 class FlaxGPTNeoXRotaryEmbedding(nn.Module):
     dim: int
     max_seq_len_cached: int
     base: int = 10000
+    dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(jnp.float32) / self.dim))  # dim
+        self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(self.dtype) / self.dim))
         self._init_cache(self.max_seq_len_cached)
 
     def _init_cache(self, seq_len: int):
@@ -189,6 +190,7 @@ class FlaxGPTNeoXAttention(nn.Module):
             dim=self.rotary_ndims,
             max_seq_len_cached=config.max_position_embeddings,
             base=config.rotary_emb_base,
+            dtype=self.dtype,
         )
 
     # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
@@ -224,6 +226,9 @@ class FlaxGPTNeoXAttention(nn.Module):
             attention_mask = combine_masks(pad_mask, attention_mask)
         return key, value, attention_mask
 
+    def _split_heads(self, hidden_states):
+        return hidden_states.reshape(hidden_states.shape[:-1] + (self.num_attention_heads, self.head_size * 3))
+
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
 
@@ -239,13 +244,10 @@ class FlaxGPTNeoXAttention(nn.Module):
         qkv = self.query_key_value(hidden_states)
         batch, seq_len, _ = qkv.shape
 
-        new_qkv_shape = qkv.shape[:-1] + (self.num_attention_heads, 3 * self.head_size)
-        qkv = qkv.reshape(*new_qkv_shape)
-
-        # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
-        query = qkv[..., : self.head_size]  # .permute(0, 2, 1, 3)
-        key = qkv[..., self.head_size : 2 * self.head_size]  # .permute(0, 2, 1, 3)
-        value = qkv[..., 2 * self.head_size :]  # .permute(0, 2, 1, 3)
+        # proj q, k, v
+        fused_qkv = self.query_key_value(hidden_states)
+        fused_qkv = self._split_heads(fused_qkv)
+        query, key, value = jnp.split(fused_qkv, 3, axis=-1)
 
         cos, sin = self.rotary_emb(seq_len)
         if self.rotary_ndims is not None:
@@ -314,14 +316,13 @@ class FlaxGPTNeoXAttention(nn.Module):
 
 class FlaxGPTNeoXMLP(nn.Module):
     config: GPTNeoXConfig
-    intermediate_size: int
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         embed_dim = self.config.hidden_size
         kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
 
-        self.dense_h_to_4h = nn.Dense(self.intermediate_size, dtype=self.dtype, kernel_init=kernel_init)
+        self.dense_h_to_4h = nn.Dense(self.config.intermediate_size, dtype=self.dtype, kernel_init=kernel_init)
         self.dense_4h_to_h = nn.Dense(embed_dim, dtype=self.dtype, kernel_init=kernel_init)
 
         self.act = ACT2FN[self.config.hidden_act]
@@ -338,12 +339,13 @@ class FlaxGPTNeoXBlock(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
+        self.use_parallel_residual = self.config.use_parallel_residual
         self.input_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.attention = FlaxGPTNeoXAttention(self.config, dtype=self.dtype)
         self.post_attention_dropout = nn.Dropout(rate=self.config.hidden_dropout)
         self.post_attention_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
-        self.mlp = FlaxGPTNeoXMLP(self.config, self.config.intermediate_size, dtype=self.dtype)
+        self.mlp = FlaxGPTNeoXMLP(self.config, dtype=self.dtype)
         self.post_mlp_dropout = nn.Dropout(rate=self.config.hidden_dropout)
 
     def __call__(
@@ -366,7 +368,7 @@ class FlaxGPTNeoXBlock(nn.Module):
         attn_output = attn_outputs[0]
         attn_output = self.post_attention_dropout(attn_output, deterministic=deterministic)
 
-        if self.config.use_parallel_residual:
+        if self.use_parallel_residual:
             # pseudocode:
             # x = x + attn(ln1(x)) + mlp(ln2(x))
             mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
@@ -592,9 +594,7 @@ class FlaxGPTNeoXModule(nn.Module):
         return_dict: bool = True,
     ):
         input_embeds = self.embed_in(input_ids.astype("i4"))
-
-        hidden_states = input_embeds
-        hidden_states = self.emb_dropout(hidden_states, deterministic=deterministic)
+        hidden_states = self.emb_dropout(input_embeds, deterministic=deterministic)
 
         outputs = self.layers(
             hidden_states,
