@@ -54,7 +54,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPModel"),
         ("clap", "ClapModel"),
         ("clip", "CLIPModel"),
-        ("siglip", "SiglipModel"),
         ("clipseg", "CLIPSegModel"),
         ("clvp", "ClvpModelForConditionalGeneration"),
         ("code_llama", "LlamaModel"),
@@ -184,6 +183,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerModel"),
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
+        ("siglip", "SiglipModel"),
         ("speech_to_text", "Speech2TextModel"),
         ("speecht5", "SpeechT5Model"),
         ("splinter", "SplinterModel"),
@@ -1075,8 +1075,8 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("blip", "BlipModel"),
         ("chinese_clip", "ChineseCLIPModel"),
         ("clip", "CLIPModel"),
-        ("siglip", "SiglipModel"),
         ("clipseg", "CLIPSegModel"),
+        ("siglip", "SiglipModel"),
     ]
 )
 

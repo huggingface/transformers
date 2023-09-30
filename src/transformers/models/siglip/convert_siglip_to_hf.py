@@ -22,17 +22,14 @@ import argparse
 import collections
 from pathlib import Path
 
+import numpy as np
 import requests
 import torch
+from huggingface_hub import hf_hub_download
+from numpy import load
 from PIL import Image
 
-from huggingface_hub import hf_hub_download
-
-import numpy as np
-from numpy import load
-
-from transformers import BitImageProcessor, SiglipConfig, SiglipModel
-from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from transformers import SiglipConfig, SiglipModel
 from transformers.utils import logging
 
 
@@ -132,7 +129,7 @@ def rename_key(dct, old, new, config):
         val = val.reshape(-1, config.vision_config.hidden_size)
     if ("out_proj" in new or "v_proj" in new or "k_proj" in new or "q_proj" in new) and "text" in new:
         val = val.reshape(-1, config.text_config.hidden_size)
-    
+
     if "patch_embedding.weight" in new:
         val = val.transpose(3, 2, 0, 1)
     elif new.endswith("weight") and "position_embedding" not in new and "token_embedding" not in new:
@@ -182,6 +179,9 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     data = load("/Users/nielsrogge/Documents/SigLIP/webli_en_b16_224_63724782.npz")
     state_dict = flatten_nested_dict(data)
 
+    for name, param in state_dict.items():
+        print(name, param.shape)
+
     # remove and rename some keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -197,9 +197,9 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     # image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     # preprocess image
-    # 
+    #
     # pixel_values = processor(image, return_tensors="pt").pixel_values
-    
+
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="pixel_values_siglip.npy", repo_type="dataset")
     pixel_values = np.load(filepath)
     pixel_values = torch.from_numpy(pixel_values).permute(0, 3, 1, 2)
@@ -207,7 +207,7 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     print("Shape of pixel values:", pixel_values.shape)
 
     with torch.no_grad():
-        outputs = model(pixel_values=pixel_values)
+        model(pixel_values=pixel_values)
 
     # TODO assert values
     # assert outputs.last_hidden_state[:, 0].shape == original_outputs.shape

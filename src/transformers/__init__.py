@@ -249,14 +249,6 @@ _import_structure = {
         "CLIPTokenizer",
         "CLIPVisionConfig",
     ],
-    "models.siglip": [
-        "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "SiglipConfig",
-       
-        "SiglipTextConfig",
-       
-        "SiglipVisionConfig",
-    ],
     "models.clipseg": [
         "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPSegConfig",
@@ -558,6 +550,12 @@ _import_structure = {
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
+    "models.siglip": [
+        "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SiglipConfig",
+        "SiglipTextConfig",
+        "SiglipVisionConfig",
+    ],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1479,17 +1477,6 @@ else:
             "CLIPTextModelWithProjection",
             "CLIPVisionModel",
             "CLIPVisionModelWithProjection",
-        ]
-    )
-    _import_structure["models.siglip"].extend(
-        [
-            "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SiglipModel",
-            "SiglipPreTrainedModel",
-            "SiglipTextModel",
-            "SiglipTextModelWithProjection",
-            "SiglipVisionModel",
-            "SiglipVisionModelWithProjection",
         ]
     )
     _import_structure["models.clipseg"].extend(
@@ -2824,6 +2811,17 @@ else:
             "SEWDForSequenceClassification",
             "SEWDModel",
             "SEWDPreTrainedModel",
+        ]
+    )
+    _import_structure["models.siglip"].extend(
+        [
+            "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SiglipModel",
+            "SiglipPreTrainedModel",
+            "SiglipTextModel",
+            "SiglipTextModelWithProjection",
+            "SiglipVisionModel",
+            "SiglipVisionModelWithProjection",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -4529,14 +4527,6 @@ if TYPE_CHECKING:
         CLIPTokenizer,
         CLIPVisionConfig,
     )
-    from .models.siglip import (
-        SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        SiglipConfig,
-       
-        SiglipTextConfig,
-       
-        SiglipVisionConfig,
-    )
     from .models.clipseg import (
         CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPSegConfig,
@@ -4824,6 +4814,12 @@ if TYPE_CHECKING:
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
+    from .models.siglip import (
+        SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SiglipConfig,
+        SiglipTextConfig,
+        SiglipVisionConfig,
+    )
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5630,15 +5626,6 @@ if TYPE_CHECKING:
             CLIPTextModelWithProjection,
             CLIPVisionModel,
             CLIPVisionModelWithProjection,
-        )
-        from .models.siglip import (
-            SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SiglipModel,
-            SiglipPreTrainedModel,
-            SiglipTextModel,
-            SiglipTextModelWithProjection,
-            SiglipVisionModel,
-            SiglipVisionModelWithProjection,
         )
         from .models.clipseg import (
             CLIPSEG_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6736,6 +6723,15 @@ if TYPE_CHECKING:
             SEWDForSequenceClassification,
             SEWDModel,
             SEWDPreTrainedModel,
+        )
+        from .models.siglip import (
+            SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SiglipModel,
+            SiglipPreTrainedModel,
+            SiglipTextModel,
+            SiglipTextModelWithProjection,
+            SiglipVisionModel,
+            SiglipVisionModelWithProjection,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (

@@ -1,5 +1,6 @@
 from transformers import SiglipConfig, SiglipModel
 
+
 config = SiglipConfig()
 
 model = SiglipModel(config)

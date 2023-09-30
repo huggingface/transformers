@@ -45,7 +45,6 @@ SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -150,7 +149,8 @@ class SiglipOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`SiglipTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`SiglipVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of
+            [`SiglipVisionModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`SiglipTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
@@ -194,7 +194,6 @@ class SiglipVisionEmbeddings(nn.Module):
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-
         print("First values of pixel values:", pixel_values[0, 0, :3, :3])
 
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
@@ -404,7 +403,7 @@ class SiglipEncoderLayer(nn.Module):
         """
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
-        
+
         if print_values:
             print("Hidden states after layernorm:", hidden_states[0, :3, :3])
 
@@ -422,7 +421,7 @@ class SiglipEncoderLayer(nn.Module):
 
         if print_values:
             print("Hidden states after first residual:", hidden_states[0, :3, :3])
-       
+
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
 
@@ -676,7 +675,6 @@ class SiglipEncoder(nn.Module):
 
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
-
             if idx == 0:
                 print("First values of hidden states before layer", idx, ":", hidden_states[0, :3, :3])
 
@@ -702,7 +700,7 @@ class SiglipEncoder(nn.Module):
                     attention_mask,
                     causal_attention_mask,
                     output_attentions=output_attentions,
-                    print_values=idx==0,
+                    print_values=idx == 0,
                 )
 
             hidden_states = layer_outputs[0]
@@ -804,7 +802,7 @@ class SiglipTextTransformer(nn.Module):
 
         if self.eos_token_id == 2:
             # The `eos_token_id` was incorrect before PR #24773: Let's keep what have been done here.
-            # A SIGLIP model with such `eos_token_id` in the config can't work correctly with extra new tokens added
+            # A SigLIP model with such `eos_token_id` in the config can't work correctly with extra new tokens added
             # ------------------------------------------------------------
             # text_embeds.shape = [batch_size, sequence_length, transformer.width]
             # take features from the eot embedding (eot_token is the highest number in each sequence)
@@ -835,7 +833,7 @@ class SiglipTextTransformer(nn.Module):
 
 
 @add_start_docstrings(
-    """The text model from SIGLIP without any head or projection on top.""",
+    """The text model from SigLIP without any head or projection on top.""",
     SIGLIP_START_DOCSTRING,
 )
 class SiglipTextModel(SiglipPreTrainedModel):
@@ -934,8 +932,11 @@ class SiglipVisionTransformer(nn.Module):
         )
 
         last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        print("First values post layernorm:", last_hidden_state[0, :3, :3])
+
         pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -948,8 +949,29 @@ class SiglipVisionTransformer(nn.Module):
         )
 
 
+class SiglipMultiheadAttentionPoolingHead(nn.Module):
+    """Multihead Attention Pooling."""
+
+    def __init__(self, config: SiglipConfig):
+        self.config = config
+
+        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_heads)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = SiglipMLP(config)
+
+    def forward(self, hidden_state):
+        hidden_state = self.probe(hidden_state)
+        hidden_state = self.attention(hidden_state, hidden_state)[0]
+
+        residual = hidden_state
+        hidden_state = residual + self.mlp(hidden_state)
+
+        return hidden_state[:, 0]
+
+
 @add_start_docstrings(
-    """The vision model from SIGLIP without any head or projection on top.""",
+    """The vision model from SigLIP without any head or projection on top.""",
     SIGLIP_START_DOCSTRING,
 )
 class SiglipVisionModel(SiglipPreTrainedModel):
@@ -959,6 +981,10 @@ class SiglipVisionModel(SiglipPreTrainedModel):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
         self.vision_model = SiglipVisionTransformer(config)
+
+        # add head
+        self.head = SiglipMultiheadAttentionPoolingHead(config)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1068,7 +1094,7 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use SIGLIP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use SigLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1119,7 +1145,7 @@ class SiglipModel(SiglipPreTrainedModel):
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
-        # Use SIGLIP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use SiglipModel's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1175,7 +1201,7 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use SIGLIP model's config for some fields (if specified) instead of those of vision & text components.
+        # Use SigLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1234,7 +1260,7 @@ class SiglipModel(SiglipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    SIGLIP Text Model with a projection layer on top (a linear layer on top of the pooled output).
+    SigLIP text model with a projection layer on top (a linear layer on top of the pooled output).
     """,
     SIGLIP_START_DOCSTRING,
 )
@@ -1315,7 +1341,7 @@ class SiglipTextModelWithProjection(SiglipPreTrainedModel):
 
 @add_start_docstrings(
     """
-    SIGLIP Vision Model with a projection layer on top (a linear layer on top of the pooled output).
+    SigLIP vision model with a projection layer on top (a linear layer on top of the pooled output).
     """,
     SIGLIP_START_DOCSTRING,
 )
