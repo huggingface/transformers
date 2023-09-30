@@ -1,4 +1,4 @@
-# Copyright 2021 The HuggingFace Team. All rights reserved.
+# Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,9 +30,6 @@ if is_flax_available():
 
     from transformers.models.gpt_neox.modeling_flax_gpt_neox import FlaxGPTNeoXForCausalLM, FlaxGPTNeoXModel
 
-if is_torch_available():
-    pass
-
 
 class FlaxGPTNeoXModelTester:
     def __init__(
@@ -56,9 +53,6 @@ class FlaxGPTNeoXModelTester:
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -79,9 +73,6 @@ class FlaxGPTNeoXModelTester:
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
         self.pad_token_id = vocab_size - 1
 
     def prepare_config_and_inputs(self):
@@ -102,7 +93,7 @@ class FlaxGPTNeoXModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
+            is_decoder=True,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
         )
@@ -208,9 +199,7 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
         model.do_sample = False
         model.config.pad_token_id = model.config.eos_token_id
 
-        jit_generate = jax.jit(model.generate)
-
-        output_sequences = jit_generate(
+        output_sequences = model.generate(
             inputs["input_ids"], attention_mask=inputs["attention_mask"], pad_token_id=tokenizer.pad_token_id
         ).sequences
 
@@ -229,3 +218,21 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
             model = model_class_name.from_pretrained("EleutherAI/pythia-410m-deduped")
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
+
+
+@require_flax
+class FlaxGPTNeoXLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_gptneox(self):
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-410m-deduped")
+        model = FlaxGPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped")
+        inputs = tokenizer("My favorite food is", return_tensors="np")
+
+        # The hub repo. is updated on 2023-04-04, resulting in poor outputs.
+        # See: https://github.com/huggingface/transformers/pull/24193
+        expected_output = "My favorite food is a good old-fashioned, old-fashioned, old-fashioned.\n\nI'm not sure"
+
+        output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        output_str = tokenizer.batch_decode(output_ids)[0]
+
+        self.assertEqual(output_str, expected_output)
