@@ -19,15 +19,21 @@ import importlib.metadata as importlib_metadata
 import importlib.util
 import weakref
 from functools import partialmethod
+from packaging import version
 
 from ..dependency_versions_check import dep_version_check
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_available, is_peft_available, logging
 
 
 if is_torch_available():
     import torch
 
     from ..optimization import get_scheduler
+
+
+if is_peft_available():
+    from peft import PeftModel
+
 
 logger = logging.get_logger(__name__)
 
@@ -44,6 +50,9 @@ def is_deepspeed_available():
         except importlib_metadata.PackageNotFoundError:
             return False
 
+
+if is_deepspeed_available():
+    from deepspeed import __version__ as deepspeed_version
 
 if is_accelerate_available() and is_deepspeed_available():
     from accelerate.utils.deepspeed import HfDeepSpeedConfig as DeepSpeedConfig
@@ -398,9 +407,17 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path):
 
     if len(deepspeed_checkpoint_dirs) > 0:
         logger.info(f"Attempting to resume from {checkpoint_path}")
+
+        load_module_strict = True
+        if version.parse(deepspeed_version) > version.parse("0.10.0"):
+            if is_peft_available() and isinstance(deepspeed_engine.module, PeftModel):
+                load_module_strict = False
         # this magically updates self.optimizer and self.lr_scheduler
         load_path, _ = deepspeed_engine.load_checkpoint(
-            checkpoint_path, load_optimizer_states=True, load_lr_scheduler_states=True
+            checkpoint_path,
+            load_optimizer_states=True,
+            load_lr_scheduler_states=True,
+            load_module_strict=load_module_strict,
         )
         if load_path is None:
             raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")

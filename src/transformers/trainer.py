@@ -214,6 +214,7 @@ if is_accelerate_available():
         )
 
     if is_deepspeed_available():
+        from deepspeed import __version__ as deepspeed_version
         from accelerate.utils import DeepSpeedSchedulerWrapper
 
 
@@ -2380,6 +2381,23 @@ class Trainer:
         if is_torch_tpu_available():
             xm.set_rng_state(checkpoint_rng_state["xla"])
 
+    def _save_deepspeed_optim_and_model_states(self, output_dir):
+        # save both optimizer and model states.
+
+        # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
+        # config `stage3_gather_16bit_weights_on_model_save` is True
+        if version.parse(deepspeed_version) > version.parse("0.10.0") and is_peft_available():
+            # skip saving deepspeed frozen parameters if possible
+            self.model_wrapped.save_checkpoint(
+                output_dir, exclude_frozen_parameters=isinstance(self.model_wrapped.module, PeftModel)
+            )
+        else:
+            self.model_wrapped.save_checkpoint(output_dir)
+            if is_peft_available() and isinstance(self.model_wrapped.module, PeftModel):
+                logger.warning(
+                    "Frozon model weights are also saved. If you want to skip saving them, please upgrade your deepspeed to at least 0.10.1"
+                )
+
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
@@ -2395,9 +2413,13 @@ class Trainer:
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir, _internal_call=True)
         if self.is_deepspeed_enabled:
-            # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
-            # config `stage3_gather_16bit_weights_on_model_save` is True
-            self.model_wrapped.save_checkpoint(output_dir)
+            not_stage3 = self.accelerator.deepspeed_config["zero_optimization"]["stage"] != 3
+            gather_16bit_weights = self.model_wrapped.zero_gather_16bit_weights_on_model_save()
+            if not_stage3 or gather_16bit_weights:
+                # We have already saved our deepspeed checkpoint when 'zero_gather_16bit_weights_on_model_save' is set to False
+                # in stage3. However, this is not the case in other stages or when 'zero_gather_16bit_weights_on_model_save'
+                # is set to True in stage3.
+                self._save_deepspeed_optim_and_model_states(output_dir)
 
         # Save optimizer and scheduler
         if self.sharded_ddp == ShardedDDPOption.SIMPLE:
@@ -2895,7 +2917,8 @@ class Trainer:
                     self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
-                self.model_wrapped.save_checkpoint(output_dir)
+                # both optimizer and model states are needed to restore model
+                self._save_deepspeed_optim_and_model_states(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)
