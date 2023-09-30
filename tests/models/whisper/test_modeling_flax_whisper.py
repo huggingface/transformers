@@ -46,6 +46,7 @@ if is_flax_available():
         WhisperProcessor,
     )
     from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
+    from transformers.models.whisper.modeling_flax_whisper import sinusoidal_embedding_init
 
 
 @require_flax
@@ -386,6 +387,19 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for key in base_params_from_head.keys():
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_encoder_sinusoidal_embed_positions(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            params = model.params
+            if model.base_model_prefix in params:
+                params = model.params[model.base_model_prefix]
+
+            embeds = params["encoder"]["embed_positions"]["embedding"]
+            sinusoids = sinusoidal_embedding_init(None, embeds.shape)
+            self.assertTrue(jax.numpy.allclose(embeds, sinusoids))
 
 
 @slow
