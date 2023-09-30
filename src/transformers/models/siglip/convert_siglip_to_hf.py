@@ -125,6 +125,12 @@ def create_rename_keys(config):
 
     rename_keys.append(("params/txt/Encoder_0/encoder_norm/scale", "text_model.text_model.final_layer_norm.weight"))
     rename_keys.append(("params/txt/Encoder_0/encoder_norm/bias", "text_model.text_model.final_layer_norm.bias"))
+    rename_keys.append(("params/txt/head/kernel", "text_model.text_model.head.weight"))
+    rename_keys.append(("params/txt/head/bias", "text_model.text_model.head.bias"))
+
+    # learned temperature and bias
+    rename_keys.append(("params/t", "temperature"))
+    rename_keys.append(("params/b", "bias"))
 
     # fmt: on
     return rename_keys
@@ -215,9 +221,9 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
 
     # load HuggingFace model
     model = SiglipModel(config).eval()
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
+    model.load_state_dict(state_dict)
+
+    print("Original temperature:", data["params/t"])
 
     # TODO load image
     # url = "http://images.cocodataset.org/val2017/000000039769.jpg"

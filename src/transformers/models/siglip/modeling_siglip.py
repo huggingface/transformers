@@ -734,8 +734,7 @@ class SiglipTextTransformer(nn.Module):
         self.encoder = SiglipEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-        # For `pooled_output` computation
-        self.eos_token_id = config.eos_token_id
+        self.head = nn.Linear(embed_dim, embed_dim)
 
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=SiglipTextConfig)
@@ -786,26 +785,11 @@ class SiglipTextTransformer(nn.Module):
 
         print("Final text hidden states:", last_hidden_state[0, :3, :3])
 
-        if self.eos_token_id == 2:
-            # The `eos_token_id` was incorrect before PR #24773: Let's keep what have been done here.
-            # A SigLIP model with such `eos_token_id` in the config can't work correctly with extra new tokens added
-            # ------------------------------------------------------------
-            # text_embeds.shape = [batch_size, sequence_length, transformer.width]
-            # take features from the eot embedding (eot_token is the highest number in each sequence)
-            # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
-            pooled_output = last_hidden_state[
-                torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-                input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(dim=-1),
-            ]
-        else:
-            # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
-            pooled_output = last_hidden_state[
-                torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-                # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
-                (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id)
-                .int()
-                .argmax(dim=-1),
-            ]
+        # Assuming "sticky" EOS tokenization, last token is always EOS.
+        pooled_output = last_hidden_state[:, -1, :]  
+        pooled_output = self.head(pooled_output)
+
+        print("First values of text pooled output:", pooled_output[0, :3])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -1053,7 +1037,8 @@ class SiglipModel(SiglipPreTrainedModel):
         self.text_model = SiglipTextModel(text_config)
         self.vision_model = SiglipVisionModel(vision_config)
 
-        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
+        self.temperature = nn.Parameter(torch.randn(1,))
+        self.bias = nn.Parameter(torch.randn(1,))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1102,7 +1087,7 @@ class SiglipModel(SiglipPreTrainedModel):
 
         pooled_output = text_outputs[1]
 
-        return text_features
+        return pooled_output
 
     @add_start_docstrings_to_model_forward(SIGLIP_VISION_INPUTS_DOCSTRING)
     def get_image_features(
@@ -1148,10 +1133,9 @@ class SiglipModel(SiglipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        pooled_output = vision_outputs[1]
 
-        return image_features
+        return pooled_output
 
     @add_start_docstrings_to_model_forward(SIGLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SiglipOutput, config_class=SiglipConfig)
@@ -1220,10 +1204,20 @@ class SiglipModel(SiglipPreTrainedModel):
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
+        print("Normalized image embeds:", image_embeds[0,:3])
+        print("Normalized text embeds:", text_embeds[0,:3])
+
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * self.temperature.exp() + self.bias
         logits_per_image = logits_per_text.t()
+
+        print("Learned temperature:", self.temperature)
+        print("Learned bias:", self.bias)
+
+        z = torch.matmul(image_embeds, text_embeds.t()) * self.temperature.exp()
+        print("Multiplying by temperature:", z[:3,:3])
+
+        print("Logits per image:", logits_per_image[:3,:3])
 
         loss = None
         if return_loss:
