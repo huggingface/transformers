@@ -19,10 +19,11 @@ import importlib.metadata as importlib_metadata
 import importlib.util
 import weakref
 from functools import partialmethod
+
 from packaging import version
 
 from ..dependency_versions_check import dep_version_check
-from ..utils import is_accelerate_available, is_torch_available, is_peft_available, logging
+from ..utils import is_accelerate_available, is_peft_available, is_torch_available, logging
 
 
 if is_torch_available():

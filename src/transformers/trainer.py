@@ -214,8 +214,8 @@ if is_accelerate_available():
         )
 
     if is_deepspeed_available():
-        from deepspeed import __version__ as deepspeed_version
         from accelerate.utils import DeepSpeedSchedulerWrapper
+        from deepspeed import __version__ as deepspeed_version
 
 
 if TYPE_CHECKING:
