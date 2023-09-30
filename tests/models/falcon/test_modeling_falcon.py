@@ -592,13 +592,13 @@ class FalconOverrideTest(unittest.TestCase):
         for supported_checkpoint in self.supported_checkpoints:
             config = FalconConfig.from_pretrained(supported_checkpoint, trust_remote_code=True)
 
-            self.assertIn(config.model_type, ["RefinedWebModel", "RefinedWeb"])
+            self.assertEqual(config.model_type, "falcon")
 
     def test_auto_config_with_remote_code(self):
         for supported_checkpoint in self.supported_checkpoints:
             config = AutoConfig.from_pretrained(supported_checkpoint, trust_remote_code=True)
 
-            self.assertIn(config.model_type, ["RefinedWebModel", "RefinedWeb"])
+            self.assertEqual(config.model_type, "falcon")
 
     def test_config_with_specific_revision(self):
         for supported_checkpoint in self.supported_checkpoints:
