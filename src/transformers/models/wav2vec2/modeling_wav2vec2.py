@@ -2301,7 +2301,7 @@ class TDNNLayer(nn.Module):
             if isinstance(self.kernel, LoraLayer):
                 warnings.warn(
                     "Detected LoRA on TDNNLayer. LoRA weights won't be applied due to optimization. "
-                    "You should exclude TDNNLayer from LoRA's target modules."
+                    "You should exclude TDNNLayer from LoRA's target modules.",
                 )
 
         # for backward compatibility, we keep nn.Linear but call F.conv1d for speed up
