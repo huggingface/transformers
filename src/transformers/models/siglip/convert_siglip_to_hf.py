@@ -99,7 +99,7 @@ def create_rename_keys(config):
     rename_keys.append(("params/img/MAPHead_0/MlpBlock_0/Dense_1/bias", "vision_model.vision_model.head.mlp.fc2.bias"))
     rename_keys.append(("params/img/MAPHead_0/MultiHeadDotProductAttention_0/out/kernel", "vision_model.vision_model.head.attention.out_proj.weight"))
     rename_keys.append(("params/img/MAPHead_0/MultiHeadDotProductAttention_0/out/bias", "vision_model.vision_model.head.attention.out_proj.bias"))
-    
+
     # text encoder
 
     rename_keys.append(("params/txt/Embed_0/embedding", "text_model.text_model.embeddings.token_embedding.weight"))
@@ -162,18 +162,30 @@ def rename_key(dct, old, new, config):
 
 def read_in_q_k_v_head(state_dict, config):
     # read in individual input projection layers
-    key_proj_weight = state_dict.pop(f"params/img/MAPHead_0/MultiHeadDotProductAttention_0/key/kernel").reshape(-1, config.vision_config.hidden_size).T
-    key_proj_bias = state_dict.pop(f"params/img/MAPHead_0/MultiHeadDotProductAttention_0/key/bias").reshape(-1)
-    value_proj_weight = state_dict.pop(f"params/img/MAPHead_0/MultiHeadDotProductAttention_0/value/kernel").reshape(-1, config.vision_config.hidden_size).T
-    value_proj_bias = state_dict.pop(f"params/img/MAPHead_0/MultiHeadDotProductAttention_0/value/bias").reshape(-1)
-    query_proj_weight = state_dict.pop(f"params/img/MAPHead_0/MultiHeadDotProductAttention_0/query/kernel").reshape(-1, config.vision_config.hidden_size).T
-    query_proj_bias = state_dict.pop(f"params/img/MAPHead_0/MultiHeadDotProductAttention_0/query/bias").reshape(-1)
+    key_proj_weight = (
+        state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/key/kernel")
+        .reshape(-1, config.vision_config.hidden_size)
+        .T
+    )
+    key_proj_bias = state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/key/bias").reshape(-1)
+    value_proj_weight = (
+        state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/value/kernel")
+        .reshape(-1, config.vision_config.hidden_size)
+        .T
+    )
+    value_proj_bias = state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/value/bias").reshape(-1)
+    query_proj_weight = (
+        state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/query/kernel")
+        .reshape(-1, config.vision_config.hidden_size)
+        .T
+    )
+    query_proj_bias = state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/query/bias").reshape(-1)
 
     # next, add them to the state dict as a single matrix + vector
-    state_dict[f"vision_model.vision_model.head.attention.in_proj_weight"] = torch.from_numpy(
+    state_dict["vision_model.vision_model.head.attention.in_proj_weight"] = torch.from_numpy(
         np.concatenate([query_proj_weight, key_proj_weight, value_proj_weight], axis=0)
     )
-    state_dict[f"vision_model.vision_model.head.attention.in_proj_bias"] = torch.from_numpy(
+    state_dict["vision_model.vision_model.head.attention.in_proj_bias"] = torch.from_numpy(
         np.concatenate([query_proj_bias, key_proj_bias, value_proj_bias], axis=0)
     )
 
@@ -225,7 +237,7 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
 
     print("Original temperature:", data["params/t"])
 
-    # TODO load image
+    # TODO create image processor
     # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     # image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     # preprocess image
@@ -238,9 +250,6 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="input_ids_siglip.npy", repo_type="dataset")
     input_ids = np.load(filepath)
     input_ids = torch.from_numpy(input_ids)
-
-    print("Shape of pixel values:", pixel_values.shape)
-    print("Shape of input ids:", input_ids.shape)
 
     with torch.no_grad():
         model(input_ids=input_ids, pixel_values=pixel_values)
@@ -258,8 +267,8 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
         # processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub(f"facebook/{model_name}")
-        # processor.push_to_hub(f"facebook/{model_name}")
+        model.push_to_hub(f"nielsr/{model_name}")
+        # processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

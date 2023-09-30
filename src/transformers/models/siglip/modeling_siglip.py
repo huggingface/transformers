@@ -786,7 +786,7 @@ class SiglipTextTransformer(nn.Module):
         print("Final text hidden states:", last_hidden_state[0, :3, :3])
 
         # Assuming "sticky" EOS tokenization, last token is always EOS.
-        pooled_output = last_hidden_state[:, -1, :]  
+        pooled_output = last_hidden_state[:, -1, :]
         pooled_output = self.head(pooled_output)
 
         print("First values of text pooled output:", pooled_output[0, :3])
@@ -949,7 +949,7 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
         hidden_state = self.layernorm(hidden_state)
         hidden_state = residual + self.mlp(hidden_state)
 
-        return hidden_state[:,0]
+        return hidden_state[:, 0]
 
 
 @add_start_docstrings(
@@ -1037,8 +1037,16 @@ class SiglipModel(SiglipPreTrainedModel):
         self.text_model = SiglipTextModel(text_config)
         self.vision_model = SiglipVisionModel(vision_config)
 
-        self.temperature = nn.Parameter(torch.randn(1,))
-        self.bias = nn.Parameter(torch.randn(1,))
+        self.temperature = nn.Parameter(
+            torch.randn(
+                1,
+            )
+        )
+        self.bias = nn.Parameter(
+            torch.randn(
+                1,
+            )
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1204,8 +1212,8 @@ class SiglipModel(SiglipPreTrainedModel):
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
-        print("Normalized image embeds:", image_embeds[0,:3])
-        print("Normalized text embeds:", text_embeds[0,:3])
+        print("Normalized image embeds:", image_embeds[0, :3])
+        print("Normalized text embeds:", text_embeds[0, :3])
 
         # cosine similarity as logits
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * self.temperature.exp() + self.bias
@@ -1215,9 +1223,9 @@ class SiglipModel(SiglipPreTrainedModel):
         print("Learned bias:", self.bias)
 
         z = torch.matmul(image_embeds, text_embeds.t()) * self.temperature.exp()
-        print("Multiplying by temperature:", z[:3,:3])
+        print("Multiplying by temperature:", z[:3, :3])
 
-        print("Logits per image:", logits_per_image[:3,:3])
+        print("Logits per image:", logits_per_image[:3, :3])
 
         loss = None
         if return_loss:
