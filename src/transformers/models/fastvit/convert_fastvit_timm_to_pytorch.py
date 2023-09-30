@@ -210,7 +210,7 @@ def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path, push_to_h
         size={"shortest_edge": 256},
         resample=PILImageResampling.BICUBIC,
         do_center_crop=True,
-        crop_size=224,
+        crop_size=230, # 0.9 Crop of 256 
         do_normalize=True,
         image_mean=IMAGENET_DEFAULT_MEAN,
         image_std=IMAGENET_DEFAULT_STD,
