@@ -30,6 +30,74 @@ from .image_processing_imagebind import ImageBindImageProcessor
 logger = logging.get_logger(__name__)
 
 
+def valid_batched_clipped_audio(raw_speech):
+    """
+    Determines whether raw mono-channel audio input (or any other 1D data) is batched and clipped. The following
+    conditions will be recognized as valid audio:
+
+    - unbatched: `List[float]`, `np.ndarray` (`ndim=1`)
+    - batched: `List[List[float]]`, `List[np.ndarray]` (`ndim=1`), `np.ndarray` (`ndim=2`)
+    - batched and clipped: `List[List[List[float]]]`, `List[List[np.ndarray]]` (`ndim=1`), List[np.ndarray] (`ndim=2`), np.ndarray (`ndim=3`)
+    """
+    valid_audio = False
+    if isinstance(raw_speech, np.ndarray) and (1 <= len(raw_speech.shape) <= 3):
+        # unbatched, batched, or batched and clipped np.ndarray
+        valid_audio = True
+    elif isinstance(raw_speech, (list, tuple)):
+        if isinstance(raw_speech[0], np.ndarray) and (1 <= len(raw_speech[0].shape) <= 2):
+            # batched or batched and clipped List[np.ndarray]
+            valid_audio = True
+        elif isinstance(raw_speech[0], float):
+            # unbatched List[float]
+            valid_audio = True
+        elif isinstance(raw_speech[0], (list, tuple)):
+            if isinstance(raw_speech[0][0], np.ndarray) and (len(raw_speech[0][0].shape == 1)):
+                # batched and clipped List[List[np.ndarray]]
+                valid_audio = True
+            elif isinstance(raw_speech, (float, list, tuple)):
+                # batched List[List[float]], batched and clipped List[List[List[float]]]
+                valid_audio = True
+    return valid_audio
+
+
+def batch_and_clip_ndarray(array, data_dim=1, dtype=np.float32):
+    """
+    Turns a possibly nested list of np.ndarrays into a batched and clipped output of type `List[List[np.ndarray]]`.
+    """
+    if isinstance(array, (list, tuple)) and isinstance(array[0], (list, tuple)) and isinstance(array[0][0], np.ndarray):
+        if array[0][0].ndim == data_dim:
+            return [[base_array.astype(dtype=dtype) for base_array in clip] for clip in array]
+        else:
+            raise ValueError(
+                f"`For List[List[np.ndarray]]` inputs the internal `np.ndarray`s are expected to have dimension"
+                f" {data_dim} but got dimension {array[0][0].ndim}"
+            )
+    elif isinstance(array, (list, tuple) and isinstance(array[0], np.ndarray)):
+        if array[0].ndim == data_dim + 1:
+            return [[np.asarray(base_array, dtype=dtype) for base_array in clip] for clip in array]
+        elif array[0].ndim == data_dim:
+            return [[base_array.astype(dtype=dtype) for base_array in array]]
+        else:
+            raise ValueError(
+                f"For `List[np.ndarray]` inputs the internal `np.ndarray`s are expected to have dimension"
+                f" {data_dim} or {data_dim + 1} but got dimension {array[0].ndim}"
+            )
+    elif isinstance(array, np.ndarray):
+        if array.ndim == data_dim + 2:
+            return [[np.asarray(raw_input, dtype=dtype) for raw_input in clip] for clip in array]
+        elif array.ndim == data_dim + 1:
+            return [[np.asarray(raw_input, dtype=dtype) for raw_input in array]]
+        elif array.ndim == data_dim:
+            return [[array.astype(dtype=dtype)]]
+        else:
+            raise ValueError(
+                f"`np.ndarray` inputs are expected to have dimension in"
+                f" `[{data_dim}, {data_dim + 1}, {data_dim + 2}]` but instead got {array.ndim}"
+            )
+    else:
+        raise ValueError(f"Could not make batched and clipped audio from {array}")
+
+
 class ImageBindFeatureExtractor(ImageBindImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
         warnings.warn(
@@ -72,7 +140,7 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
-    model_input_names = ["input_values", "attention_mask"]
+    model_input_names = ["input_features", "attention_mask"]
 
     def __init__(
         self,
@@ -138,7 +206,7 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]], List[List[List[float]]]],
         sampling_rate: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
@@ -147,10 +215,15 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
-                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
-                stereo, i.e. single float per timestep.
+            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`):
+                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of numpy
+                arrays or a (possibly nested) list of float values. The supported input types are as follows:
+
+                - unbatched: `List[float]`, `np.ndarray` (`ndim=1`)
+                - batched: `List[List[float]]`, `List[np.ndarray]` (`ndim=1`), `np.ndarray` (`ndim=2`)
+                - batched with clips: `List[List[List[float]]]`, `List[List[np.ndarray]]` (`ndim=1`), `List[np.ndarray]` (`ndim=2`), np.ndarray (`ndim=3`)
+                
+                The input will always be interpreted as mono channel audio, not stereo, i.e. a single float per timestep.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
@@ -174,39 +247,42 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
                 "It is strongly recommended to pass the `sampling_rate` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
+        
+        if not valid_batched_clipped_audio(raw_speech):
+            raise ValueError(
+                f"Only unbatched, batched, and batched and clipped mono-channel audio is supported for input to {self}"
+            )
+        
+        # Handle the cases where there are no np.ndarrays in raw_speech
+        if isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], float):
+            raw_speech = [[np.asarray(raw_speech, dtype=np.float32)]]
+        elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], (list, tuple)):
+            if isinstance(raw_speech[0][0], float):
+                # List[List[float]]
+                raw_speech = [[np.asarray(audio, dtype=np.float32) for audio in raw_speech]]
+            elif isinstance(raw_speech[0][0], (list, tuple)):
+                # List[List[List[float]]]
+                raw_speech = [[np.asarray(audio, dtype=np.float32) for audio in clip] for clip in raw_speech]
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
-        if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
-        is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
-        )
-
-        if is_batched:
-            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
-            raw_speech = raw_speech.astype(np.float32)
-
-        # always return batch
-        if not is_batched:
-            raw_speech = [raw_speech]
+        # always return batched and clipped audio of type [List[List[np.ndarray]]]
+        raw_speech = batch_and_clip_ndarray(raw_speech, data_dim=1, dtype=np.float32)
 
         # extract fbank features and pad/truncate to max_length
-        features = [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in raw_speech]
+        features = [[self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in clip] for clip in raw_speech]
 
         # convert into BatchFeature
-        padded_inputs = BatchFeature({"input_values": features})
+        padded_inputs = BatchFeature({"input_features": features})
 
-        # make sure list is in array format
-        input_values = padded_inputs.get("input_values")
-        if isinstance(input_values[0], list):
-            padded_inputs["input_values"] = [np.asarray(feature, dtype=np.float32) for feature in input_values]
+        # make sure spectrograms are in array format
+        input_values = padded_inputs.get("input_features")
+        if isinstance(input_values[0][0], list):
+            padded_inputs["input_features"] = [[np.asarray(feature, dtype=np.float32) for feature in clip] for clip in input_values]
 
         # normalization
         if self.do_normalize:
-            padded_inputs["input_values"] = [self.normalize(feature) for feature in input_values]
+            padded_inputs["input_features"] = [
+                [self.normalize(feature) for feature in clip] for clip in padded_inputs["input_features"]
+            ]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
