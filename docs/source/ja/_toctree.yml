@@ -8,11 +8,11 @@
 - sections:
   - local: quicktour
     title: クイックツアー
+  title: チュートリアル
 
 - sections:
   - local: accelerate
-    title: 🤗 Accelerate を用いた分散学習
-  title: チュートリアル
+    title: を用いた分散学習
 
 - sections:
   - sections:
@@ -42,3 +42,127 @@
 - sections:
   - local: add_new_model
     title: 新しいモデルを追加する
+
+- sections:
+  - local: perf_hardware
+    title: パフォーマンスハードウェア
+
+- sections:
+  - local: custom_tools
+    title: カスタムツール
+
+- sections:
+  - local: add_tensorflow_model
+    title: TensorFlowモデルを追加する
+
+- sections:
+  - local: performance
+    title: パフォーマンス
+
+- sections:
+  - local: benchmarks
+    title: ベンチマーク
+
+- sections:
+  - local: create_a_model
+    title: モデルを作成する
+
+- sections:
+  - local: glossary
+    title: 用語集
+
+- sections:
+  - local: perf_infer_gpu_one
+    title: GPUでの推論パフォーマンス
+
+- sections:
+  - local: pad_truncation
+    title: パッドとトランケート
+
+- sections:
+  - local: perf_infer_cpu
+    title: CPUでの推論パフォーマンス
+
+- sections:
+  - local: perf_train_tpu_tf
+    title: TPUでの訓練パフォーマンス（TensorFlow）
+
+- sections:
+  - local: big_models
+    title: 大規模モデル
+
+- sections:
+  - local: perplexity
+    title: パープレキシティ
+
+- sections:
+  - local: llm_tutorial
+    title: 言語モデルチュートリアル
+
+- sections:
+  - local: perf_infer_gpu_many
+    title: GPUでの複数バッチ推論パフォーマンス
+
+- sections:
+  - local: perf_train_special
+    title: 特別な訓練パフォーマンス
+
+- sections:
+  - local: pr_checks
+    title: PRチェック
+
+- sections:
+  - local: model_memory_anatomy
+    title: モデルメモリの解剖学
+
+- sections:
+  - local: attention
+    title: 注意機構
+
+- sections:
+  - local: pipeline_webserver
+    title: パイプラインウェブサーバー
+
+- sections:
+  - local: custom_model
+    title: カスタムモデル
+
+- sections:
+  - local: community
+    title: コミュニティ
+
+- sections:
+  - local: model_summary
+    title: モデルサマリー
+
+- sections:
+  - local: bertology
+    title: バートロジー
+
+- sections:
+  - local: perf_train_gpu_many
+    title: GPUでの複数バッチ訓練パフォーマンス
+
+- sections:
+  - local: chat_templating
+    title: チャットテンプレート
+
+- sections:
+  - local: perf_train_cpu
+    title: CPUでの訓練パフォーマンス
+
+- sections:
+  - local: perf_torch_compile
+    title: PyTorchコンパイルのパフォーマンス
+
+- sections:
+  - local: hpo_train
+    title: ハイパーパラメータ最適化訓練
+
+- sections:
+  - local: run_scripts
+    title: スクリプトの実行
+
+- sections:
+  - local: serialization
+    title: シリアライズ
