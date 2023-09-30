@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Meta AI, EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+"""Flax LLaMA model."""
 from functools import partial
 from typing import Optional, Tuple
 
@@ -140,7 +140,6 @@ def rotate_half(tensor):
     rotate_half_tensor = jnp.concatenate(
         (-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1
     )
-    """Rotates half the hidden dims of the input."""
     rotate_half_tensor = jnp.concatenate(
         (-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1
     )
@@ -165,7 +164,6 @@ class FlaxLlamaRMSNorm(nn.Module):
         variance = jnp.power(variance, 2)
         variance = variance.mean(-1, keepdims=True)
         # use `jax.numpy.sqrt` as `jax.lax.rsqrt` does not match `torch.rsqrt`
-        # hidden_states = hidden_states * jax.lax.rsqrt(variance + self.epsilon)
         hidden_states = hidden_states / jnp.sqrt(variance + self.epsilon)
 
         return self.weight * jnp.asarray(hidden_states, dtype=self.dtype)
@@ -591,7 +589,7 @@ class FlaxLlamaModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        input_embeds = self.embed_tokens(input_ids.astype("i4"))
+        input_embeds = self.embed_tokens(input_ids)
 
         outputs = self.layers(
             input_embeds,
@@ -684,6 +682,7 @@ class FlaxLlamaForCausalLMModule(nn.Module):
     """,
     LLAMA_START_DOCSTRING,
 )
+# Copied from transformers.models.gptj.modeling_flax_gptj.FlaxLlamaForCausalLM with GPTJ->Llama
 class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
     module_class = FlaxLlamaForCausalLMModule
 
