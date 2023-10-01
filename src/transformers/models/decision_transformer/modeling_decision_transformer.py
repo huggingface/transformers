@@ -530,8 +530,10 @@ class DecisionTransformerGPT2Block(nn.Module):
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
-            self.crossattention = DecisionTransformerGPT2Attention(
-                config, is_cross_attention=True, layer_idx=layer_idx
+            self.crossattention = (
+                DecisionTransformerGPT2Attention(config, is_cross_attention=True, layer_idx=layer_idx)
+                if not getattr(config, "_flash_attn_2_enabled", False)
+                else DecisionTransformerGPT2FlashAttention2(config, is_cross_attention=True, layer_idx=layer_idx)
             )
             self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
@@ -761,6 +763,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+                padding_mask = None
             encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_attention_mask = None
@@ -813,25 +816,9 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
-                    def custom_forward(
-                        hidden_states,
-                        layer_past,
-                        attention_mask,
-                        head_mask,
-                        encoder_hidden_states,
-                        encoder_attention_mask,
-                    ):
-                        return module(
-                            hidden_states,
-                            layer_past,
-                            attention_mask,
-                            head_mask,
-                            encoder_hidden_states,
-                            encoder_attention_mask,
-                            use_cache=use_cache,
-                            output_attentions=output_attentions,
-                            padding_mask=padding_mask,
-                        )
+                    def custom_forward(*inputs):
+                        # None for layer_past
+                        return module(*inputs, use_cache, None, output_attentions, padding_mask=padding_mask)
 
                     return custom_forward
 
