@@ -9,6 +9,13 @@ class ASTFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["speech"])
 
 
+class MAESTFeatureExtractor(metaclass=DummyObject):
+    _backends = ["speech"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["speech"])
+
+
 class Speech2TextFeatureExtractor(metaclass=DummyObject):
     _backends = ["speech"]
 
