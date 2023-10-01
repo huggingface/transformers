@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from datasets import DatasetDict, load_dataset, Audio
+from datasets import Audio, DatasetDict, load_dataset
 from flax import jax_utils, traverse_util
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
@@ -332,13 +332,13 @@ def main():
     datasets = datasets.cast_column(data_args.audio_file_column, Audio(sampling_rate=feature_extractor.sampling_rate))
 
     def prepare_dataset(batch):
-        batch["speech"] = batch[data_args.audio_file_column]['array']
+        batch["speech"] = batch[data_args.audio_file_column]["array"]
         return batch
 
     remove_columns_values = datasets["train"].column_names.copy()
-    if 'speech' in set(remove_columns_values):
-        remove_columns_values.remove('speech')
-    
+    if "speech" in set(remove_columns_values):
+        remove_columns_values.remove("speech")
+
     # load audio files into numpy arrays
     vectorized_datasets = datasets.map(
         prepare_dataset, num_proc=data_args.preprocessing_num_workers, remove_columns=remove_columns_values
