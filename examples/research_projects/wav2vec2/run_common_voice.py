@@ -305,9 +305,17 @@ def main():
 
     # Get the datasets:
     train_dataset = datasets.load_dataset(
-        "common_voice", data_args.dataset_config_name, split=data_args.train_split_name, num_proc=data_args.preprocessing_num_workers,
+        "common_voice",
+        data_args.dataset_config_name,
+        split=data_args.train_split_name,
+        num_proc=data_args.preprocessing_num_workers,
     )
-    eval_dataset = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="test", num_proc=data_args.preprocessing_num_workers,)
+    eval_dataset = datasets.load_dataset(
+        "common_voice",
+        data_args.dataset_config_name,
+        split="test",
+        num_proc=data_args.preprocessing_num_workers,
+    )
 
     # Create and save tokenizer
     chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]'
