@@ -205,18 +205,26 @@ def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path, push_to_h
 
     model.load_state_dict(new_state_dict)
 
+    # Check pixel values
     processor = BitImageProcessor(
         do_resize=True,
-        size={"shortest_edge": 256},
+        size={"shortest_edge": 284},  # Crop of 0.9 , (256 / 0.9) = 284
         resample=PILImageResampling.BICUBIC,
         do_center_crop=True,
-        crop_size=230, # 0.9 Crop of 256 
+        crop_size=256,
         do_normalize=True,
         image_mean=IMAGENET_DEFAULT_MEAN,
         image_std=IMAGENET_DEFAULT_STD,
     )
     inputs = processor(images=prepare_img(), return_tensors="pt")
 
+    data_config = timm.data.resolve_model_data_config(timm_model)
+    transforms = timm.data.create_transform(**data_config, is_training=False)
+    original_output = transforms(prepare_img()).unsqueeze(0)
+
+    assert torch.allclose(inputs.pixel_values, original_output, 1e-3), "The pixel values are not the same."
+
+    # Check model
     outputs = model(**inputs).logits
     timm_logits = timm_model(inputs["pixel_values"])
 
@@ -233,13 +241,13 @@ def convert_fastvit_checkpoint(fastvit_name, pytorch_dump_folder_path, push_to_h
 
     if push_to_hub:
         tag_to_name = {
-            "fastvit_t8.apple_in1k": "fastvit-t8",
-            "fastvit_t12.apple_in1k": "fastvit-t12",
-            "fastvit_s12.apple_in1k": "fastvit-s12",
-            "fastvit_sa12.apple_in1k": "fastvit-sa12",
-            "fastvit_sa24.apple_in1k": "fastvit-sa24",
-            "fastvit_sa36.apple_in1k": "fastvit-sa36",
-            "fastvit_ma36.apple_in1k": "fastvit-ma36",
+            "timm/fastvit_t8.apple_in1k": "fastvit-t8",
+            "timm/fastvit_t12.apple_in1k": "fastvit-t12",
+            "timm/fastvit_s12.apple_in1k": "fastvit-s12",
+            "timm/fastvit_sa12.apple_in1k": "fastvit-sa12",
+            "timm/fastvit_sa24.apple_in1k": "fastvit-sa24",
+            "timm/fastvit_sa36.apple_in1k": "fastvit-sa36",
+            "timm/fastvit_ma36.apple_in1k": "fastvit-ma36",
         }
 
         model_name = tag_to_name[fastvit_name]
