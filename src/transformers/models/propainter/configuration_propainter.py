@@ -14,13 +14,9 @@
 # limitations under the License.
 """ ViT model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
 
-from packaging import version
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -92,7 +88,7 @@ class ProPainterConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=512,
-        threshold=.2,
+        threshold=0.2,
         num_hidden_layers=8,
         num_attention_heads=4,
         intermediate_size=3072,
@@ -107,21 +103,19 @@ class ProPainterConfig(PretrainedConfig):
         qkv_bias=True,
         encoder_stride=16,
         kernel_size=(7, 7),
-        padding = (3, 3),
-        stride = (3, 3),
-        window_size = (5, 9),
-        pool_size = (4, 4),
-        small = False,
-        dropout = 0,
-        encoder_depth = 2,
-        raft_iter = 20,
-        subvideo_length = 80,
-        neighbor_length = 10,
-        ref_stride = 10,
-        transformer_depth = 8,
-        transformer_heads = 4,
-
-
+        padding=(3, 3),
+        stride=(3, 3),
+        window_size=(5, 9),
+        pool_size=(4, 4),
+        small=False,
+        dropout=0,
+        encoder_depth=2,
+        raft_iter=20,
+        subvideo_length=80,
+        neighbor_length=10,
+        ref_stride=10,
+        transformer_depth=8,
+        transformer_heads=4,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -140,13 +134,17 @@ class ProPainterConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
+        self.stride = stride
+        self.padding = padding
         self.small = small
         self.dropout = dropout
         self.threshold = threshold
         self.encoder_depth = 2
         self.raft_iter = raft_iter
-        self.alternate_corr = alternate_corr
+        self.kernel_size = kernel_size
+        #self.alternate_corr = alternate_corr
         self.subvideo_length = subvideo_length
         self.neighbor_length = neighbor_length
         self.ref_stride = ref_stride
-
+        self.transformer_depth = transformer_depth
+        self.transformer_heads = transformer_heads

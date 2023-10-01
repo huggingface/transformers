@@ -14,33 +14,20 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
-from typing import Dict, List, Optional, Union, Tuple
-
-import numpy as np
 import os
-import re
+import pathlib
+from typing import Dict, List, Optional, Tuple, Union
+
 import cv2
 import imageio
-import pathlib
-
-from ...image_transforms import (
-    PaddingMode,
-    center_to_corners_format,
-    corners_to_center_format,
-    id_to_rgb,
-    pad,
-    rescale,
-    resize,
-    rgb_to_id,
-    to_channel_dimension_format,
- )
+import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...utils import (
     TensorType,
     is_scipy_available,
-    is_torchvision_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
     logging,
 )
@@ -72,7 +59,8 @@ class ProPainterImageProcessor(BaseImageProcessor):
     Args:
         TODO
     """
-    model_input_names = ["pixel_values","pixel_masks"]
+    model_input_names = ["pixel_values", "pixel_masks"]
+
     def __init__(
         self,
         do_resize: bool = True,
@@ -94,10 +82,8 @@ class ProPainterImageProcessor(BaseImageProcessor):
         self.mask_dilation = mask_dilation
         self.save_fps = save_fps
 
-
     def to_tensors(self) -> torch.Tensor:
         return transforms.Compose([Stack(), ToTorchFormatTensor()])
-
 
     def resize_frames(
         self,
@@ -109,30 +95,27 @@ class ProPainterImageProcessor(BaseImageProcessor):
         """
         if size is not None:
             out_size = size
-            process_size = (out_size[0]-out_size[0]%8, out_size[1]-out_size[1]%8)
+            process_size = (out_size[0] - out_size[0] % 8, out_size[1] - out_size[1] % 8)
             frames = [f.resize(process_size) for f in frames]
         else:
             out_size = frames[0].size
-            process_size = (out_size[0]-out_size[0]%8, out_size[1]-out_size[1]%8)
+            process_size = (out_size[0] - out_size[0] % 8, out_size[1] - out_size[1] % 8)
             if not out_size == process_size:
                 frames = [f.resize(process_size) for f in frames]
-
         return frames, process_size, out_size
 
-
     def read_frame_from_videos(
-        self,
-        frame_root : str
+        self, frame_root: str
     ) -> Tuple[List[Image.Image], Optional[float], Tuple[int, int], str]:
         """
         TODO
         """
-        if frame_root.endswith(('mp4', 'mov', 'avi', 'MP4', 'MOV', 'AVI')): # input video path
+        if frame_root.endswith(("mp4", "mov", "avi", "MP4", "MOV", "AVI")):  # input video path
             video_name = os.path.basename(frame_root)[:-4]
-            vframes, aframes, info = torchvision.io.read_video(filename=frame_root, pts_unit='sec') # RGB
+            vframes, aframes, info = torchvision.io.read_video(filename=frame_root, pts_unit="sec")  # RGB
             frames = list(vframes.numpy())
             frames = [Image.fromarray(f) for f in frames]
-            fps = info['video_fps']
+            fps = info["video_fps"]
         else:
             video_name = os.path.basename(frame_root)
             frames = []
@@ -146,26 +129,16 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         return frames, fps, size, video_name
 
-    def binary_mask(
-        self,
-        mask: np.ndarray,
-        th: float = 0.1
-    ) -> np.ndarray:
+    def binary_mask(self, mask: np.ndarray, th: float = 0.1) -> np.ndarray:
         """
         TODO
         """
-        mask[mask>th] = 1
-        mask[mask<=th] = 0
+        mask[mask > th] = 1
+        mask[mask <= th] = 0
         return mask
 
-
     def read_mask(
-        self,
-        mpath,
-        length,
-        size,
-        flow_mask_dilates : int = 8,
-        mask_dilates : int = 5
+        self, mpath, length, size, flow_mask_dilates: int = 8, mask_dilates: int = 5
     ) -> Tuple[List[Image.Image], List[Image.Image]]:
         """
         TODO
@@ -180,7 +153,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         for mask_img in masks_img:
             if size is not None:
                 mask_img = mask_img.resize(size, Image.NEAREST)
-            mask_img = np.array(mask_img.convert('L'))
+            mask_img = np.array(mask_img.convert("L"))
 
             # Dilate 8 pixel so that all known pixel is trustworthy
             if flow_mask_dilates > 0:
@@ -188,7 +161,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
             else:
                 flow_mask_img = self.binary_mask(mask_img).astype(np.uint8)
             # Close the small holes inside the foreground objects
-            flow_mask_img = cv2.morphologyEx(flow_mask_img, cv2.MORPH_CLOSE, np.ones((21, 21),np.uint8)).astype(bool)
+            flow_mask_img = cv2.morphologyEx(flow_mask_img, cv2.MORPH_CLOSE, np.ones((21, 21), np.uint8)).astype(bool)
             flow_mask_img = scipy.ndimage.binary_fill_holes(flow_mask_img).astype(np.uint8)
             flow_masks.append(Image.fromarray(flow_mask_img * 255))
 
@@ -204,14 +177,10 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         return flow_masks, masks_dilated
 
-
     def extrapolation(
-        self,
-        video_ori,
-        scale : Tuple
+        self, video_ori, scale: Tuple
     ) -> Tuple[List[Image.Image], List[Image.Image], List[Image.Image], Tuple[int, int]]:
-        """Prepares the data for video outpainting.
-        """
+        """Prepares the data for video outpainting."""
         nFrame = len(video_ori)
         imgW, imgH = video_ori[0].size
 
@@ -227,7 +196,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         frames = []
         for v in video_ori:
             frame = np.zeros(((imgH_extr, imgW_extr, 3)), dtype=np.uint8)
-            frame[H_start: H_start + imgH, W_start: W_start + imgW, :] = v
+            frame[H_start : H_start + imgH, W_start : W_start + imgW, :] = v
             frames.append(Image.fromarray(frame))
 
         # Generates the mask for missing region.
@@ -238,11 +207,10 @@ class ProPainterImageProcessor(BaseImageProcessor):
         dilate_w = 4 if W_start > 10 else 0
         mask = np.ones(((imgH_extr, imgW_extr)), dtype=np.uint8)
 
-        mask[H_start+dilate_h: H_start+imgH-dilate_h,
-            W_start+dilate_w: W_start+imgW-dilate_w] = 0
+        mask[H_start + dilate_h : H_start + imgH - dilate_h, W_start + dilate_w : W_start + imgW - dilate_w] = 0
         flow_masks.append(Image.fromarray(mask * 255))
 
-        mask[H_start: H_start+imgH, W_start: W_start+imgW] = 0
+        mask[H_start : H_start + imgH, W_start : W_start + imgW] = 0
         masks_dilated.append(Image.fromarray(mask * 255))
 
         flow_masks = flow_masks * nFrame
@@ -250,12 +218,11 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         return frames, flow_masks, masks_dilated, (imgW_extr, imgH_extr)
 
-
     def preprocess_inpainting(
         self,
         video_path: Optional[Union[str, pathlib.Path]] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
-        do_resize: Optional[bool] = None,
+        do_resize: Optional[bool] = False,
         size: Optional[Dict[str, int]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         **kwargs,
@@ -267,39 +234,35 @@ class ProPainterImageProcessor(BaseImageProcessor):
             TODO
 
         """
-        size = self.size if size is None else size
-        #size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
+        # size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
         if do_resize is not None and size is None:
             raise ValueError("Size and max_size must be specified if do_resize is True.")
 
-        #images = make_list_of_images(images)
+        # images = make_list_of_images(images)
 
         frames, fps, size, video_name = self.read_frame_from_videos(video_path)
         masks, fps, size, video_name = self.read_frame_from_videos(masks_path)
-        if not self.size['width'] == -1 and not self.size['height'] == -1:
-            size = (self.size['width'], self.size['height'])
+        if not self.size["width"] == -1 and not self.size["height"] == -1:
+            size = (self.size["width"], self.size["height"])
         if not self.resize_ratio == 1.0:
             size = (int(self.resize_ratio * size[0]), int(self.resize_ratio * size[1]))
 
         if self.do_resize:
-            frames, size, out_size = self.resize_frames(frames, size)
+            frames, size, out_size = self.resize_frames(frames, resize)
 
         frames_len = len(frames)
-        flow_masks, masks_dilated = self.read_mask(masks, frames_len, size,
-                                            flow_mask_dilates=self.mask_dilation,
-                                            mask_dilates=self.mask_dilation)
+        flow_masks, masks_dilated = self.read_mask(
+            masks, frames_len, size, flow_mask_dilates=self.mask_dilation, mask_dilates=self.mask_dilation
+        )
 
         frames_inp = [np.array(f).astype(np.uint8) for f in frames]
         frames = self.to_tensors()(frames).unsqueeze(0) * 2 - 1
         flow_masks = self.to_tensors()(flow_masks).unsqueeze(0)
         masks_dilated = self.to_tensors()(masks_dilated).unsqueeze(0)
 
-        data = {"frames": frames,
-                "flow_masks": flow_masks,
-                "masks_dilated": masks_dilated}
+        data = {"frames": frames[:,:2,:,:,:], "flow_masks": flow_masks[:,:2,:,:,:], "masks_dilated": masks_dilated[:,:2,:,:,:]}
 
         return BatchFeature(data=data, tensor_type=return_tensors), frames_inp
-
 
     def preprocess_outpainting(
         self,
@@ -315,8 +278,8 @@ class ProPainterImageProcessor(BaseImageProcessor):
         """
 
         frames, fps, size, video_name = self.read_frame_from_videos(self.video)
-        if not self.size['width'] == -1 and not self.size['height'] == -1:
-            size = (self.size['width'], self.size['height'])
+        if not self.size["width"] == -1 and not self.size["height"] == -1:
+            size = (self.size["width"], self.size["height"])
         if not self.resize_ratio == 1.0:
             size = (int(self.resize_ratio * size[0]), int(self.resize_ratio * size[1]))
 
@@ -329,16 +292,17 @@ class ProPainterImageProcessor(BaseImageProcessor):
         flow_masks = self.to_tensors()(flow_masks).unsqueeze(0)
         masks_dilated = self.to_tensors()(masks_dilated).unsqueeze(0)
 
-        data = {"frames": frames[:,:2,:,:,:],
-                "flow_masks": flow_masks[:,:2,:,:,:],
-                "distil_masks": masks_dilated[:,:2,:,:,:],}
+        data = {
+            "frames": frames[:, :2, :, :450, :450],
+            "flow_masks": flow_masks[:, :2, :, :450, :450],
+            "distil_masks": masks_dilated[:, :2, :, :450, :450],
+        }
 
         return BatchFeature(data=data, tensor_type=return_tensors), frames_inp
 
-
     def save_videos_frame(
         self,
-        save_root : str,
+        save_root: str,
         masked_frame_for_save,
         comp_frames,
     ) -> None:
@@ -349,41 +313,32 @@ class ProPainterImageProcessor(BaseImageProcessor):
             TODO
 
         """
-        imageio.mimwrite(os.path.join(save_root, 'masked_in.mp4'), masked_frame_for_save, fps=self.save_fps, quality=7)
-        imageio.mimwrite(os.path.join(save_root, 'inpaint_out.mp4'), comp_frames, fps=self.save_fps, quality=7)
+        imageio.mimwrite(os.path.join(save_root, "masked_in.mp4"), masked_frame_for_save, fps=self.save_fps, quality=7)
+        imageio.mimwrite(os.path.join(save_root, "inpaint_out.mp4"), comp_frames, fps=self.save_fps, quality=7)
         return None
 
-
-    def imwrite(
-        self,
-        img,
-        file_path,
-        params=None,
-        auto_mkdir=True
-    ) -> bool:
+    def imwrite(self, img, file_path, params=None, auto_mkdir=True) -> bool:
         if auto_mkdir:
             dir_name = os.path.abspath(os.path.dirname(file_path))
             os.makedirs(dir_name, exist_ok=True)
 
         return cv2.imwrite(file_path, img, params)
 
-
     def save_frame(
         self,
         comp_frames,
         video_length,
         out_size,
-        save_root : str,
+        save_root: str,
     ) -> None:
         for idx in range(video_length):
             f = comp_frames[idx]
-            f = cv2.resize(f, out_size, interpolation = cv2.INTER_CUBIC)
+            f = cv2.resize(f, out_size, interpolation=cv2.INTER_CUBIC)
             f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-            img_save_root = os.path.join(save_root, 'frames', str(idx).zfill(4)+'.png')
+            img_save_root = os.path.join(save_root, "frames", str(idx).zfill(4) + ".png")
             self.imwrite(f, img_save_root)
 
         return None
-
 
     def post_process(
         self,
@@ -408,10 +363,10 @@ class ProPainterImageProcessor(BaseImageProcessor):
             self.save_frame(comp_frames, video_length, out_size, save_root)
 
         # Save the video.
-        if self.mode == 'video_outpainting':
-            comp_frames = [i[10:-10,10:-10] for i in comp_frames]
-            masked_frame_for_save = [i[10:-10,10:-10] for i in masked_frame_for_save]
-        elif self.mode == 'video_inpainting':
+        if self.mode == "video_outpainting":
+            comp_frames = [i[10:-10, 10:-10] for i in comp_frames]
+            masked_frame_for_save = [i[10:-10, 10:-10] for i in masked_frame_for_save]
+        elif self.mode == "video_inpainting":
             masked_frame_for_save = [cv2.resize(f, out_size) for f in masked_frame_for_save]
             comp_frames = [cv2.resize(f, out_size) for f in comp_frames]
         else:
@@ -421,21 +376,21 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         return None
 
+
 class Stack(object):
     def __init__(self, roll=False) -> None:
         self.roll = roll
 
     def __call__(self, img_group) -> np.ndarray:
         mode = img_group[0].mode
-        if mode == '1':
-            img_group = [img.convert('L') for img in img_group]
-            mode = 'L'
-        if mode == 'L':
+        if mode == "1":
+            img_group = [img.convert("L") for img in img_group]
+            mode = "L"
+        if mode == "L":
             return np.stack([np.expand_dims(x, 2) for x in img_group], axis=2)
-        elif mode == 'RGB':
+        elif mode == "RGB":
             if self.roll:
-                return np.stack([np.array(x)[:, :, ::-1] for x in img_group],
-                                axis=2)
+                return np.stack([np.array(x)[:, :, ::-1] for x in img_group], axis=2)
             else:
                 return np.stack(img_group, axis=2)
         else:
@@ -443,8 +398,9 @@ class Stack(object):
 
 
 class ToTorchFormatTensor(object):
-    """ Converts a PIL.Image (RGB) or numpy.ndarray (H x W x C) in the range [0, 255]
-    to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0] """
+    """Converts a PIL.Image (RGB) or numpy.ndarray (H x W x C) in the range [0, 255]
+    to a torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0]"""
+
     def __init__(self, div=True) -> None:
         self.div = div
 
@@ -454,8 +410,7 @@ class ToTorchFormatTensor(object):
             img = torch.from_numpy(pic).permute(2, 3, 0, 1).contiguous()
         else:
             # handle PIL Image
-            img = torch.ByteTensor(torch.ByteStorage.from_buffer(
-                pic.tobytes()))
+            img = torch.ByteTensor(torch.ByteStorage.from_buffer(pic.tobytes()))
             img = img.view(pic.size[1], pic.size[0], len(pic.mode))
             # put it from HWC to CHW format
             # yikes, this transpose takes 80% of the loading time/CPU
