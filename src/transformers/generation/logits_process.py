@@ -15,14 +15,18 @@
 
 import inspect
 import math
+from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
+import regex
 import torch
+from lark import Lark, UnexpectedInput
+
+from transformers import LogitsProcessor
 
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
-
 
 logger = get_logger(__name__)
 
@@ -535,9 +539,7 @@ class EpsilonLogitsWarper(LogitsWarper):
 
         min_tokens_to_keep = int(min_tokens_to_keep)
         if min_tokens_to_keep < 1:
-            raise ValueError(
-                f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
-            )
+            raise ValueError(f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}")
 
         self.epsilon = epsilon
         self.filter_value = filter_value
@@ -612,9 +614,7 @@ class EtaLogitsWarper(LogitsWarper):
 
         min_tokens_to_keep = int(min_tokens_to_keep)
         if min_tokens_to_keep < 1:
-            raise ValueError(
-                f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}"
-            )
+            raise ValueError(f"`min_tokens_to_keep` has to be a strictly positive integer, but is {min_tokens_to_keep}")
 
         self.epsilon = torch.tensor(epsilon)
         self.filter_value = filter_value
@@ -774,9 +774,7 @@ class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
 
     def __init__(self, encoder_ngram_size: int, encoder_input_ids: torch.LongTensor):
         if not isinstance(encoder_ngram_size, int) or encoder_ngram_size <= 0:
-            raise ValueError(
-                f"`encoder_ngram_size` has to be a strictly positive integer, but is {encoder_ngram_size}"
-            )
+            raise ValueError(f"`encoder_ngram_size` has to be a strictly positive integer, but is {encoder_ngram_size}")
         self.ngram_size = encoder_ngram_size
         if len(encoder_input_ids.shape) == 1:
             encoder_input_ids = encoder_input_ids.unsqueeze(0)
@@ -1705,3 +1703,114 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         unconditional_logits = torch.nn.functional.log_softmax(logits[:, -1], dim=-1)
         out = self.guidance_scale * (scores - unconditional_logits) + unconditional_logits
         return out
+
+
+@dataclass
+class IntermediateParsingState:
+    active_terminal_names: List[str]
+    active_terminal_patterns: List[regex.Regex]
+    current_terminal_start_index: int
+
+    def __str__(self) -> str:
+        return f"({self.current_terminal_start_index}, {self.active_terminal_names})"
+
+    def __repr__(self) -> str:
+        return str(self)
+
+
+class CfgParsingStepper:
+    def __init__(self, parser: Lark, vocab, eos_token):
+        self.parser: Lark = parser
+        self.partial_token = ""
+        self.vocab = vocab
+        self.eos_token = eos_token
+        self.regex_map = self._create_terminal_regexes()
+
+    def _create_terminal_regexes(self):
+        """
+        Create a map from terminal names to regexes that match the terminal
+        """
+        terminal_regexes = {}
+        for terminal in self.parser.terminals:
+            if terminal.pattern:
+                terminal_regexes[terminal.name] = regex.compile(terminal.pattern.to_regexp())
+        terminal_regexes["$END"] = regex.compile(self.eos_token)
+        return terminal_regexes
+
+    def get_parsing_state(self, current_generation: str):
+        # Get the next parser tokens that would be valid to add to the input string according to the CFG
+        next_parser_tokens, token_start_index = self._get_next_parser_tokens(current_generation)
+        # Get the regexes for the next parser tokens
+        next_patterns = [self.regex_map[terminal] for terminal in next_parser_tokens]
+
+        return IntermediateParsingState(next_parser_tokens, next_patterns, token_start_index)
+
+    def _get_next_parser_tokens(self, input_str):
+        """
+        Get the next tokens that would be valid to add to the input string
+        :return: A list of tokens that would be valid to add to the input string, and the position in the input string where the next token would start
+        """
+        try:
+            # Try parsing until error or end of input
+            self.parser.parse(input_str)
+        except UnexpectedInput as e:
+            interactive = self.parser.parse_interactive(input_str)
+            try:
+                # Get the set of tokens that would be valid next
+                interactive.exhaust_lexer()
+            except UnexpectedInput as ee:
+                # Now, this exception means that we have characters that do not match any of the terminals (yet).
+                # This means that we have a partial token.
+                # Return the set of tokens that would be valid before that partial token
+                print("Second catch")
+                return interactive.accepts(), ee.pos_in_stream
+            # Return the token
+            return interactive.accepts(), e.pos_in_stream
+
+        # If we get here, the input is complete
+        return [], len(input_str)
+
+
+class CfgLogitsProcessor(LogitsProcessor):
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.all_tokens = self.tokenizer.convert_ids_to_tokens(range(self.tokenizer.vocab_size))
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # input_ids: B * num_beams x T
+        # scores: B * num_beams x V
+
+        # Decode sequences
+        decoded_sequences = self.tokenizer.batch_decode(input_ids, skip_special_tokens=True)
+
+        print(f"Decoded sequences: {decoded_sequences}")
+
+        # Get parsing states per sequence
+        parsing_states = [state.get_parsing_state(seq) for seq in decoded_sequences]
+        print(f"Parsing states: {parsing_states}")
+
+        valid_tokens = [
+            self._filter_tokens_by_regex(self.all_tokens, state.active_terminal_patterns) for state in parsing_states
+        ]
+        valid_token_ids = [
+            self.tokenizer.convert_tokens_to_ids(tokens) for tokens in valid_tokens
+        ]  # list of lists of token ids
+        print(f"Valid tokens: {valid_tokens}")
+
+        # Mask out scores
+        scores_mask = torch.ones_like(scores) * float("inf") * -1
+        for sequence_index, valid_token_ids_for_sequence in enumerate(valid_token_ids):
+            scores_mask[sequence_index, valid_token_ids_for_sequence] = 0
+
+        scores = scores + scores_mask
+
+        print(f"Argmax: {scores.argmax(dim=-1)}")
+
+        print("-" * 8)
+        return scores
+
+    def _filter_tokens_by_regex(self, tokens, regexes):
+        """
+        Filter tokens by regexes
+        """
+        return [token for token in tokens if any(regex.fullmatch(token, partial=True) for regex in regexes)]
