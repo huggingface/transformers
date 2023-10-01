@@ -1329,7 +1329,13 @@ class Kosmos2TextTransformer(nn.Module):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, present_key_value_states, all_hidden_states, all_self_attns, all_cross_attentions]
+                for v in [
+                    hidden_states,
+                    present_key_value_states,
+                    all_hidden_states,
+                    all_self_attns,
+                    all_cross_attentions,
+                ]
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
