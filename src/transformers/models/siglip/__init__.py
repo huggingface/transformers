@@ -17,6 +17,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_vision_available,
 )
 
 
@@ -31,6 +32,14 @@ _import_structure = {
 }
 
 try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_siglip"] = ["SiglipImageProcessor"]
+
+try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -41,9 +50,7 @@ else:
         "SiglipModel",
         "SiglipPreTrainedModel",
         "SiglipTextModel",
-        "SiglipTextModelWithProjection",
         "SiglipVisionModel",
-        "SiglipVisionModelWithProjection",
     ]
 
 if TYPE_CHECKING:
@@ -56,6 +63,13 @@ if TYPE_CHECKING:
     )
 
     try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+        from .image_processing_siglip import SiglipImageProcessor
+
+    try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
@@ -66,9 +80,7 @@ if TYPE_CHECKING:
             SiglipModel,
             SiglipPreTrainedModel,
             SiglipTextModel,
-            SiglipTextModelWithProjection,
             SiglipVisionModel,
-            SiglipVisionModelWithProjection,
         )
 
 else:

@@ -296,6 +296,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TCodeHifiGan",
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "TvpForVideoGrounding",
+    "SiglipVisionModel",
+    "SiglipTextModel",
 ]
 
 # DO NOT edit this list!

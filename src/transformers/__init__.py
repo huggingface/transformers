@@ -2819,9 +2819,7 @@ else:
             "SiglipModel",
             "SiglipPreTrainedModel",
             "SiglipTextModel",
-            "SiglipTextModelWithProjection",
             "SiglipVisionModel",
-            "SiglipVisionModelWithProjection",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -6729,9 +6727,7 @@ if TYPE_CHECKING:
             SiglipModel,
             SiglipPreTrainedModel,
             SiglipTextModel,
-            SiglipTextModelWithProjection,
             SiglipVisionModel,
-            SiglipVisionModelWithProjection,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (

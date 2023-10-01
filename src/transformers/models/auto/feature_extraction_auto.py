@@ -81,7 +81,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
-        ("siglip", "SiglipFeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("speecht5", "SpeechT5FeatureExtractor"),
         ("swiftformer", "ViTFeatureExtractor"),

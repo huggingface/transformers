@@ -252,18 +252,20 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     input_ids = torch.from_numpy(input_ids)
 
     with torch.no_grad():
-        model(input_ids=input_ids, pixel_values=pixel_values)
+        outputs = model(input_ids=input_ids, pixel_values=pixel_values)
 
-    # TODO assert values
-    # assert outputs.last_hidden_state[:, 0].shape == original_outputs.shape
-    # assert torch.allclose(outputs.last_hidden_state[:, 0], original_outputs, atol=1e-3)
+    # assert values
+    expected_slice = torch.tensor(
+        [[-2.9621, -2.1672, -1.7837], [-0.2713, 0.2910, -10.6595], [-13.6617, -13.1611, -17.4408]]
+    )
+    assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving image processor to {pytorch_dump_folder_path}")
+        # print(f"Saving processor to {pytorch_dump_folder_path}")
         # processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:

@@ -234,14 +234,8 @@ class SiglipTextEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
-        print("Shape of inputs_embeds: ", inputs_embeds.shape)
-        print("First values of embeddings:", inputs_embeds[0, :3, :3])
-
         position_embeddings = self.position_embedding(position_ids)
         embeddings = inputs_embeds + position_embeddings
-
-        print("Shape of embeddings after position embeddings: ", embeddings.shape)
-        print("First values of embeddings after position embeddings:", embeddings[0, :3, :3])
 
         return embeddings
 
@@ -360,22 +354,10 @@ class SiglipMLP(nn.Module):
         self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, hidden_states: torch.Tensor, print_values=False) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
-
-        if print_values:
-            print("Hidden states after first FC:", hidden_states[0, :3, :3])
-
         hidden_states = self.activation_fn(hidden_states)
-
-        if print_values:
-            print("Hidden states after gelu:", hidden_states[0, :3, :3])
-
         hidden_states = self.fc2(hidden_states)
-
-        if print_values:
-            print("Hidden states after second FC:", hidden_states[0, :3, :3])
-
         return hidden_states
 
 
@@ -395,7 +377,6 @@ class SiglipEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-        print_values: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -408,37 +389,19 @@ class SiglipEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
+
         hidden_states = self.layer_norm1(hidden_states)
-
-        if print_values:
-            print("Hidden states after layernorm:", hidden_states[0, :3, :3])
-
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
-
-        if print_values:
-            print("Hidden states after self-attention:", hidden_states[0, :3, :3])
-
         hidden_states = residual + hidden_states
-
-        if print_values:
-            print("Hidden states after first residual:", hidden_states[0, :3, :3])
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
-
-        if print_values:
-            print("Hidden states after second layernorm:", hidden_states[0, :3, :3])
-
-        hidden_states = self.mlp(hidden_states, print_values=print_values)
-
-        if print_values:
-            print("Hidden states after MLP:", hidden_states[0, :3, :3])
-
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -661,9 +624,6 @@ class SiglipEncoder(nn.Module):
 
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
-            if idx == 0:
-                print("First values of hidden states before layer", idx, ":", hidden_states[0, :3, :3])
-
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
@@ -686,13 +646,9 @@ class SiglipEncoder(nn.Module):
                     attention_mask,
                     causal_attention_mask,
                     output_attentions=output_attentions,
-                    print_values=idx == 0,
                 )
 
             hidden_states = layer_outputs[0]
-
-            if idx == 0:
-                print("First values of hidden states after layer", idx, ":", hidden_states[0, :3, :3])
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
