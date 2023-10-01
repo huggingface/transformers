@@ -9,10 +9,9 @@ from typing import Dict, List, Optional, Union
 import flax
 import jax
 import jax.numpy as jnp
-import librosa
 import numpy as np
 import optax
-from datasets import DatasetDict, load_dataset
+from datasets import DatasetDict, load_dataset, Audio
 from flax import jax_utils, traverse_util
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
@@ -102,9 +101,9 @@ class DataTrainingArguments:
             )
         },
     )
-    speech_file_column: Optional[str] = field(
-        default="file",
-        metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
+    audio_file_column: Optional[str] = field(
+        default="audio",
+        metadata={"help": "Column in the dataset that contains audio file. Defaults to 'audio'"},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
@@ -329,14 +328,20 @@ def main():
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, do_normalize=True
     )
 
+    # check that all files have the correct sampling rate
+    datasets = datasets.cast_column(data_args.audio_file_column, Audio(sampling_rate=feature_extractor.sampling_rate))
+
     def prepare_dataset(batch):
-        # check that all files have the correct sampling rate
-        batch["speech"], _ = librosa.load(batch[data_args.speech_file_column], sr=feature_extractor.sampling_rate)
+        batch["speech"] = batch[data_args.audio_file_column]['array']
         return batch
 
+    remove_columns_values = datasets["train"].column_names.copy()
+    if 'speech' in set(remove_columns_values):
+        remove_columns_values.remove('speech')
+    
     # load audio files into numpy arrays
     vectorized_datasets = datasets.map(
-        prepare_dataset, num_proc=data_args.preprocessing_num_workers, remove_columns=datasets["train"].column_names
+        prepare_dataset, num_proc=data_args.preprocessing_num_workers, remove_columns=remove_columns_values
     )
 
     # filter audio files that are too long
