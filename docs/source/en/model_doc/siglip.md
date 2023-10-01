@@ -29,7 +29,7 @@ Tips:
 - Usage of SigLIP is identical to [CLIP](clip). The only difference is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. 
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+The original code can be found [here](https://github.com/google-research/big_vision/tree/main).
 
 
 ## SiglipConfig
