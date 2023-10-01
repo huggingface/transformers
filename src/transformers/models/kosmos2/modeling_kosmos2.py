@@ -937,8 +937,7 @@ class KosmosTextAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(batch_size, 1, seq_length, src_len)}, but is {attention_mask.size()}"
                 )
-            # attn_weights = attn_weights.view(batch_size, self.num_heads, seq_length, src_len) + attention_mask
-            # attn_weights = attn_weights.view(batch_size * self.num_heads, seq_length, src_len)
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
