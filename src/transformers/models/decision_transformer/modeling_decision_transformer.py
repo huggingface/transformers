@@ -763,7 +763,6 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-                padding_mask = None
             encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_attention_mask = None
@@ -818,7 +817,7 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for layer_past
-                        return module(*inputs, use_cache, None, output_attentions, padding_mask=padding_mask)
+                        return module(*inputs, use_cache, None, output_attentions)
 
                     return custom_forward
 

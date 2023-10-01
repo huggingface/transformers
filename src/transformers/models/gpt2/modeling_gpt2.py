@@ -431,18 +431,19 @@ class GPT2FlashAttention2(GPT2Attention):
 
         # Compute attention using Flash Attention
         attn_weights = self._flash_attention_forward(
-            # make sure attention_mask is correctly computed
             query,
             key,
             value,
             attention_mask,
+            # or another way to determine query_length
+            query_length=query.size(-2),
             dropout=attention_dropout,
-            softmax_scale=None,  # You might need to provide a correct value here
+            softmax_scale=None,
         )
 
         # Reshape outputs back to GPT-2's expected format
         attn_output = attn_weights.reshape(
-            attn_weights.shape[0], attn_weights.shape[1], self.num_attention_heads * self.head_size
+            attn_weights.shape[0], attn_weights.shape[1], self.num_heads * self.head_dim
         )
         # This is GPT-2's projection layer
         attn_output = self.c_proj(attn_output)
@@ -475,6 +476,7 @@ class GPT2FlashAttention2(GPT2Attention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
+
         # Contains at least one padding token in the sequence
         if padding_mask is not None:
             batch_size = query_states.shape[0]
@@ -482,8 +484,17 @@ class GPT2FlashAttention2(GPT2Attention):
                 query_states, key_states, value_states, padding_mask, query_length
             )
 
+            print("Inside _flash_attention_forward")
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+            print("cu_seqlens_q Shape before squeeze:", cu_seqlens_q.shape)
+            cu_seqlens_q = cu_seqlens_q.squeeze()
+            print("cu_seqlens_q Shape after squeeze:", cu_seqlens_q.shape)
+
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+            print("Query States Shape:", query_states.shape)
+            print("Key States Shape:", key_states.shape)
+            print("Value States Shape:", value_states.shape)
 
             attn_output_unpad = flash_attn_varlen_func(
                 query_states,
@@ -1046,7 +1057,6 @@ class GPT2Model(GPT2PreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-                padding_mask = None
             encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_attention_mask = None
@@ -1101,7 +1111,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for layer_past
-                        return module(*inputs, use_cache, None, output_attentions, padding_mask=padding_mask)
+                        return module(*inputs, use_cache, None, output_attentions)
 
                     return custom_forward
 
@@ -1864,7 +1874,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.transformer(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
