@@ -1185,7 +1185,7 @@ class SiglipModel(SiglipPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = siglip_loss(logits_per_text)
+            raise NotImplementedError("SigLIP loss to be implemented")
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)

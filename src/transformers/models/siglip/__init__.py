@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_tokenizers_available,
     is_torch_available,
     is_vision_available,
 )
@@ -29,6 +30,7 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
+    "processing_siglip": ["SiglipProcessor"],
 }
 
 try:
@@ -53,6 +55,7 @@ else:
         "SiglipVisionModel",
     ]
 
+
 if TYPE_CHECKING:
     from .configuration_siglip import (
         SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -61,12 +64,14 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
+    from .processing_siglip import SiglipProcessor
 
     try:
         if not is_vision_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
+    else:
         from .image_processing_siglip import SiglipImageProcessor
 
     try:
@@ -82,6 +87,7 @@ if TYPE_CHECKING:
             SiglipTextModel,
             SiglipVisionModel,
         )
+
 
 else:
     import sys

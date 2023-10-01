@@ -45,6 +45,15 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] SiglipVisionConfig
 
+## SiglipImageProcessor
+
+[[autodoc]] SiglipImageProcessor
+    - preprocess
+
+## SiglipProcessor
+
+[[autodoc]] SiglipProcessor
+
 ## SiglipModel
 
 [[autodoc]] SiglipModel
@@ -55,16 +64,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## SiglipTextModel
 
 [[autodoc]] SiglipTextModel
-    - forward
-
-## SiglipTextModelWithProjection
-
-[[autodoc]] SiglipTextModelWithProjection
-    - forward
-
-## SiglipVisionModelWithProjection
-
-[[autodoc]] SiglipVisionModelWithProjection
     - forward
 
 
