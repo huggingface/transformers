@@ -876,13 +876,19 @@ class KosmosTextAttention(nn.Module):
         if add_inner_attn_layernorm:
             self.inner_attn_ln = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    # def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+    #     return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def _shape(self, projection: torch.Tensor) -> torch.Tensor:
+        new_projection_shape = projection.size()[:-1] + (self.num_heads, self.head_dim)
+        # move heads to 2nd position (B, T, H * D) -> (B, T, H, D) -> (B, H, T, D)
+        new_projection = projection.view(new_projection_shape).permute(0, 2, 1, 3)
+        return new_projection
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
@@ -904,16 +910,16 @@ class KosmosTextAttention(nn.Module):
             key_states = past_key_value[0]
             value_states = past_key_value[1]
         else:
-            key_states = self._shape(self.k(current_states))
-            value_states = self._shape(self.v(current_states))
+            key_states = self._shape(self.k_proj(current_states))
+            value_states = self._shape(self.v_proj(current_states))
             if past_key_value is not None and not is_cross_attention:
                 # reuse k, v, self_attention
                 key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
-        query_states = self._shape(self.q(hidden_states))
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
-        
+        query_states = self._shape(self.q_proj(hidden_states) * self.scaling)
+        attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2))
+
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -923,37 +929,24 @@ class KosmosTextAttention(nn.Module):
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
-            
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
+        src_len = key_states.size(2)
 
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+            if attention_mask.size() != (batch_size, 1, seq_length, src_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                    f"Attention mask should be of size {(batch_size, 1, seq_length, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            # attn_weights = attn_weights.view(batch_size, self.num_heads, seq_length, src_len) + attention_mask
+            # attn_weights = attn_weights.view(batch_size * self.num_heads, seq_length, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
 
         # Mask heads if we want to
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
+
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
         #  attn_output = torch.bmm(attn_probs, value_states) ?
         context_states = torch.matmul(attn_weights, value_states)
@@ -961,11 +954,11 @@ class KosmosTextAttention(nn.Module):
         context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
 
         if self.inner_attn_ln is not None:
-            attn_output = self.inner_attn_ln(attn_output)
+            context_states = self.inner_attn_ln(context_states)
 
         attn_output = self.out_proj(context_states)
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights, past_key_value
 
 
 class Kosmos2TextFFN(nn.Module):
@@ -1070,7 +1063,7 @@ class Kosmos2TextBlock(nn.Module):
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
-                key_value_states=encoder_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
@@ -1737,7 +1730,7 @@ class Kosmos2ImageToTextConnector(nn.Module):
 
         hidden_states, attn_weights, _ = self.x_attn(
             hidden_states=latent_query,
-            key_value_states=key_value_states,
+            encoder_hidden_states=key_value_states,
             past_key_value=None,
             attention_mask=None,
             output_attentions=None,
