@@ -471,7 +471,7 @@ class MistralFlashAttention2(MistralAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
             use_sliding_windows (`bool`, *optional*):
-                Whether to activate
+                Whether to activate sliding window attention.
         """
         # Contains at least one padding token in the sequence
         if padding_mask is not None:
