@@ -2480,7 +2480,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             token = use_auth_token
 
-        if token is not None and "token" not in adapter_kwargs:
+        if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
             adapter_kwargs["token"] = token
 
         if use_safetensors is None and not is_safetensors_available():
