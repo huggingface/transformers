@@ -135,6 +135,12 @@ class VitsConfig(PretrainedConfig):
             How random the duration prediction is. Larger values create more variation in the predicted durations.
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the output audio waveform is digitalized expressed in hertz (Hz).
+        discriminator_kernel_size (`int`, *optional*, defaults to 5):
+            Kernel size of the first channel of the 2D convolution layers used in the discriminator model.
+        discriminator_stride (`int`, *optional*, defaults to 3):
+            Stride of the first channel of the 2D convolution layers used in the discriminator model.
+        discriminator_periods (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
+            A tuple of integers defining the period of each sub-discriminator of the discriminator model.
 
     Example:
 
@@ -198,6 +204,9 @@ class VitsConfig(PretrainedConfig):
         noise_scale=0.667,
         noise_scale_duration=0.8,
         sampling_rate=16_000,
+        discriminator_kernel_size=5,
+        discriminator_stride=3,
+        discriminator_periods=[1,2,3,5,7,11],
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -245,6 +254,10 @@ class VitsConfig(PretrainedConfig):
         self.noise_scale_duration = noise_scale_duration
         self.sampling_rate = sampling_rate
 
+        self.discriminator_kernel_size = discriminator_kernel_size
+        self.discriminator_stride = discriminator_stride
+        self.discriminator_periods = discriminator_periods
+        
         if len(upsample_kernel_sizes) != len(upsample_rates):
             raise ValueError(
                 f"The length of `upsample_kernel_sizes` ({len(upsample_kernel_sizes)}) must match the length of "
