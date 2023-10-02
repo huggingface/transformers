@@ -362,15 +362,19 @@ class MistralFlashAttention2(MistralAttention):
 
         if past_key_value is not None:
             if use_sliding_windows and kv_seq_len > self.config.sliding_window:
-                slicing_tokens = kv_seq_len - self.config.sliding_window
+                slicing_tokens = (kv_seq_len - self.config.sliding_window) + 1
 
                 past_key = past_key_value[0]
                 past_value = past_key_value[1]
 
-                past_key = past_key[:, :, kv_seq_len-slicing_tokens:, :].contiguous()            
-                past_value = past_value[:, :, kv_seq_len-slicing_tokens:, :].contiguous()  
+                past_key = past_key[:, :, slicing_tokens:, :].contiguous()            
+                past_value = past_value[:, :, slicing_tokens:, :].contiguous()  
 
                 past_key_value = (past_key, past_value)
+
+                if padding_mask is not None:
+                    padding_mask = padding_mask[:, slicing_tokens:]
+                    padding_mask = torch.cat([padding_mask, torch.ones_like(padding_mask[:, -1:])], dim=-1)
 
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
@@ -492,11 +496,18 @@ class MistralFlashAttention2(MistralAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
     def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
         batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
+
+        # HACK: deep dive why we need this?
+        if kv_seq_len != padding_mask.shape[-1]:
+            padding_mask_num_tokens = padding_mask.shape[-1]
+            padding_mask = padding_mask[:, padding_mask_num_tokens-kv_seq_len:]
+
+        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
 
         key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
         value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
                 query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
