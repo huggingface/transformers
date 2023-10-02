@@ -15,7 +15,6 @@
 """PyTorch Falcon model."""
 
 import math
-import os
 from typing import Optional, Tuple, Union
 
 import torch
@@ -39,7 +38,6 @@ from ...utils import (
     is_flash_attn_available,
     logging,
 )
-from ..auto.configuration_auto import sanitize_code_revision
 from .configuration_falcon import FalconConfig
 
 
@@ -975,37 +973,6 @@ class FalconPreTrainedModel(PreTrainedModel):
                 layer_past[1].view(batch_size_times_num_heads, kv_length, head_dim),
             )
             for layer_past in past_key_value
-        )
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
-        *model_args,
-        config: Optional[Union[str, os.PathLike]] = None,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
-        ignore_mismatched_sizes: bool = False,
-        force_download: bool = False,
-        local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
-        revision: str = "main",
-        use_safetensors: bool = None,
-        **kwargs,
-    ):
-        revision = sanitize_code_revision(pretrained_model_name_or_path, revision, kwargs.get("trust_remote_code"))
-
-        return super().from_pretrained(
-            pretrained_model_name_or_path,
-            *model_args,
-            config=config,
-            cache_dir=cache_dir,
-            ignore_mismatched_sizes=ignore_mismatched_sizes,
-            force_download=force_download,
-            local_files_only=local_files_only,
-            token=token,
-            revision=revision,
-            use_safetensors=use_safetensors,
-            **kwargs,
         )
 
 
