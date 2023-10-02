@@ -353,7 +353,7 @@ class MistralFlashAttention2(MistralAttention):
             kv_seq_len += past_key_value[0].shape[-2]
 
         # Extrapolate the RoPE in case of sliding windows
-        rotary_seq_len = max(kv_seq_len, position_ids.max().item()) + 1
+        rotary_seq_len = max(kv_seq_len, position_ids[:, -1].max().item()) + 1
         cos, sin = self.rotary_emb(value_states, seq_len=rotary_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
