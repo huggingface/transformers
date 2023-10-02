@@ -76,6 +76,10 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         requires_backends(self, "g2p_en")
+
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.encoder = json.load(vocab_handle)
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -87,9 +91,6 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         import g2p_en
 
         self.g2p = g2p_en.G2p()
-
-        with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
 
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.should_strip_spaces = should_strip_spaces
