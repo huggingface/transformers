@@ -27,7 +27,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BackboneOutput,
     BaseModelOutput,
     BaseModelOutputWithPooling,
     ImageClassifierOutput,
@@ -35,6 +34,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -66,7 +66,7 @@ DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-class Dinov2BackboneOutput(BackboneOutput):
+class Dinov2BackboneOutput(ModelOutput):
     """
     Class for the outputs of [`Dinov2Backbone`].
 
@@ -865,8 +865,7 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
-                cls_token = hidden_state[:, 0]
-                cls_tokens += (cls_token,)
+                cls_tokens += (hidden_state[:, 0],)
                 hidden_state = hidden_state[:, 1:]
                 if self.config.reshape_hidden_states:
                     # this was actually a bug in the original implementation that we copied here,
@@ -877,11 +876,13 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 
+        print("Number of feature maps:", len(feature_maps))
+
         if not return_dict:
             if output_hidden_states:
-                output = (feature_maps,) + outputs[1:]
+                output = (feature_maps,) + (cls_tokens,) + outputs[1:]
             else:
-                output = (feature_maps,) + outputs[2:]
+                output = (feature_maps,) + (cls_tokens,) + outputs[2:]
             return output
 
         return Dinov2BackboneOutput(
