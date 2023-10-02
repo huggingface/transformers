@@ -1238,11 +1238,7 @@ class PredictionHead(nn.Module):
         head_dim = config.num_input_channels * config.d_model
 
         self.flatten = nn.Flatten(start_dim=1)
-        # if distribution_output is None:
-        #     self.linear = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)
-        #     self.args_proj = None
-        # else:                        
-        #     self.args_proj = distribution_output.get_parameter_projection(head_dim)
+
         if distribution_output is None:
             self.projection = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)            
         else:                        
@@ -1324,7 +1320,10 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 loss_val = weighted_average(loss_val)
             else:                
                 loss_val = self.loss(y_hat, future_values)
-        return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=model_output.hidden_states)
+        return PatchTSTOutput(loss=loss_val, 
+                              prediction_output=y_hat, 
+                              hidden_states=model_output.hidden_states
+                              )
 
 
 @dataclass
@@ -1359,7 +1358,7 @@ class PatchTSTForForecastingOutput(ModelOutput):
 
 
 class ForecastHead(nn.Module):
-    def __init__(self, config: PatchTSTConfig):
+    def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
 
         self.shared_projection = config.shared_projection
@@ -1369,16 +1368,32 @@ class ForecastHead(nn.Module):
         head_dim = config.d_model if self.pooling else config.d_model * config.num_patches
 
         if not self.shared_projection:
-            self.linears = nn.ModuleList()
+            # if each channel has its own head
+            self.projections = nn.ModuleList()
             self.dropouts = nn.ModuleList()
             self.flattens = nn.ModuleList()
             for i in range(self.num_input_channels):
                 self.flattens.append(nn.Flatten(start_dim=2))
-                self.linears.append(nn.Linear(head_dim, config.prediction_length))
+                if distribution_output is None:
+                    # use linear head
+                    self.projections.append(
+                        nn.Linear(head_dim, config.prediction_length)
+                        )
+                else:
+                    # use distribution head
+                    self.projections.append(
+                        distribution_output.get_parameter_projection(head_dim)
+                        )
                 self.dropouts.append(nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity())
         else:
+            # all the channels share the same head
             self.flatten = nn.Flatten(start_dim=2)
-            self.linear = nn.Linear(head_dim, config.prediction_length)
+            if distribution_output is None:
+                # use linear head
+                self.projection = nn.Linear(head_dim, config.prediction_length)
+            else:
+                # use distribution head
+                self.projection = distribution_output.get_parameter_projection(head_dim)
             self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
 
     def forward(self, x: torch.Tensor):
@@ -1402,16 +1417,19 @@ class ForecastHead(nn.Module):
             x_out = []
             for i in range(self.num_input_channels):
                 z = self.flattens[i](y[:, i, :])  # y: [bs x (d_model * num_patches)] or [bs x d_model)]
-                z = self.linears[i](z)  # z: [bs x forecast_len]
                 z = self.dropouts[i](z)
+                z = self.projections[i](z)  # z: [bs x forecast_len]  or tuple ([bs x forecast_len], [bs x forecast_len]) if using distribution head              
                 x_out.append(z)
             x = torch.stack(x_out, dim=1)  # x: [bs x nvars x forecast_len]
         else:
             z = self.flatten(y)  # z: [bs x nvars x (d_model * num_patches)] or [bs x nvars x d_model)]
             z = self.dropout(z)
-            x = self.linear(z)  # x: [bs x nvars x forecast_len]
+            x = self.projection(z)  # x: [bs x nvars x forecast_len] or tuple ([bs x nvars x forecast_len], [bs x nvars x forecast_len]) if using distribution head
 
-        x = x.transpose(2, 1)  # [bs x forecast_len x nvars]
+        if isinstance(x, tuple):
+            x = (z.transpose(2,1) for z in x)   # ([bs x forecast_len x nvars], [bs x forecast_len x nvars])
+        else:
+            x = x.transpose(2, 1)  # [bs x forecast_len x nvars]
 
         return x
 
@@ -1421,8 +1439,22 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
         self.model = PatchTSTModel(config)
-        self.head = ForecastHead(config)
-        self.loss = nn.MSELoss(reduction="mean")
+
+        if config.loss == "mse":
+            self.loss = nn.MSELoss(reduction="mean")
+            self.distribution_output = None
+        else:
+            self.loss = nll
+            if config.distribution_output == "student_t":
+                self.distribution_output = StudentTOutput(dim=config.prediction_length)
+            elif config.distribution_output == "normal":
+                self.distribution_output = NormalOutput(dim=config.prediction_length)
+            elif config.distribution_output == "negative_binomial":
+                self.distribution_output = NegativeBinomialOutput(dim=config.prediction_length)
+            else:
+                raise ValueError(f"Unknown distribution output {config.distribution_output}")
+
+        self.head = ForecastHead(config, self.distribution_output)        
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1438,19 +1470,30 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        model_output = self.model(
-            past_values, past_observed_mask=past_observed_mask, output_hidden_states=output_hidden_states
-        )
+        model_output = self.model(past_values, 
+                                  past_observed_mask=past_observed_mask, 
+                                  output_hidden_states=output_hidden_states
+                                 )
 
         y_hat = self.head(model_output.last_hidden_state)
-        y_hat = y_hat * model_output.scale + model_output.loc
-
+        
         loss_val = None
         if future_values is not None:
-            loss_val = self.loss(y_hat, future_values)
-        return PatchTSTForForecastingOutput(
-            loss=loss_val, forecast_outputs=y_hat, hidden_states=model_output.hidden_states
-        )
+            if self.distribution_output:
+                distribution = self.distribution_output.distribution(y_hat, 
+                                                                     loc=model_output.loc,
+                                                                     scale=model_output.scale)
+                loss_val = self.loss(distribution, future_values)
+                # take average of the loss
+                loss_val = weighted_average(loss_val)
+            else:
+                y_hat = y_hat * model_output.scale + model_output.loc
+                loss_val = self.loss(y_hat, future_values)
+
+        return PatchTSTForForecastingOutput(loss=loss_val, 
+                                            forecast_outputs=y_hat, 
+                                            hidden_states=model_output.hidden_states
+                                            )
 
 
 class RegressionHead(nn.Module):
@@ -1514,4 +1557,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         loss_val = None
         if labels is not None:
             loss_val = self.loss(y_hat, labels)
-        return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=model_output.hidden_states)
+        return PatchTSTOutput(loss=loss_val, 
+                              prediction_output=y_hat, 
+                              hidden_states=model_output.hidden_states
+                              )
