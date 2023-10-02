@@ -32,12 +32,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .configuration_auto import (
-    AutoConfig,
-    model_type_to_module_name,
-    replace_list_option_in_docstrings,
-    sanitize_code_revision,
-)
+from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
 
 logger = logging.get_logger(__name__)
@@ -470,9 +465,6 @@ class _BaseAutoModelClass:
         code_revision = kwargs.pop("code_revision", None)
         commit_hash = kwargs.pop("_commit_hash", None)
         adapter_kwargs = kwargs.pop("adapter_kwargs", None)
-
-        revision = hub_kwargs.pop("revision", None)
-        hub_kwargs["revision"] = sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code)
 
         token = hub_kwargs.pop("token", None)
         use_auth_token = hub_kwargs.pop("use_auth_token", None)
