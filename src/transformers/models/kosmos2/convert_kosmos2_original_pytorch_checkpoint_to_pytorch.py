@@ -39,7 +39,7 @@ def rename_key(key):
     key = re.sub(r"\.layers\.", ".model.layers.", key)
     key = re.sub(r"^text_model.layer_norm\.", "text_model.model.layer_norm.", key)
     key = re.sub(r"^text_model.output_projection\.", "text_model.lm_head.", key)
-    key = re.sub(r"^img_connector\.", "image_to_text_connector.", key)
+    key = re.sub(r"^img_connector\.", "image_to_text_projection.", key)
     key = rename_vision_key(key)
 
     return key

@@ -270,7 +270,7 @@ class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = Kosmos2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Kosmos2Config, hidden_size=37)
 
-    # overwrite from test_modeling_common to skip `image_to_text_connector.latent_query`
+    # overwrite from test_modeling_common to skip `image_to_text_projection.latent_query`
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -279,7 +279,7 @@ class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if name == "image_to_text_connector.latent_query":
+                    if name == "image_to_text_projection.latent_query":
                         # The original code use ` nn.Parameter(torch.randn(...))` for which this test won't pass.
                         continue
                     self.assertIn(
