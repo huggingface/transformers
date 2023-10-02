@@ -56,7 +56,6 @@ class PhiModelTester:
         hidden_size=256,
         num_hidden_layers=2,
         num_attention_heads=4,
-        num_key_value_heads=4,
         intermediate_size=37,
         hidden_act="gelu_new",
         resid_pdrop=0.1,
@@ -78,7 +77,6 @@ class PhiModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.resid_pdrop = resid_pdrop
@@ -115,7 +113,6 @@ class PhiModelTester:
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             resid_pdrop=self.resid_pdrop,

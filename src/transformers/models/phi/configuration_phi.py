@@ -53,8 +53,6 @@ class PhiConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*, defaults to 32):
-            This is the number of key_value heads. If it is not specified, will default to `num_attention_heads`.
         resid_pdrop (`float`, *optional*, defaults to 0.0):
             Dropout probability for self attention and mlp outputs.
         embd_pdrop (`float`, *optional*, defaults to 0.0):
@@ -105,8 +103,7 @@ class PhiConfig(PretrainedConfig):
         hidden_size=2048,
         intermediate_size=8192,
         num_hidden_layers=24,
-        num_attention_heads=16,
-        num_key_value_heads=16,
+        num_attention_heads=32,
         resid_pdrop=0.0,
         embd_pdrop=0.0,
         pretraining_tp=1,
@@ -128,7 +125,6 @@ class PhiConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
         self.pretraining_tp = pretraining_tp
