@@ -1897,28 +1897,9 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
 
                 comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
-            ## to be removed
         return ProPainterFrameModelingOutput(
             reconstructed_frames=comp_frames,
         )
-        import os
-
-        out_size = (w, h)
-
-        def imwrite(img, file_path, params=None, auto_mkdir=True):
-            if auto_mkdir:
-                dir_name = os.path.abspath(os.path.dirname(file_path))
-                os.makedirs(dir_name, exist_ok=True)
-            return cv2.imwrite(file_path, img, params)
-
-        for idx in range(video_length):
-            f = comp_frames[idx]
-            f = cv2.resize(f, out_size, interpolation=cv2.INTER_CUBIC)
-            f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-            img_save_root = os.path.join("./", "frames", str(idx).zfill(4) + ".png")
-            imwrite(f, img_save_root)
-
-        return
 
     def get_ref_index(self, mid_neighbor_id, neighbor_ids, length, ref_stride=10, ref_num=-1):
         ref_index = []

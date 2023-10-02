@@ -4605,6 +4605,7 @@ if TYPE_CHECKING:
         POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Pop2PianoConfig,
     )
+    from .models.propainter import PROPAINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, ProPainterConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -4693,7 +4694,6 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
-    from .models.propainter import PROPAINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, ProPainterConfig
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
@@ -5045,6 +5045,7 @@ if TYPE_CHECKING:
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
+        from .models.propainter import ProPainterImageProcessor
         from .models.pvt import PvtImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
@@ -5057,7 +5058,6 @@ if TYPE_CHECKING:
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
-        from .models.propainter import ProPainterImageProcessor
 
     # Modeling
     try:
@@ -6299,6 +6299,12 @@ if TYPE_CHECKING:
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
         )
+        from .models.propainter import (
+            PROPAINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ProPainterForImageInPainting,
+            ProPainterModel,
+            ProPainterPreTrainedModel,
+        )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ProphetNetDecoder,
@@ -6802,12 +6808,6 @@ if TYPE_CHECKING:
             XmodForTokenClassification,
             XmodModel,
             XmodPreTrainedModel,
-        )
-        from .models.propainter import (
-            PROPAINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ProPainterForImageInPainting,
-            ProPainterModel,
-            ProPainterPreTrainedModel,
         )
         from .models.yolos import (
             YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST,

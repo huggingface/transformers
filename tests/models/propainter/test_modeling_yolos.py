@@ -46,7 +46,7 @@ class YolosModelTester:
         self,
         parent,
         batch_size=13,
-        frames = 10,
+        frames=10,
         image_size=[30, 30],
         patch_size=2,
         num_channels=3,
@@ -93,7 +93,9 @@ class YolosModelTester:
         self.expected_seq_len = num_patches + 1 + self.num_detection_tokens
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.frames, self.num_channels, self.image_size[0], self.image_size[1]])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.frames, self.num_channels, self.image_size[0], self.image_size[1]]
+        )
 
         labels = None
 
