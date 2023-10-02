@@ -25,7 +25,7 @@ Let's install the libraries needed for distillation and evaluating the process.
 pip install transformers datasets accelerate tensorboard evaluate --upgrade
 ```
 
-In this example, we are using the `microsoft/resnet-50` model, trained with ImageNet-1k dataset with a resolution of 224x224. You can see that feature extractor returns the same output below.
+In this example, we are using the `microsoft/resnet-50` model, trained with ImageNet-1k dataset with a resolution of 224x224.
 
 ```python
 from PIL import Image
@@ -57,7 +57,7 @@ def process(examples):
 processed_datasets = dataset.map(process, batched=True)
 ```
 
-Essentially, we want the student to mimic the teacher. To achieve this, we first get the logits output by the teacher and the student. Then, we divide each of them by the parameter `temperature`, which controls the importance of each soft target. We will use the KL loss to compute the divergence between the student and teacher. A parameter called `lambda` weights the importance of the distillation loss. In this example, we will use `temperature=5` and `lambda=0.5`.
+Essentially, we want the student model (a randomly initialized MobileNet) to mimic the teacher model (pre-trained ResNet). To achieve this, we first get the logits output by the teacher and the student. Then, we divide each of them by the parameter `temperature`, which controls the importance of each soft target. We will use the KL loss to compute the divergence between the student and teacher. A parameter called `lambda` weights the importance of the distillation loss. In this example, we will use `temperature=5` and `lambda=0.5`.
 
 
 ```python
