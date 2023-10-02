@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """ Testing suite for the PyTorch Phi model. """
 
 
@@ -298,28 +299,46 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 @slow
 @require_torch
 class PhiIntegrationTest(unittest.TestCase):
-    def test_model_7b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = PhiForCausalLM.from_pretrained("microsoft/phi-1-hf", device_map="auto")
-        out = model(torch.tensor([input_ids]))
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-6.6550, -4.1227, -4.9859, -3.2406, 0.8262, -3.0033, 1.2964, -3.3699]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        # fmt: off
-        EXPECTED_SLICE = torch.tensor([-12.8281, -7.4453, -0.4639, -8.0625, -7.2500, -8.0000, -6.4883, -7.7695, -7.8438, -7.0312, -6.2188, -7.1328, -1.8496, 1.9961, -8.6250, -6.7227, -12.8281, -6.9492, -7.0742, -7.7852, -7.5820, -7.9062, -6.9375, -7.9805, -8.3438, -8.1562, -8.0469, -7.6250, -7.7422, -7.3398,])
-        # fmt: on
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
+    def test_model_phi_1_logits(self):
+        input_ids = {"input_ids": torch.tensor([[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device)}
 
-    def test_model_13b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = PhiForCausalLM.from_pretrained("meta-phi/Phi-2-13b-hf", device_map="auto")
-        out = model(torch.tensor(input_ids))
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.0622, -1.2794, -1.1638, -0.9788, -1.4603, -1.0238, -1.7893, -1.4411]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
+        model = PhiForCausalLM.from_pretrained("susnato/phi-1_dev").to(torch_device)
+        model.eval()
+
+        output = model(**input_ids).logits
         # fmt: off
-        EXPECTED_SLICE = torch.tensor([-8.1406, -8.0547, 2.7461, -1.2344, -0.1448, -1.8262, -1.0020, -1.8154, -1.6895, -1.8516, -2.3574, -0.9277, 3.7598, 6.5742, -1.2998, -0.1177, -8.1406, -2.9688, -2.9199, -3.1699, -3.5254, -2.3555, -2.7988, -3.4141, -2.8262, -4.5195, -3.3379, -3.3164, -2.7832, -3.0273])
+        EXPECTED_OUTPUT = torch.tensor([[2.2671,  6.7684, -2.0107, -1.2440, -1.5335, -2.3828,  6.9186,  6.4245,
+                                         3.1548,  0.9998,  0.0760,  4.4653,  4.9857,  4.2956,  1.2308, -1.4178,
+                                         0.1361,  0.5191, -0.5699, -2.2201, -3.0750, -3.9600, -4.5936, -3.7394,
+                                         -2.7777,  6.1874, -0.4148, -1.5684, -0.5967,  0.2395],
+                                        [1.7004,  4.0383,  0.0546,  0.4530, -0.3619, -0.9021,  1.8355,  1.3587,
+                                         1.2406,  2.5775, -0.8834,  5.1910,  4.2565,  4.1406,  3.0752, -0.9099,
+                                         1.1595,  0.0264,  0.3243, -1.1803, -1.3945, -2.1406, -3.9939, -1.4438,
+                                         -2.9546,  3.9204,  1.0851, -1.0598, -1.7819, -0.4827]
+                                        ]
+                                       ).to(torch_device)
         # fmt: on
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
+
+        self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
+
+    def test_model_phi_1_5_logits(self):
+        input_ids = {"input_ids": torch.tensor([[1212,  318,  281, 1672, 2643,  290,  428,  318,  257, 1332]], dtype=torch.long, device=torch_device)}
+
+        model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev").to(torch_device)
+        model.eval()
+
+        output = model(**input_ids).logits
+        # fmt: off
+        EXPECTED_OUTPUT = torch.tensor([[12.2922, 13.3507,  8.6963,  9.1355,  9.3502,  9.2667, 14.2027, 13.1363,
+                                         13.5446, 11.1337,  9.9279, 16.7195, 13.0768, 14.9141, 11.9965,  8.0233,
+                                         10.3129, 10.6118, 10.0204,  9.3827,  8.8344,  8.2806,  8.0153,  8.0540,
+                                         7.0964, 16.5743, 11.1256,  9.6987, 11.4770, 10.5440],
+                                        [12.3323, 14.6050,  8.9986,  8.1580,  9.5654,  6.6728, 12.5966, 12.6662,
+                                         12.2784, 11.7522,  8.2039, 16.3102, 11.2203, 13.6088, 12.0125,  9.1021,
+                                         9.8216, 10.0987,  9.0926,  8.4260,  8.8009,  7.6547,  6.8075,  7.7881,
+                                         7.4501, 15.7451, 10.5053,  8.3129, 10.0027,  9.2612]
+                                        ]
+                                       ).to(torch_device)
+        # fmt: on
+
+        self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))

@@ -177,14 +177,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     q1, q2 = q_rot.chunk(2, dim=-1)
     k1, k2 = k_rot.chunk(2, dim=-1)
     seqlen = q.shape[1]
-    print(cos.shape, sin.shape, seqlen)
     cos, sin = cos[:, :seqlen].unsqueeze(2), sin[:, :seqlen].unsqueeze(2)
 
     # Casts to fp32 to prevent fp16 overflow issues and to match outputs
     q1, q2, k1, k2, cos, sin = [t.to(dtype=torch.float32) for t in [q1, q2, k1, k2, cos, sin]]
 
     # Computes the new keys and queries, recasting to original dtype
-    print(q1.shape, q2.shape, k1.shape, k2.shape, cos.shape, sin.shape)
     q_rot = torch.cat([q1 * cos - q2 * sin, q1 * sin + q2 * cos], axis=-1).to(q.dtype)
     k_rot = torch.cat([k1 * cos - k2 * sin, k1 * sin + k2 * cos], axis=-1).to(q.dtype)
 
