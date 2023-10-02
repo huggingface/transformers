@@ -18,8 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Mistral model."""
-import math
 import inspect
+import math
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -358,7 +358,11 @@ class MistralFlashAttention2(MistralAttention):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        use_sliding_windows = _is_flash_using_sliding_windows and hasattr(self.config, "sliding_window") is not None and kv_seq_len > self.config.sliding_window
+        use_sliding_windows = (
+            _is_flash_using_sliding_windows
+            and hasattr(self.config, "sliding_window") is not None
+            and kv_seq_len > self.config.sliding_window
+        )
 
         if not _is_flash_using_sliding_windows:
             logger.warning_once(
@@ -374,8 +378,8 @@ class MistralFlashAttention2(MistralAttention):
                 past_key = past_key_value[0]
                 past_value = past_key_value[1]
 
-                past_key = past_key[:, :, slicing_tokens:, :].contiguous()            
-                past_value = past_value[:, :, slicing_tokens:, :].contiguous()  
+                past_key = past_key[:, :, slicing_tokens:, :].contiguous()
+                past_value = past_value[:, :, slicing_tokens:, :].contiguous()
 
                 past_key_value = (past_key, past_value)
 
@@ -418,8 +422,16 @@ class MistralFlashAttention2(MistralAttention):
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
-        
-        attn_output = self._flash_attention_forward(query_states,  key_states,  value_states, padding_mask, q_len, dropout=dropout_rate,  use_sliding_windows=use_sliding_windows)
+
+        attn_output = self._flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            padding_mask,
+            q_len,
+            dropout=dropout_rate,
+            use_sliding_windows=use_sliding_windows,
+        )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -429,9 +441,16 @@ class MistralFlashAttention2(MistralAttention):
 
         return attn_output, attn_weights, past_key_value
 
-
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None, use_sliding_windows=False
+        self,
+        query_states,
+        key_states,
+        value_states,
+        padding_mask,
+        query_length,
+        dropout=0.0,
+        softmax_scale=None,
+        use_sliding_windows=False,
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -489,7 +508,7 @@ class MistralFlashAttention2(MistralAttention):
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
                     causal=True,
-                    window_size=(self.config.sliding_window, self.config.sliding_window)
+                    window_size=(self.config.sliding_window, self.config.sliding_window),
                 )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
@@ -499,7 +518,15 @@ class MistralFlashAttention2(MistralAttention):
                     query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
                 )
             else:
-                attn_output = flash_attn_func(query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True, window_size=(self.config.sliding_window, self.config.sliding_window))
+                attn_output = flash_attn_func(
+                    query_states,
+                    key_states,
+                    value_states,
+                    dropout,
+                    softmax_scale=softmax_scale,
+                    causal=True,
+                    window_size=(self.config.sliding_window, self.config.sliding_window),
+                )
 
         return attn_output
 
@@ -510,7 +537,7 @@ class MistralFlashAttention2(MistralAttention):
         # by slicing it on the proper place
         if kv_seq_len != padding_mask.shape[-1]:
             padding_mask_num_tokens = padding_mask.shape[-1]
-            padding_mask = padding_mask[:, padding_mask_num_tokens-kv_seq_len:]
+            padding_mask = padding_mask[:, padding_mask_num_tokens - kv_seq_len :]
 
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
 
