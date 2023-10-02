@@ -358,10 +358,17 @@ class MistralFlashAttention2(MistralAttention):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        use_sliding_windows = _is_flash_using_sliding_windows and self.config.sliding_window is not None and kv_seq_len > self.config.sliding_window
+        use_sliding_windows = _is_flash_using_sliding_windows and hasattr(self.config, "sliding_window") is not None and kv_seq_len > self.config.sliding_window
+
+        if not _is_flash_using_sliding_windows:
+            logger.warning_once(
+                "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
+                " make sure to upgrade flash-attn library."
+            )
 
         if past_key_value is not None:
-            if use_sliding_windows and kv_seq_len > self.config.sliding_window:
+            # Activate slicing cache only if the config has a value `sliding_windows` attribute
+            if hasattr(self.config, "sliding_window") and kv_seq_len > self.config.sliding_window:
                 slicing_tokens = (kv_seq_len - self.config.sliding_window) + 1
 
                 past_key = past_key_value[0]
@@ -444,6 +451,8 @@ class MistralFlashAttention2(MistralAttention):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+            use_sliding_windows (`bool`, *optional*):
+                Whether to activate
         """
         # Contains at least one padding token in the sequence
         if padding_mask is not None:
