@@ -293,8 +293,8 @@ class FastSpeech2ConformerLengthRegulator(nn.Module):
         max_len = torch.sum(duration_labels, dim=1).max()
 
         # Create a padded tensor to hold the results
-        hidden_states = encoded_embeddings.new_full(
-            (encoded_embeddings.size(0), max_len, encoded_embeddings.size(2)), 0.0
+        hidden_states = torch.full((encoded_embeddings.size(0), max_len, encoded_embeddings.size(2)), 0.0).to(
+            encoded_embeddings.device
         )
 
         # Loop through the batch and fill in the data
