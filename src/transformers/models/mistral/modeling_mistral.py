@@ -373,13 +373,19 @@ class MistralFlashAttention2(MistralAttention):
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
             if hasattr(self.config, "sliding_window") and kv_seq_len > self.config.sliding_window:
-                slicing_tokens = (kv_seq_len - self.config.sliding_window) + 1
+                slicing_tokens = (kv_seq_len - self.config.sliding_window)
 
                 past_key = past_key_value[0]
                 past_value = past_key_value[1]
 
                 past_key = past_key[:, :, slicing_tokens:, :].contiguous()
                 past_value = past_value[:, :, slicing_tokens:, :].contiguous()
+
+                if past_key.shape[-2] != self.config.sliding_window - 1:
+                    raise ValueError(
+                       f"past key much have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got"
+                       f" {past_key.shape}"
+                    )
 
                 past_key_value = (past_key, past_value)
 
