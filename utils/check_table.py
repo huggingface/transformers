@@ -173,7 +173,12 @@ def get_model_table_from_auto_modules() -> str:
 
     # Let's build that table!
     model_names = list(model_name_to_config.keys())
+
+    # MaskFormerSwin and TimmBackbone are backbones and so not meant to be loaded and used on their own. Instead, they define architectures which can be loaded using the AutoBackbone API.
+    names_to_exclude = ["MaskFormerSwin", "TimmBackbone"]
+    model_names = [name for name in model_names if name not in names_to_exclude]
     model_names.sort(key=str.lower)
+
     columns = ["Model", "PyTorch support", "TensorFlow support", "Flax Support"]
     # We'll need widths to properly display everything in the center (+2 is to leave one extra space on each side).
     widths = [len(c) + 2 for c in columns]

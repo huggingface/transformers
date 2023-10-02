@@ -18,7 +18,7 @@ import inspect
 import math
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -47,6 +47,9 @@ from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
 
+
+if TYPE_CHECKING:
+    from ...generation.streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
 
@@ -1185,6 +1188,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         synced_gpus: Optional[bool] = None,
+        streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ):
         """
@@ -1225,6 +1229,9 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1303,8 +1310,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
             logger.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
-                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
-                UserWarning,
+                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
@@ -1335,6 +1341,9 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             pad_token_id=generation_config.decoder_start_token_id,
             max_length=generation_config.max_length,
         )
+
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
 
         # stash the delay mask so that we don't have to recompute it in each forward pass
         model_kwargs["delay_pattern_mask"] = delay_pattern_mask
@@ -1387,6 +1396,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -1412,6 +1422,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -2186,6 +2197,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         synced_gpus: Optional[bool] = None,
+        streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ):
         """
@@ -2226,6 +2238,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2334,8 +2349,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if has_default_max_length and generation_config.max_new_tokens is None:
             logger.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
-                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
-                UserWarning,
+                "to control the generation length. We recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
@@ -2367,6 +2381,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         )
         # stash the delay mask so that we don't have to recompute in each forward pass
         model_kwargs["decoder_delay_pattern_mask"] = decoder_delay_pattern_mask
+
+        # input_ids are ready to be placed on the streamer (if used)
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
 
         # 7. determine generation mode
         is_greedy_gen_mode = (
@@ -2416,6 +2434,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -2442,6 +2461,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 

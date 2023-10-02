@@ -475,8 +475,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         Returns whether this model can generate sequences with `.generate()`. Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
-        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
-        if "GenerationMixin" in str(cls.prepare_inputs_for_generation):
+        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation.
+        # Alternativelly, the model can also have a custom `generate` function.
+        if "GenerationMixin" in str(cls.prepare_inputs_for_generation) and "GenerationMixin" in str(cls.generate):
             return False
         return True
 
@@ -621,6 +622,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         _do_init = kwargs.pop("_do_init", True)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
+
+        # Not relevant for Flax Models
+        _ = kwargs.pop("adapter_kwargs", None)
 
         if use_auth_token is not None:
             warnings.warn(

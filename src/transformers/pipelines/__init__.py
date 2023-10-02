@@ -29,7 +29,7 @@ from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
-from ..models.auto.modeling_auto import AutoModelForDepthEstimation
+from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
@@ -64,6 +64,7 @@ from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
+from .image_to_image import ImageToImagePipeline
 from .image_to_text import ImageToTextPipeline
 from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
@@ -394,6 +395,13 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("facebook/sam-vit-huge", "997b15")}},
         "type": "multimodal",
     },
+    "image-to-image": {
+        "impl": ImageToImagePipeline,
+        "tf": (),
+        "pt": (AutoModelForImageToImage,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("caidas/swin2SR-classical-sr-x2-64", "4aaedcb")}},
+        "type": "image",
+    },
 }
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
@@ -472,6 +480,7 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"image-classification"`
             - `"image-segmentation"`
             - `"image-to-text"`
+            - `"image-to-image"`
             - `"object-detection"`
             - `"question-answering"`
             - `"summarization"`
@@ -556,6 +565,7 @@ def pipeline(
             - `"fill-mask"`: will return a [`FillMaskPipeline`]:.
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
             - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
+            - `"image-to-image"`: will return a [`ImageToImagePipeline`].
             - `"image-to-text"`: will return a [`ImageToTextPipeline`].
             - `"mask-generation"`: will return a [`MaskGenerationPipeline`].
             - `"object-detection"`: will return a [`ObjectDetectionPipeline`].

@@ -81,10 +81,10 @@ The `preview` command only works with existing doc files. When you add a complet
 
 ## Adding a new element to the navigation bar
 
-Accepted files are Markdown (.md or .md).
+Accepted files are Markdown (.md).
 
 Create a file with its extension and put it in the source directory. You can then link it to the toc-tree by putting
-the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/main/docs/source/_toctree.yml) file.
+the filename without the extension in the [`_toctree.yml`](https://github.com/huggingface/transformers/blob/main/docs/source/en/_toctree.yml) file.
 
 ## Renaming section headers and moving sections
 
@@ -147,7 +147,7 @@ When adding a new model:
 - Add the classes that should be linked in the model. This generally includes the configuration, the tokenizer, and
   every model of that class (the base model, alongside models with additional heads), both in PyTorch and TensorFlow.
   The order is generally:
-    - Configuration,
+    - Configuration
     - Tokenizer
     - PyTorch base model
     - PyTorch head models
@@ -363,9 +363,6 @@ To do so each example should be included in the doctests.
 We use pytests' [doctest integration](https://docs.pytest.org/doctest.html) to verify that all of our examples run correctly. 
 For Transformers, the doctests are run on a daily basis via GitHub Actions as can be 
 seen [here](https://github.com/huggingface/transformers/actions/workflows/doctests.yml).
-
-To include your example in the daily doctests, you need to add the filename that
-contains the example docstring to the [documentation_tests.txt](../utils/documentation_tests.txt).
 
 ### For Python files
 

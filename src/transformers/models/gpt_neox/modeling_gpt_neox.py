@@ -100,11 +100,7 @@ class GPTNeoXAttention(nn.Module):
         self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
         self._init_rope()
 
-        self.register_buffer(
-            "norm_factor",
-            torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype()),
-            persistent=False,
-        )
+        self.norm_factor = self.head_size**-0.5
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
@@ -258,7 +254,7 @@ class GPTNeoXAttention(nn.Module):
             query,
             key.transpose(1, 2),
             beta=1.0,
-            alpha=(torch.tensor(1.0, dtype=self.norm_factor.dtype, device=self.norm_factor.device) / self.norm_factor),
+            alpha=self.norm_factor,
         )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
@@ -843,7 +839,8 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                + layer_past[2:],
             )
         return reordered_past
 
