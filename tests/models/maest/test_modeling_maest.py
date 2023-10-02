@@ -23,8 +23,8 @@ from transformers import MAESTConfig
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
 
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -140,7 +140,7 @@ class MAESTModelTester:
 
 
 @require_torch
-class MAESTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MAESTModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as MAEST does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -159,6 +159,10 @@ class MAESTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
 
+    def setUp(self):
+        self.model_tester = MAESTModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MAESTConfig, has_text_modality=False, hidden_size=37)
+
     @unittest.skip(reason="MAEST does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -171,6 +175,9 @@ class MAESTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
