@@ -206,7 +206,7 @@ class VitsConfig(PretrainedConfig):
         sampling_rate=16_000,
         discriminator_kernel_size=5,
         discriminator_stride=3,
-        discriminator_periods=[1,2,3,5,7,11],
+        discriminator_periods=[1, 2, 3, 5, 7, 11],
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -257,7 +257,7 @@ class VitsConfig(PretrainedConfig):
         self.discriminator_kernel_size = discriminator_kernel_size
         self.discriminator_stride = discriminator_stride
         self.discriminator_periods = discriminator_periods
-        
+
         if len(upsample_kernel_sizes) != len(upsample_rates):
             raise ValueError(
                 f"The length of `upsample_kernel_sizes` ({len(upsample_kernel_sizes)}) must match the length of "
