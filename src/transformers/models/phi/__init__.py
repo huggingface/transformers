@@ -36,10 +36,12 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_phi"] = [
         "PHI_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PhiForCausalLM",
-        "PhiModel",
         "PhiPreTrainedModel",
+        "PhiModel",
+        "PhiForCausalLM",
         "PhiForSequenceClassification",
+        "PhiForTokenClassification",
+        "PhiForQuestionAnswering",
     ]
 
 
@@ -52,7 +54,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_phi import PHI_PRETRAINED_MODEL_ARCHIVE_LIST, PhiForCausalLM, PhiForSequenceClassification, PhiModel, PhiPreTrainedModel
+        from .modeling_phi import PHI_PRETRAINED_MODEL_ARCHIVE_LIST, PhiPreTrainedModel, PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification, PhiForQuestionAnswering
 
 
 else:

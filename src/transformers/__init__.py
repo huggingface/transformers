@@ -2118,7 +2118,7 @@ else:
         ["LlamaForCausalLM", "LlamaForSequenceClassification", "LlamaModel", "LlamaPreTrainedModel"]
     )
     _import_structure["models.phi"].extend(
-        ["PHI_PRETRAINED_MODEL_ARCHIVE_LIST", "PhiForCausalLM", "PhiForSequenceClassification", "PhiModel", "PhiPreTrainedModel"]
+        ["PHI_PRETRAINED_MODEL_ARCHIVE_LIST", "PhiPreTrainedModel", "PhiModel", "PhiForCausalLM", "PhiForSequenceClassification", "PhiForTokenClassification", "PhiForQuestionAnswering"]
     )
     _import_structure["models.longformer"].extend(
         [
@@ -6055,7 +6055,7 @@ if TYPE_CHECKING:
             LiltPreTrainedModel,
         )
         from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
-        from .models.phi import PHI_PRETRAINED_MODEL_ARCHIVE_LIST, PhiForCausalLM, PhiForSequenceClassification, PhiModel, PhiPreTrainedModel
+        from .models.phi import PHI_PRETRAINED_MODEL_ARCHIVE_LIST, PhiPreTrainedModel, PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification, PhiForQuestionAnswering
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,
