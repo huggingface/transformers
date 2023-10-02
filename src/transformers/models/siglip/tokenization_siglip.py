@@ -113,6 +113,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         model_max_length=64,
         do_lower_case=True,
+        split_special_tokens=True,
         **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, rstrip=True, lstrip=True)
@@ -138,24 +139,22 @@ class SiglipTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             model_max_length=model_max_length,
             do_lower_case=do_lower_case,
+            split_special_tokens=split_special_tokens,
             **kwargs,
         )
 
     def get_spm_processor(self):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        tokenizer.Load(self.vocab_file)
+        with open(self.vocab_file, "rb") as f:
+            sp_model = f.read()
+            model_pb2 = import_protobuf()
+            model = model_pb2.ModelProto.FromString(sp_model)
+            normalizer_spec = model_pb2.NormalizerSpec()
+            normalizer_spec.add_dummy_prefix = False
+            model.normalizer_spec.MergeFrom(normalizer_spec)
+            sp_model = model.SerializeToString()
+            tokenizer.LoadFromSerializedProto(sp_model)
         return tokenizer
-
-        # with open(self.vocab_file, "rb") as f:
-        #     sp_model = f.read()
-        #     model_pb2 = import_protobuf()
-        #     model = model_pb2.ModelProto.FromString(sp_model)
-        #     normalizer_spec = model_pb2.NormalizerSpec()
-        #     normalizer_spec.add_dummy_prefix = False
-        #     model.normalizer_spec.MergeFrom(normalizer_spec)
-        #     sp_model = model.SerializeToString()
-        #     tokenizer.LoadFromSerializedProto(sp_model)
-        # return tokenizer
 
 
     @property
