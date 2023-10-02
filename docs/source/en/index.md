@@ -391,7 +391,7 @@ Flax), PyTorch, and/or TensorFlow.
 |            LXMERT             |       ✅        |         ✅         |      ❌      |
 |            M-CTC-T            |       ✅        |         ❌         |      ❌      |
 |            M2M100             |       ✅        |         ❌         |      ❌      |
-|             MAEST             |       ❌        |         ❌         |      ❌      |
+|             MAEST             |       ✅        |         ❌         |      ❌      |
 |            Marian             |       ✅        |         ✅         |      ✅      |
 |           MarkupLM            |       ✅        |         ❌         |      ❌      |
 |          Mask2Former          |       ✅        |         ❌         |      ❌      |

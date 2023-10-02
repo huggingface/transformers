@@ -414,10 +414,7 @@ _import_structure = {
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
     "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
-    "models.maest": [
-        "MAEST_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "MAESTConfig",
-    ],
+    "models.maest": ["MAEST_PRETRAINED_CONFIG_ARCHIVE_MAP"],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
         "MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -4547,10 +4544,7 @@ if TYPE_CHECKING:
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
-    from .models.maest import (
-        MAEST_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        MAESTConfig,
-    )
+    from .models.maest import MAEST_PRETRAINED_CONFIG_ARCHIVE_MAP
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP,

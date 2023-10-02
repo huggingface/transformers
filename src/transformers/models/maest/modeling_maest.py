@@ -15,14 +15,10 @@
 """ PyTorch MAEST (MAEST) model."""
 
 
-
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "MAESTConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "mtg-upf/discogs-maest-30s-pw-129e"

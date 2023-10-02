@@ -128,7 +128,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("luke", "LukeConfig"),
         ("lxmert", "LxmertConfig"),
         ("m2m_100", "M2M100Config"),
-        ("maest", "MAESTConfig"),
+        ("maest", "ASTConfig"),
         ("marian", "MarianConfig"),
         ("markuplm", "MarkupLMConfig"),
         ("mask2former", "Mask2FormerConfig"),

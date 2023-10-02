@@ -19,7 +19,7 @@ import unittest
 
 from huggingface_hub import hf_hub_download
 
-from transformers import MAESTConfig
+from transformers import ASTConfig
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
 
@@ -104,7 +104,7 @@ class MAESTModelTester:
         return config, input_values, labels
 
     def get_config(self):
-        return MAESTConfig(
+        return ASTConfig(
             patch_size=self.patch_size,
             max_length=self.max_length,
             num_mel_bins=self.num_mel_bins,
@@ -161,7 +161,7 @@ class MAESTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = MAESTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MAESTConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ASTConfig, has_text_modality=False, hidden_size=37)
 
     @unittest.skip(reason="MAEST does not use inputs_embeds")
     def test_inputs_embeds(self):
