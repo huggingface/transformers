@@ -4479,7 +4479,7 @@ class GenerationMixin:
             # we use this forward pass to also pick the subsequent logits in the original model.
 
             # 2.1. Prepare the model inputs
-            candidate_kwargs = copy.deepcopy(model_kwargs)
+            candidate_kwargs = copy.copy(model_kwargs)
             candidate_kwargs = self._extend_attention_mask(candidate_kwargs, candidate_input_ids.shape[1])
             candidate_kwargs = self._extend_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
 
