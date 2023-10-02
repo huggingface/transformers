@@ -54,7 +54,15 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_phi import PHI_PRETRAINED_MODEL_ARCHIVE_LIST, PhiPreTrainedModel, PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification, PhiForQuestionAnswering
+        from .modeling_phi import (
+            PHI_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PhiForCausalLM,
+            PhiForQuestionAnswering,
+            PhiForSequenceClassification,
+            PhiForTokenClassification,
+            PhiModel,
+            PhiPreTrainedModel,
+        )
 
 
 else:

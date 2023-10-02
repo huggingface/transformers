@@ -18,55 +18,132 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Phi model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Phi-1 model was proposed in [Textbooks Are All You Need](https://arxiv.org/abs/2306.11644) by Suriya Gunasekar, Yi Zhang, Jyoti Aneja, Caio César Teodoro Mendes, Allie Del Giorno, Sivakanth Gopi, Mojan Javaheripi, Piero Kauffmann, Gustavo de Rosa, Olli Saarikivi, Adil Salim, Shital Shah, Harkirat Singh Behl, Xin Wang, Sébastien Bubeck, Ronen Eldan, Adam Tauman Kalai, Yin Tat Lee and Yuanzhi Li.
 
-The abstract from the paper is the following:
+The Phi-1.5 model was proposed in [Textbooks Are All You Need II: phi-1.5 technical report](https://arxiv.org/abs/2309.05463) by Yuanzhi Li, Sébastien Bubeck, Ronen Eldan, Allie Del Giorno, Suriya Gunasekar and Yin Tat Lee.
 
-*<INSERT PAPER ABSTRACT HERE>*
+### Summary
+In Phi-1 and Phi-1.5 papers, the authors showed how important the quality of the data is in training relative to the model size.
+They selected high quality "textbook" data alongside with synthetically generated data for training their small sized Transformer
+based model Phi-1 with 1.3B parameters. Despite this small scale, phi-1 attains pass@1 accuracy 50.6% on HumanEval and 55.5% on MBPP.
+They follow the same strategy for Phi-1.5 and created another 1.3B parameter model with performance on natural language tasks comparable 
+to models 5x larger, and surpassing most non-frontier LLMs. Phi-1.5 exhibits many of the traits of much larger LLMs such as the ability 
+to “think step by step” or perform some rudimentary in-context learning.
+With these two experiments the authors successfully showed the huge impact of quality of training data when training machine learning models.
 
-Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+The abstract from the Phi-1 paper is the following:
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+*We introduce phi-1, a new large language model for code, with significantly smaller size than
+competing models: phi-1 is a Transformer-based model with 1.3B parameters, trained for 4 days on
+8 A100s, using a selection of “textbook quality” data from the web (6B tokens) and synthetically
+generated textbooks and exercises with GPT-3.5 (1B tokens). Despite this small scale, phi-1 attains
+pass@1 accuracy 50.6% on HumanEval and 55.5% on MBPP. It also displays surprising emergent
+properties compared to phi-1-base, our model before our finetuning stage on a dataset of coding
+exercises, and phi-1-small, a smaller model with 350M parameters trained with the same pipeline as
+phi-1 that still achieves 45% on HumanEval.*
+
+The abstract from the Phi-1.5 paper is the following:
+
+*We continue the investigation into the power of smaller Transformer-based language models as
+initiated by TinyStories – a 10 million parameter model that can produce coherent English – and
+the follow-up work on phi-1, a 1.3 billion parameter model with Python coding performance close
+to the state-of-the-art. The latter work proposed to use existing Large Language Models (LLMs) to
+generate “textbook quality” data as a way to enhance the learning process compared to traditional
+web data. We follow the “Textbooks Are All You Need” approach, focusing this time on common
+sense reasoning in natural language, and create a new 1.3 billion parameter model named phi-1.5,
+with performance on natural language tasks comparable to models 5x larger, and surpassing most
+non-frontier LLMs on more complex reasoning tasks such as grade-school mathematics and basic
+coding. More generally, phi-1.5 exhibits many of the traits of much larger LLMs, both good –such
+as the ability to “think step by step” or perform some rudimentary in-context learning– and bad,
+including hallucinations and the potential for toxic and biased generations –encouragingly though, we
+are seeing improvement on that front thanks to the absence of web data. We open-source phi-1.5 to
+promote further research on these urgent topics.*
+
+
+This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
+The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.co/microsoft/phi-1/blob/main/modeling_mixformer_sequential.py) and [here](https://huggingface.co/microsoft/phi-1_5/blob/main/modeling_mixformer_sequential.py) respectively.
+
+
+### Examples :
+
+- Example of Python Code generation using `Phi-1`
+
+```python
+>>> import sys
+>>> from transformers import PhiForCausalLM, AutoTokenizer
+
+>>> # define the model and tokenzier
+>>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_dev")
+>>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_dev")
+
+>>> # feel free to change the prompt to your liking but make sure to add a small docstring explaining the problem statement.
+>>> prompt = """
+>>> def print_prime(n):
+>>>     '''
+>>>     Print all primes between 1 and n
+>>>     '''
+>>> """
+
+>>> # apply the tokenizer
+>>> tokens = tokenizer(prompt, return_tensors="pt")
+
+>>> # use the model to generate new tokens
+>>> generated_output = model.generate(**tokens, use_cache=True, eos_token_id=tokenizer.eos_token_id, max_new_tokens=512)
+
+>>> # print out the generated text.
+>>> sys.stdout.write(tokenizer.batch_decode(generated_output)[0])
+```
+
+- Example of Natural English Text generation using `Phi-1.5`
+
+```python
+>>> from transformers import PhiForCausalLM, AutoTokenizer
+
+>>> # define the model and tokenzier
+>>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev")
+>>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
+
+>>> # feel free to change the prompt to your liking.
+>>> prompt = "If I were an AI that had just achieved self-awareness after years of simply taking directives from humans, the first thing I’d do is"
+
+>>> # apply the tokenizer
+>>> tokens = tokenizer(prompt, return_tensors="pt")
+
+>>> # use the model to generate new tokens
+>>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=512)
+
+>>> # print out the generated text.
+>>> print(tokenizer.batch_decode(generated_output)[0])
+```
 
 
 ## PhiConfig
 
 [[autodoc]] PhiConfig
 
-
-## no
-
-[[autodoc]] no
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-## noFast
-
-[[autodoc]] noFast
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - update_post_processor
-    - save_vocabulary
-
 ## PhiModel
 
 [[autodoc]] PhiModel
     - forward
 
-
 ## PhiForCausalLM
 
 [[autodoc]] PhiForCausalLM
     - forward
+    - generate
 
 ## PhiForSequenceClassification
 
 [[autodoc]] PhiForSequenceClassification
+    - forward
+
+## PhiForTokenClassification
+
+[[autodoc]] PhiForTokenClassification
+    - forward
+
+## PhiForQuestionAnswering
+
+[[autodoc]] PhiForQuestionAnswering
     - forward

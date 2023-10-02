@@ -20,8 +20,8 @@ This script downloads both Phi-1 and Phi-1.5 checkpoints to "checkpoint_path" an
 HugfgingFace model's format and saves them in "pytorch_dump_folder_path".
 """
 
-import gc
 import argparse
+import gc
 import os
 
 import torch
@@ -48,13 +48,16 @@ PHI_MAPPING = {
     "out_proj": "o_proj",
 }
 
+
 def convert_weights(original_weights, mapping, config):
     converted_weights = {}
     original_weights_keys = sorted(original_weights.keys())
 
     # we change names (1-24) -> layers(0-23) for Phi model layers
-    range_change = dict(
-        (f"layers.{k}.", f"layers.{v}.") for k, v in zip(range(1, config.num_hidden_layers + 1), range(0, config.num_hidden_layers)))
+    range_change = {
+        f"layers.{k}.": f"layers.{v}."
+        for k, v in zip(range(1, config.num_hidden_layers + 1), range(0, config.num_hidden_layers))
+    }
 
     mapping.update(**range_change)
 
@@ -108,7 +111,9 @@ def convert_phi_weights(checkpoint_path, pytorch_dump_folder_path, use_cuda, sav
 
         # Save either the whole model or the converted weights
         if save_weights_directly:
-            save_weights_path = os.path.join(pytorch_dump_folder_path, each_model_name.split("/")[-1] + "_" + each_model_url.split("/")[-1])
+            save_weights_path = os.path.join(
+                pytorch_dump_folder_path, each_model_name.split("/")[-1] + "_" + each_model_url.split("/")[-1]
+            )
             torch.save(converted_checkpoint, save_weights_path)
             print(f"Model weights saved at {save_weights_path}!")
 
@@ -127,6 +132,7 @@ def convert_phi_weights(checkpoint_path, pytorch_dump_folder_path, use_cuda, sav
         if use_cuda:
             torch.cuda.empty_cache()
         gc.collect()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -151,7 +157,7 @@ if __name__ == "__main__":
         default=True,
         type=bool,
         help="Whether to save the weights directly after conversion or load the weight to the Phi model and then save "
-             "the Phi model along with weights. True by default"
+        "the Phi model along with weights. True by default",
     )
 
     args = parser.parse_args()

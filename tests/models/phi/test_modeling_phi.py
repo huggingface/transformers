@@ -18,10 +18,9 @@
 
 import unittest
 
-from parameterized import parameterized
 from pytest import mark
 
-from transformers import PhiConfig, is_torch_available, set_seed
+from transformers import PhiConfig, is_torch_available
 from transformers.testing_utils import require_flash_attn, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -34,12 +33,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        PhiForCausalLM,
-        PhiForSequenceClassification,
-        PhiModel,
-        PhiForQuestionAnswering,
-        PhiForTokenClassification,
         CodeGenTokenizer,
+        PhiForCausalLM,
+        PhiForQuestionAnswering,
+        PhiForSequenceClassification,
+        PhiForTokenClassification,
+        PhiModel,
     )
 
 
@@ -121,9 +120,7 @@ class PhiModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    def create_and_check_model(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
         model = PhiModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -192,7 +189,9 @@ class PhiModelTester:
             next_input_ids,
             attention_mask=next_attention_mask,
             output_hidden_states=True,
-        )["hidden_states"][0]
+        )[
+            "hidden_states"
+        ][0]
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
@@ -304,7 +303,8 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         Overwritting the common test as the test is flaky on tiny models
         """
         model = PhiForCausalLM.from_pretrained(
-            "susnato/phi-1_dev", torch_dtype=torch.float16,
+            "susnato/phi-1_dev",
+            torch_dtype=torch.float16,
         ).to(torch_device)
 
         tokenizer = CodeGenTokenizer.from_pretrained("susnato/phi-1_dev")
@@ -333,7 +333,11 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 @require_torch
 class PhiIntegrationTest(unittest.TestCase):
     def test_model_phi_1_logits(self):
-        input_ids = {"input_ids": torch.tensor([[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device)}
+        input_ids = {
+            "input_ids": torch.tensor(
+                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device
+            )
+        }
 
         model = PhiForCausalLM.from_pretrained("susnato/phi-1_dev").to(torch_device)
         model.eval()
@@ -355,7 +359,11 @@ class PhiIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
 
     def test_model_phi_1_5_logits(self):
-        input_ids = {"input_ids": torch.tensor([[1212,  318,  281, 1672, 2643,  290,  428,  318,  257, 1332]], dtype=torch.long, device=torch_device)}
+        input_ids = {
+            "input_ids": torch.tensor(
+                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device
+            )
+        }
 
         model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev").to(torch_device)
         model.eval()

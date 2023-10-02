@@ -32,11 +32,13 @@ PHI_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "susnato/phi-1_5_dev": "https://huggingface.co/susnato/phi-1_5_dev/resolve/main/config.json",
 }
 
+
 class PhiConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PhiModel`]. It is used to instantiate an Phi
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Phi [susnato/phi-1_dev](https://huggingface.co/susnato/phi-1_dev).
+    defaults will yield a similar configuration to that of the Phi
+    [susnato/phi-1_dev](https://huggingface.co/susnato/phi-1_dev).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -65,7 +67,8 @@ class PhiConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Phi-1 and Phi-1.5 supports up to 2048 tokens.
+            The maximum sequence length that this model might ever be used with. Phi-1 and Phi-1.5 supports up to 2048
+            tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):

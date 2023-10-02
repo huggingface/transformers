@@ -26,9 +26,16 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast, QuestionAnsweringModelOutput, TokenClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    QuestionAnsweringModelOutput,
+    SequenceClassifierOutputWithPast,
+    TokenClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_available,
@@ -45,6 +52,7 @@ if is_flash_attn_available():
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "susnato/phi-1_dev"
 _CONFIG_FOR_DOC = "PhiConfig"
 
 PHI_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -137,25 +145,16 @@ class PhiRotaryEmbedding(nn.Module):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.rotate_half
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids, rotary_dim):
     q = q.transpose(1, 2)
     k = k.transpose(1, 2)
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
-    cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
-    sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
-    cos = cos[position_ids]  # [seq_len, dim]
-    sin = sin[position_ids]  # [seq_len, dim]
+    cos = cos.squeeze(1).squeeze(0)
+    sin = sin.squeeze(1).squeeze(0)
+    cos = cos[position_ids].unsqueeze(2)
+    sin = sin[position_ids].unsqueeze(2)
 
     # seperate which portions to apply rotary embeddings to and which ones to pass.
-    rotary_dim = cos.shape[-1] * 2
     q_rot = q[:, :, :, :rotary_dim]
     q_pass = q[:, :, :, rotary_dim:]
     k_rot = k[:, :, :, :rotary_dim]
@@ -164,17 +163,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # Splits the queries and keys in half
     q1, q2 = q_rot.chunk(2, dim=-1)
     k1, k2 = k_rot.chunk(2, dim=-1)
-    seqlen = q.shape[1]
-    cos, sin = cos[:, :seqlen].unsqueeze(2), sin[:, :seqlen].unsqueeze(2)
 
-    # Casts to fp32 to prevent fp16 overflow issues and to match outputs
-    q1, q2, k1, k2, cos, sin = [t.to(dtype=torch.float32) for t in [q1, q2, k1, k2, cos, sin]]
+    # apply sin and cos
+    q_rot = torch.cat([q1 * cos - q2 * sin, q1 * sin + q2 * cos], axis=-1)
+    k_rot = torch.cat([k1 * cos - k2 * sin, k1 * sin + k2 * cos], axis=-1)
 
-    # Computes the new keys and queries, recasting to original dtype
-    q_rot = torch.cat([q1 * cos - q2 * sin, q1 * sin + q2 * cos], axis=-1).to(q.dtype)
-    k_rot = torch.cat([k1 * cos - k2 * sin, k1 * sin + k2 * cos], axis=-1).to(q.dtype)
-
-    # concatenate the `_pass` and `_rot` ones.
+    # concatenate the `_pass` and `_rot` embeddings.
     q_embed = torch.cat([q_rot, q_pass], dim=-1).transpose(1, 2)
     k_embed = torch.cat([k_rot, k_pass], dim=-1).transpose(1, 2)
 
@@ -208,6 +202,7 @@ class PhiAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
+        self.rotary_dim = config.rotary_dim
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -220,7 +215,7 @@ class PhiAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
 
         self.rotary_emb = PhiRotaryEmbedding(
-            config.rotary_dim,
+            self.rotary_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
         )
@@ -267,7 +262,9 @@ class PhiAttention(nn.Module):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids, self.rotary_dim
+        )
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -320,9 +317,9 @@ class PhiAttention(nn.Module):
 
 class PhiFlashAttention2(PhiAttention):
     """
-    Phi flash attention module. This module inherits from `PhiAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
+    Phi flash attention module. This module inherits from `PhiAttention` as the weights of the module stays untouched.
+    The only required change would be on the forward pass where it needs to correctly call the public API of flash
+    attention and deal with padding tokens in case the input contains any of them.
     """
 
     def forward(
@@ -357,7 +354,9 @@ class PhiFlashAttention2(PhiAttention):
 
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids, self.rotary_dim
+        )
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -524,9 +523,8 @@ class PhiDecoderLayer(nn.Module):
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.n_positions - 1]`.
-                [What are position IDs?](../glossary#position-ids)
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
+                `[0, config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1157,7 +1155,7 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
     PhiModel with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
-    PHI_INPUTS_DOCSTRING,
+    PHI_START_DOCSTRING,
 )
 class PhiForTokenClassification(PhiPreTrainedModel):
     def __init__(self, config):
@@ -1182,6 +1180,12 @@ class PhiForTokenClassification(PhiPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(PHI_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+        real_checkpoint=_CHECKPOINT_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1239,8 +1243,8 @@ class PhiForTokenClassification(PhiPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The `PhiModel` with a span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    The `PhiModel` with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     PHI_START_DOCSTRING,
 )
@@ -1257,6 +1261,12 @@ class PhiForQuestionAnswering(PhiPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(PHI_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=QuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        real_checkpoint=_CHECKPOINT_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1326,4 +1336,3 @@ class PhiForQuestionAnswering(PhiPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
