@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class MobileNetV2FeatureExtractor(MobileNetV2ImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logger.warning(
             "The class MobileNetV2FeatureExtractor is deprecated and will be removed in version 5 of Transformers."
             " Please use MobileNetV2ImageProcessor instead.",
             FutureWarning,

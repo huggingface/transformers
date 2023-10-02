@@ -438,7 +438,7 @@ def get_supported_tasks() -> List[str]:
 def get_task(model: str, token: Optional[str] = None, **deprecated_kwargs) -> str:
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
-        warnings.warn(
+        logger.warning(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
@@ -691,7 +691,7 @@ def pipeline(
     # this is to keep BC).
     use_auth_token = model_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
-        warnings.warn(
+        logger.warning(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
@@ -1010,7 +1010,7 @@ def pipeline(
         for key in model.config.task_specific_params:
             if key.startswith("translation"):
                 task = key
-                warnings.warn(
+                logger.warning(
                     f'"translation" task was used, instead of "translation_XX_to_YY", defaulting to "{task}"',
                     UserWarning,
                 )

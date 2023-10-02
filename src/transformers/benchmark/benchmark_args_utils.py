@@ -133,7 +133,7 @@ class BenchmarkArguments:
     )
 
     def __post_init__(self):
-        warnings.warn(
+        logger.warning(
             f"The class {self.__class__} is deprecated. Hugging Face Benchmarking utils"
             " are deprecated in general and it is advised to use external Benchmarking libraries "
             " to benchmark Transformer models.",

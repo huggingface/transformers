@@ -2723,7 +2723,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if stop_labels is not None:
-            warnings.warn(
+            logger.warning(
                 "The argument `stop_labels` is deprecated and will be removed in version 4.30.0 of Transformers",
                 FutureWarning,
             )
@@ -3003,7 +3003,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if stop_labels is not None:
-            warnings.warn(
+            logger.warning(
                 "The argument `stop_labels` is deprecated and will be removed in version 4.30.0 of Transformers",
                 FutureWarning,
             )

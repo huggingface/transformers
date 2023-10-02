@@ -212,7 +212,7 @@ def get_image_processor_config(
     ```"""
     use_auth_token = kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
-        warnings.warn(
+        logger.warning(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
@@ -330,7 +330,7 @@ class AutoImageProcessor:
         ```"""
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
-            warnings.warn(
+            logger.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if kwargs.get("token", None) is not None:

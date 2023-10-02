@@ -460,7 +460,7 @@ def input_processing(func, config, **kwargs):
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
 
     if "inputs" in kwargs["kwargs_call"]:
-        warnings.warn(
+        logger.warning(
             "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
             FutureWarning,
         )
@@ -468,7 +468,7 @@ def input_processing(func, config, **kwargs):
         output["input_ids"] = kwargs["kwargs_call"].pop("inputs")
 
     if "decoder_cached_states" in kwargs["kwargs_call"]:
-        warnings.warn(
+        logger.warning(
             "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
             " `past_key_values` instead.",
             FutureWarning,
@@ -476,7 +476,7 @@ def input_processing(func, config, **kwargs):
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
     if "past" in kwargs["kwargs_call"] and "past_key_values" in parameter_names:
-        warnings.warn(
+        logger.warning(
             "The `past` argument is deprecated and will be removed in a future version, use `past_key_values`"
             " instead.",
             FutureWarning,
@@ -522,7 +522,7 @@ def input_processing(func, config, **kwargs):
                 )
     elif isinstance(main_input, Mapping):
         if "inputs" in main_input:
-            warnings.warn(
+            logger.warning(
                 "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids`"
                 " instead.",
                 FutureWarning,
@@ -531,7 +531,7 @@ def input_processing(func, config, **kwargs):
             output["input_ids"] = main_input.pop("inputs")
 
         if "decoder_cached_states" in main_input:
-            warnings.warn(
+            logger.warning(
                 "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
                 " `past_key_values` instead.",
                 FutureWarning,
@@ -1219,7 +1219,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
-        warnings.warn(
+        logger.warning(
             "The function `eager_serving` is deprecated and will be removed in version 4.32.0 of Transformers",
             FutureWarning,
         )
@@ -1553,7 +1553,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             # This will be true in TF 2.8 or greater
             return super().compute_loss(*args, **kwargs)
         else:
-            warnings.warn(
+            logger.warning(
                 "The old compute_loss method is deprecated as it conflicts with the Keras compute_loss "
                 "method added in TF 2.8. If you want the original HF compute_loss, please call "
                 "hf_compute_loss() instead. From TF versions >= 2.8, or Transformers versions >= 5, "
@@ -1914,7 +1914,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Return:
             `tf.keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
         """
-        warnings.warn(
+        logger.warning(
             "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
         )
         return self.get_lm_head()
@@ -1926,7 +1926,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Return:
             `str`: The _prefix name of the bias.
         """
-        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        logger.warning("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return None
 
     def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
@@ -2377,7 +2377,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logger.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:
@@ -2649,7 +2649,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         _ = kwargs.pop("adapter_kwargs", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logger.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:
@@ -3100,7 +3100,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         ```
         """
         if use_auth_token is not None:
-            warnings.warn(
+            logger.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:
@@ -3110,7 +3110,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             token = use_auth_token
 
         if "repo_path_or_name" in base_model_card_args:
-            warnings.warn(
+            logger.warning(
                 "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
                 "`repo_id` instead."
             )
@@ -3247,7 +3247,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
-        warnings.warn(
+        logger.warning(
             "`TFSharedEmbeddings` is scheduled for deletion in v4.32, use `tf.keras.layers.Embedding` instead.",
             DeprecationWarning,
         )

@@ -166,12 +166,12 @@ class TokenClassificationPipeline(ChunkPipeline):
                 aggregation_strategy = AggregationStrategy.NONE
 
             if grouped_entities is not None:
-                warnings.warn(
+                logger.warning(
                     "`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to"
                     f' `aggregation_strategy="{aggregation_strategy}"` instead.'
                 )
             if ignore_subwords is not None:
-                warnings.warn(
+                logger.warning(
                     "`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to"
                     f' `aggregation_strategy="{aggregation_strategy}"` instead.'
                 )
@@ -390,7 +390,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                         AggregationStrategy.AVERAGE,
                         AggregationStrategy.MAX,
                     }:
-                        warnings.warn(
+                        logger.warning(
                             "Tokenizer does not support real words, using fallback heuristic",
                             UserWarning,
                         )

@@ -698,7 +698,7 @@ TFAutoModelForSpeechSeq2Seq = auto_class_update(
 class TFAutoModelWithLMHead(_TFAutoModelWithLMHead):
     @classmethod
     def from_config(cls, config):
-        warnings.warn(
+        logger.warning(
             "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use"
             " `TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models"
             " and `TFAutoModelForSeq2SeqLM` for encoder-decoder models.",
@@ -708,7 +708,7 @@ class TFAutoModelWithLMHead(_TFAutoModelWithLMHead):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        warnings.warn(
+        logger.warning(
             "The class `TFAutoModelWithLMHead` is deprecated and will be removed in a future version. Please use"
             " `TFAutoModelForCausalLM` for causal language models, `TFAutoModelForMaskedLM` for masked language models"
             " and `TFAutoModelForSeq2SeqLM` for encoder-decoder models.",

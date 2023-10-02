@@ -21,7 +21,7 @@ from .generation import TFGenerationMixin
 
 class TFGenerationMixin(TFGenerationMixin):
     # warning at import time
-    warnings.warn(
+    logger.warning(
         "Importing `TFGenerationMixin` from `src/transformers/generation_tf_utils.py` is deprecated and will "
         "be removed in Transformers v5. Import as `from transformers import TFGenerationMixin` instead.",
         FutureWarning,

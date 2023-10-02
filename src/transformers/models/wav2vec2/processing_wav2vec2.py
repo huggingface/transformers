@@ -50,7 +50,7 @@ class Wav2Vec2Processor(ProcessorMixin):
         try:
             return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
         except OSError:
-            warnings.warn(
+            logger.warning(
                 f"Loading a tokenizer inside {cls.__name__} from a config that does not"
                 " include a `tokenizer_class` attribute is deprecated and will be "
                 "removed in v5. Please add `'tokenizer_class': 'Wav2Vec2CTCTokenizer'`"
@@ -76,7 +76,7 @@ class Wav2Vec2Processor(ProcessorMixin):
             return self.current_processor(*args, **kwargs)
 
         if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
+            logger.warning("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")
         else:
             audio = kwargs.pop("audio", None)
@@ -152,7 +152,7 @@ class Wav2Vec2Processor(ProcessorMixin):
         Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
         Wav2Vec2.
         """
-        warnings.warn(
+        logger.warning(
             "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
             "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
             "your audio inputs, or in a separate call."

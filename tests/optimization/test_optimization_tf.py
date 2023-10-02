@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-
+import logging
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
 
@@ -25,6 +25,7 @@ if is_tf_available():
 
     from transformers import GradientAccumulator, create_optimizer
 
+logger=logging.getLogger(__name__)
 
 @require_tf
 class OptimizationFTest(unittest.TestCase):

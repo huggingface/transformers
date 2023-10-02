@@ -335,7 +335,7 @@ class XLMProphetNetSeq2SeqLMOutput(ModelOutput):
 
     @property
     def decoder_cross_attentions(self):
-        warnings.warn(
+        logger.warning(
             "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
             " instead.",
             FutureWarning,
@@ -422,7 +422,7 @@ class XLMProphetNetSeq2SeqModelOutput(ModelOutput):
 
     @property
     def decoder_cross_attentions(self):
-        warnings.warn(
+        logger.warning(
             "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
             " instead.",
             FutureWarning,

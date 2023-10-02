@@ -68,7 +68,7 @@ class SageMakerTrainingArguments(TrainingArguments):
 
     def __post_init__(self):
         super().__post_init__()
-        warnings.warn(
+        logger.warning(
             "`SageMakerTrainingArguments` is deprecated and will be removed in v5 of Transformers. You can use "
             "`TrainingArguments` instead.",
             FutureWarning,

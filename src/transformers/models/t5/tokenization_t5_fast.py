@@ -155,7 +155,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             if init_max_model_length is not None and init_max_model_length != max_model_length:
                 return init_max_model_length
             elif init_max_model_length is None:
-                warnings.warn(
+                logger.warning(
                     "This tokenizer was incorrectly instantiated with a model max length of"
                     f" {deprecated_max_model_length} which will be corrected in Transformers v5.\nFor now, this"
                     " behavior is kept to avoid breaking backwards compatibility when padding/encoding with"

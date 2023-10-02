@@ -340,7 +340,7 @@ def is_torch_bf16_cpu_available():
 def is_torch_bf16_available():
     # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
     # has become ambiguous and therefore deprecated
-    warnings.warn(
+    logger.warning(
         "The util is_torch_bf16_available is deprecated, please use is_torch_bf16_gpu_available "
         "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu",
         FutureWarning,

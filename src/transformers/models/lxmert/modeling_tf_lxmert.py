@@ -1243,7 +1243,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         return self.cls.predictions
 
     def get_prefix_bias_name(self):
-        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        logger.warning("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.cls.name + "/" + self.cls.predictions.name
 
     @unpack_inputs
