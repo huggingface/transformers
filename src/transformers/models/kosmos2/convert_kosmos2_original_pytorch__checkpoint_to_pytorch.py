@@ -5,9 +5,12 @@ from transformers import Kosmos2ForConditionalGeneration, Kosmos2Config
 
 
 # ckpt = "../../../kosmos-2/checkpoints/kosmos-2.pt"
+# python3 temp3.py --kosmos2_checkpoint_path "../../../kosmos-2/checkpoints/kosmos-2.pt" --pytorch_dump_folder_path "foo"
 
 KEYS_TO_IGNORE = [
+    # this buffer in the original code is only used to send weights to the desired device
     "gpt_model.decoder.embed_positions._float_tensor",
+    # this weight is never used in the forward in the original KOSMOS-2)
     "gpt_model.decoder.self_attn_sope.scale",
 ]
 
