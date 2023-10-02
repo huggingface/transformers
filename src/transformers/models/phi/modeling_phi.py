@@ -525,7 +525,7 @@ class PhiDecoderLayer(nn.Module):
             else PhiFlashAttention2(config=config)
         )
         self.mlp = PhiMLP(config)
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(
@@ -711,7 +711,7 @@ class PhiModel(PhiPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
         self.layers = nn.ModuleList([PhiDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
