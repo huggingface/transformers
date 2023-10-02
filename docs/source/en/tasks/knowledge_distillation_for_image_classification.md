@@ -56,7 +56,7 @@ def process(examples):
 processed_datasets = dataset.map(process, batched=True)
 ```
 
-Essentially, we want the student to mimick the teacher so we will get the output from the teacher and the student, multiply it with a parameter called `temperature`, then calculate KL-divergence between them. We will then calculate loss based on KL-divergence and student output, and to provide a trade-off between them, we will use a parameter called `lambda`. In this tutorial, we are going to use `lambda` as 0.5 and temperature as 5.
+Essentially, we want the student to mimic the teacher. To achieve this, we first get the logits output by the teacher and the student. Then, we divide each of them by the parameter `temperature`, which controls the importance of each soft target. We will use the KL loss to compute the divergence between the student and teacher. A parameter called `lambda` weights the importance of the distillation loss. In this example, we will use `temperature=5` and `lambda=0.5`.
 
 
 ```python
