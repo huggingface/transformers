@@ -149,9 +149,9 @@ KOSMOS2_TEXT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        image_features: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextConnector`.
-        image_features_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        image_embeds: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+        image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
             1]`:
 
@@ -221,7 +221,7 @@ KOSMOS2_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        image_features_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
             1]`:
 
@@ -246,8 +246,8 @@ KOSMOS2_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        image_features: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextConnector`.
+        image_embeds: (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -290,13 +290,13 @@ class Kosmos2ModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_features (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextConnector`.
-        image_connector_attentions (`tuple(torch.FloatTensor)`, *optional*):
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            Attentions weights given by `Kosmos2ImageToTextConnector`, after the attention softmax, used to compute the
+            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute the
             weighted average in the self-attention heads.
         vision_model_output(`BaseModelOutputWithPooling`, *optional*):
             The output of the [`Kosmos2VisionModel`].
@@ -315,8 +315,8 @@ class Kosmos2ModelOutput(ModelOutput):
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_features: Optional[torch.FloatTensor] = None
-    image_connector_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_embeds: Optional[torch.FloatTensor] = None
+    projection_attentions: Optional[Tuple[torch.FloatTensor]] = None
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> Tuple[Any]:
@@ -347,13 +347,13 @@ class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        image_features (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextConnector`.
-        image_connector_attentions (`tuple(torch.FloatTensor)`, *optional*):
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            Attentions weights given by `Kosmos2ImageToTextConnector`, after the attention softmax, used to compute the
+            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute the
             weighted average in the self-attention heads.
         vision_model_output(`BaseModelOutputWithPooling`, *optional*):
             The output of the [`Kosmos2VisionModel`].
@@ -373,8 +373,8 @@ class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_features: Optional[torch.FloatTensor] = None
-    image_connector_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_embeds: Optional[torch.FloatTensor] = None
+    projection_attentions: Optional[Tuple[torch.FloatTensor]] = None
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> Tuple[Any]:
@@ -1150,7 +1150,7 @@ class Kosmos2TextTransformer(nn.Module):
         self,
         input_ids,
         inputs_embeds: torch.Tensor = None,
-        image_features: torch.Tensor = None,
+        image_embeds: torch.Tensor = None,
         img_input_mask: torch.Tensor = None,
         past_key_values_length: int = 0,
         position_ids: torch.Tensor = None,
@@ -1159,8 +1159,8 @@ class Kosmos2TextTransformer(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if image_features is not None:
-            inputs_embeds[img_input_mask.to(dtype=torch.bool)] = image_features.view(-1, image_features.size(-1))
+        if image_embeds is not None:
+            inputs_embeds[img_input_mask.to(dtype=torch.bool)] = image_embeds.view(-1, image_embeds.size(-1))
 
         inputs_embeds = inputs_embeds * self.embed_scale
 
@@ -1183,8 +1183,8 @@ class Kosmos2TextTransformer(nn.Module):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        image_features: Optional[torch.Tensor] = None,
-        image_features_mask: Optional[torch.Tensor] = None,
+        image_embeds: Optional[torch.Tensor] = None,
+        image_embeds_position_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1219,14 +1219,14 @@ class Kosmos2TextTransformer(nn.Module):
 
         # We don't need img info. when `past_key_values_length` > 0
         if past_key_values_length > 0:
-            image_features = None
-            image_features_mask = None
+            image_embeds = None
+            image_embeds_position_mask = None
 
         hidden_states = self.forward_embedding(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
-            image_features=image_features,
-            img_input_mask=image_features_mask,
+            image_embeds=image_embeds,
+            img_input_mask=image_embeds_position_mask,
             past_key_values_length=past_key_values_length,
             position_ids=position_ids,
         )
@@ -1433,7 +1433,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.lm_head.weight, std=std)
             if module.lm_head.bias is not None:
                 module.lm_head.bias.data.zero_()
-        elif isinstance(module, Kosmos2ImageToTextConnector):
+        elif isinstance(module, Kosmos2ImageToTextProjection):
             nn.init.normal_(module.dense.weight, std=std)
             if module.dense.bias is not None:
                 module.dense.bias.data.zero_()
@@ -1504,8 +1504,8 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        image_features: Optional[torch.Tensor] = None,
-        image_features_mask: Optional[torch.Tensor] = None,
+        image_embeds: Optional[torch.Tensor] = None,
+        image_embeds_position_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1525,8 +1525,8 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         return self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            image_features=image_features,
-            image_features_mask=image_features_mask,
+            image_embeds=image_embeds,
+            image_embeds_position_mask=image_embeds_position_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
@@ -1579,8 +1579,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        image_features: Optional[torch.Tensor] = None,
-        image_features_mask: Optional[torch.Tensor] = None,
+        image_embeds: Optional[torch.Tensor] = None,
+        image_embeds_position_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1613,8 +1613,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            image_features=image_features,
-            image_features_mask=image_features_mask,
+            image_embeds=image_embeds,
+            image_embeds_position_mask=image_embeds_position_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
@@ -1659,8 +1659,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        image_features=None,
-        image_features_mask=None,
+        image_embeds=None,
+        image_embeds_position_mask=None,
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
@@ -1683,15 +1683,15 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
 
             input_ids = input_ids[:, -1:]
             # the image info. is already encoded into the past keys/values
-            image_features = None
-            image_features_mask = None
-        elif image_features_mask is not None:
-            # appending `False` to `image_features_mask` (because `input_ids` grows during generation)
+            image_embeds = None
+            image_embeds_position_mask = None
+        elif image_embeds_position_mask is not None:
+            # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
             batch_size, seq_len = input_ids.size()
-            mask_len = image_features_mask.size()[-1]
-            image_features_mask = torch.cat(
+            mask_len = image_embeds_position_mask.size()[-1]
+            image_embeds_position_mask = torch.cat(
                 (
-                    image_features_mask,
+                    image_embeds_position_mask,
                     torch.zeros(size=(batch_size, seq_len - mask_len), dtype=torch.bool, device=input_ids.device),
                 ),
                 dim=1,
@@ -1699,8 +1699,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
 
         return {
             "input_ids": input_ids,
-            "image_features": image_features,
-            "image_features_mask": image_features_mask,
+            "image_embeds": image_embeds,
+            "image_embeds_position_mask": image_embeds_position_mask,
             "past_key_values": past_key_values,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
@@ -1718,7 +1718,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         return reordered_past
 
 
-class Kosmos2ImageToTextConnector(nn.Module):
+class Kosmos2ImageToTextProjection(nn.Module):
     """The layer that transforms the image model's output to part of the text model's input (namely, image features)"""
 
     def __init__(self, config: Kosmos2Config):
@@ -1768,7 +1768,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 
         self.text_model = Kosmos2TextModel(config.text_config)
         self.vision_model = Kosmos2VisionModel(config.vision_config)
-        self.image_to_text_connector = Kosmos2ImageToTextConnector(config)
+        self.image_to_text_projection = Kosmos2ImageToTextProjection(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1785,11 +1785,11 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         input_ids: Optional[torch.Tensor] = None,
-        image_features_mask: Optional[torch.Tensor] = None,
+        image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
-        image_features: Optional[torch.Tensor] = None,
+        image_embeds: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1825,7 +1825,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         ...     pixel_values=inputs["pixel_values"],
         ...     input_ids=inputs["input_ids"],
         ...     attention_mask=inputs["attention_mask"],
-        ...     image_features_mask=inputs["image_features_mask"],
+        ...     image_embeds_position_mask=inputs["image_embeds_position_mask"],
         ... ).last_hidden_state
         >>> list(last_hidden_state.shape)
         [1, 91, 2048]
@@ -1837,10 +1837,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_model_output = None
-        image_connector_attentions = None
-        if image_features is None:
+        projection_attentions = None
+        if image_embeds is None:
             if pixel_values is None:
-                raise ValueError("You have to specify either `pixel_values` or `image_features`.")
+                raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
 
             vision_model_output = self.vision_model(
                 pixel_values=pixel_values,
@@ -1849,16 +1849,16 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
                 return_dict=return_dict,
             )
             # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            image_features = self.vision_model.model.post_layernorm(vision_model_output[0])
+            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
             # normalized features
-            image_features = nn.functional.normalize(image_features, dim=-1)
-            image_features, image_connector_attentions = self.image_to_text_connector(image_features)
+            image_embeds = nn.functional.normalize(image_embeds, dim=-1)
+            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
         outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            image_features=image_features,
-            image_features_mask=image_features_mask,
+            image_embeds=image_embeds,
+            image_embeds_position_mask=image_embeds_position_mask,
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1870,7 +1870,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         )
 
         if not return_dict:
-            outputs = outputs + (image_features, image_connector_attentions, vision_model_output)
+            outputs = outputs + (image_embeds, projection_attentions, vision_model_output)
             return tuple(output for output in outputs if output is not None)
 
         return Kosmos2ModelOutput(
@@ -1878,8 +1878,8 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_features=image_features,
-            image_connector_attentions=image_connector_attentions,
+            image_embeds=image_embeds,
+            projection_attentions=projection_attentions,
             vision_model_output=vision_model_output,
         )
 
@@ -1902,7 +1902,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         self.text_model = Kosmos2TextForCausalLM(config.text_config)
         self.vision_model = Kosmos2VisionModel(config.vision_config)
 
-        self.image_to_text_connector = Kosmos2ImageToTextConnector(config)
+        self.image_to_text_projection = Kosmos2ImageToTextProjection(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1925,11 +1925,11 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         input_ids: Optional[torch.Tensor] = None,
-        image_features_mask: Optional[torch.Tensor] = None,
+        image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
-        image_features: Optional[torch.Tensor] = None,
+        image_embeds: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1968,8 +1968,8 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         ...     pixel_values=inputs["pixel_values"],
         ...     input_ids=inputs["input_ids"],
         ...     attention_mask=inputs["attention_mask"],
-        ...     image_features=None,
-        ...     image_features_mask=inputs["image_features_mask"],
+        ...     image_embeds=None,
+        ...     image_embeds_position_mask=inputs["image_embeds_position_mask"],
         ...     use_cache=True,
         ...     max_new_tokens=64,
         ... )
@@ -1992,10 +1992,10 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_model_output = None
-        image_connector_attentions = None
-        if image_features is None:
+        projection_attentions = None
+        if image_embeds is None:
             if pixel_values is None:
-                raise ValueError("You have to specify either `pixel_values` or `image_features`.")
+                raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
 
             vision_model_output = self.vision_model(
                 pixel_values=pixel_values,
@@ -2004,16 +2004,16 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
                 return_dict=return_dict,
             )
             # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            image_features = self.vision_model.model.post_layernorm(vision_model_output[0])
+            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
             # normalized features
-            image_features = nn.functional.normalize(image_features, dim=-1)
-            image_features, image_connector_attentions = self.image_to_text_connector(image_features)
+            image_embeds = nn.functional.normalize(image_embeds, dim=-1)
+            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
         lm_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            image_features=image_features,
-            image_features_mask=image_features_mask,
+            image_embeds=image_embeds,
+            image_embeds_position_mask=image_embeds_position_mask,
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -2026,7 +2026,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         )
 
         if not return_dict:
-            outputs = lm_outputs + (image_features, image_connector_attentions, vision_model_output)
+            outputs = lm_outputs + (image_embeds, projection_attentions, vision_model_output)
             return tuple(output for output in outputs if output is not None)
 
         return Kosmos2ForConditionalGenerationModelOutput(
@@ -2035,18 +2035,18 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             past_key_values=lm_outputs.past_key_values,
             hidden_states=lm_outputs.hidden_states,
             attentions=lm_outputs.attentions,
-            image_features=image_features,
-            image_connector_attentions=image_connector_attentions,
+            image_embeds=image_embeds,
+            projection_attentions=projection_attentions,
             vision_model_output=vision_model_output,
         )
 
     def generate(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        image_features_mask: Optional[torch.Tensor] = None,
+        image_embeds_position_mask: Optional[torch.Tensor] = None,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        image_features: Optional[torch.Tensor] = None,
+        image_embeds: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         # in order to allow `inputs` argument (as in `GenerationMixin`)
@@ -2059,19 +2059,19 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         if pixel_values is None and inputs is not None:
             pixel_values = inputs
 
-        if image_features is None:
+        if image_embeds is None:
             vision_model_output = self.vision_model(pixel_values)
             # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            image_features = self.vision_model.model.post_layernorm(vision_model_output[0])
+            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
             # normalized features
-            image_features = nn.functional.normalize(image_features, dim=-1)
-            image_features, image_connector_attentions = self.image_to_text_connector(image_features)
+            image_embeds = nn.functional.normalize(image_embeds, dim=-1)
+            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
         output = self.text_model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            image_features=image_features,
-            image_features_mask=image_features_mask,
+            image_embeds=image_embeds,
+            image_embeds_position_mask=image_embeds_position_mask,
             **kwargs,
         )
 
