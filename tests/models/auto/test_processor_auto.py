@@ -308,6 +308,9 @@ class ProcessorPushToHubTester(unittest.TestCase):
             pass
 
     def test_push_to_hub(self):
+        import logging
+        logger=logging.getLogger(__name__)
+
         processor = Wav2Vec2Processor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
         with tempfile.TemporaryDirectory() as tmp_dir:
             processor.save_pretrained(
@@ -320,6 +323,9 @@ class ProcessorPushToHubTester(unittest.TestCase):
             self.assertDictEqual(new_processor.tokenizer.get_vocab(), processor.tokenizer.get_vocab())
 
     def test_push_to_hub_in_organization(self):
+        import logging
+        logger=logging.getLogger(__name__)
+        
         processor = Wav2Vec2Processor.from_pretrained(SAMPLE_PROCESSOR_CONFIG_DIR)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
