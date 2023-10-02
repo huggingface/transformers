@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import unittest
+import logging
 
 from transformers import MobileBertConfig, is_tf_available
 from transformers.models.auto import get_values
@@ -42,6 +43,7 @@ if is_tf_available():
         TFMobileBertModel,
     )
 
+logger= logging.getLogger(__name__)
 
 @require_tf
 class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):

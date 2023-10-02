@@ -17,6 +17,7 @@ import json
 import os
 import sys
 import tempfile
+import logging
 import unittest
 from pathlib import Path
 from shutil import copyfile
@@ -57,6 +58,7 @@ SAMPLE_PROCESSOR_CONFIG = get_tests_dir("fixtures/dummy_feature_extractor_config
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
 SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
 
+logger=logging.getLogger(__name__)
 
 class AutoFeatureExtractorTest(unittest.TestCase):
     vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "bla", "blou"]

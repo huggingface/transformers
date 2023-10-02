@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import unittest
+import logging
 
 from transformers import MPNetConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
@@ -38,6 +39,7 @@ if is_tf_available():
         TFMPNetModel,
     )
 
+logger = logging.getLogger(__name__)
 
 class TFMPNetModelTester:
     def __init__(

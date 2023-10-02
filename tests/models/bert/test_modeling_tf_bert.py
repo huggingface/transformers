@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import unittest
+import logging
 
 from transformers import BertConfig, is_tf_available
 from transformers.models.auto import get_values
@@ -44,6 +45,7 @@ if is_tf_available():
         TFBertModel,
     )
 
+logger=logging.getLogger(__name__)
 
 class TFBertModelTester:
     def __init__(

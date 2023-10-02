@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import unittest
+import logging
 
 from transformers import ElectraConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
@@ -39,6 +40,7 @@ if is_tf_available():
         TFElectraModel,
     )
 
+logger = logging.getLogger(__name__)
 
 class TFElectraModelTester:
     def __init__(
