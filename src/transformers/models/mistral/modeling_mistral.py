@@ -429,7 +429,7 @@ class MistralFlashAttention2(MistralAttention):
 
         return attn_output, attn_weights, past_key_value
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
+
     def _flash_attention_forward(
         self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None, use_sliding_windows=False
     ):
@@ -503,11 +503,11 @@ class MistralFlashAttention2(MistralAttention):
 
         return attn_output
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
     def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
         batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
 
-        # HACK: deep dive why we need this?
+        # On the first iteration we need to properly re-create the padding mask
+        # by slicing it on the proper place
         if kv_seq_len != padding_mask.shape[-1]:
             padding_mask_num_tokens = padding_mask.shape[-1]
             padding_mask = padding_mask[:, padding_mask_num_tokens-kv_seq_len:]
@@ -841,6 +841,15 @@ class MistralModel(MistralPreTrainedModel):
             )
         elif 0 in attention_mask:
             padding_mask = attention_mask
+
+        if padding_mask is not None and hasattr(self.config, "_flash_attn_2_enabled", False):
+            is_padding_right = padding_mask[:, -1].sum().item() != batch_size
+            if not is_padding_right:
+                logger.warning_once(
+                    "You are attempting to perform batched generation with padding_side='right'"
+                    " this may lead to unexpected behaviour for Flash Attention version of Mistral. Make sure to "
+                    " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
+                )
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask,
