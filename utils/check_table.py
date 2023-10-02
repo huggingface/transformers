@@ -132,6 +132,14 @@ def _center_text(text: str, width: int) -> str:
     return " " * left_indent + text + " " * right_indent
 
 
+SPECIAL_MODEL_NAME_LINK_MAPPING = {
+    "Data2VecAudio": "[Data2VecAudio](model_doc/data2vec)",
+    "Data2VecText": "[Data2VecText](model_doc/data2vec)",
+    "Data2VecVision": "[Data2VecVision](model_doc/data2vec)",
+    "DonutSwin": "[DonutSwin](model_doc/donut)",
+}
+
+
 def get_model_table_from_auto_modules() -> str:
     """
     Generates an up-to-date model table from the content of the auto modules.
@@ -173,16 +181,26 @@ def get_model_table_from_auto_modules() -> str:
 
     # Let's build that table!
     model_names = list(model_name_to_config.keys())
+    model_names_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
+
+    # model name to doc link mapping
+    model_name_to_link_mapping = {value: f"[{value}](model_doc/{key})" for key, value in model_names_mapping.items()}
+    # update mapping with special model names
+    model_name_to_link_mapping = {
+        k: SPECIAL_MODEL_NAME_LINK_MAPPING[k] if k in SPECIAL_MODEL_NAME_LINK_MAPPING else v
+        for k, v in model_name_to_link_mapping.items()
+    }
 
     # MaskFormerSwin and TimmBackbone are backbones and so not meant to be loaded and used on their own. Instead, they define architectures which can be loaded using the AutoBackbone API.
-    names_to_exclude = ["MaskFormerSwin", "TimmBackbone"]
+    names_to_exclude = ["MaskFormerSwin", "TimmBackbone", "Speech2Text2"]
     model_names = [name for name in model_names if name not in names_to_exclude]
     model_names.sort(key=str.lower)
 
     columns = ["Model", "PyTorch support", "TensorFlow support", "Flax Support"]
     # We'll need widths to properly display everything in the center (+2 is to leave one extra space on each side).
+
     widths = [len(c) + 2 for c in columns]
-    widths[0] = max([len(name) for name in model_names]) + 2
+    widths[0] = max([len(doc_link) for doc_link in model_name_to_link_mapping.values()]) + 2
 
     # Build the table per se
     table = "|" + "|".join([_center_text(c, w) for c, w in zip(columns, widths)]) + "|\n"
@@ -193,7 +211,7 @@ def get_model_table_from_auto_modules() -> str:
     for name in model_names:
         prefix = model_name_to_prefix[name]
         line = [
-            name,
+            model_name_to_link_mapping[name],
             check[pt_models[prefix]],
             check[tf_models[prefix]],
             check[flax_models[prefix]],
