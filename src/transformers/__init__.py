@@ -2156,9 +2156,6 @@ else:
     _import_structure["models.maest"].extend(
         [
             "MAEST_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MAESTForAudioClassification",
-            "MAESTModel",
-            "MAESTPreTrainedModel",
         ]
     )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
@@ -6029,9 +6026,6 @@ if TYPE_CHECKING:
         )
         from .models.maest import (
             MAEST_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MAESTForAudioClassification,
-            MAESTModel,
-            MAESTPreTrainedModel,
         )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (

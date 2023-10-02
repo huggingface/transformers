@@ -31,9 +31,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_maest"] = [
         "MAEST_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MAESTForAudioClassification",
-        "MAESTModel",
-        "MAESTPreTrainedModel",
     ]
 
 try:
@@ -58,9 +55,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_maest import (
             MAEST_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MAESTForAudioClassification,
-            MAESTModel,
-            MAESTPreTrainedModel,
         )
 
     try:

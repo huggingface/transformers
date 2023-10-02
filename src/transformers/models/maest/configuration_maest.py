@@ -73,13 +73,13 @@ class MAESTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MAESTConfig, MAESTModel
+    >>> from transformers import ASTConfig, ASTModel
 
     >>> # Initializing a MAEST mtg-upf/discogs-maest-30s-pw-129e style configuration
     >>> configuration = MAESTConfig()
 
     >>> # Initializing a model (with random weights) from the mtg-upf/discogs-maest-30s-pw-129e style configuration
-    >>> model = MAESTModel(configuration)
+    >>> model = ASTModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

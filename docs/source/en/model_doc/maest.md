@@ -41,6 +41,7 @@ available and obtain the best performance among open models in music tagging tas
 This model was contributed by [p-alonso](https://huggingface.co/p-alonso).
 The original code can be found [here](https://github.com/palonso/MAEST).
 
+Sice MAEST features the same architecture as AST, the [ASTModel](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel) and [ASTForAudioClassification](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTForAudioClassification) classes are used for inference.
 
 ## MAESTConfig
 
@@ -50,13 +51,3 @@ The original code can be found [here](https://github.com/palonso/MAEST).
 
 [[autodoc]] MAESTFeatureExtractor
     - __call__
-
-## MAESTModel
-
-[[autodoc]] MAESTModel
-    - forward
-
-## MAESTForAudioClassification
-
-[[autodoc]] MAESTForAudioClassification
-    - forward

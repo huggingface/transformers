@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MAESTForAudioClassification, MAESTModel
+    from transformers import ASTForAudioClassification, ASTModel
     from transformers.models.maest.modeling_maest import (
         MAEST_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -122,7 +122,7 @@ class MAESTModelTester:
         )
 
     def create_and_check_model(self, config, input_values, labels):
-        model = MAESTModel(config=config)
+        model = ASTModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_values)
@@ -148,8 +148,8 @@ class MAESTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            MAESTModel,
-            MAESTForAudioClassification,
+            ASTModel,
+            ASTForAudioClassification,
         )
         if is_torch_available()
         else ()
@@ -191,7 +191,7 @@ class MAESTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in MAEST_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MAESTModel.from_pretrained(model_name)
+            model = ASTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -220,7 +220,7 @@ class MAESTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_audio_classification(self):
         feature_extractor = self.default_feature_extractor
-        model = MAESTForAudioClassification.from_pretrained("mtg-upf/discogs-maest-30s-pw-129e").to(torch_device)
+        model = ASTForAudioClassification.from_pretrained("mtg-upf/discogs-maest-30s-pw-129e").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         audio, sampling_rate = prepare_audio()
