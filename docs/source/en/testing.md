@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -54,8 +54,6 @@ RUN_SLOW=1 pytest examples/
 
 
 ## Running tests
-
-
 
 
 
@@ -184,6 +182,7 @@ pytest -k "test and ada" tests/test_optimization.py
 ### Run `accelerate` tests
 
 Sometimes you need to run `accelerate` tests on your models. For that you can just add `-m accelerate_tests` to your command, if let's say you want to run these tests on `OPT` run:
+
 ```bash
 RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
 ```
