@@ -293,8 +293,10 @@ class FastSpeech2ConformerLengthRegulator(nn.Module):
         max_len = torch.sum(duration_labels, dim=1).max()
 
         # Create a padded tensor to hold the results
-        hidden_states = torch.full((encoded_embeddings.size(0), max_len, encoded_embeddings.size(2)), 0.0).to(
-            encoded_embeddings.device
+        hidden_states = torch.zeros(
+            (encoded_embeddings.size(0), max_len, encoded_embeddings.size(2)),
+            dtype=torch.float,
+            device=encoded_embeddings.device,
         )
 
         # Loop through the batch and fill in the data
@@ -1646,7 +1648,9 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         >>> inputs = tokenizer("some text to convert to speech", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
 
-        >>> model = FastSpeech2ConformerWithHifiGan.from_pretrained("connor-henderson/fastspeech2_conformer_hifigan")
+        >>> model = FastSpeech2ConformerWithHifiGan.from_pretrained(
+        ...     "connor-henderson/fastspeech2_conformer_with_hifigan"
+        ... )
         >>> output_dict = model(input_ids, return_dict=True)
         >>> waveform = output_dict["waveform"]
         >>> print(waveform.shape)
