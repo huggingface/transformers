@@ -86,6 +86,24 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - A blog post on [How to fine-tune CLIP on 10,000 image-text pairs](https://huggingface.co/blog/fine-tune-clip-rsicd).
 - CLIP is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text).
 
+<PipelineTag pipeline="image-to-text"/>
+
+- A [notebook](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing), a demo to using pretrained CLIP to inference captions with beam search. 🌎
+
+<PipelineTag pipeline="text-to-image"/>
+
+- A [notebook](https://colab.research.google.com/drive/1py7au62Ky4ZdLtFJP0D4shNkIVym7JS6), a demo to generating image with prompting style tokens using pretrained CLIP and vqgan. 🌎
+
+🚀 Deploy
+
+- A [notebook](https://colab.research.google.com/drive/1bLVwVKpAndpEDHqjzxVPr_9nGrSbuOQd?usp=sharing), a guide on image retrieval using pretrained CLIP and computing MRR(Mean Reciprocal Rank) score. 🌎
+- A [notebook](https://colab.research.google.com/github/deep-diver/image_search_with_natural_language/blob/main/notebooks/Image_Search_CLIP.ipynb), a demo to image retrieval with how to show similarity score. 🌎
+- A [notebook](https://colab.research.google.com/drive/1xO-wC_m_GNzgjIBQ4a4znvQkvDoZJvH4?usp=sharing), a demo showing how to map images and texts to the same vector space using Multilingual CLIP. 🌎 
+
+⚡️ Inference
+
+- A [notebook](https://colab.research.google.com/github/hila-chefer/Transformer-MM-Explainability/blob/main/CLIP_explainability.ipynb) on how to visualize similarity between input token and image segment. 🌎
+
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
 The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
