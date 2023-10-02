@@ -36,7 +36,7 @@ def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
         `float` or `np.ndarray`: The frequencies on the mel scale.
     """
 
-    if mel_scale not in ["slaney", "htk", "kaldi"]:
+    if mel_scale not in ("slaney", "htk", "kaldi"):
         raise ValueError('mel_scale should be one of "htk", "slaney" or "kaldi".')
 
     if mel_scale == "htk":
