@@ -67,7 +67,7 @@ class PhiConfig(PretrainedConfig):
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
             necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
             issue](https://github.com/pytorch/pytorch/issues/76232).
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Phi 1 supports up to 2048 tokens,

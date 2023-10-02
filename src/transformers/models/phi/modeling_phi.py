@@ -117,7 +117,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Phi with self.register_buffer("inv_freq", inv_freq, persistent=False)->self.register_buffer("inv_freq", inv_freq)
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Phi with self.register_buffer("inv_freq", inv_freq, persistent=False)->self.register_buffer("inv_freq", inv_freq), emb = torch.cat((freqs, freqs), dim=-1)->emb = freqs
 class PhiRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -139,7 +139,7 @@ class PhiRotaryEmbedding(nn.Module):
 
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
+        emb = freqs
         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
@@ -154,53 +154,7 @@ class PhiRotaryEmbedding(nn.Module):
         )
 
 
-# # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Phi
-# class PhiLinearScalingRotaryEmbedding(PhiRotaryEmbedding):
-#     """PhiRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-#
-#     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-#         self.scaling_factor = scaling_factor
-#         super().__init__(dim, max_position_embeddings, base, device)
-#
-#     def _set_cos_sin_cache(self, seq_len, device, dtype):
-#         self.max_seq_len_cached = seq_len
-#         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-#         t = t / self.scaling_factor
-#
-#         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-#         # Different from paper, but it uses a different permutation in order to obtain the same calculation
-#         emb = torch.cat((freqs, freqs), dim=-1)
-#         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
-#         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
-#
-#
-# # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Phi
-# class PhiDynamicNTKScalingRotaryEmbedding(PhiRotaryEmbedding):
-#     """PhiRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-#
-#     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
-#         self.scaling_factor = scaling_factor
-#         super().__init__(dim, max_position_embeddings, base, device)
-#
-#     def _set_cos_sin_cache(self, seq_len, device, dtype):
-#         self.max_seq_len_cached = seq_len
-#
-#         if seq_len > self.max_position_embeddings:
-#             base = self.base * (
-#                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
-#             ) ** (self.dim / (self.dim - 2))
-#             inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
-#             self.register_buffer("inv_freq", inv_freq, persistent=False)
-#
-#         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-#
-#         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-#         # Different from paper, but it uses a different permutation in order to obtain the same calculation
-#         emb = torch.cat((freqs, freqs), dim=-1)
-#         self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
-#         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
-
-
+# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -209,14 +163,40 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
+    q = q.transpose(1, 2)
+    k = k.transpose(1, 2)
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
     sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
-    cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
-    sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
-    print(q.shape, sin.shape, cos.shape)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    cos = cos[position_ids]  # [seq_len, dim]
+    sin = sin[position_ids]  # [seq_len, dim]
+
+    # seperate which portions to apply rotary embeddings to and which ones to pass.
+    rotary_dim = cos.shape[-1] * 2
+    q_rot = q[:, :, :, :rotary_dim]
+    q_pass = q[:, :, :, rotary_dim:]
+    k_rot = k[:, :, :, :rotary_dim]
+    k_pass = k[:, :, :, rotary_dim:]
+
+    # Splits the queries and keys in half
+    q1, q2 = q_rot.chunk(2, dim=-1)
+    k1, k2 = k_rot.chunk(2, dim=-1)
+    seqlen = q.shape[1]
+    print(cos.shape, sin.shape, seqlen)
+    cos, sin = cos[:, :seqlen].unsqueeze(2), sin[:, :seqlen].unsqueeze(2)
+
+    # Casts to fp32 to prevent fp16 overflow issues and to match outputs
+    q1, q2, k1, k2, cos, sin = [t.to(dtype=torch.float32) for t in [q1, q2, k1, k2, cos, sin]]
+
+    # Computes the new keys and queries, recasting to original dtype
+    print(q1.shape, q2.shape, k1.shape, k2.shape, cos.shape, sin.shape)
+    q_rot = torch.cat([q1 * cos - q2 * sin, q1 * sin + q2 * cos], axis=-1).to(q.dtype)
+    k_rot = torch.cat([k1 * cos - k2 * sin, k1 * sin + k2 * cos], axis=-1).to(q.dtype)
+
+    # concatenate the `_pass` and `_rot` ones.
+    q_embed = torch.cat([q_rot, q_pass], dim=-1).transpose(1, 2)
+    k_embed = torch.cat([k_rot, k_pass], dim=-1).transpose(1, 2)
+
     return q_embed, k_embed
 
 
@@ -265,35 +245,6 @@ class PhiAttention(nn.Module):
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
         )
-
-        # self._init_rope()
-
-    # def _init_rope(self):
-    #     if self.config.rope_scaling is None:
-    #         self.rotary_emb = PhiRotaryEmbedding(
-    #             self.head_dim,
-    #             max_position_embeddings=self.max_position_embeddings,
-    #             base=self.rope_theta,
-    #         )
-    #     else:
-    #         scaling_type = self.config.rope_scaling["type"]
-    #         scaling_factor = self.config.rope_scaling["factor"]
-    #         if scaling_type == "linear":
-    #             self.rotary_emb = PhiLinearScalingRotaryEmbedding(
-    #                 self.head_dim,
-    #                 max_position_embeddings=self.max_position_embeddings,
-    #                 scaling_factor=scaling_factor,
-    #                 base=self.rope_theta,
-    #             )
-    #         elif scaling_type == "dynamic":
-    #             self.rotary_emb = PhiDynamicNTKScalingRotaryEmbedding(
-    #                 self.head_dim,
-    #                 max_position_embeddings=self.max_position_embeddings,
-    #                 scaling_factor=scaling_factor,
-    #                 base=self.rope_theta,
-    #             )
-    #         else:
-    #             raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     # Copied from transformers.models.llama.modeling_llama.LlamaAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -1222,3 +1173,107 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+@add_start_docstrings(
+    """
+    The GPT-2 Model transformer with a span classification head on top for extractive question-answering tasks like
+    SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
+    GPT2_START_DOCSTRING,
+)
+class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.transformer = GPT2Model(config)
+        self.qa_outputs = nn.Linear(config.hidden_size, 2)
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=QuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        real_checkpoint=_CHECKPOINT_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+        r"""
+        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+
+        logits = self.qa_outputs(sequence_output)
+        start_logits, end_logits = logits.split(1, dim=-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
+
+        total_loss = None
+        if start_positions is not None and end_positions is not None:
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1).to(start_logits.device)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1).to(end_logits.device)
+            # sometimes the start/end positions are outside our model inputs, we ignore these terms
+            ignored_index = start_logits.size(1)
+            start_positions = start_positions.clamp(0, ignored_index)
+            end_positions = end_positions.clamp(0, ignored_index)
+
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)
+            end_loss = loss_fct(end_logits, end_positions)
+            total_loss = (start_loss + end_loss) / 2
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[2:]
+            return ((total_loss,) + output) if total_loss is not None else output
+
+        return QuestionAnsweringModelOutput(
+            loss=total_loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+

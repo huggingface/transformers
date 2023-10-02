@@ -52,7 +52,7 @@ def convert_weights(original_weights, mapping, config):
     converted_weights = {}
     original_weights_keys = sorted(original_weights.keys())
 
-    # we change layers(1-24) -> layers(0-23) for Phi
+    # we change names (1-24) -> layers(0-23) for Phi model layers
     range_change = dict(
         (f"layers.{k}.", f"layers.{v}.") for k, v in zip(range(1, config.num_hidden_layers + 1), range(0, config.num_hidden_layers)))
 
@@ -65,14 +65,12 @@ def convert_weights(original_weights, mapping, config):
             if k in new_key:
                 new_key = new_key.replace(k, v)
 
+        # we need to convert Wqkv to q, k, v weights.
         if "Wqkv" not in new_key:
             converted_weights[new_key] = original_weights.pop(original_weights_key)
         else:
             wqkv = original_weights.pop(original_weights_key)
             q, k, v = wqkv.split(config.hidden_size)
-
-            if "weight" in new_key:
-                q, k, v = q.T, k.T, v.T
 
             converted_weights[new_key.replace("Wqkv", "q_proj")] = q
             converted_weights[new_key.replace("Wqkv", "k_proj")] = k
@@ -92,7 +90,7 @@ def _download(url: str, root: str):
     )
 
 
-def convert_phi_weights(checkpoint_path, pytorch_dump_folder_path, use_cuda):
+def convert_phi_weights(checkpoint_path, pytorch_dump_folder_path, use_cuda, save_weights_directly):
     device = "cuda" if torch.cuda.is_available() and use_cuda else "cpu"
     for each_model_name, each_model_url in _MODELS.items():
         converted_checkpoint = {}
@@ -102,20 +100,30 @@ def convert_phi_weights(checkpoint_path, pytorch_dump_folder_path, use_cuda):
             print(f"\n{each_model_name} was not found! Downloading it to {model_path}")
             _download(url=each_model_url, root=model_path)
         model_checkpoint = torch.load(model_path, map_location=device)
-
         model_type = each_model_name.split("/")[1]  # phi-1 or phi-1_5
         config = PhiConfig.from_pretrained(f"susnato/{model_type}_dev")
-        model = PhiForCausalLM(config).to(device)
 
         # Converting the weights
         converted_checkpoint.update(**convert_weights(model_checkpoint, PHI_MAPPING, config))
 
-        model.load_state_dict(converted_checkpoint, strict=True)
-        model.save_pretrained(os.path.join(pytorch_dump_folder_path, model_type))
-        print(f"Model saved at {os.path.join(pytorch_dump_folder_path, model_type)}!")
+        # Save either the whole model or the converted weights
+        if save_weights_directly:
+            save_weights_path = os.path.join(pytorch_dump_folder_path, each_model_name.split("/")[-1] + "_" + each_model_url.split("/")[-1])
+            torch.save(converted_checkpoint, save_weights_path)
+            print(f"Model weights saved at {save_weights_path}!")
+
+        else:
+            model = PhiForCausalLM(config).to(device)
+            model.load_state_dict(converted_checkpoint, strict=True)
+            save_model_path = os.path.join(pytorch_dump_folder_path, model_type)
+            model.save_pretrained(save_model_path)
+            print(f"Model saved at {save_model_path}!")
+
+            # release GPU memory for the 2nd model if cuda was used.
+            del config, model
 
         # release GPU memory for the 2nd model if cuda was used.
-        del config, model, model_checkpoint, converted_checkpoint
+        del model_checkpoint, converted_checkpoint
         if use_cuda:
             torch.cuda.empty_cache()
         gc.collect()
@@ -138,6 +146,14 @@ if __name__ == "__main__":
         type=bool,
         help="Whether to load the weights on GPU during conversion or not, False by default",
     )
+    parser.add_argument(
+        "--save_weights_directly",
+        default=True,
+        type=bool,
+        help="Whether to save the weights directly after conversion or load the weight to the Phi model and then save "
+             "the Phi model along with weights. True by default"
+    )
+
     args = parser.parse_args()
 
-    convert_phi_weights(args.checkpoint_path, args.pytorch_dump_folder_path, args.use_cuda)
+    convert_phi_weights(args.checkpoint_path, args.pytorch_dump_folder_path, args.use_cuda, args.save_weights_directly)
