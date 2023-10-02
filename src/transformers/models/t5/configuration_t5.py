@@ -101,7 +101,7 @@ class T5Config(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         classifier_dropout=0.0,
-        position_embedding_types=None,
+        position_embedding_definitions=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -137,7 +137,7 @@ class T5Config(PretrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
         
-        self.position_embedding_types = position_embedding_types or dict()
+        self.position_embedding_definitions = position_embedding_definitions or dict()
 
         super().__init__(
             pad_token_id=pad_token_id,
