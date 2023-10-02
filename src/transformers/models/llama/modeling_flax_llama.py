@@ -684,7 +684,7 @@ class FlaxLlamaForCausalLMModule(nn.Module):
     """,
     LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.gptj.modeling_flax_gptj.FlaxLlamaForCausalLM with GPTJ->Llama
+# Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJForCausalLM with GPTJ->Llama
 class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
     module_class = FlaxLlamaForCausalLMModule
 
