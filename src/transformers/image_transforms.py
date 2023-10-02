@@ -340,7 +340,7 @@ def resize(
         )
         # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
         # rescale it back to the original range.
-        resized_image = rescale(resized_image, 1 / 255) if do_rescale else resized_image
+        resized_image = rescale(resized_image, 1 / 255) if do_rescale else rescale(resized_image, 1)
     return resized_image
 
 
