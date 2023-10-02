@@ -1,7 +1,13 @@
 [tool.black]
-line-length = 119
-target-version = ['py37']
-
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+exclude = '''
+    /home/circleci/transformers/src/transformers/deepspeed.py
+    /home/circleci/transformers/src/transformers/models/whisper/convert_openai_to_hf.py
+    /home/circleci/transformers/tests/optimization/test_optimization_tf.py
+    /home/circleci/transformers/tests/optimization/test_optimization.py
+'''
 [tool.ruff]
 # Never enforce `E501` (line length violations).
 ignore = ["C901", "E501", "E741"]

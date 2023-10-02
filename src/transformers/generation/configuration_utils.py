@@ -359,32 +359,32 @@ class GenerationConfig(PushToHubMixin):
                 + fix_location
             )
             if self.temperature != 1.0:
-                warnings.warn(
+                logger.warning(
                     greedy_wrong_parameter_msg.format(flag_name="temperature", flag_value=self.temperature),
                     UserWarning,
                 )
             if self.top_p != 1.0:
-                warnings.warn(
+                logger.warning(
                     greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p),
                     UserWarning,
                 )
             if self.typical_p != 1.0:
-                warnings.warn(
+                logger.warning(
                     greedy_wrong_parameter_msg.format(flag_name="typical_p", flag_value=self.typical_p),
                     UserWarning,
                 )
             if self.top_k != 50 and self.penalty_alpha is None:  # contrastive search uses top_k
-                warnings.warn(
+                logger.warning(
                     greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k),
                     UserWarning,
                 )
             if self.epsilon_cutoff != 0.0:
-                warnings.warn(
+                logger.warning(
                     greedy_wrong_parameter_msg.format(flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff),
                     UserWarning,
                 )
             if self.eta_cutoff != 0.0:
-                warnings.warn(
+                logger.warning(
                     greedy_wrong_parameter_msg.format(flag_name="eta_cutoff", flag_value=self.eta_cutoff),
                     UserWarning,
                 )
@@ -396,31 +396,31 @@ class GenerationConfig(PushToHubMixin):
                 "in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`." + fix_location
             )
             if self.early_stopping is not False:
-                warnings.warn(
+                logger.warning(
                     single_beam_wrong_parameter_msg.format(flag_name="early_stopping", flag_value=self.early_stopping),
                     UserWarning,
                 )
             if self.num_beam_groups != 1:
-                warnings.warn(
+                logger.warning(
                     single_beam_wrong_parameter_msg.format(
                         flag_name="num_beam_groups", flag_value=self.num_beam_groups
                     ),
                     UserWarning,
                 )
             if self.diversity_penalty != 0.0:
-                warnings.warn(
+                logger.warning(
                     single_beam_wrong_parameter_msg.format(
                         flag_name="diversity_penalty", flag_value=self.diversity_penalty
                     ),
                     UserWarning,
                 )
             if self.length_penalty != 1.0:
-                warnings.warn(
+                logger.warning(
                     single_beam_wrong_parameter_msg.format(flag_name="length_penalty", flag_value=self.length_penalty),
                     UserWarning,
                 )
             if self.constraints is not None:
-                warnings.warn(
+                logger.warning(
                     single_beam_wrong_parameter_msg.format(flag_name="constraints", flag_value=self.constraints),
                     UserWarning,
                 )
@@ -505,7 +505,7 @@ class GenerationConfig(PushToHubMixin):
             for w in caught_warnings:
                 raise ValueError(w.message)
         except ValueError as exc:
-            warnings.warn(
+            logger.warning(
                 "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
                 "Fix these issues to save the configuration. This warning will be raised to an exception in v4.34."
                 "\n\nThrown during validation:\n" + str(exc),
@@ -516,7 +516,7 @@ class GenerationConfig(PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logger.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if kwargs.get("token", None) is not None:
@@ -659,7 +659,7 @@ class GenerationConfig(PushToHubMixin):
         commit_hash = kwargs.pop("_commit_hash", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logger.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:

@@ -194,7 +194,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
             self.punc_normalizer = MosesPunctNormalizer(self.source_lang).normalize
         except (ImportError, FileNotFoundError):
-            warnings.warn("Recommended: pip install sacremoses.")
+            logger.warning("Recommended: pip install sacremoses.")
             self.punc_normalizer = lambda x: x
 
     def normalize(self, x: str) -> str:

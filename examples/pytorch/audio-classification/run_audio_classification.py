@@ -187,7 +187,7 @@ class ModelArguments:
 
     def __post_init__(self):
         if not self.freeze_feature_extractor and self.freeze_feature_encoder:
-            warnings.warn(
+            logger.warning(
                 "The argument `--freeze_feature_extractor` is deprecated and "
                 "will be removed in a future version. Use `--freeze_feature_encoder`"
                 "instead. Setting `freeze_feature_encoder==True`.",
@@ -215,7 +215,7 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if model_args.use_auth_token is not None:
-        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        logger.warning("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
         if model_args.token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         model_args.token = model_args.use_auth_token

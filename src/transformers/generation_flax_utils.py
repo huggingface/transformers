@@ -14,14 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
+import logging
 
 from .generation import FlaxGenerationMixin
 
+logger=logging.getLogger(__name__)
 
 class FlaxGenerationMixin(FlaxGenerationMixin):
     # warning at import time
-    warnings.warn(
+    logger.warning(
         "Importing `FlaxGenerationMixin` from `src/transformers/generation_flax_utils.py` is deprecated and will "
         "be removed in Transformers v5. Import as `from transformers import FlaxGenerationMixin` instead.",
         FutureWarning,

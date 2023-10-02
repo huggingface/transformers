@@ -26,8 +26,8 @@ try:
 
     tokenizer_class = LlamaTokenizerFast
 except ImportError as e:
-    warnings.warn(e)
-    warnings.warn(
+    logger.warning(e)
+    logger.warning(
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
     tokenizer_class = LlamaTokenizer

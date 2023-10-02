@@ -100,7 +100,7 @@ class Text2TextGenerationPipeline(Pipeline):
         if stop_sequence is not None:
             stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
             if len(stop_sequence_ids) > 1:
-                warnings.warn(
+                logger.warning(
                     "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
                     " the stop sequence will be used as the stop sequence string in the interim."
                 )

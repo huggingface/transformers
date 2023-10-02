@@ -113,7 +113,7 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
 
     @property
     def decoder_logits(self):
-        warnings.warn(
+        logger.warning(
             "`decoder_logits` attribute is deprecated and will be removed in version 5 of Transformers."
             " Please use the `logits` attribute to retrieve the final output instead.",
             FutureWarning,

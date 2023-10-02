@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class DetrFeatureExtractor(DetrImageProcessor):
     def __init__(self, *args, **kwargs) -> None:
-        warnings.warn(
+        logger.warning(
             "The class DetrFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
             " Please use DetrImageProcessor instead.",
             FutureWarning,

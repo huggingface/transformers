@@ -84,7 +84,7 @@ class RagTokenizer:
         truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:
-        warnings.warn(
+        logger.warning(
             "`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of 🤗 Transformers. Use the "
             "regular `__call__` method to prepare your inputs and the tokenizer under the `with_target_tokenizer` "
             "context manager to prepare your targets. See the documentation of your specific tokenizer for more "

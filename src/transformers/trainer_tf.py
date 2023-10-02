@@ -115,7 +115,7 @@ class TFTrainer:
         self.epoch_logging = 0
         self.eval_loss = tf.keras.metrics.Sum()
 
-        warnings.warn(
+        logger.warning(
             "The class `TFTrainer` is deprecated and will be removed in version 5 of Transformers. "
             "We recommend using native Keras instead, by calling methods like `fit()` and `predict()` "
             "directly on the model object. Detailed examples of the Keras style can be found in our "

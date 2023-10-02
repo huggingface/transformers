@@ -30,6 +30,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: pip install "black[jupyter]"
             - run: pip install --upgrade --upgrade-strategy eager pip
             - run: pip install -U --upgrade-strategy eager GitPython
             - run: pip install -U --upgrade-strategy eager .
@@ -104,6 +105,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: pip install "black[jupyter]"
             - run: pip install --upgrade --upgrade-strategy eager pip
             - run: pip install -U --upgrade-strategy eager GitPython
             - run: pip install -U --upgrade-strategy eager .
@@ -144,6 +146,7 @@ jobs:
                       - v0.7-code-quality-site-packages
             - run: pip install --upgrade --upgrade-strategy eager pip
             - run: pip install -U --upgrade-strategy eager .[all,quality]
+            - run: pip install "black[jupyter]"
             - save_cache:
                   key: v0.7-code_quality-pip-{{ checksum "setup.py" }}
                   paths:

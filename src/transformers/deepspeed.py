@@ -17,10 +17,11 @@ in `integrations/deepspeed` instead.
 
 Check: https://github.com/huggingface/transformers/pull/25599
 """
-import warnings
+import logging
 
+logger= logging.getLogger(__name__)   # __name__ is transformers.deepspeed
 
-warnings.warn(
+logger.warning(
     "transformers.deepspeed module is deprecated and will be removed in a future version. Please import deepspeed modules directly from transformers.integrations",
     FutureWarning,
 )

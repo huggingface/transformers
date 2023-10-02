@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import unittest
+import logging
 
 from transformers import RobertaPreLayerNormConfig, is_tf_available
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
@@ -41,6 +42,7 @@ if is_tf_available():
         TFRobertaPreLayerNormModel,
     )
 
+logger = logging.getLogger(__name__)
 
 # Copied from tests.models.roberta.test_modelling_tf_roberta.TFRobertaModelTester with Roberta->RobertaPreLayerNorm
 class TFRobertaPreLayerNormModelTester:

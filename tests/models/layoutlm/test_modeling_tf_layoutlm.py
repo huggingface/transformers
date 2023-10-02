@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import unittest
 
+import logging
 import numpy as np
 
 from transformers import LayoutLMConfig, is_tf_available
@@ -39,6 +40,7 @@ if is_tf_available():
         TFLayoutLMModel,
     )
 
+logger = logging.getLogger(__name__)
 
 class TFLayoutLMModelTester:
     def __init__(

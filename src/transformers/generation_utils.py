@@ -14,14 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
+import logging
 
 from .generation import GenerationMixin
 
+logger=logging.getLogger(__name__)
 
 class GenerationMixin(GenerationMixin):
     # warning at import time
-    warnings.warn(
+    logger.warning(
         "Importing `GenerationMixin` from `src/transformers/generation_utils.py` is deprecated and will "
         "be removed in Transformers v5. Import as `from transformers import GenerationMixin` instead.",
         FutureWarning,

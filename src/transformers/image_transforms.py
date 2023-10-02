@@ -437,7 +437,7 @@ def center_crop(
     requires_backends(center_crop, ["vision"])
 
     if return_numpy is not None:
-        warnings.warn("return_numpy is deprecated and will be removed in v.4.33", FutureWarning)
+        logger.warning("return_numpy is deprecated and will be removed in v.4.33", FutureWarning)
 
     return_numpy = True if return_numpy is None else return_numpy
 

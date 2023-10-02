@@ -856,7 +856,7 @@ class ModuleUtilsMixin:
     @staticmethod
     def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device=None):
         if device is not None:
-            warnings.warn(
+            logger.warning(
                 "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
         else:
@@ -902,7 +902,7 @@ class ModuleUtilsMixin:
         if not (attention_mask.dim() == 2 and self.config.is_decoder):
             # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
             if device is not None:
-                warnings.warn(
+                logger.warning(
                     "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
                 )
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
@@ -1921,7 +1921,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
-            warnings.warn(
+            logger.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:
@@ -1935,7 +1935,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
-            warnings.warn(
+            logger.warning(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
                 " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
                 UserWarning,
@@ -1947,7 +1947,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if "save_config" in kwargs:
-            warnings.warn(
+            logger.warning(
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
             )
             is_main_process = kwargs.pop("save_config")
@@ -2471,7 +2471,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             low_cpu_mem_usage = True
 
         if use_auth_token is not None:
-            warnings.warn(
+            logger.warning(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
             if token is not None:

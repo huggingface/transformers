@@ -366,7 +366,7 @@ class HubertFeatureEncoder(nn.Module):
 class HubertFeatureExtractor(HubertFeatureEncoder):
     def __init__(self, config):
         super().__init__(config)
-        warnings.warn(
+        logger.warning(
             f"The class `{self.__class__.__name__}` has been depreciated "
             "and will be removed in Transformers v5. "
             f"Use `{self.__class__.__bases__[0].__name__}` instead.",
@@ -1182,7 +1182,7 @@ class HubertForCTC(HubertPreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        warnings.warn(
+        logger.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
@@ -1315,7 +1315,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
         not be updated during training.
         """
-        warnings.warn(
+        logger.warning(
             "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,

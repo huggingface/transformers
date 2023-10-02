@@ -17,10 +17,11 @@
 import os
 import tempfile
 import unittest
-
+import logging
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch
 
+logger=  logging.getLogger(__name__)
 
 if is_torch_available():
     import torch

@@ -17,6 +17,7 @@
 
 import inspect
 import unittest
+import logging 
 
 from transformers import Data2VecVisionConfig
 from transformers.models.auto import get_values
@@ -46,6 +47,7 @@ if is_vision_available():
 
     from transformers import BeitImageProcessor
 
+logger=logging.getLogger(__name__)
 
 class Data2VecVisionModelTester:
     def __init__(

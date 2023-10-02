@@ -936,7 +936,7 @@ class HFTracer(Tracer):
             rv.install_metadata(meta_out)
         except Exception as e:
             if _IS_IN_DEBUG_MODE:
-                warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
+                logger.warning(f"Could not compute metadata for {kind} target {target}: {e}")
 
         return rv
 

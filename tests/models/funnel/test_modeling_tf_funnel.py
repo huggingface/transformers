@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import unittest
+import logging
 
 from transformers import FunnelConfig, is_tf_available
 from transformers.testing_utils import require_tf
@@ -40,6 +41,7 @@ if is_tf_available():
         TFFunnelModel,
     )
 
+logger = logging.getLogger(__name__)
 
 class TFFunnelModelTester:
     """You can also import this e.g, from .test_modeling_funnel import FunnelModelTester"""

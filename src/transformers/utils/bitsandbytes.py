@@ -14,7 +14,7 @@
 import warnings
 
 
-warnings.warn(
+logger.warning(
     "transformers.utils.bitsandbytes module is deprecated and will be removed in a future version. Please import bitsandbytes modules directly from transformers.integrations",
     FutureWarning,
 )

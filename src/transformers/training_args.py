@@ -1259,7 +1259,7 @@ class TrainingArguments:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
         if isinstance(self.evaluation_strategy, EvaluationStrategy):
-            warnings.warn(
+            logger.warning(
                 "using `EvaluationStrategy` for `evaluation_strategy` is deprecated and will be removed in version 5"
                 " of 🤗 Transformers. Use `IntervalStrategy` instead",
                 FutureWarning,
@@ -1267,7 +1267,7 @@ class TrainingArguments:
             # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
             self.evaluation_strategy = self.evaluation_strategy.value
         if self.no_cuda:
-            warnings.warn(
+            logger.warning(
                 "using `no_cuda` is deprecated and will be removed in version 5.0 of 🤗 Transformers. "
                 "Use `use_cpu` instead",
                 FutureWarning,
@@ -1359,7 +1359,7 @@ class TrainingArguments:
             self.run_name = self.output_dir
         if self.framework == "pt" and is_torch_available():
             if self.fp16_backend and self.fp16_backend != "auto":
-                warnings.warn(
+                logger.warning(
                     "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
                     " `half_precision_backend` instead",
                     FutureWarning,
@@ -1417,7 +1417,7 @@ class TrainingArguments:
 
         self.optim = OptimizerNames(self.optim)
         if self.adafactor:
-            warnings.warn(
+            logger.warning(
                 "`--adafactor` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `--optim"
                 " adafactor` instead",
                 FutureWarning,
@@ -1461,7 +1461,7 @@ class TrainingArguments:
             )
 
         if self.torchdynamo is not None:
-            warnings.warn(
+            logger.warning(
                 "`torchdynamo` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
                 " `torch_compile_backend` instead",
                 FutureWarning,
@@ -1541,7 +1541,7 @@ class TrainingArguments:
             )
 
         if not (self.sharded_ddp == "" or not self.sharded_ddp):
-            warnings.warn(
+            logger.warning(
                 "using `sharded_ddp` is deprecated and will be removed in version 4.33"
                 " of 🤗 Transformers. Use `fsdp` instead",
                 FutureWarning,
@@ -1577,7 +1577,7 @@ class TrainingArguments:
 
         if isinstance(self.fsdp_config, str):
             if len(self.fsdp) == 0:
-                warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
+                logger.warning("`--fsdp_config` is useful only when `--fsdp` is specified.")
             with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
                 for k in list(self.fsdp_config.keys()):
@@ -1586,7 +1586,7 @@ class TrainingArguments:
                         self.fsdp_config[k[5:]] = v
 
         if self.fsdp_min_num_params > 0:
-            warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
+            logger.warning("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
 
         self.fsdp_config["min_num_params"] = max(self.fsdp_config.get("min_num_params", 0), self.fsdp_min_num_params)
 
@@ -1595,7 +1595,7 @@ class TrainingArguments:
             self.fsdp_config["transformer_layer_cls_to_wrap"] = [self.fsdp_config["transformer_layer_cls_to_wrap"]]
 
         if self.fsdp_transformer_layer_cls_to_wrap is not None:
-            warnings.warn(
+            logger.warning(
                 "using `--fsdp_transformer_layer_cls_to_wrap` is deprecated. Use fsdp_config instead ", FutureWarning
             )
             self.fsdp_config["transformer_layer_cls_to_wrap"] = self.fsdp_config.get(
@@ -1603,10 +1603,10 @@ class TrainingArguments:
             ) + [self.fsdp_transformer_layer_cls_to_wrap]
 
         if len(self.fsdp) == 0 and self.fsdp_config["min_num_params"] > 0:
-            warnings.warn("`min_num_params` is useful only when `--fsdp` is specified.")
+            logger.warning("`min_num_params` is useful only when `--fsdp` is specified.")
 
         if len(self.fsdp) == 0 and self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None:
-            warnings.warn("`transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
+            logger.warning("`transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
 
         if (
             len(self.fsdp) > 0
@@ -1626,10 +1626,10 @@ class TrainingArguments:
                 if "buffer_dtype" in self.xla_fsdp_config:
                     self.xla_fsdp_config["buffer_dtype"] = getattr(torch, self.xla_fsdp_config["buffer_dtype"])
             else:
-                warnings.warn("XLA FSDP can be used only when `--fsdp` is specified.")
+                logger.warning("XLA FSDP can be used only when `--fsdp` is specified.")
         else:
             if self.fsdp_config["xla_fsdp_grad_ckpt"]:
-                warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
+                logger.warning("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
         # accelerate integration for FSDP
         if len(self.fsdp) > 0 and not self.fsdp_config["xla"]:
@@ -1664,7 +1664,7 @@ class TrainingArguments:
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "false")
 
         if self.tpu_metrics_debug:
-            warnings.warn(
+            logger.warning(
                 "using `--tpu_metrics_debug` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
                 " `--debug tpu_metrics_debug` instead",
                 FutureWarning,
@@ -1708,7 +1708,7 @@ class TrainingArguments:
             self.deepspeed_plugin.set_deepspeed_weakref()
 
         if self.push_to_hub_token is not None:
-            warnings.warn(
+            logger.warning(
                 "`--push_to_hub_token` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
                 "`--hub_token` instead.",
                 FutureWarning,
@@ -1720,14 +1720,14 @@ class TrainingArguments:
                 self.push_to_hub_model_id, organization=self.push_to_hub_organization, token=self.hub_token
             )
             if self.push_to_hub_organization is not None:
-                warnings.warn(
+                logger.warning(
                     "`--push_to_hub_model_id` and `--push_to_hub_organization` are deprecated and will be removed in "
                     "version 5 of 🤗 Transformers. Use `--hub_model_id` instead and pass the full repo name to this "
                     f"argument (in this case {self.hub_model_id}).",
                     FutureWarning,
                 )
             else:
-                warnings.warn(
+                logger.warning(
                     "`--push_to_hub_model_id` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
                     "`--hub_model_id` instead and pass the full repo name to this argument (in this case "
                     f"{self.hub_model_id}).",
@@ -1735,7 +1735,7 @@ class TrainingArguments:
                 )
         elif self.push_to_hub_organization is not None:
             self.hub_model_id = f"{self.push_to_hub_organization}/{Path(self.output_dir).name}"
-            warnings.warn(
+            logger.warning(
                 "`--push_to_hub_organization` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
                 "`--hub_model_id` instead and pass the full repo name to this argument (in this case "
                 f"{self.hub_model_id}).",
@@ -1854,7 +1854,7 @@ class TrainingArguments:
             torch.xpu.set_device(device)
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
-                warnings.warn(
+                logger.warning(
                     "`use_mps_device` is deprecated and will be removed in version 5.0 of 🤗 Transformers."
                     "`mps` device will be used by default if available similar to the way `cuda` device is used."
                     "Therefore, no action from user is required. "

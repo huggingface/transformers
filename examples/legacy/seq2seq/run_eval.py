@@ -137,7 +137,7 @@ def run_generate(verbose=True):
     Path(args.save_path).parent.mkdir(exist_ok=True)
 
     if args.reference_path is None and Path(args.score_path).exists():
-        warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
+        logger.warning(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
 
     if args.device == "cpu" and args.fp16:
         # this mix leads to RuntimeError: "threshold_cpu" not implemented for 'Half'

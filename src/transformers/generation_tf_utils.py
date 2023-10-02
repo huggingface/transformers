@@ -14,14 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
+import logging
 
 from .generation import TFGenerationMixin
 
+logger=logging.getLogger(__name__)
 
 class TFGenerationMixin(TFGenerationMixin):
     # warning at import time
-    warnings.warn(
+    logger.warning(
         "Importing `TFGenerationMixin` from `src/transformers/generation_tf_utils.py` is deprecated and will "
         "be removed in Transformers v5. Import as `from transformers import TFGenerationMixin` instead.",
         FutureWarning,
