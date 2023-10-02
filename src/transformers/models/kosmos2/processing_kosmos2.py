@@ -177,21 +177,21 @@ class Kosmos2Processor(ProcessorMixin):
             if first_image_token_id is None:
                 first_image_token_id = self.tokenizer.unk_token_id + 1
 
-            # To see if we need one more `0` (for `<s>`) at the beginning of `image_features_mask`.
+            # To see if we need one more `0` (for `<s>`) at the beginning of `image_embeds_position_mask`.
             with_bos = add_special_tokens
 
             # The first (actual) `<image>` token is always at the 1st or 2nd place (after `<s>` if any). Here we look
             # for the second `<image>` token (which indicate the first image token).
             start_index = int(with_bos) + 1
 
-            # Add `image_features_mask`: the leading and trailing `0` are for `boi` and `eoi` tokens. The `1` indicates
+            # Add `image_embeds_position_mask`: the leading and trailing `0` are for `boi` and `eoi` tokens. The `1` indicates
             # the places of image tokens.
             image_token_ids = list(range(first_image_token_id, first_image_token_id + num_image_tokens))
-            base_image_features_mask = [0] + [1] * num_image_tokens + [0]
+            base_image_embeds_position_mask = [0] + [1] * num_image_tokens + [0]
 
             # loop over `encoding["input_ids"]`
             input_ids = []
-            image_features_mask = []
+            image_embeds_position_mask = []
             all_input_ids = encoding["input_ids"]
             # not batched -> (changed to) batch of size 1
             if isinstance(text, str):
@@ -202,13 +202,13 @@ class Kosmos2Processor(ProcessorMixin):
                 text_ids = text_ids[:start_index] + image_token_ids + text_ids[start_index + num_image_tokens :]
                 input_ids.append(text_ids)
 
-                mask = copy.copy(base_image_features_mask)
+                mask = copy.copy(base_image_embeds_position_mask)
                 if with_bos:
                     # for `<s>`
                     mask = [0] + mask
                 # trailing part (which are not related to the image)
                 mask += [0] * (len(text_ids) - len(mask))
-                image_features_mask.append(mask)
+                image_embeds_position_mask.append(mask)
 
             if isinstance(text, list):
                 sorted_length = sorted([(idx, len(x)) for idx, x in enumerate(text_encoding.input_ids)])
@@ -231,14 +231,14 @@ class Kosmos2Processor(ProcessorMixin):
                 if min_len_not_padded != max_len_padded:
                     if self.tokenizer.padding_side == "right":
                         input_ids = [x + [self.tokenizer.pad_token_id] * (max_len_padded - len(x)) for x in input_ids]
-                        image_features_mask = [x + [0] * (max_len_padded - len(x)) for x in image_features_mask]
+                        image_embeds_position_mask = [x + [0] * (max_len_padded - len(x)) for x in image_embeds_position_mask]
                         if "attention_mask" in encoding:
                             encoding["attention_mask"] = [
                                 x + [0] * (max_len_padded - len(x)) for x in encoding["attention_mask"]
                             ]
                     elif self.tokenizer.padding_side == "left":
                         input_ids = [[self.tokenizer.pad_token_id] * (max_len_padded - len(x)) + x for x in input_ids]
-                        image_features_mask = [[0] * (max_len_padded - len(x)) + x for x in image_features_mask]
+                        image_embeds_position_mask = [[0] * (max_len_padded - len(x)) + x for x in image_embeds_position_mask]
                         if "attention_mask" in encoding:
                             encoding["attention_mask"] = [
                                 [0] * (max_len_padded - len(x)) + x for x in encoding["attention_mask"]
@@ -248,7 +248,7 @@ class Kosmos2Processor(ProcessorMixin):
             if isinstance(text, str) and return_tensors is None:
                 input_ids = input_ids[0]
                 encoding["attention_mask"] = encoding["attention_mask"][0]
-                image_features_mask = image_features_mask[0]
+                image_embeds_position_mask = image_embeds_position_mask[0]
 
             # to the target tensor type
             if return_tensors == "pt":
@@ -257,13 +257,13 @@ class Kosmos2Processor(ProcessorMixin):
                 import torch
 
                 input_ids = torch.from_numpy(np.array(input_ids))
-                image_features_mask = torch.from_numpy(np.array(image_features_mask))
+                image_embeds_position_mask = torch.from_numpy(np.array(image_embeds_position_mask))
                 encoding["attention_mask"] = torch.from_numpy(np.array(encoding["attention_mask"]))
             elif return_tensors is not None:
                 raise ValueError("return_tensors should be one of 'None' or 'pt'")
 
             encoding["input_ids"] = input_ids
-            encoding["image_features_mask"] = image_features_mask
+            encoding["image_embeds_position_mask"] = image_embeds_position_mask
 
         return encoding
 
