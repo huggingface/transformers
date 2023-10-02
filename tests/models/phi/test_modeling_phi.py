@@ -225,7 +225,11 @@ class PhiModelTester:
 
 @require_torch
 class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PhiModel, PhiForCausalLM, PhiForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification, PhiForQuestionAnswering)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (PhiForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
