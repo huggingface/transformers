@@ -206,7 +206,6 @@ docs/source/en/model_doc/retribert.md
 docs/source/en/model_doc/roberta-prelayernorm.md
 docs/source/en/model_doc/roberta.md
 docs/source/en/model_doc/roc_bert.md
-docs/source/en/model_doc/roformer.md
 docs/source/en/model_doc/rwkv.md
 docs/source/en/model_doc/sam.md
 docs/source/en/model_doc/segformer.md
