@@ -574,7 +574,6 @@ class LlamaIntegrationTest(unittest.TestCase):
             "codellama/CodeLlama-7b-hf", revision="3773f63b4511b9e47a9a7ffc765eed7eb0169486"
         )
         tokenizer.encode("Hey how <FILL_ME> are you")
-        # passing both a text with fill me and a suffix should not work no?
         tokenizer.encode_plus("Hey how <FILL_ME> are you", "mne too")
         tokenizer.tokenize("Hey how are you", "mne too")
 
