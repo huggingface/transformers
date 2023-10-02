@@ -234,12 +234,10 @@ class ReccurrentFlowCompleteNet(nn.Module):
             masked_flows_bi: [masked_flows_f, masked_flows_b] | (b t-1 2 h w), (b t-1 2 h w)
             masks: b t 1 h w
         """
-        print(masks.shape)
         masks_forward = masks[:, :-1, ...].contiguous()
         masks_backward = masks[:, 1:, ...].contiguous()
 
         # mask flow
-        print(masked_flows_bi[0].shape, masks_forward.shape)
         masked_flows_forward = masked_flows_bi[0] * (1 - masks_forward)
         masked_flows_backward = masked_flows_bi[1] * (1 - masks_backward)
 
@@ -340,7 +338,6 @@ class FlowMotionEncoder(nn.Module):
         self.Conv_ = nn.Conv2d(64 + 192, 128 - 2, 3, padding=1)
 
     def forward(self, flow, corr):
-        print(flow.dtype)
         cor = F.relu(self.Conv_c1(corr))
         cor = F.relu(self.Conv_c2(cor))
         flo = F.relu(self.Conv_f1(flow))
@@ -445,7 +442,6 @@ class FlowUpdateBlock(nn.Module):
         )
 
     def forward(self, net, inp, corr, flow, upsample=True):
-        print(corr.dtype, "---")
         motion_features = self.Encoder(flow, corr)
         inp = torch.cat([inp, motion_features], dim=1)
 
@@ -512,7 +508,6 @@ class FlowEncoder(nn.Module):
         if is_list:
             batch_dim = x[0].shape[0]
             x = torch.cat(x, dim=0)
-        print(x.dtype)
 
         x = self.Conv1(x)
         x = self.Norm1(x)
@@ -556,9 +551,7 @@ class CorrBlock:
         xgrid, ygrid = coords.split([1, 1], dim=-1)
         xgrid = 2 * xgrid / (W - 1) - 1
         ygrid = 2 * ygrid / (H - 1) - 1
-        print(img.dtype, "dtype -------------------------------------------------")
         grid = torch.cat([xgrid, ygrid], dim=-1).to(img.dtype)
-        print(grid.dtype, "++++")
         img = F.grid_sample(img, grid, align_corners=True)
 
         if mask:
@@ -1754,7 +1747,6 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
 
         video_length = frames.size(1)
         h, w = frames.shape[-2], frames.shape[-1]
-        print(h,w)
 
         if frames.size(-1) <= 640:
             short_clip_len = 12
@@ -1785,7 +1777,6 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
             gt_flows_bi = (gt_flows_f, gt_flows_b)
         else:
-            print(frames.dtype)
             gt_flows_bi = self.OpticalFlow(frames, iters=self.config.raft_iter)
 
         flow_length = gt_flows_bi[0].size(1)
@@ -1813,7 +1804,6 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             pred_flows_b = torch.cat(pred_flows_b, dim=1)
             pred_flows_bi = (pred_flows_f, pred_flows_b)
         else:
-            print(gt_flows_bi[0].shape, flow_masks.shape)
             pred_flows_bi, _ = self.FlowComplete.forward_bidirect_flow(gt_flows_bi, flow_masks)
             pred_flows_bi = self.FlowComplete.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
 
@@ -1908,9 +1898,9 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
                 comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
             ## to be removed
-        #return ProPainterFrameModelingOutput(
-        #    reconstructed_frames=comp_frames,
-        #)
+        return ProPainterFrameModelingOutput(
+            reconstructed_frames=comp_frames,
+        )
         import os
 
         out_size = (w, h)

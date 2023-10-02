@@ -235,7 +235,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         """
         # size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
-        if do_resize is not None and size is None:
+        if do_resize is not False and size is None:
             raise ValueError("Size and max_size must be specified if do_resize is True.")
 
         # images = make_list_of_images(images)
@@ -248,19 +248,33 @@ class ProPainterImageProcessor(BaseImageProcessor):
             size = (int(self.resize_ratio * size[0]), int(self.resize_ratio * size[1]))
 
         if self.do_resize:
-            frames, size, out_size = self.resize_frames(frames, resize)
+            frames, size, out_size = self.resize_frames(frames, size)
 
         frames_len = len(frames)
         flow_masks, masks_dilated = self.read_mask(
             masks, frames_len, size, flow_mask_dilates=self.mask_dilation, mask_dilates=self.mask_dilation
         )
 
+        self.masked_frame_for_save = []
+        (w,h) = size
+        for i in range(len(frames)):
+            mask_ = np.expand_dims(np.array(masks_dilated[i]),2).repeat(3, axis=2)/255.
+            img = np.array(frames[i])
+            green = np.zeros([h, w, 3])
+            green[:,:,1] = 255
+            alpha = 0.6
+            # alpha = 1.0
+            fuse_img = (1-alpha)*img + alpha*green
+            fuse_img = mask_ * fuse_img + (1-mask_)*img
+            self.masked_frame_for_save.append(fuse_img.astype(np.uint8))
+
+
         frames_inp = [np.array(f).astype(np.uint8) for f in frames]
         frames = self.to_tensors()(frames).unsqueeze(0) * 2 - 1
         flow_masks = self.to_tensors()(flow_masks).unsqueeze(0)
         masks_dilated = self.to_tensors()(masks_dilated).unsqueeze(0)
 
-        data = {"frames": frames[:,:2,:,:,:], "flow_masks": flow_masks[:,:2,:,:,:], "masks_dilated": masks_dilated[:,:2,:,:,:]}
+        data = {"frames": frames, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
 
         return BatchFeature(data=data, tensor_type=return_tensors), frames_inp
 
@@ -313,8 +327,8 @@ class ProPainterImageProcessor(BaseImageProcessor):
             TODO
 
         """
-        imageio.mimwrite(os.path.join(save_root, "masked_in.mp4"), masked_frame_for_save, fps=self.save_fps, quality=7)
-        imageio.mimwrite(os.path.join(save_root, "inpaint_out.mp4"), comp_frames, fps=self.save_fps, quality=7)
+        imageio.mimwrite(os.path.join(save_root, "masked_in.mp4"), masked_frame_for_save, fps=self.save_fps)
+        imageio.mimwrite(os.path.join(save_root, "inpaint_out.mp4"), comp_frames, fps=self.save_fps)
         return None
 
     def imwrite(self, img, file_path, params=None, auto_mkdir=True) -> bool:
@@ -332,10 +346,11 @@ class ProPainterImageProcessor(BaseImageProcessor):
         save_root: str,
     ) -> None:
         for idx in range(video_length):
+            print("in")
             f = comp_frames[idx]
-            f = cv2.resize(f, out_size, interpolation=cv2.INTER_CUBIC)
+            #f = cv2.resize(f, out_size, interpolation=cv2.INTER_CUBIC)
             f = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-            img_save_root = os.path.join(save_root, "frames", str(idx).zfill(4) + ".png")
+            img_save_root = os.path.join("./", "frame879", str(idx).zfill(4) + ".png")
             self.imwrite(f, img_save_root)
 
         return None
@@ -344,8 +359,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         self,
         video_name: str,
         comp_frames,
-        video_length,
-        out_size,
+        save_frames:bool = True,
     ) -> None:
         """
         Postporcess the outputs of the model.
@@ -355,25 +369,28 @@ class ProPainterImageProcessor(BaseImageProcessor):
 
         """
         # Save the frames of the video.
-        save_root = os.path.join(self.save_path, video_name)
+        comp_frames = comp_frames.reconstructed_frames
+        video_length = len(comp_frames)
+        print(video_length)
+        out_size = len(comp_frames[0]),len(comp_frames[1])
+
+        save_root = os.path.join("./", video_name)
         if not os.path.exists(save_root):
             os.makedirs(save_root, exist_ok=True)
 
-        if self.save_frames:
+        if save_frames:
             self.save_frame(comp_frames, video_length, out_size, save_root)
 
+        return 
         # Save the video.
-        if self.mode == "video_outpainting":
-            comp_frames = [i[10:-10, 10:-10] for i in comp_frames]
-            masked_frame_for_save = [i[10:-10, 10:-10] for i in masked_frame_for_save]
-        elif self.mode == "video_inpainting":
-            masked_frame_for_save = [cv2.resize(f, out_size) for f in masked_frame_for_save]
-            comp_frames = [cv2.resize(f, out_size) for f in comp_frames]
-        else:
-            raise NotImplementedError(f"Image mode {self.mode}")
-
-        self.save_videos_frame(save_root, masked_frame_for_save, comp_frames)
-
+        #if self.mode == "video_outpainting":
+        #    comp_frames = [i[10:-10, 10:-10] for i in comp_frames]
+        #    masked_frame_for_save = [i[10:-10, 10:-10] for i in masked_frame_for_save]
+        #elif self.mode == "video_inpainting":
+        masked_frame_for_save = [cv2.resize(f, out_size) for f in self.masked_frame_for_save]
+        comp_frames = [cv2.resize(f, out_size) for f in comp_frames]
+        imageio.mimwrite('masked_in.mp4', masked_frame_for_save, fps=24,codec="libx264")
+        imageio.mimwrite('inpaint_out.mp4', comp_frames, fps=24,codec="libx264")
         return None
 
 
