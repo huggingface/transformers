@@ -18,8 +18,8 @@ from collections import OrderedDict
 from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
+from ...onnx import OnnxConfig
 
 
 logger = logging.get_logger(__name__)
@@ -158,6 +158,7 @@ class BertConfig(PretrainedConfig):
         classifier_dropout=None,
         **kwargs,
     ):
+        # Add (with random weights)
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
         self.vocab_size = vocab_size
