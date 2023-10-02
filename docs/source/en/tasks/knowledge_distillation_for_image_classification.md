@@ -15,9 +15,9 @@ rendered properly in your Markdown viewer.
 -->
 # Knowledge Distillation for Computer Vision
 
-Knowledge distillation is a technique used to transfer knowledge from a larger, more complex model (teacher) to a smaller, simpler model (student). In the context of image classification, the goal is to train the student model to mimic the behavior of the teacher model. In this notebook, we will do task-specific knowledge distillation. We will use [beans](https://huggingface.co/datasets/beans) for this.
+Knowledge distillation is a technique used to transfer knowledge from a larger, more complex model (teacher) to a smaller, simpler model (student). In the context of image classification, the goal is to train the student model to mimic the behavior of the teacher model. It was first introduced in [Distilling the Knowledge in a Neural Network by Hinton et al](https://arxiv.org/abs/1503.02531). In this notebook, we will do task-specific knowledge distillation. We will use [beans](https://huggingface.co/datasets/beans) for this.
 
-This tutorial aims to demonstrate how to distil a ResNet (teacher model)[https://huggingface.co/microsoft/resnet-50] to [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (student model) using `Trainer` API of 🤗 Transformers.
+This tutorial aims to demonstrate how to distil a ResNet (teacher model)[https://huggingface.co/microsoft/resnet-50] to [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (student model) using `Trainer` API of 🤗 Transformers. 
 
 Let's install the libraries needed for distillation and evaluating the process. 
 
@@ -28,12 +28,10 @@ pip install transformers datasets accelerate tensorboard evaluate --upgrade
 In this example, we are using the `microsoft/resnet-50` model, trained with ImageNet-1k dataset with a resolution of 224x224. You can see that feature extractor returns the same output below.
 
 ```python
-from transformers import AutoFeatureExtractor
 from PIL import Image
 import requests
 import numpy as np
 
-teacher_extractor = AutoFeatureExtractor.from_pretrained("microsoft/resnet-50")
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 sample = Image.open(requests.get(url, stream=True).raw)
 ```
@@ -49,6 +47,9 @@ dataset = load_dataset("beans")
 We can use either of the processors given they return the same output. We will use `map()` method of `dataset` to apply the preprocessing to every split of the dataset.
 
 ```python
+from transformers import AutoImageProcessor
+teacher_extractor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+
 def process(examples):
     processed_inputs = teacher_extractor(examples["image"])
     return processed_inputs
@@ -128,9 +129,6 @@ training_args = TrainingArguments(
     hub_model_id=repo_name,
     )
 
-
-data_collator = DefaultDataCollator()
-
 num_labels = len(processed_datasets["train"].features["labels"].names)
 
 # initialize models
@@ -163,6 +161,7 @@ def compute_metrics(eval_pred):
 Let's initialize the `Trainer` with the training arguments we defined. 
 
 ```python
+data_collator = DefaultDataCollator()
 trainer = ImageDistilTrainer(
     student_model=student_model,
     teacher_model=teacher_model,
