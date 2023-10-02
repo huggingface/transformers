@@ -1238,11 +1238,16 @@ class PredictionHead(nn.Module):
         head_dim = config.num_input_channels * config.d_model
 
         self.flatten = nn.Flatten(start_dim=1)
+        # if distribution_output is None:
+        #     self.linear = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)
+        #     self.args_proj = None
+        # else:                        
+        #     self.args_proj = distribution_output.get_parameter_projection(head_dim)
         if distribution_output is None:
-            self.linear = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)
-            self.args_proj = None
+            self.projection = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)            
         else:                        
-            self.args_proj = distribution_output.get_parameter_projection(head_dim)
+            self.projection = distribution_output.get_parameter_projection(head_dim)
+
         self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
 
     def forward(self, x):
@@ -1263,17 +1268,13 @@ class PredictionHead(nn.Module):
 
         # flatten the input        
         x = self.dropout(self.flatten(x))  # x: bs x (nvars * d_model)        
-        # y = self.linear(self.dropout(x))  # y: bs x (pred_len * num_output_channels)        
-        if self.args_proj is None:
-            y = self.linear(x)  # y: bs x (pred_len * num_output_channels)        
-            # reshape the data to [bs x pred_len x num_output_channels]            
+        # projection 
+        y = self.projection(x)
+        # reshape y
+        if isinstance(y, tuple):    # for distribution head
+            y = (z.reshape(batch_size, -1, self.num_output_channels) for z in y)   # tuple of [bs x pred_len x num_output_channels]          
+        else:       # for linear head
             y = y.reshape(batch_size, -1, self.num_output_channels)  # [bs x pred_len x num_output_channels]            
-        else:
-            # project prarameters of distribution            
-            y = self.args_proj(x)                         
-            # reshape the data to be a tuple of [bs x pred_len x num_output_channels] 
-            y = (z.reshape(batch_size, -1, self.num_output_channels) for z in y)            
-
         return y
 
 
