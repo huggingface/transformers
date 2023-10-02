@@ -21,14 +21,3 @@ known-first-party = ["transformers"]
 # This is ignored, maybe because of the header? If someone finds a fix, we can uncomment and remove setup.cfg
 # [tool.pytest]
 # doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
-[tool.black]
-line-length = 88
-target-version = ['py38']
-include = '\.pyi?$'
-exclude = '''
-    /home/circleci/transformers/src/transformers/deepspeed.py
-    /home/circleci/transformers/src/transformers/models/whisper/convert_openai_to_hf.py
-    /home/circleci/transformers/tests/optimization/test_optimization_tf.py
-    /home/circleci/transformers/tests/optimization/test_optimization.py
-'''
-
