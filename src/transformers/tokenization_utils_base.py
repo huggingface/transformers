@@ -851,6 +851,8 @@ class SpecialTokensMixin:
                 continue
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
+                    # TODO THIS IS NASTY! Will always reset tokens to default rstrip and lstrip because self.set_attr on strings
+                    # will not check the addedtokens decoder. WILL FIX TOMORROW
                     assert isinstance(value, (list, tuple)), f"Value {value} is not a list or tuple"
                     assert all(
                         isinstance(t, (str, AddedToken)) for t in value
@@ -2196,11 +2198,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             for idx, token in init_kwargs["added_tokens_decoder"].items():
                 if isinstance(token, dict):
                     token = AddedToken(**token)
-
                 if isinstance(token, AddedToken):
                     added_tokens_decoder[int(idx)] = token
                     if str(token) in additional_special_tokens:
-                        # at this point if the token is in `additional_special_tokens` as an str, should be updated
+                        # at this point the token is in `additional_special_tokens` as an str, let's add the AddedToken info
                         additional_special_tokens.remove(str(token))
                     if token.special and token not in additional_special_tokens:
                         additional_special_tokens.append(token)
@@ -2235,11 +2236,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # legacy: we have to init with (rstrip=True, lstrip=True)
                 rstrip = lstrip = True if "Fast" not in cls.__name__ else False
                 for token, index in added_tok_encoder.items():
-                    if index in added_tokens_decoder and  "Fast" not in cls.__name__:
-                        continue
-                    added_tokens_decoder = {
-                        index: AddedToken(token, rstrip=rstrip, lstrip=lstrip) for token, index in added_tok_encoder.items()
-                    }
+                    if index not in added_tokens_decoder:
+                        rstrip = lstrip = False
+                    added_tokens_decoder = {index: AddedToken(token, rstrip=rstrip, lstrip=lstrip)}
             # end legacy
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens if the `fast` was not properly saved!
