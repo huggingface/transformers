@@ -54,7 +54,7 @@ pip install -q datasets transformers evaluate
 
 ## SceneParse150 데이터 세트 불러오기[[load-sceneparse150-dataset]]
 
-🤗 Datasets 라이브러리에서 SceneParse150 데이터 세트의 더 작은 부분 집합을 가져오는 것으로 시작합니다. 이렇게 하면 전체 데이터 세트에 대한 훈련에 많은 시간을 할애하기 전에 실험을 통해 모든 것이 제대로 작동하는지 확인할 수 있습니다.
+🤗 Datasets 라이브러리에서 SceneParse150 데이터 세트의 더 작은 부분 집합을 가져오는 것으로 시작합니다. 이렇게 하면 데이터 세트 전체에 대한 훈련에 많은 시간을 할애하기 전에 실험을 통해 모든 것이 제대로 작동하는지 확인할 수 있습니다.
 
 ```py
 >>> from datasets import load_dataset
@@ -83,7 +83,7 @@ pip install -q datasets transformers evaluate
 - `annotation`: 분할 지도(segmentation map)의 PIL 이미지입니다. 모델의 타겟이기도 합니다.
 - `scene_category`: "주방" 또는 "사무실"과 같이 이미지 장면을 설명하는 카테고리 ID입니다. 이 가이드에서는 둘 다 PIL 이미지인 `image`와 `annotation`만을 사용합니다.
 
-나중에 모델을 설정할 때 유용하게 사용할 수 있도록 레이블 ID를 레이블 클래스에 매핑하는 사전도 만들고 싶을 것입니다. 허브에서 매핑을 다운로드하고 `id2label` 및 `label2id` 사전을 만드세요:
+나중에 모델을 설정할 때 유용하게 사용할 수 있도록 레이블 ID를 레이블 클래스에 매핑하는 사전도 만들고 싶을 것입니다. Hub에서 매핑을 다운로드하고 `id2label` 및 `label2id` 사전을 만드세요:
 
 ```py
 >>> import json
@@ -99,7 +99,7 @@ pip install -q datasets transformers evaluate
 
 ## 전처리하기[[preprocess]
 
-다음 단계는 모델에 사용할 이미지와 주석을 준비하기 위해 SegFormer 이미지 프로세서를 불러오는 것입니다. 우리가 사용하는 데이터 세트와 같은 일부 데이터 세트는 배경 클래스로 제로 인덱스를 사용합니다. 하지만, 배경 클래스는 150개의 클래스에 실제로는 포함되지 않기 때문에 `reduce_labels=True` 를 설정해 모든 레이블에서 배경 클래스를 제거해야 합니다. 제로 인덱스는 `255`로 대체되므로 SegFormer의 손실 함수에서 무시됩니다:
+다음 단계는 모델에 사용할 이미지와 주석을 준비하기 위해 SegFormer 이미지 프로세서를 불러오는 것입니다. 우리가 사용하는 데이터 세트와 같은 일부 데이터 세트는 배경 클래스로 제로 인덱스를 사용합니다. 하지만 배경 클래스는 150개의 클래스에 실제로는 포함되지 않기 때문에 `reduce_labels=True` 를 설정해 모든 레이블에서 배경 클래스를 제거해야 합니다. 제로 인덱스는 `255`로 대체되므로 SegFormer의 손실 함수에서 무시됩니다:
 
 ```py
 >>> from transformers import AutoImageProcessor
@@ -175,9 +175,7 @@ pip install -q datasets transformers evaluate
 ...     return image
 ```
 
-그런 다음 두 개의 전처리 함수를 만들어 모델에 대한 이미지 및 주석 배치를 준비합니다. 이 함수들은
-이미지 변환을 적용하고 이전에 로드한 `image_processor`를 사용하여 이미지를 `pixel_values`로, 주석을 `label`로 변환합니다.
-어노테이션을 `레이블`로 변환합니다. `ImageProcessor` 는 이미지의 크기 조정과 정규화도 처리합니다.
+그런 다음 모델을 위해 두 개의 전처리 함수를 만들어 이미지 및 주석 배치를 준비합니다. 이 함수들은 이미지 변환을 적용하고 이전에 로드한 `image_processor`를 사용하여 이미지를 `pixel_values`로, 주석을 `label`로 변환합니다. `ImageProcessor` 는 이미지의 크기 조정과 정규화도 처리합니다.
 
 ```py
 >>> def train_transforms(example_batch):
@@ -193,6 +191,7 @@ pip install -q datasets transformers evaluate
 ...     inputs = image_processor(images, labels)
 ...     return inputs
 ```
+
 전체 데이터 집합에 전처리 변환을 적용하려면 🤗 Datasets [`~datasets.Dataset.set_transform`] 함수를 사용하세요.
 즉시 변환이 적용되기 때문에 더 빠르고 디스크 공간을 덜 차지합니다:
 
@@ -212,6 +211,7 @@ pip install -q datasets transformers evaluate
 
 >>> metric = evaluate.load("mean_iou")
 ```
+
 그런 다음 메트릭을 [`~evaluate.EvaluationModule.compute`]하는 함수를 만듭니다. 예측을 먼저 로짓으로 변환한 다음, 레이블의 크기에 맞게 모양을 다시 지정해야 [`~evaluate.EvaluationModule.compute`]를 호출할 수 있습니다:
 
 <frameworkcontent>
@@ -305,7 +305,7 @@ pip install -q datasets transformers evaluate
 
 이제 세 단계만 남았습니다:
 
-1. 학습 하이퍼파라미터를 [`TrainingArguments`]에 정의합니다. `image` 열이 삭제되기 때문에 사용하지 않는 열을 제거하지 않는 것이 중요합니다. `image` 열이 없으면 `pixel_values`을 생성할 수 없습니다. 이런 경우를 방지하려면 `remove_unused_columns=False`로 설정하세요! 유일하게 필요한 다른 매개변수는 모델을 저장할 위치를 지정하는 `output_dir`입니다. `push_to_hub=True`를 설정하여 이 모델을 허브에 푸시합니다(모델을 업로드하려면 허깅 페이스에 로그인해야 합니다). 각 에포크가 끝날 때마다 [`Trainer`]가 IoU 메트릭을 평가하고 학습 체크포인트를 저장합니다.
+1. 학습 하이퍼파라미터를 [`TrainingArguments`]에 정의합니다. `image` 열이 삭제되기 때문에 사용하지 않는 열을 제거하지 않는 것이 중요합니다. `image` 열이 없으면 `pixel_values`을 생성할 수 없습니다. 이런 경우를 방지하려면 `remove_unused_columns=False`로 설정하세요! 유일하게 필요한 다른 매개변수는 모델을 저장할 위치를 지정하는 `output_dir`입니다. `push_to_hub=True`를 설정하여 이 모델을 Hub에 푸시합니다(모델을 업로드하려면 Hugging Face에 로그인해야 합니다). 각 에포크가 끝날 때마다 [`Trainer`]가 IoU 메트릭을 평가하고 학습 체크포인트를 저장합니다.
 2. 모델, 데이터 세트, 토크나이저, 데이터 콜레이터, `compute_metrics` 함수와 함께 학습 인자를 [`Trainer`]에 전달하세요.
 3. 모델을 미세 조정하기 위해 [`~Trainer.train`]를 호출하세요.
 
@@ -337,7 +337,7 @@ pip install -q datasets transformers evaluate
 
 >>> trainer.train()
 ```
-학습이 완료되면, 모두가 당신의 모델을 사용할 수 있도록 [`~transformers.Trainer.push_to_hub`] 메서드를 사용해 허브에 모델을 공유하세요:
+학습이 완료되면, 누구나 모델을 사용할 수 있도록 [`~transformers.Trainer.push_to_hub`] 메서드를 사용해 Hub에 모델을 공유하세요:
 
 ```py
 >>> trainer.push_to_hub()
@@ -429,8 +429,7 @@ TensorFlow에서 모델을 미세 조정하려면 다음 단계를 따르세요:
 >>> callbacks = [metric_callback, push_to_hub_callback]
 ```
 
-이제 모델을 훈련할 준비가 되었습니다! 훈련 및 검증 데이터 세트, 에포크 수와 함께 `fit()`을 호출하고,
-콜백을 사용하여 모델을 미세 조정합니다:
+이제 모델을 훈련할 준비가 되었습니다! 훈련 및 검증 데이터 세트, 에포크 수와 함께 `fit()`을 호출하고, 콜백을 사용하여 모델을 미세 조정합니다:
 
 ```py
 >>> model.fit(
@@ -549,6 +548,7 @@ TensorFlow에서 모델을 미세 조정하려면 다음 단계를 따르세요:
 >>> model = TFAutoModelForSemanticSegmentation.from_pretrained("MariaK/scene_segmentation")
 >>> logits = model(**inputs).logits
 ```
+
 그런 다음 로그를 원본 이미지 크기로 재조정하고 클래스 차원에 argmax를 적용합니다:
 
 ```py
