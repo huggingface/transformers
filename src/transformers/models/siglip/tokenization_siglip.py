@@ -112,6 +112,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         model_max_length=64,
+        do_lower_case=True,
         **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, rstrip=True, lstrip=True)
@@ -120,6 +121,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        self.do_lower_case = do_lower_case
         self.vocab_file = vocab_file
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
@@ -135,6 +137,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             model_max_length=model_max_length,
+            do_lower_case=do_lower_case,
             **kwargs,
         )
 
