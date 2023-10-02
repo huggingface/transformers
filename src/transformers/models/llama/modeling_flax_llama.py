@@ -591,7 +591,7 @@ class FlaxLlamaModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        input_embeds = self.embed_tokens(input_ids)
+        input_embeds = self.embed_tokens(input_ids.astype("i4"))
 
         outputs = self.layers(
             input_embeds,
