@@ -732,7 +732,7 @@ class DPTPreActResidualLayer(nn.Module):
             else not self.use_batch_norm
         )
 
-        self.activation1 = ACT2FN["relu"]
+        self.activation1 = nn.ReLU()
         self.convolution1 = nn.Conv2d(
             config.fusion_hidden_size,
             config.fusion_hidden_size,
@@ -742,7 +742,7 @@ class DPTPreActResidualLayer(nn.Module):
             bias=use_bias_in_fusion_residual,
         )
 
-        self.activation2 = ACT2FN["relu"]
+        self.activation2 = nn.ReLU()
         self.convolution2 = nn.Conv2d(
             config.fusion_hidden_size,
             config.fusion_hidden_size,
@@ -1055,9 +1055,9 @@ class DPTDepthEstimationHead(nn.Module):
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
             nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
-            ACT2FN["relu"],
+            nn.ReLU(),
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-            ACT2FN["relu"],
+            nn.ReLU(),
         )
 
     def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
@@ -1066,7 +1066,7 @@ class DPTDepthEstimationHead(nn.Module):
 
         if self.projection is not None:
             hidden_states = self.projection(hidden_states)
-            hidden_states = ACT2FN["relu"](hidden_states)
+            hidden_states = nn.ReLU()(hidden_states)
 
         predicted_depth = self.head(hidden_states)
 
@@ -1221,7 +1221,7 @@ class DPTSemanticSegmentationHead(nn.Module):
         self.head = nn.Sequential(
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features),
-            ACT2FN["relu"],
+            nn.ReLU(),
             nn.Dropout(config.semantic_classifier_dropout),
             nn.Conv2d(features, config.num_labels, kernel_size=1),
             nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
@@ -1244,7 +1244,7 @@ class DPTAuxiliaryHead(nn.Module):
         self.head = nn.Sequential(
             nn.Conv2d(features, features, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features),
-            ACT2FN["relu"],
+            nn.ReLU(),
             nn.Dropout(0.1, False),
             nn.Conv2d(features, config.num_labels, kernel_size=1),
         )
