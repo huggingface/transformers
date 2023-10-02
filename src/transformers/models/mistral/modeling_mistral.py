@@ -842,7 +842,7 @@ class MistralModel(MistralPreTrainedModel):
         elif 0 in attention_mask:
             padding_mask = attention_mask
 
-        if padding_mask is not None and hasattr(self.config, "_flash_attn_2_enabled", False):
+        if padding_mask is not None and hasattr(self.config, "_flash_attn_2_enabled"):
             is_padding_right = padding_mask[:, -1].sum().item() != batch_size
             if not is_padding_right:
                 logger.warning_once(
