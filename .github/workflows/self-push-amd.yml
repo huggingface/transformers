@@ -165,7 +165,7 @@ jobs:
         folders: ${{ fromJson(needs.setup_gpu.outputs.matrix) }}
         machine_type: [single-gpu, multi-gpu]
         gpu_flavor: [mi210]
-    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.gpu_flavor}}']
+    runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ matrix.gpu_flavor }}']
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
       options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
