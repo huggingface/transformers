@@ -295,6 +295,39 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_padding_right(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        model = PhiForCausalLM.from_pretrained(
+            "susnato/phi-1_dev", torch_dtype=torch.float16,
+        ).to(torch_device)
+
+        tokenizer = CodeGenTokenizer.from_pretrained("susnato/phi-1_dev")
+
+        texts = ["hi", "Hello this is a very long sentence"]
+
+        tokenizer.padding_side = "right"
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
+
+        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_native = tokenizer.batch_decode(output_native)
+
+        model = PhiForCausalLM.from_pretrained(
+            "susnato/phi-1_dev", torch_dtype=torch.float16, use_flash_attention_2=True
+        ).to(torch_device)
+
+        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_fa_2 = tokenizer.batch_decode(output_fa_2)
+
+        self.assertListEqual(output_native, output_fa_2)
+
 
 @slow
 @require_torch
