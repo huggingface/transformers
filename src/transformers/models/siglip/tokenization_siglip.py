@@ -143,17 +143,19 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
     def get_spm_processor(self):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-
-        with open(self.vocab_file, "rb") as f:
-            sp_model = f.read()
-            model_pb2 = import_protobuf()
-            model = model_pb2.ModelProto.FromString(sp_model)
-            normalizer_spec = model_pb2.NormalizerSpec()
-            normalizer_spec.add_dummy_prefix = False
-            model.normalizer_spec.MergeFrom(normalizer_spec)
-            sp_model = model.SerializeToString()
-            tokenizer.LoadFromSerializedProto(sp_model)
+        tokenizer.Load(self.vocab_file)
         return tokenizer
+
+        # with open(self.vocab_file, "rb") as f:
+        #     sp_model = f.read()
+        #     model_pb2 = import_protobuf()
+        #     model = model_pb2.ModelProto.FromString(sp_model)
+        #     normalizer_spec = model_pb2.NormalizerSpec()
+        #     normalizer_spec.add_dummy_prefix = False
+        #     model.normalizer_spec.MergeFrom(normalizer_spec)
+        #     sp_model = model.SerializeToString()
+        #     tokenizer.LoadFromSerializedProto(sp_model)
+        # return tokenizer
 
 
     @property
