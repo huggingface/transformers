@@ -38,10 +38,14 @@ transformer, and 3) using patchout at inference allows faster processing than ou
 baselines while maintaining superior performance. The resulting models, MAEST, are publicly
 available and obtain the best performance among open models in music tagging tasks.*
 
+Tips:
+
+- The MAEST labels are composed of a two-level hierarchy (`<music_genre>---<music_style>`) consisting of 15 broader genres and 400 music styles. Refer to Discogs' [Genres / Styles guidelines](https://support.discogs.com/hc/en-us/articles/360005055213-Database-Guidelines-9-Genres-Styles#genres) to find more information about this taxonomy.
+
 This model was contributed by [p-alonso](https://huggingface.co/p-alonso).
 The original code can be found [here](https://github.com/palonso/MAEST).
 
-Sice MAEST features the same architecture as AST, the [ASTConfig](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTConfig), [ASTModel](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel), and [ASTForAudioClassification](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTForAudioClassification) classes are used for inference.
+Since MAEST features the same architecture as AST, the [ASTConfig](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTConfig), [ASTModel](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel), and [ASTForAudioClassification](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTForAudioClassification) classes are used for inference.
 
 ## MAESTFeatureExtractor
 
