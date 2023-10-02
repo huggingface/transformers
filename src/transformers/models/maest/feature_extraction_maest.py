@@ -35,8 +35,8 @@ class MAESTFeatureExtractor(ASTFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw audio, pads/truncates them to a fixed
-    length and normalizes them using a mean and standard deviation.
+    This class extracts mel-filter bank features from raw audio, pads/truncates them to a fixed length and normalizes
+    them using a mean and standard deviation.
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):
@@ -46,8 +46,7 @@ class MAESTFeatureExtractor(ASTFeatureExtractor):
         num_mel_bins (`int`, *optional*, defaults to 96):
             Number of Mel-frequency bins.
         max_length (`int`, *optional*, defaults to 1876):
-            Maximum length to which to pad/truncate the extracted features. Set to -1 to deactivate
-            the functionallity.
+            Maximum length to which to pad/truncate the extracted features. Set to -1 to deactivate the functionallity.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the log-Mel features using `mean` and `std`.
         mean (`float`, *optional*, defaults to 2.06755686098554):
