@@ -513,6 +513,7 @@ n_gpu = get_gpu_count()  # works with torch and tf
 ### Testing with a specific PyTorch backend or device
 
 To run the test suite on a specific torch device add `TRANSFORMERS_TEST_DEVICE="$device"` where `$device` is the target backend. For example, to test on CPU only:
+
 ```bash
 TRANSFORMERS_TEST_DEVICE="cpu" pytest tests/utils/test_logging.py
 ```
@@ -520,6 +521,7 @@ TRANSFORMERS_TEST_DEVICE="cpu" pytest tests/utils/test_logging.py
 This variable is useful for testing custom or less common PyTorch backends such as `mps`. It can also be used to achieve the same effect as `CUDA_VISIBLE_DEVICES` by targeting specific GPUs or testing in CPU-only mode.
 
 Certain devices will require an additional import after importing `torch` for the first time. This can be specified using the environment variable `TRANSFORMERS_TEST_BACKEND`:
+
 ```bash
 TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/utils/test_logging.py
 ```
@@ -878,7 +880,8 @@ or the `xfail` way:
 def test_feature_x():
 ```
 
-- Here is how to skip a test based on some internal check inside the test:
+
+- テスト内の内部チェックに基づいてテストをスキップする方法は次のとおりです。
 
 ```python
 def test_feature_x():
