@@ -43,7 +43,7 @@ class EncoderDecoderConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import EncoderDecoderModel, EncoderDecoderConfig, BertConfig
+    >>> from transformers import EncoderDecoderConfig, BertConfig, EncoderDecoderModel
 
     >>> # Initializing a BERT bert-base-uncased style configuration
     >>> config_encoder = BertConfig()
