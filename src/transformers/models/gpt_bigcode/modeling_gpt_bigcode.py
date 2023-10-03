@@ -352,8 +352,6 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
 
         attn_dropout = self.dropout if self.training else 0.0
 
-        softmax_dtype = torch.float32 if self.attention_softmax_in_fp32 else query.dtype
-        upcast = query.dtype != softmax_dtype
         softmax_scale = self.layer_idx + 1 if self.scale_attention_softmax_in_fp32 and upcast else 1
         softmax_scale = softmax_scale**-1
         if self.scale_attn_weights:
