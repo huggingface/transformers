@@ -45,7 +45,7 @@ if is_flash_attn_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
-    _is_flash_using_sliding_windows = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
 logger = logging.get_logger(__name__)
@@ -358,12 +358,12 @@ class MistralFlashAttention2(MistralAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         use_sliding_windows = (
-            _is_flash_using_sliding_windows
+            _flash_supports_window_size
             and hasattr(self.config, "sliding_window") is not None
             and kv_seq_len > self.config.sliding_window
         )
 
-        if not _is_flash_using_sliding_windows:
+        if not _flash_supports_window_size:
             logger.warning_once(
                 "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
                 " make sure to upgrade flash-attn library."
