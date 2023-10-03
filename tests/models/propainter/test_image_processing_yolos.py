@@ -21,7 +21,7 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
 
 
 if is_torch_available():
@@ -30,52 +30,39 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import YolosImageProcessor
+    from transformers import ProPainterImageProcessor
 
 
-class YolosImageProcessingTester(unittest.TestCase):
+class ProPainterImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
         batch_size=7,
         num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
         do_resize=True,
         size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_rescale=True,
         rescale_factor=1 / 255,
-        do_pad=True,
+        num_frames = 2,
+        min_resolution = 13,
+        max_resolution = 20,
     ):
         # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
-        size = size if size is not None else {"shortest_edge": 18, "longest_edge": 1333}
+        size = size if size is not None else {"width": 18, "height": 13}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        self.do_pad = do_pad
+        self.num_frames = num_frames
+        self.min_resolution = min_resolution
+        self.max_resolution = max_resolution
 
     def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
-            "do_pad": self.do_pad,
         }
 
     def get_expected_values(self, image_inputs, batched=False):
@@ -114,11 +101,12 @@ class YolosImageProcessingTester(unittest.TestCase):
         return self.num_channels, height, width
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
+        return prepare_video_inputs(
             batch_size=self.batch_size,
+            num_frames = self.num_frames,
             num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
+            min_resolution = self.min_resolution,
+            max_resolution = self.max_resolution,
             equal_resolution=equal_resolution,
             numpify=numpify,
             torchify=torchify,
@@ -127,11 +115,11 @@ class YolosImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class YolosImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = YolosImageProcessor if is_vision_available() else None
+class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = ProPainterImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.image_processor_tester = YolosImageProcessingTester(self)
+        self.image_processor_tester = ProPainterImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -139,16 +127,12 @@ class YolosImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_properties(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 1333})
-        self.assertEqual(image_processor.do_pad, True)
+        self.assertEqual(image_processor.size, {"width": 18, "height": 13})
 
         image_processor = self.image_processing_class.from_dict(
             self.image_processor_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
@@ -265,3 +249,4 @@ class YolosImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # verify size
         expected_size = torch.tensor([800, 1066])
         self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
+
