@@ -1941,10 +1941,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             and getattr(self, "is_8bit_serializable", False)
             and not _hf_peft_config_loaded
         ):
-            warnings.warn(
+            raise ValueError(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
-                UserWarning,
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
             )
 
         # If the model has adapters attached, you can save the adapters

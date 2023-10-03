@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
+import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..utils import (
@@ -385,7 +386,9 @@ class PeftAdapterMixin:
         return active_adapters
 
     def active_adapter(self) -> str:
-        logger.warning("The `active_adapter` method is deprecated and will be removed in a future version. ")
+        warnings.warn(
+            "The `active_adapter` method is deprecated and will be removed in a future version.", FutureWarning
+        )
 
         return self.active_adapters()[0]
 
