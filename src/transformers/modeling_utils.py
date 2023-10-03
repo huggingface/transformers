@@ -2175,6 +2175,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         else:
+            # TODO: @younesbelkada find a better way to do this directly in `xxxFlashAttention` modules
+            # currently it is not possible to retrieve the original dtype for quantized models.
             if getattr(self.config, "_flash_attn_2_enabled", False):
                 target_dtype = None
 
