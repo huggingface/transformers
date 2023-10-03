@@ -30,7 +30,7 @@ class SuperPointModelTester:
     def __init__(
         self,
         parent,
-        batch_size=1,
+        batch_size=3,
         image_width=640,
         image_height=480,
         conv_layers_sizes: List[int] = [64, 64, 128, 128, 256],
@@ -53,7 +53,7 @@ class SuperPointModelTester:
 
     def prepare_config_and_inputs(self):
         # SuperPoint expects a grayscale image as input
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_width, self.image_height])
+        pixel_values = floats_tensor([self.batch_size, 3, self.image_width, self.image_height])
         config = self.get_config()
         return config, pixel_values
 
@@ -207,9 +207,10 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
+def prepare_imgs():
+    image1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    image2 = Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")
+    return [image1, image2]
 
 
 @require_torch
@@ -221,29 +222,46 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
 
     def infer_on_model(self, model):
         preprocessor = self.default_image_processor
-        image = prepare_img()
-        inputs = preprocessor(images=image, return_tensors="pt").to(torch_device)
+        images = prepare_imgs()
+        inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
 
-        expected_keypoints_shape = torch.Size((568, 2))
-        expected_scores_shape = torch.Size((568,))
-        expected_descriptors_shape = torch.Size((256, 568))
+        expected_number_keypoints_image0 = 568
+        expected_number_keypoints_image1 = 830
+        expected_max_number_keypoints = max(expected_number_keypoints_image0, expected_number_keypoints_image1)
 
-        expected_keypoints_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]]).to(torch_device)
-        expected_scores_values = torch.tensor(
-            [0.0064, 0.0140, 0.0595, 0.0728, 0.5170, 0.0175, 0.1523, 0.2055, 0.0336]
-        ).to(torch_device)
-        expected_descriptors_value = torch.tensor(-0.1096).to(torch_device)
+        expected_keypoints_shape = torch.Size((len(images), expected_max_number_keypoints, 2))
+        expected_scores_shape = torch.Size(
+            (
+                len(images),
+                expected_max_number_keypoints,
+            )
+        )
+        expected_descriptors_shape = torch.Size((len(images), expected_max_number_keypoints, 256))
 
+        # Check output shapes
         self.assertEqual(outputs.keypoints.shape, expected_keypoints_shape)
         self.assertEqual(outputs.scores.shape, expected_scores_shape)
         self.assertEqual(outputs.descriptors.shape, expected_descriptors_shape)
 
-        self.assertTrue(torch.allclose(outputs.keypoints[:3], expected_keypoints_values, atol=1e-4))
-        self.assertTrue(torch.allclose(outputs.scores[:9], expected_scores_values, atol=1e-4))
-        self.assertTrue(torch.allclose(outputs.descriptors[0, 0], expected_descriptors_value, atol=1e-4))
+        expected_keypoints_image0_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]]).to(torch_device)
+        expected_scores_image0_values = torch.tensor(
+            [0.0064, 0.0140, 0.0595, 0.0728, 0.5170, 0.0175, 0.1523, 0.2055, 0.0336]
+        ).to(torch_device)
+        expected_descriptors_image0_value = torch.tensor(-0.1096).to(torch_device)
+
+        # Check output values
+        self.assertTrue(torch.allclose(outputs.keypoints[0, :3], expected_keypoints_image0_values, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.scores[0, :9], expected_scores_image0_values, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.descriptors[0, 0, 0], expected_descriptors_image0_value, atol=1e-4))
+
+        # Check mask values
+        self.assertTrue(outputs.mask[0, expected_number_keypoints_image0 - 1].item() == 1)
+        self.assertTrue(outputs.mask[0, expected_number_keypoints_image0].item() == 0)
+        self.assertTrue(torch.all(outputs.mask[0, : expected_number_keypoints_image0 - 1]))
+        self.assertTrue(torch.all(outputs.mask[1]))
 
     @slow
     def test_inference(self):

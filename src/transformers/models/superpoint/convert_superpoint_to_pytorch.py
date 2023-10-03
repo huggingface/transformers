@@ -63,10 +63,12 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
-def prepare_img():
+def prepare_imgs():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    im1 = Image.open(requests.get(url, stream=True).raw)
+    url = "http://images.cocodataset.org/test-stuff2017/000000004016.jpg"
+    im2 = Image.open(requests.get(url, stream=True).raw)
+    return [im1, im2]
 
 
 @torch.no_grad()
@@ -92,12 +94,16 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     print("Successfully loaded weights in the model")
 
     preprocessor = SuperPointImageProcessor()
-    inputs = preprocessor(images=prepare_img(), return_tensors="pt")
+    inputs = preprocessor(images=prepare_imgs(), return_tensors="pt")
     outputs = model(**inputs)
 
-    expected_keypoints_shape = (568, 2)
-    expected_scores_shape = (568,)
-    expected_descriptors_shape = (256, 568)
+    torch.count_nonzero(outputs.mask[0])
+    expected_keypoints_shape = (2, 830, 2)
+    expected_scores_shape = (
+        2,
+        830,
+    )
+    expected_descriptors_shape = (2, 830, 256)
 
     expected_keypoints_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]])
     expected_scores_values = torch.tensor([0.0064, 0.0140, 0.0595, 0.0728, 0.5170, 0.0175, 0.1523, 0.2055, 0.0336])
@@ -107,9 +113,9 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     assert outputs.scores.shape == expected_scores_shape
     assert outputs.descriptors.shape == expected_descriptors_shape
 
-    assert torch.allclose(outputs.keypoints[:3], expected_keypoints_values, atol=1e-3)
-    assert torch.allclose(outputs.scores[:9], expected_scores_values, atol=1e-3)
-    assert torch.allclose(outputs.descriptors[0, 0], expected_descriptors_value, atol=1e-3)
+    assert torch.allclose(outputs.keypoints[0, :3], expected_keypoints_values, atol=1e-3)
+    assert torch.allclose(outputs.scores[0, :9], expected_scores_values, atol=1e-3)
+    assert torch.allclose(outputs.descriptors[0, 0, 0], expected_descriptors_value, atol=1e-3)
     print("Model outputs match the original results!")
 
     if save_model:

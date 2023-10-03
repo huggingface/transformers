@@ -286,6 +286,9 @@ class SuperPointDescriptorDecoder(nn.Module):
         # descriptors = self.sample_descriptors(k[None], d[None], 8)[0] for k, d in zip(keypoints, descriptors)]
         descriptors = self.sample_descriptors(keypoints[None], descriptors[0][None], 8)[0]
 
+        # From [descriptor_dim, num_keypoints] to [num_keypoints, descriptor_dim]
+        descriptors = torch.transpose(descriptors, 0, 1)
+
         return descriptors
 
     @staticmethod
@@ -419,27 +422,73 @@ class SuperPointModel(SuperPointPreTrainedModel):
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
-        encoder_outputs = self.encoder(
+        batch_size = pixel_values.shape[0]
+
+        batched_encoder_outputs = self.encoder(
             pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs[0]
-
-        keypoints, scores = self.keypoint_decoder(last_hidden_state)
-
-        descriptors = self.descriptor_decoder(last_hidden_state, keypoints)
-
         if not return_dict:
-            return (keypoints, scores, descriptors, last_hidden_state) + encoder_outputs[1:]
+            batched_last_hidden_state = batched_encoder_outputs[0]
+            if output_hidden_states:
+                batched_hidden_states = batched_encoder_outputs[1]
+        else:
+            batched_last_hidden_state = batched_encoder_outputs.last_hidden_state
+            if output_hidden_states:
+                batched_hidden_states = batched_encoder_outputs.hidden_states
+
+        listed_keypoints_scores = [
+            self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in batched_last_hidden_state
+        ]
+
+        listed_keypoints, listed_scores = [keypoints_scores[0] for keypoints_scores in listed_keypoints_scores], [
+            keypoints_scores[1] for keypoints_scores in listed_keypoints_scores
+        ]
+
+        listed_descriptors = [
+            self.descriptor_decoder(last_hidden_state[None, ...], keypoints[None, ...])
+            for last_hidden_state, keypoints in zip(batched_last_hidden_state, listed_keypoints)
+        ]
+
+        maximum_num_keypoints = max([keypoints.shape[0] for keypoints in listed_keypoints])
+
+        batched_keypoints = torch.zeros((batch_size, maximum_num_keypoints, 2), device=pixel_values.device)
+        batched_scores = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device)
+        batched_descriptors = torch.zeros(
+            (batch_size, maximum_num_keypoints, self.config.descriptor_dim),
+            device=pixel_values.device,
+        )
+        batched_mask = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device, dtype=torch.int)
+
+        for i, (keypoints, scores, descriptors) in enumerate(zip(listed_keypoints, listed_scores, listed_descriptors)):
+            batched_keypoints[i, : keypoints.shape[0]] = keypoints
+            batched_scores[i, : scores.shape[0]] = scores
+            batched_descriptors[i, : descriptors.shape[0]] = descriptors
+            batched_mask[i, : scores.shape[0]] = 1
+
+        keypoints = batched_keypoints
+        scores = batched_scores
+        descriptors = batched_descriptors
+        mask = batched_mask
+        last_hidden_state = batched_last_hidden_state
+        if output_hidden_states:
+            hidden_states = batched_hidden_states
+        else:
+            hidden_states = None
+        if not return_dict:
+            return tuple(
+                v for v in [keypoints, scores, descriptors, mask, last_hidden_state, hidden_states] if v is not None
+            )
 
         return ImagePointDescriptionOutput(
             keypoints=keypoints,
             scores=scores,
             descriptors=descriptors,
+            mask=mask,
             last_hidden_state=last_hidden_state,
-            hidden_states=encoder_outputs.hidden_states,
+            hidden_states=hidden_states,
         )
 
 
@@ -499,12 +548,13 @@ class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
         )
 
         if not return_dict:
-            return (outputs[0], outputs[1], outputs[2], outputs[3])
+            return tuple(v for v in outputs if v is not None)
 
         return ImagePointDescriptionOutput(
             keypoints=outputs.keypoints,
             scores=outputs.scores,
             descriptors=outputs.descriptors,
+            mask=outputs.mask,
             last_hidden_state=outputs.last_hidden_state,
             hidden_states=outputs.hidden_states,
         )
