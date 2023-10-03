@@ -1661,6 +1661,7 @@ class MaskedImageModelingOutput(ModelOutput):
         )
         return self.reconstruction
 
+
 @dataclass
 class ProPainterFrameModelingOutput(ModelOutput):
     """
