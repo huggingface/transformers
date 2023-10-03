@@ -2202,6 +2202,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     if str(token) in additional_special_tokens:
                         # at this point the token is in `additional_special_tokens` as an str, let's add the AddedToken info
                         additional_special_tokens.remove(str(token))
+                        if token.special and token not in additional_special_tokens:
+                            additional_special_tokens.append(token)
+                    else:
+                        additional_special_tokens.append(token)
                 else:
                     raise ValueError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
