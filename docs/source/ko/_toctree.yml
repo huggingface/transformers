@@ -59,7 +59,7 @@
       - local: tasks/image_classification
         title: 이미지 분류
       - local: tasks/semantic_segmentation
-        title: Semantic segmentation
+        title: 의미적 분할(Semantic segmentation)
       - local: tasks/video_classification
         title: 영상 분류
       - local: tasks/object_detection
