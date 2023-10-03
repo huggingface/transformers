@@ -66,8 +66,7 @@ def sinusoidal_embedding_init(key, shape, dtype=jnp.float_) -> jax.Array:
         raise ValueError(
             f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
         )
-    max_timescale = 10000
-    log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
+    log_timescale_increment = math.log(10000) / (channels // 2 - 1)
     inv_timescales = jnp.exp(-log_timescale_increment * jnp.arange(channels // 2))
     scaled_time = jnp.arange(length).reshape(-1, 1) * inv_timescales.reshape(1, -1)
     return jnp.concatenate([jnp.sin(scaled_time), jnp.cos(scaled_time)], axis=1).astype(dtype)
