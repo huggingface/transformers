@@ -18,7 +18,6 @@ Processor class for Nougat.
 
 from typing import Dict, List, Optional, Union
 
-from transformers.image_utils import ChannelDimension, PILImageResampling
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput, TruncationStrategy
 
 from ...processing_utils import ProcessorMixin
@@ -53,7 +52,7 @@ class NougatProcessor(ProcessorMixin):
         do_crop_margin: bool = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
+        resample: "PILImageResampling" = None,  # noqa: F821
         do_thumbnail: bool = None,
         do_align_long_axis: bool = None,
         do_pad: bool = None,
@@ -62,8 +61,8 @@ class NougatProcessor(ProcessorMixin):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: Optional["ChannelDimension"] = "ChannelDimension.FIRST",  # noqa: F821
+        input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
         text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         text_pair_target: Optional[
