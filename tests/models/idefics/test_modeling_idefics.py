@@ -503,7 +503,11 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
 class IdeficsModelIntegrationTest(TestCasePlus):
     @cached_property
     def default_processor(self):
-        return IdeficsProcessor.from_pretrained("HuggingFaceM4/idefics-9b") if is_vision_available() else None
+        return (
+            IdeficsProcessor.from_pretrained("HuggingFaceM4/idefics-9b", revision="refs/pr/11")
+            if is_vision_available()
+            else None
+        )
 
     @require_bitsandbytes
     @slow
