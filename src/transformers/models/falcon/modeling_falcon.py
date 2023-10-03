@@ -613,10 +613,7 @@ class FalconFlashAttention2(FalconAttention):
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_layer.dtype
         if input_dtype == torch.float32:
-            if getattr(self.config, "_flash_attn_2_attention_dtype", None) is not None:
-                attention_dtype = self.config._flash_attn_2_attention_dtype
-            else:
-                attention_dtype = torch.float16
+            attention_dtype = self.config._flash_attn_2_attention_dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"

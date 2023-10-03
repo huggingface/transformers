@@ -1320,7 +1320,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
             )
         config._flash_attn_2_enabled = True
-        config._flash_attn_2_attention_dtype = torch_dtype
+
+        if torch_dtype is not None:
+            config._flash_attn_2_attention_dtype = torch_dtype
+        else:
+            config._flash_attn_2_attention_dtype = torch.float16
         return config
 
     def enable_input_require_grads(self):

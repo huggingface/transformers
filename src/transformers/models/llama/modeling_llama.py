@@ -476,10 +476,7 @@ class LlamaFlashAttention2(LlamaAttention):
         # in fp32. (LlamaRMSNorm handles it correctly)
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
-            if getattr(self.config, "_flash_attn_2_attention_dtype", None) is not None:
-                attention_dtype = self.config._flash_attn_2_attention_dtype
-            else:
-                attention_dtype = torch.float16
+            attention_dtype = self.config._flash_attn_2_attention_dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
