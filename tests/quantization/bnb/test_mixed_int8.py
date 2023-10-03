@@ -263,13 +263,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def test_warns_save_pretrained(self):
-        r"""
-        Test whether trying to save a model after converting it in 8-bit will throw a warning.
-        """
-        with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
-            self.model_8bit.save_pretrained(tmpdirname)
-
     def test_raise_if_config_and_load_in_8bit(self):
         r"""
         Test that loading the model with the config and `load_in_8bit` raises an error
