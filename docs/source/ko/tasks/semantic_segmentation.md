@@ -349,7 +349,7 @@ pip install -q datasets transformers evaluate
 <tf>
 <Tip>
 
-Keras로 모델을 미세 조정하는 데 익숙하지 않은 경우, 먼저 [기본 튜토리얼](./training#train-a-tensorflow-model-with-keras)을 확인해보세요!
+Keras로 모델을 미세 조정하는 데 익숙하지 않은 경우, 먼저 [기본 튜토리얼](../training#train-a-tensorflow-model-with-keras)을 확인해보세요!
 
 </Tip>
 
