@@ -1321,10 +1321,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         config._flash_attn_2_enabled = True
 
-        if torch_dtype is not None:
-            config._flash_attn_2_attention_dtype = torch_dtype
-        else:
-            config._flash_attn_2_attention_dtype = torch.float16
+        config._flash_attn_2_attention_dtype = torch_dtype if torch_dtype is not None else torch.float16
         return config
 
     def enable_input_require_grads(self):
