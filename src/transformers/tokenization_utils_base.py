@@ -846,6 +846,7 @@ class SpecialTokensMixin:
         # We directly set the hidden value to allow initialization with special tokens
         # which are not yet in the vocabulary. Necessary for serialization/de-serialization
         # TODO clean this up at some point (probably by switching to fast tokenizers)
+
         for key, value in kwargs.items():
             if value is None:
                 continue
@@ -857,6 +858,14 @@ class SpecialTokensMixin:
                     assert all(
                         isinstance(t, (str, AddedToken)) for t in value
                     ), "One of the tokens is not a string or an AddedToken"
+                    if hasattr(self, "added_tokens_encoder"):
+                        extended_token = []
+                        for token in value:
+                            if isinstance(token, str) and str(token) in self.added_tokens_encoder:
+                                extended_token.append(self.added_tokens_decoder[self.added_tokens_encoder[str(token)]])
+                            else:
+                                extended_token.append(token)
+                        value = extended_token
                     setattr(self, key, value)
                 elif isinstance(value, (str)):
                     value = AddedToken(value, normalized=False, special=True)
@@ -1675,14 +1684,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def _set_processor_class(self, processor_class: str):
         """Sets processor class as an attribute."""
         self._processor_class = processor_class
-
-    @property
-    def added_tokens_encoder(self) -> Dict[str, int]:
-        """
-        Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
-        optimisation in `self._added_tokens_encoder` for the slow tokenizers.
-        """
-        return {k.content: v for v, k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
 
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
