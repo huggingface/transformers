@@ -698,19 +698,11 @@ class LlamaSDPAAttention(LlamaAttention):
 
             attention_mask = torch.max(attention_mask, torch.tensor(torch.finfo(key_states.dtype).min))
 
-            """
-            if attention_mask.shape == (2, 1, 7, 7):
-                attention_mask[1, 0, 0, 0] = 0
-                attention_mask[1, 0, 1, 0] = 0
-                attention_mask[1, 0, 2, 0] = 0
-            """
-
             # NOTE: As of PyTorch 2.1, this case can not dispatch to flash attention v2 due to the
             # attention mask passed. Possible solution: use nested tensors.
-            with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
-                attn_output = torch.nn.functional.scaled_dot_product_attention(
-                    query_states, key_states, value_states, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
-                )
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states, key_states, value_states, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
+            )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
