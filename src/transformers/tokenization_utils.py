@@ -368,14 +368,15 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._decode_use_source_tokenizer = False
 
     @property
-    def added_tokens_decoder(self) -> Dict[int, AddedToken]:
-        """
-        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
+    def is_fast(self) -> bool:
+        return False
 
-        Returns:
-            `Dict[str, int]`: The added tokens.
+    @property
+    def vocab_size(self) -> int:
         """
-        return dict(sorted(self._added_tokens_decoder.items(), key=lambda item: item[0]))
+        `int`: Size of the base vocabulary (without the added tokens).
+        """
+        raise NotImplementedError
 
     @property
     def added_tokens_encoder(self) -> Dict[str, int]:
@@ -384,6 +385,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         optimisation in `self._added_tokens_encoder` for the slow tokenizers.
         """
         return {k.content: v for v, k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
+
+    @property
+    def added_tokens_decoder(self) -> Dict[int, AddedToken]:
+        """
+        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
+
+        Returns:
+            `Dict[str, int]`: The added tokens.
+        """
+        return dict(sorted(self._added_tokens_decoder.items(), key=lambda item: item[0]))
 
     @added_tokens_decoder.setter
     def added_tokens_decoder(self, value: Dict[int, Union[AddedToken, str]]) -> Dict[int, AddedToken]:
@@ -396,17 +407,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
             self._added_tokens_encoder[str(token)] = index
-
-    @property
-    def is_fast(self) -> bool:
-        return False
-
-    @property
-    def vocab_size(self) -> int:
-        """
-        `int`: Size of the base vocabulary (without the added tokens).
-        """
-        raise NotImplementedError
 
     def get_added_vocab(self) -> Dict[str, int]:
         """
