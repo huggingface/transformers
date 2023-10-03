@@ -213,6 +213,13 @@ _import_structure = {
         "Blip2QFormerConfig",
         "Blip2VisionConfig",
     ],
+    "models.bliva": [
+        "BLIVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BLIVAConfig",
+       
+        "BLIVAQFormerConfig",
+        "BLIVAVisionConfig",
+    ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bridgetower": [
         "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1342,6 +1349,16 @@ else:
             "Blip2PreTrainedModel",
             "Blip2QFormerModel",
             "Blip2VisionModel",
+        ]
+    )
+    _import_structure["models.bliva"].extend(
+        [
+            "BLIVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BLIVAForConditionalGeneration",
+            "BLIVAModel",
+            "BLIVAPreTrainedModel",
+            "BLIVAQFormerModel",
+            "BLIVAVisionModel",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -4347,6 +4364,13 @@ if TYPE_CHECKING:
         Blip2QFormerConfig,
         Blip2VisionConfig,
     )
+    from .models.bliva import (
+        BLIVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BLIVAConfig,
+       
+        BLIVAQFormerConfig,
+        BLIVAVisionConfig,
+    )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.bridgetower import (
         BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5361,6 +5385,14 @@ if TYPE_CHECKING:
             Blip2PreTrainedModel,
             Blip2QFormerModel,
             Blip2VisionModel,
+        )
+        from .models.bliva import (
+            BLIVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BLIVAForConditionalGeneration,
+            BLIVAModel,
+            BLIVAPreTrainedModel,
+            BLIVAQFormerModel,
+            BLIVAVisionModel,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -46,6 +46,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("blip", "BlipModel"),
         ("blip-2", "Blip2Model"),
+        ("bliva", "BLIVAModel"),
         ("bloom", "BloomModel"),
         ("bridgetower", "BridgeTowerModel"),
         ("bros", "BrosModel"),
@@ -565,6 +566,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("blip", "BlipForConditionalGeneration"),
         ("blip-2", "Blip2ForConditionalGeneration"),
+        ("bliva", "BLIVAForConditionalGeneration"),
         ("git", "GitForCausalLM"),
         ("instructblip", "InstructBlipForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
@@ -848,6 +850,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         ("blip-2", "Blip2ForConditionalGeneration"),
+        ("bliva", "BLIVAForConditionalGeneration"),
         ("vilt", "ViltForQuestionAnswering"),
     ]
 )
