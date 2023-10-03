@@ -2196,7 +2196,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 elif target_dtype is not None:
                     self.config._flash_attn_2_attention_dtype = target_dtype
 
-
             return super().to(*args, **kwargs)
 
     def half(self, *args):
