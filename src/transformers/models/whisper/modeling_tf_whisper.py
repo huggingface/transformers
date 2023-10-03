@@ -66,8 +66,7 @@ def sinusoidal_embedding_init(shape, dtype=tf.float32) -> tf.Tensor:
         raise ValueError(
             f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
         )
-    max_timescale = 10000
-    log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
+    log_timescale_increment = math.log(10000) / (channels // 2 - 1)
     inv_timescales = tf.exp(-log_timescale_increment * tf.range(channels // 2, dtype=tf.float32))
     scaled_time = tf.reshape(tf.range(length, dtype=tf.float32), (-1, 1)) * tf.reshape(inv_timescales, (1, -1))
     return tf.cast(tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=1), dtype)
