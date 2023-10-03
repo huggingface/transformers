@@ -336,10 +336,10 @@ class FlaxLlamaMLP(nn.Module):
         self.up_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
 
     def __call__(self, hidden_states):
-        hidden_states = self.up_proj(hidden_states)
+        up_proj_states = self.up_proj(hidden_states)
         gate_states = self.act(self.gate_proj(hidden_states))
 
-        hidden_states = self.down_proj(hidden_states * gate_states)
+        hidden_states = self.down_proj(up_proj_states * gate_states)
         return hidden_states
 
 
