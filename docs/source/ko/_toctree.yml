@@ -58,8 +58,8 @@
   - sections:
       - local: tasks/image_classification
         title: 이미지 분류
-      - local: in_translation
-        title: (번역중) Semantic segmentation
+      - local: tasks/semantic_segmentation
+        title: 의미적 분할(Semantic segmentation)
       - local: tasks/video_classification
         title: 영상 분류
       - local: tasks/object_detection
@@ -70,7 +70,7 @@
         title: 제로샷(zero-shot) 이미지 분류
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
-    title: (번역중) 컴퓨터 비전
+    title: 컴퓨터 비전
     isExpanded: false
   - sections:
       - local: tasks/image_captioning
