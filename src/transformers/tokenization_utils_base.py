@@ -852,8 +852,6 @@ class SpecialTokensMixin:
                 continue
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
-                    # TODO THIS IS NASTY! Will always reset tokens to default rstrip and lstrip because self.set_attr on strings
-                    # will not check the addedtokens decoder. WILL FIX TOMORROW
                     assert isinstance(value, (list, tuple)), f"Value {value} is not a list or tuple"
                     assert all(
                         isinstance(t, (str, AddedToken)) for t in value
@@ -2204,8 +2202,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     if str(token) in additional_special_tokens:
                         # at this point the token is in `additional_special_tokens` as an str, let's add the AddedToken info
                         additional_special_tokens.remove(str(token))
-                    if token.special and token not in additional_special_tokens:
-                        additional_special_tokens.append(token)
                 else:
                     raise ValueError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
@@ -2438,7 +2434,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Sanitize AddedTokens in special_tokens_map
 
-        # kept for forward compatibility, will be removed in transoformers 5
+        # kept for forward compatibility, will be removed in transoformers 5. Adding typefield
         write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=True)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
