@@ -211,7 +211,6 @@ def get_model_table_from_auto_modules() -> str:
                 # Try again after removing the last word in the name
                 attr_name = "".join(camel_case_split(attr_name)[:-1])
 
-
     # Let's build that table!
     model_names = list(model_name_to_config.keys()) + list(MODEL_NAMES_WITH_SAME_CONFIG.keys())
 
