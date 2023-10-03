@@ -101,7 +101,7 @@ class DataTrainingArguments:
             )
         },
     )
-    audio_file_column: Optional[str] = field(
+    speech_file_column: Optional[str] = field(
         default="audio",
         metadata={"help": "Column in the dataset that contains audio file. Defaults to 'audio'"},
     )
@@ -329,10 +329,10 @@ def main():
     )
 
     # check that all files have the correct sampling rate
-    datasets = datasets.cast_column(data_args.audio_file_column, Audio(sampling_rate=feature_extractor.sampling_rate))
+    datasets = datasets.cast_column(data_args.speech_file_column, Audio(sampling_rate=feature_extractor.sampling_rate))
 
     def prepare_dataset(batch):
-        batch["speech"] = batch[data_args.audio_file_column]["array"]
+        batch["speech"] = batch[data_args.speech_file_column]["array"]
         return batch
 
     remove_columns_values = datasets["train"].column_names.copy()

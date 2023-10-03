@@ -46,6 +46,13 @@ export MODEL_DIR="./wav2vec2-base-robust"
 ln -s ~/transformers/examples/research_projects/jax-projects/wav2vec2/run_wav2vec2_pretrain_flax.py ./
 ```
 
+### Install libraries
+This code requires a minimum version of 2.14.5 for the `datasets` library to run correctly. Therefore, the first step is to upgrade the `datasets` library, and then install any necessary dependencies.
+```bash
+pip install datasets >= 2.14.5
+pip install transformers -U
+```
+
 ### Create the model configuration
 
 Let's first create the model configuration and store it in the model repository. 
