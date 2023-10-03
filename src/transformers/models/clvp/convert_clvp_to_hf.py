@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-Weights conversion script for Clvp
+Weights conversion script for CLVP
 """
 
 import argparse

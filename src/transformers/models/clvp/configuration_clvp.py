@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Clvp model configuration"""
+""" CLVP model configuration"""
 
 
 import copy
@@ -37,9 +37,9 @@ CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ClvpEncoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClvpEncoder`]. It is used to instantiate a Clvp
-    text or Clvp speech encoder according to the specified arguments. Instantiating a configuration with the defaults
-    will yield a similar configuration to that of the encoder of the Clvp
+    This is the configuration class to store the configuration of a [`ClvpEncoder`]. It is used to instantiate a CLVP
+    text or CLVP speech encoder according to the specified arguments. Instantiating a configuration with the defaults
+    will yield a similar configuration to that of the encoder of the CLVP
     [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -47,7 +47,7 @@ class ClvpEncoderConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 256):
-            Vocabulary size of the Clvp Encoder model.
+            Vocabulary size of the CLVP Encoder model.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 1536):
@@ -163,9 +163,9 @@ class ClvpEncoderConfig(PretrainedConfig):
 
 class ClvpDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClvpDecoder`]. It is used to instantiate a Clvp
+    This is the configuration class to store the configuration of a [`ClvpDecoder`]. It is used to instantiate a CLVP
     Decoder Model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Decoder part of the Clvp
+    with the defaults will yield a similar configuration to that of the Decoder part of the CLVP
     [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -190,6 +190,8 @@ class ClvpDecoderConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. `None` will set it to 4 times `n_embd`.
+        num_mel_attn_blocks (`int`, *optional*, defaults to 6):
+            Denotes the number of self attention layers in [`ClvpConditioningEncoder`].
         activation_function (`str`, *optional*, defaults to `"gelu_new"`):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (`float`, *optional*, defaults to 0.1):
@@ -223,7 +225,7 @@ class ClvpDecoderConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         feature_size (`int`, *optional*, defaults to 80):
-            The feature dimension of the extracted mel features. This value is used in `CLVPConditioningEncoder`.
+            The feature dimension of the extracted mel features. This value is used in [`ClvpConditioningEncoder`].
         use_attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in Query, Key and Value layers during self attention.
         initializer_factor (`float`, *optional*, defaults to 1.0):
@@ -265,6 +267,7 @@ class ClvpDecoderConfig(PretrainedConfig):
         n_layer=30,
         n_head=16,
         n_inner=None,
+        num_mel_attn_blocks=6,
         activation_function="gelu_new",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
@@ -292,6 +295,7 @@ class ClvpDecoderConfig(PretrainedConfig):
         self.n_layer = n_layer
         self.n_head = n_head
         self.n_inner = n_inner
+        self.num_mel_attn_blocks = num_mel_attn_blocks
         self.activation_function = activation_function
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
@@ -356,24 +360,24 @@ class ClvpDecoderConfig(PretrainedConfig):
 class ClvpConfig(PretrainedConfig):
     r"""
     [`ClvpConfig`] is the configuration class to store the configuration of a [`ClvpModelForConditionalGeneration`]. It
-    is used to instantiate a Clvp model according to the specified arguments, defining the text model, speech model and
+    is used to instantiate a CLVP model according to the specified arguments, defining the text model, speech model and
     decoder model configs. Instantiating a configuration with the defaults will yield a similar configuration to that
-    of the Clvp [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
+    of the CLVP [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize the Clvp text encoder.
+            Dictionary of configuration options used to initialize the CLVP text encoder.
         speech_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize Clvp speech encoder.
+            Dictionary of configuration options used to initialize CLVP speech encoder.
         decoder_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLVPAutoRegressiveConfig`].
+            Dictionary of configuration options used to initialize [`ClvpDecoderConfig`].
         projection_dim (`int`, *optional*, defaults to 768):
             Dimentionality of text and speech projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original Clvp implementation.
+            The inital value of the *logit_scale* paramter. Default is used as per the original CLVP implementation.
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
             testing).
@@ -397,7 +401,7 @@ class ClvpConfig(PretrainedConfig):
     >>> # We can also initialize a CLVPConfig from a CLVPTextConfig, CLVPSpeechConfig and a CLVPAutoRegressiveConfig
     >>> from transformers import ClvpEncoderConfig, ClvpDecoderConfig
 
-    >>> # Initializing a clvp text, clvp speech and clvp decoder configuration
+    >>> # Initializing a CLVP text, CLVP speech and CLVP decoder configuration
     >>> config_text = ClvpEncoderConfig()
     >>> config_speech = ClvpEncoderConfig()
     >>> decoder_config = ClvpDecoderConfig()
@@ -449,8 +453,8 @@ class ClvpConfig(PretrainedConfig):
         **kwargs,
     ):
         r"""
-        Instantiate a [`ClvpConfig`] (or a derived class) from clvp text model configuration, clvp speech model
-        configuration and clvp decoder model configuration.
+        Instantiate a [`ClvpConfig`] (or a derived class) from CLVP text model configuration, CLVP speech model
+        configuration and CLVP decoder model configuration.
 
         Args:
             text_config (`ClvpEncoderConfig`):

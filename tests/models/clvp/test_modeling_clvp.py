@@ -549,7 +549,7 @@ class ClvpIntegrationTest(unittest.TestCase):
     def test_conditional_encoder(self):
         with torch.no_grad():
             conditioning_encoder_outputs = self.model.conditioning_encoder(
-                mel_spec=self.input_features, input_ids=self.text_tokens
+                input_features=self.input_features, input_ids=self.text_tokens
             ).to("cpu")
 
         self.assertEqual(
@@ -605,7 +605,7 @@ class ClvpIntegrationTest(unittest.TestCase):
             num_beams=4,
             num_return_sequences=4,
             max_new_tokens=10,
-        ).speech_candidates.cpu()
+        ).speech_ids.cpu()
 
         EXPECTED_OUTPUTS = torch.tensor([[1953, 1080,  612], [1953, 1953,  612], [1953,  612,  716]])
 

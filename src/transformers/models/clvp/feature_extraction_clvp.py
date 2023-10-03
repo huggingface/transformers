@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-Feature extractor class for Clvp
+Feature extractor class for CLVP
 """
 
 import copy
@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 class ClvpFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a Clvp feature extractor.
+    Constructs a CLVP feature extractor.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-Processor class for Clvp
+Processor class for CLVP
 """
 
 
@@ -23,7 +23,7 @@ from ...processing_utils import ProcessorMixin
 
 class ClvpProcessor(ProcessorMixin):
     r"""
-    Constructs a Clvp processor which wraps a Clvp Feature Extractor and a Clvp Tokenizer into a single processor.
+    Constructs a CLVP processor which wraps a CLVP Feature Extractor and a CLVP Tokenizer into a single processor.
 
     [`ClvpProcessor`] offers all the functionalities of [`ClvpFeatureExtractor`] and [`ClvpTokenizer`]. See the
     [`~ClvpProcessor.__call__`], [`~ClvpProcessor.decode`] and [`~ClvpProcessor.batch_decode`] for more information.
@@ -43,8 +43,8 @@ class ClvpProcessor(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        Forwards the `audio` and `sampling_rate` arguments to ClvpFeatureExtractor's [`~ClvpFeatureExtractor.__call__`]
-        and the `text` argument to [`~ClvpTokenizer.__call__`]. Please refer to the doctsring of the above two methods
+        Forwards the `audio` and `sampling_rate` arguments to [`~ClvpFeatureExtractor.__call__`] and the
+        `text` argument to [`~ClvpTokenizer.__call__`]. Please refer to the doctsring of the above two methods
         for more information.
         """
 

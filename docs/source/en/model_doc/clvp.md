@@ -26,14 +26,15 @@ The abstract from the paper is the following:
 
 Tips:
 
-1. CLVP or Contrastive Language-Voice Pretrained Transformer is an integral part of the Tortoise TTS model.
+1. CLVP is an integral part of the Tortoise TTS model.
 2. CLVP can be used to compare different generated speech candidates with the provided text, and the best speech tokens are forwarded to the diffusion model.
 3. The use of the [`ClvpModelForConditionalGeneration.generate()`] method is strongly recommended for tortoise usage.
+4. Note that the CLVP model expects the audio to be sampled at 22.05 kHz contrary to other audio models which expects 16 kHz. 
 
 Brief Explanation:
 
-Firstly, the [`ClvpTokenizer`] tokenizes the `text` and the [`ClvpFeatureExtractor`] extracts the `log-melspectrogram` from the desired `audio`. 
-Next, the text tokens and audio representations are passed to the [`ClvpConditioningEncoder`], which converts them into `conditioning_embeds` that preserve the text information as well as the voice properties. The [`ClvpForCausalLM`] uses these embeds to generate multiple `speech candidates`. 
+Firstly, the [`ClvpTokenizer`] tokenizes the text input, and the [`ClvpFeatureExtractor`] extracts the log mel-spectrogram from the desired audio. 
+Next, the text tokens and audio representations are passed to the [`ClvpConditioningEncoder`], which converts them into embeddings conditioned on the text and audio. The [`ClvpForCausalLM`] uses these embeddings to generate multiple speech candidates. 
 The speech encoder converts each speech candidate into a vector representation, and the text encoder converts the text tokens into the same latent space. 
 At the end, we compare each speech vector with the text vector to see which speech vector is most similar to the text vector. 
 
@@ -53,14 +54,14 @@ Example :
 
 >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
->>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+>>> sample = ds[0]["audio"]
 
 >>> # Define processor and model
 >>> processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
 >>> model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
 
 >>> # Generate processor output and model output 
->>> processor_output = processor(raw_speech=audio, sampling_rate=sr, text=text, return_tensors="pt")
+>>> processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt")
 >>> generated_output = model.generate(input_ids=processor_output["input_ids"], input_features=processor_output["input_features"], num_beams=4, num_return_sequences=4)
 ```
 

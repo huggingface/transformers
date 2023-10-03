@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization class for Clvp."""
+"""Tokenization class for CLVP."""
 
 import json
 import os
@@ -90,7 +90,7 @@ def get_pairs(word):
 
 class ClvpTokenizer(PreTrainedTokenizer):
     """
-    Construct a Clvp tokenizer. Based on byte-level Byte-Pair-Encoding.
+    Construct a CLVP tokenizer. Based on byte-level Byte-Pair-Encoding.
 
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
@@ -135,7 +135,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (Clvp tokenizer detect beginning of words by the preceding space).
+            other word. (CLVP tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
