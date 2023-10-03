@@ -2178,6 +2178,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         else:
+            if getattr(self.config, "_flash_attn_2_enabled", False):
+                target_dtype = None
+
+                if "dtype" not in kwargs:
+                    for arg in args:
+                        if isinstance(arg, torch.dtype):
+                            target_dtype = arg
+                            break
+                else:
+                    target_dtype = kwargs["dtype"]
+
+                if target_dtype is not None and target_dtype == torch.float32:
+                    raise ValueError(
+                        "You cannot cast a model that has been loaded with Flash Attention 2 in `float32`"
+                    )
+                elif target_dtype is not None:
+                    self.config._flash_attn_2_attention_dtype = target_dtype
+
+
             return super().to(*args, **kwargs)
 
     def half(self, *args):
