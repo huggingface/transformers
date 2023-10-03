@@ -278,7 +278,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         special_tokens = [(self.bos_token, self.bos_token_id)] if self.add_bos_token and add_special_tokens else []
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
-            pair += [self.prefix_token, self.suffix_token, "$A", self.middle_token, "$B"]
+            pair += [self.prefix_token, self.suffix_token, "$B", self.middle_token, "$A"]
             special_tokens += [
                 (self.prefix_token, self.prefix_id),
                 (self.suffix_token, self.suffix_id),
