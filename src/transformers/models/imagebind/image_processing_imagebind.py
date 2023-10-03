@@ -33,6 +33,9 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    is_valid_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -47,9 +50,23 @@ if is_vision_available():
     import PIL
 
 
+# Copied from transformers.models.videomae.image_processing_videomae.make_batched
+def make_batched(videos) -> List[List[ImageInput]]:
+    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+        return videos
+
+    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
+        return [videos]
+
+    elif is_valid_image(videos):
+        return [[videos]]
+
+    raise ValueError(f"Could not make batched video from {videos}")
+
+
 class ImageBindImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a IMAGEBIND image processor.
+    Constructs a ImageBind image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -75,11 +92,12 @@ class ImageBindImageProcessor(BaseImageProcessor):
             method.
         do_normalize:
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-            Image standard deviation.
+        image_std (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_STD`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -215,6 +233,64 @@ class ImageBindImageProcessor(BaseImageProcessor):
         """
         return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
+    def preprocess_single_image(
+        self,
+        image: ImageInput,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """
+        Process a single image.
+        """
+        if do_resize and size is None:
+            raise ValueError("Size must be specified if do_resize is True.")
+
+        if do_center_crop and crop_size is None:
+            raise ValueError("Crop size must be specified if do_center_crop is True.")
+
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
+
+        if do_normalize and (image_mean is None or image_std is None):
+            raise ValueError("Image mean and std must be specified if do_normalize is True.")
+
+        # All transformations expect numpy arrays.
+        image = to_numpy_array(image)
+
+        if is_scaled_image(image) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+
+        if do_resize:
+            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+
+        if do_center_crop:
+            image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
+
+        if do_rescale:
+            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+
+        if do_normalize:
+            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+
+        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        return image
+
     def preprocess(
         self,
         images: ImageInput,
@@ -231,6 +307,7 @@ class ImageBindImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -276,6 +353,12 @@ class ImageBindImageProcessor(BaseImageProcessor):
                 - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - Unset: defaults to the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -291,48 +374,38 @@ class ImageBindImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_list_of_images(images)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
+        # Batch and clip images into video frames
+        videos = make_batched(images)
 
-        if do_center_crop and crop_size is None:
-            raise ValueError("Crop size must be specified if do_center_crop is True.")
+        videos = [
+            [
+                self.preprocess_single_image(
+                    image=img,
+                    do_resize=do_resize,
+                    size=size,
+                    resample=resample,
+                    do_center_crop=do_center_crop,
+                    crop_size=crop_size,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
+                )
+                for img in clip
+            ]
+            for clip in videos
+        ]
 
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
-
-        # PIL RGBA images are converted to RGB
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
-
-        if do_center_crop:
-            images = [self.center_crop(image=image, size=crop_size) for image in images]
-
-        if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
-
-        if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
-
-        images = [to_channel_dimension_format(image, data_format) for image in images]
-
-        data = {"pixel_values": images}
+        data = {"pixel_values": videos}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
