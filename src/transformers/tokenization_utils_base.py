@@ -2235,11 +2235,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
                 # legacy: we have to init with (rstrip=True, lstrip=True)
-                rstrip = lstrip = True if "Fast" not in cls.__name__ else False
-                for token, index in added_tok_encoder.items():
-                    if index not in added_tokens_decoder:
-                        rstrip = lstrip = False
-                    added_tokens_decoder = {index: AddedToken(token, rstrip=rstrip, lstrip=lstrip)}
+                strip = True if "Fast" not in cls.__name__ else False
+                added_tokens_decoder = {
+                    index: AddedToken(token, rstrip=strip, lstrip=strip) for token, index in added_tok_encoder.items()
+                }
             # end legacy
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens if the `fast` was not properly saved!
@@ -2389,7 +2388,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
-        # TODO: Ensure the modified attributes (those are also in the __init__ kwargs) will give identical tokenizers
         target_keys = list(self.init_kwargs.keys())
         target_keys += ["model_max_length", "clean_up_tokenization_spaces", "additional_special_tokens"]
         for k in target_keys:
