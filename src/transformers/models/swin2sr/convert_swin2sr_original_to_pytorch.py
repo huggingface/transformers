@@ -42,7 +42,8 @@ def get_config(checkpoint_url):
         config.upscale = 4
         config.upsampler = "nearest+conv"
     elif "Swin2SR_Jpeg_dynamic" in checkpoint_url:
-        config.num_channels = 1
+        config.num_channels_in = 1
+        config.num_channels_out = 1
         config.upscale = 1
         config.image_size = 126
         config.window_size = 7
@@ -191,7 +192,7 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     )
     pixel_values = transforms(image).unsqueeze(0)
 
-    if config.num_channels == 1:
+    if config.num_channels_in == 1:
         pixel_values = pixel_values[:, 0, :, :].unsqueeze(1)
 
     outputs = model(pixel_values)
