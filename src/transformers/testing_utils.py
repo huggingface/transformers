@@ -2135,21 +2135,21 @@ def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], 
 if is_torch_available():
     # Mappings from device names to callable functions to support device agnostic
     # testing.
-    ACCELERATOR_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": torch.manual_seed, "default": torch.manual_seed}
-    ACCELERATOR_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
-    ACCELERATOR_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
+    BACKEND_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": torch.manual_seed, "default": torch.manual_seed}
+    BACKEND_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
+    BACKEND_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
 
 
-def accelerator_manual_seed(device: str, seed: int):
-    return _device_agnostic_dispatch(device, ACCELERATOR_MANUAL_SEED, seed)
+def backend_manual_seed(device: str, seed: int):
+    return _device_agnostic_dispatch(device, BACKEND_MANUAL_SEED, seed)
 
 
-def accelerator_empty_cache(device: str):
-    return _device_agnostic_dispatch(device, ACCELERATOR_EMPTY_CACHE)
+def backend_empty_cache(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_EMPTY_CACHE)
 
 
-def accelerator_device_count(device: str):
-    return _device_agnostic_dispatch(device, ACCELERATOR_DEVICE_COUNT)
+def backend_device_count(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_DEVICE_COUNT)
 
 
 if is_torch_available():
@@ -2196,7 +2196,7 @@ if is_torch_available():
                         f"`{attribute_name}` not found in '{device_spec_path}' and no default fallback function found."
                     ) from e
 
-        # Add one entry here for each `ACCELERATOR_*` dictionary.
-        update_mapping_from_spec(ACCELERATOR_MANUAL_SEED, "MANUAL_SEED_FN")
-        update_mapping_from_spec(ACCELERATOR_EMPTY_CACHE, "EMPTY_CACHE_FN")
-        update_mapping_from_spec(ACCELERATOR_DEVICE_COUNT, "DEVICE_COUNT_FN")
+        # Add one entry here for each `BACKEND_*` dictionary.
+        update_mapping_from_spec(BACKEND_MANUAL_SEED, "MANUAL_SEED_FN")
+        update_mapping_from_spec(BACKEND_EMPTY_CACHE, "EMPTY_CACHE_FN")
+        update_mapping_from_spec(BACKEND_DEVICE_COUNT, "DEVICE_COUNT_FN")
