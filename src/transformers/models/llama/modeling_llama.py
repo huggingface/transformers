@@ -724,14 +724,10 @@ class LlamaDecoderLayer(nn.Module):
 
         if getattr(config, "_flash_attn_2_enabled", False):
             self.self_attn = LlamaFlashAttention2(config=config)
-        # self.self_attn = LlamaSDPAAttention(config=config)
-        self.self_attn = LlamaAttention(config=config)
-        """
         elif is_torch_sdpa_available():
             self.self_attn = LlamaSDPAAttention(config=config)
         else:
             self.self_attn = LlamaAttention(config=config)
-        """
 
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
