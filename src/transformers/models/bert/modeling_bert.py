@@ -338,6 +338,7 @@ class BertSelfAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
+        padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor]:
 
         query_layer, key_layer, value_layer, attention_mask = self._query_key_value_attention_mask(hidden_states,
@@ -498,13 +499,28 @@ class BertFlashAttention2(BertAttention):
             raise Warning("output_attentions was set as true, but this is currently not support for flash attention 2 as this intermediary ")
 
         
-        bsz, tgt_len, hidden_dim = hidden_states.shape
+        bsz, seq_len, hidden_dim = hidden_states.shape
         query_layer, key_layer, value_layer, attention_mask = self.self._query_key_value_attention_mask(hidden_states,
             attention_mask,
             encoder_hidden_states,
             encoder_attention_mask,
             past_key_value
         )
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim.
+        query_layer = query_layer.transpose(1, 2)
+        key_layer = key_layer.transpose(1, 2)
+        value_layer = value_layer.transpose(1, 2)
+
+        attn_dropout = self.self.dropout.p if self.training else 0.0
+        
+        context_layer = self._flash_attention_forward(
+            query_layer, key_layer, value_layer, padding_mask, seq_len, dropout=attn_dropout
+        )
+
+        context_layer = context_layer.reshape(bsz, seq_len, hidden_dim)
+        attention_output = self.output(context_layer, hidden_states)
 
         if self.self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -515,22 +531,8 @@ class BertFlashAttention2(BertAttention):
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        query_layer = query_layer.view(bsz, tgt_len, self.self.num_attention_heads, hidden_dim)
-        key_layer = key_layer.transpose(1, 2).view(bsz, tgt_len, self.self.num_attention_heads, hidden_dim)
-        value_layer = value_layer.transpose(1, 2).view(bsz, tgt_len, self.self.num_attention_heads, hidden_dim)
-
-        _, query_length, _, _ = query_layer.shape
-
-        attn_dropout = self.self.dropout.p if self.training else 0.0
-        
-        context_layer = self._flash_attention_forward(
-            query_layer, key_layer, value_layer, padding_mask, query_length, dropout=attn_dropout
-        )
-        attention_output = self.output(context_layer, hidden_states)
         output = (attention_output, past_key_value) if self.self.is_decoder else (attention_output, )
+
         return output
 
 
