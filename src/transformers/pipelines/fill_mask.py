@@ -67,11 +67,16 @@ class FillMaskPipeline(Pipeline):
 
     This pipeline now supports tokenizer_kwargs. For example try:
 
+    ```python
     >>> from transformers import pipeline
 
     >>> fill_masker = pipeline(model="bert-base-uncased")
     >>> tokenizer_kwargs = {"truncation": True}
-    >>> fill_masker("This is a simple [MASK]. " + "...with a large amount of repeated text appended. " * 100, tokenizer_kwargs=tokenizer_kwargs)
+    >>> fill_masker(
+    ...     "This is a simple [MASK]. " + "...with a large amount of repeated text appended. " * 100,
+    ...     tokenizer_kwargs=tokenizer_kwargs,
+    ... )
+    ```
 
 
     </Tip>
