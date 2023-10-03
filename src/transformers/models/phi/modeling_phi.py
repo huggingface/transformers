@@ -861,10 +861,10 @@ class PhiModel(PhiPreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->PHI,Llama->Phi,bias=False->bias=True,PATH_TO_CONVERTED_WEIGHTS->"susnato/phi-1_dev",PATH_TO_CONVERTED_TOKENIZER->"susnato/phi-1_dev"
 class PhiForCausalLM(PhiPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Phi,bias=False->bias=True
     def __init__(self, config):
         super().__init__(config)
         self.model = PhiModel(config)
@@ -930,7 +930,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        'Hey, are you conscious? Can you talk to me?\\nYes, definitely!",\n    "I\'m not sure what you\'re talking about'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -986,6 +986,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
@@ -1017,6 +1018,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
         return model_inputs
 
     @staticmethod
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
