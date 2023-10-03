@@ -96,73 +96,20 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
-def _inplace_unmask_padding(expanded_mask, attention_mask):
-    print("expanded_mask", expanded_mask.shape)
-    print("expanded_mask", expanded_mask)
 
+def _inplace_unmask_padding(expanded_mask, attention_mask):
     bsz = attention_mask.shape[0]
 
     # Get the index of the first non-zero value for every sample in the batch.
     tmp = torch.arange(attention_mask.shape[1], 0, -1)
     indices = torch.argmax(attention_mask.cpu() * tmp, 1, keepdim=True)
 
-    # Construct a matrix of shape (batch_size, maximum_left_padding_length) that is used
-    # in an aten::index_put to override expanded_mask values for pad tokens.
-    # For example, if attention_mask is
-    # [[1, 1, 1, 1, 1]
-    #  [0, 0, 1, 1, 1]
-    #  [0, 0, 0, 1, 1]]
-    # 
-    # and the original expanded_mask is
-    #
-    # [[[[1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1]]],
-    #
-    # [[[0, 0, 1, 1, 1],
-    #   [0, 0, 1, 1, 1],
-    #   [0, 0, 1, 1, 1],
-    #   [0, 0, 1, 1, 1],
-    #   [0, 0, 1, 1, 1]]],
-    #
-    # [[[0, 0, 0, 1, 1],
-    #   [0, 0, 0, 1, 1],
-    #   [0, 0, 0, 1, 1],
-    #   [0, 0, 0, 1, 1],
-    #   [0, 0, 0, 1, 1]]]]
-    #
-    # then the modified expanded_mask will be 
-    #
-    # [[[[1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1]]],
-    #
-    # [[[1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1],
-    #   [0, 0, 1, 1, 1],
-    #   [0, 0, 1, 1, 1],
-    #   [0, 0, 1, 1, 1]]],
-    # 
-    # [[[1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1],
-    #   [1, 1, 1, 1, 1],
-    #   [0, 0, 0, 1, 1],
-    #   [0, 0, 0, 1, 1]]]]
-
     max_len = torch.max(indices)
     range_tensor = torch.arange(max_len).unsqueeze(0)
     range_tensor = range_tensor.repeat(indices.size(0), 1)
     range_tensor[range_tensor >= indices] = 0
 
-    print("range_tensor", range_tensor)
-
     expanded_mask[torch.arange(bsz).unsqueeze(1), 0, range_tensor] = 0
-
-    print("expanded_mask after", expanded_mask)
 
 
 class LlamaRMSNorm(nn.Module):
@@ -760,18 +707,10 @@ class LlamaSDPAAttention(LlamaAttention):
 
             # NOTE: As of PyTorch 2.1, this case can not dispatch to flash attention v2 due to the
             # attention mask passed. Possible solution: use nested tensors.
-            #print("attention_mask", attention_mask.shape)
-            #print("attention_mask", attention_mask)
-            #print("query_states", query_states.shape)
-            #print("query_states", query_states)
-            #print("key_states", key_states.shape)
-            #print("key_states", key_states)
             with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
                 attn_output = torch.nn.functional.scaled_dot_product_attention(
                     query_states, key_states, value_states, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
                 )
-            #print("attn_output", attn_output.shape)
-            #print("attn_output", attn_output)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
@@ -793,7 +732,7 @@ class LlamaDecoderLayer(nn.Module):
 
         if getattr(config, "_flash_attn_2_enabled", False):
             self.self_attn = LlamaFlashAttention2(config=config)
-        #self.self_attn = LlamaSDPAAttention(config=config)
+        # self.self_attn = LlamaSDPAAttention(config=config)
         self.self_attn = LlamaAttention(config=config)
         """
         elif is_torch_sdpa_available():
@@ -1024,13 +963,12 @@ class LlamaModel(LlamaPreTrainedModel):
 
             # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
             # does not support unattended sequences in the attention mask. Details: LINK
-            #if input_shape[-1] > 1 and is_torch_sdpa_available() and attention_mask.device.type == "cuda":
-            #    _inplace_unmask_padding(expanded_attn_mask, attention_mask)
+            if input_shape[-1] > 1 and is_torch_sdpa_available() and attention_mask.device.type == "cuda":
+                _inplace_unmask_padding(expanded_attn_mask, attention_mask)
 
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
-        print("combined_attention_mask", combined_attention_mask)
         return combined_attention_mask
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
