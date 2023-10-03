@@ -15,12 +15,13 @@
 """ Testing suite for the PyTorch Mistral model. """
 
 
-import unittest
 import tempfile
+import unittest
+
 from pytest import mark
 
 from transformers import AutoTokenizer, MistralConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device, require_flash_attn, require_torch_gpu
+from transformers.testing_utils import require_flash_attn, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -353,7 +354,6 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_past_key_values_format(self):
         pass
 
-
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -377,7 +377,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
                 dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
 
-                out = model.generate(
+                model.generate(
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
                 )
 
@@ -389,7 +389,6 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     _ = model.generate(
                         dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
                     )
-
 
     @require_flash_attn
     @require_torch_gpu
@@ -422,7 +421,9 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
                 _ = model(dummy_input, output_hidden_states=True).hidden_states[-1]
                 with self.assertRaises(ValueError):
-                    _ = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True).hidden_states[-1]
+                    _ = model_fa(
+                        dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True
+                    ).hidden_states[-1]
 
 
 @require_torch
