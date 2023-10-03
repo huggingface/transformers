@@ -15,7 +15,6 @@
 """ ViT model configuration"""
 
 
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -142,7 +141,7 @@ class ProPainterConfig(PretrainedConfig):
         self.encoder_depth = 2
         self.raft_iter = raft_iter
         self.kernel_size = kernel_size
-        #self.alternate_corr = alternate_corr
+        # self.alternate_corr = alternate_corr
         self.subvideo_length = subvideo_length
         self.neighbor_length = neighbor_length
         self.ref_stride = ref_stride

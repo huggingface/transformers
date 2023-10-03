@@ -19,19 +19,14 @@ import math
 from functools import reduce
 from typing import Optional, Union
 
-import cv2
+import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 import torchvision
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.modules.utils import _pair, _single
 
 from ...modeling_outputs import (
-    ImageClassifierOutput,
-    ImageSuperResolutionOutput,
-    MaskedImageModelingOutput,
     ProPainterFrameModelingOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -50,17 +45,14 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ProPainterConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224-in21k"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_CHECKPOINT_FOR_DOC = "shauray/ProPainter-hf"
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/vit-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
+_IMAGE_CLASS_CHECKPOINT = "shauray/ProPainter-hf"
 
 
 VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-base-patch16-224",
-    # See all ViT models at https://huggingface.co/models?filter=vit
+    "shauray/ProPainter-hf",
 ]
 
 
@@ -96,7 +88,7 @@ class P3DBlock(nn.Module):
         feat1 = self.Conv1(pixel_values)
         feat2 = self.Conv2(feat1)
         if self.use_residual:
-            output = feats + feat2
+            output = feat1 + feat2
         else:
             output = feat2
         return output
@@ -152,9 +144,6 @@ class ReccurrentFlowCompleteNet(nn.Module):
             P3DBlock(64, 128, 3, 2, 1),
             nn.LeakyReLU(config.threshold, inplace=True),
         )
-
-        # self.Encoder1 = nn.Sequential(nn.ModuleList(self.Encoder1))
-        # self.Encoder2 = nn.Sequential(nn.ModuleList(self.Encoder2))
 
         self.MidDilation = nn.Sequential(
             nn.Conv3d(128, 128, (1, 3, 3), (1, 1, 1), padding=(0, 3, 3), dilation=(1, 3, 3)),
@@ -594,25 +583,6 @@ class CorrBlock:
         return corr / torch.sqrt(torch.tensor(dim))
 
 
-class CorrLayer(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, fmap1, fmap2, coords, r):
-        fmap1 = fmap1.contiguous()
-        fmap2 = fmap2.contiguous()
-        coords = coords.contiguous()
-        ctx.save_for_backward(fmap1, fmap2, coords)
-        ctx.r = r
-        (corr,) = correlation_cudaz.forward(fmap1, fmap2, coords, ctx.r)
-        return corr
-
-    @staticmethod
-    def backward(ctx, grad_corr):
-        fmap1, fmap2, coords = ctx.saved_tensors
-        grad_corr = grad_corr.contiguous()
-        fmap1_grad, fmap2_grad, coords_grad = correlation_cudaz.backward(fmap1, fmap2, coords, grad_corr, ctx.r)
-        return fmap1_grad, fmap2_grad, coords_grad, None
-
-
 def constant_init(module, val, bias=0):
     if hasattr(module, "weight") and module.weight is not None:
         nn.init.constant_(module.weight, val)
@@ -985,7 +955,7 @@ class ProPainterBidirectionalPropagation(nn.Module):
 
         if self.learnable:
             mask_in = mask.view(-1, 2, h, w)
-            masks_b, masks_f = None, None
+            _, masks_f = None, None
             outputs = self.fuse(torch.cat([outputs_b, outputs_f, mask_in], dim=1)) + x.view(-1, c, h, w)
         else:
             torch.stack(masks["backward_1"], dim=1)
@@ -1134,17 +1104,31 @@ class SparseWindowAttention(nn.Module):
         )
         # roll_k and roll_v
         if any(i > 0 for i in self.expand_size):
-            (k_tl, v_tl) = (torch.roll(a, shifts=(-self.expand_size[0], -self.expand_size[1]), dims=(2, 3)) for a in (k, v))
-            (k_tr, v_tr) = (torch.roll(a, shifts=(-self.expand_size[0], self.expand_size[1]), dims=(2, 3)) for a in (k, v))
-            (k_bl, v_bl) = (torch.roll(a, shifts=(self.expand_size[0], -self.expand_size[1]), dims=(2, 3)) for a in (k, v))
-            (k_br, v_br) = (torch.roll(a, shifts=(self.expand_size[0], self.expand_size[1]), dims=(2, 3)) for a in (k, v))
+            (k_tl, v_tl) = (
+                torch.roll(a, shifts=(-self.expand_size[0], -self.expand_size[1]), dims=(2, 3)) for a in (k, v)
+            )
+            (k_tr, v_tr) = (
+                torch.roll(a, shifts=(-self.expand_size[0], self.expand_size[1]), dims=(2, 3)) for a in (k, v)
+            )
+            (k_bl, v_bl) = (
+                torch.roll(a, shifts=(self.expand_size[0], -self.expand_size[1]), dims=(2, 3)) for a in (k, v)
+            )
+            (k_br, v_br) = (
+                torch.roll(a, shifts=(self.expand_size[0], self.expand_size[1]), dims=(2, 3)) for a in (k, v)
+            )
 
-            (k_tl_windows, k_tr_windows, k_bl_windows, k_br_windows) = (self.window_partition(a, self.window_size, self.n_head).view(
+            (k_tl_windows, k_tr_windows, k_bl_windows, k_br_windows) = (
+                self.window_partition(a, self.window_size, self.n_head).view(
                     b, n_wh * n_ww, self.n_head, t, w_h * w_w, c_head
-                ) for a in (k_tl, k_tr, k_bl, k_br))
-            (v_tl_windows, v_tr_windows, v_bl_windows, v_br_windows) = (self.window_partition(a, self.window_size, self.n_head).view(
+                )
+                for a in (k_tl, k_tr, k_bl, k_br)
+            )
+            (v_tl_windows, v_tr_windows, v_bl_windows, v_br_windows) = (
+                self.window_partition(a, self.window_size, self.n_head).view(
                     b, n_wh * n_ww, self.n_head, t, w_h * w_w, c_head
-                ) for a in (v_tl, v_tr, v_bl, v_br))
+                )
+                for a in (v_tl, v_tr, v_bl, v_br)
+            )
             rool_k = torch.cat((k_tl_windows, k_tr_windows, k_bl_windows, k_br_windows), 4).contiguous()
             rool_v = torch.cat(
                 (v_tl_windows, v_tr_windows, v_bl_windows, v_br_windows), 4
@@ -1700,7 +1684,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ProPainterFrameModelingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         frames: Optional[torch.Tensor] = None,
@@ -1711,7 +1695,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedImageModelingOutput]:
+    ) -> Union[tuple, ProPainterFrameModelingOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -1742,8 +1726,8 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
         [1, 3, 224, 224]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        import numpy as np
-        #frames_inp = [np.array(f).astype(np.int8) for f in ((frames + 1) / 2).squeeze(0).permute(0,2,3,1)]
+
+        # frames_inp = [np.array(f).astype(np.int8) for f in ((frames + 1) / 2).squeeze(0).permute(0,2,3,1)]
 
         video_length = frames.size(1)
         h, w = frames.shape[-2], frames.shape[-1]
@@ -1850,8 +1834,6 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             updated_frames = frames * (1 - masks_dilated) + prop_imgs.view(b, t, 3, h, w) * masks_dilated
             updated_masks = updated_local_masks.view(b, t, 1, h, w)
 
-        import numpy as np
-
         ori_frames = frames_inp
         comp_frames = [None] * video_length
 
@@ -1937,86 +1919,215 @@ class ProPainterForImageOutPainting(ProPainterPreTrainedModel):
     def __init__(self, config: ProPainterConfig) -> None:
         super().__init__(config)
 
-        self.num_labels = config.num_labels
-        self.vit = ViTModel(config, add_pooling_layer=False)
-
-        # Classifier head
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.OpticalFlow = OpticalFlow(config)
+        self.FlowComplete = ReccurrentFlowCompleteNet(config)
+        self.InPainting = ProPainterModel(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    # @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
-    # @add_code_sample_docstrings(
-    #    checkpoint=_IMAGE_CLASS_CHECKPOINT,
-    #    output_type=ImageClassifierOutput,
-
-    #    config_class=_CONFIG_FOR_DOC,
-    #    expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    # )
+    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ProPainterFrameModelingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        frames: Optional[torch.Tensor] = None,
+        flow_masks: Optional[torch.BoolTensor] = None,
+        masks_dilated: Optional[torch.Tensor] = None,
+        frames_inp: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> Union[tuple, ProPainterFrameModelingOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
+            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
+
+        Returns:
+
+        Examples:
+        ```python
+        >>> from transformers import AutoImageProcessor, ViTForMaskedImageModeling
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+        >>> model = ViTForMaskedImageModeling.from_pretrained("google/vit-base-patch16-224-in21k")
+
+        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
+        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
+        >>> # create random boolean mask of shape (batch_size, num_patches)
+        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
+
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
+        >>> list(reconstructed_pixel_values.shape)
+        [1, 3, 224, 224]
+        ```"""
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        import numpy as np
 
-        outputs = self.vit(
-            pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+        video_length = frames.size(1)
+        h, w = frames.shape[-2], frames.shape[-1]
+
+        if frames.size(-1) <= 640:
+            short_clip_len = 12
+        elif frames.size(-1) < 720:
+            short_clip_len = 8
+        elif frames.size(-1) < 1280:
+            short_clip_len = 4
+        else:
+            short_clip_len = 2
+
+        if frames.size(1) > short_clip_len:
+            gt_flows_f_list, gt_flows_b_list = [], []
+            for f in range(0, video_length, short_clip_len):
+                end_f = min(frames.size(1), f + short_clip_len)
+                if f == 0:
+                    flows_f, flows_b = self.OpticalFlow(frames[:, f:end_f], iters=self.config.raft_iter)
+                else:
+                    flows_f, flows_b = self.OpticalFlow(frames[:, f - 1 : end_f], iters=self.config.raft_iter)
+
+                gt_flows_f_list.append(flows_f)
+                gt_flows_b_list.append(flows_b)
+
+            gt_flows_f = torch.cat(gt_flows_f_list, dim=1)
+            gt_flows_b = torch.cat(gt_flows_b_list, dim=1)
+            gt_flows_bi = (gt_flows_f, gt_flows_b)
+        else:
+            gt_flows_bi = self.OpticalFlow(frames, iters=self.config.raft_iter)
+
+        flow_length = gt_flows_bi[0].size(1)
+        if flow_length > self.config.subvideo_length:
+            pred_flows_f, pred_flows_b = [], []
+            pad_len = 5
+            for f in range(0, flow_length, self.config.subvideo_length):
+                s_f = max(0, f - pad_len)
+                e_f = min(flow_length, f + self.config.subvideo_length + pad_len)
+                pad_len_s = max(0, f) - s_f
+                pad_len_e = e_f - min(flow_length, f + self.config.subvideo_length)
+                pred_flows_bi_sub, _ = self.FlowComplete.forward_bidirect_flow(
+                    (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]), flow_masks[:, s_f : e_f + 1]
+                )
+                pred_flows_bi_sub = self.FlowComplete.combine_flow(
+                    (gt_flows_bi[0][:, s_f:e_f], gt_flows_bi[1][:, s_f:e_f]),
+                    pred_flows_bi_sub,
+                    flow_masks[:, s_f : e_f + 1],
+                )
+
+                pred_flows_f.append(pred_flows_bi_sub[0][:, pad_len_s : e_f - s_f - pad_len_e])
+                pred_flows_b.append(pred_flows_bi_sub[1][:, pad_len_s : e_f - s_f - pad_len_e])
+
+            pred_flows_f = torch.cat(pred_flows_f, dim=1)
+            pred_flows_b = torch.cat(pred_flows_b, dim=1)
+            pred_flows_bi = (pred_flows_f, pred_flows_b)
+        else:
+            pred_flows_bi, _ = self.FlowComplete.forward_bidirect_flow(gt_flows_bi, flow_masks)
+            pred_flows_bi = self.FlowComplete.combine_flow(gt_flows_bi, pred_flows_bi, flow_masks)
+
+        masked_frames = frames * (1 - masks_dilated)
+        subvideo_length_img_prop = min(
+            100, self.config.subvideo_length
+        )  # ensure a minimum of 100 frames for image propagation
+        if video_length > subvideo_length_img_prop:
+            updated_frames, updated_masks = [], []
+            pad_len = 10
+            for f in range(0, video_length, subvideo_length_img_prop):
+                s_f = max(0, f - pad_len)
+                e_f = min(video_length, f + subvideo_length_img_prop + pad_len)
+                pad_len_s = max(0, f) - s_f
+                pad_len_e = e_f - min(video_length, f + subvideo_length_img_prop)
+
+                b, t, _, _, _ = masks_dilated[:, s_f:e_f].size()
+                pred_flows_bi_sub = (pred_flows_bi[0][:, s_f : e_f - 1], pred_flows_bi[1][:, s_f : e_f - 1])
+                prop_imgs_sub, updated_local_masks_sub = self.InPainting.img_propagation(
+                    masked_frames[:, s_f:e_f], pred_flows_bi_sub, masks_dilated[:, s_f:e_f], "nearest"
+                )
+                updated_frames_sub = (
+                    frames[:, s_f:e_f] * (1 - masks_dilated[:, s_f:e_f])
+                    + prop_imgs_sub.view(b, t, 3, h, w) * masks_dilated[:, s_f:e_f]
+                )
+                updated_masks_sub = updated_local_masks_sub.view(b, t, 1, h, w)
+
+                updated_frames.append(updated_frames_sub[:, pad_len_s : e_f - s_f - pad_len_e])
+                updated_masks.append(updated_masks_sub[:, pad_len_s : e_f - s_f - pad_len_e])
+
+            updated_frames = torch.cat(updated_frames, dim=1)
+            updated_masks = torch.cat(updated_masks, dim=1)
+        else:
+            b, t, _, _, _ = masks_dilated.size()
+            prop_imgs, updated_local_masks = self.InPainting.img_propagation(
+                masked_frames, pred_flows_bi, masks_dilated, "nearest"
+            )
+            updated_frames = frames * (1 - masks_dilated) + prop_imgs.view(b, t, 3, h, w) * masks_dilated
+            updated_masks = updated_local_masks.view(b, t, 1, h, w)
+
+        ori_frames = frames_inp
+        comp_frames = [None] * video_length
+
+        neighbor_stride = self.config.neighbor_length // 2
+        if video_length > self.config.subvideo_length:
+            ref_num = self.config.subvideo_length // self.config.ref_stride
+        else:
+            ref_num = -1
+
+        for f in range(0, video_length, neighbor_stride):
+            neighbor_ids = list(range(max(0, f - neighbor_stride), min(video_length, f + neighbor_stride + 1)))
+            ref_ids = self.get_ref_index(f, neighbor_ids, video_length, self.config.ref_stride, ref_num)
+            selected_imgs = updated_frames[:, neighbor_ids + ref_ids, :, :, :]
+            selected_masks = masks_dilated[:, neighbor_ids + ref_ids, :, :, :]
+            selected_update_masks = updated_masks[:, neighbor_ids + ref_ids, :, :, :]
+            selected_pred_flows_bi = (
+                pred_flows_bi[0][:, neighbor_ids[:-1], :, :, :],
+                pred_flows_bi[1][:, neighbor_ids[:-1], :, :, :],
+            )
+
+            # 1.0 indicates mask
+            l_t = len(neighbor_ids)
+
+            # pred_img = selected_imgs # results of image propagation
+            pred_img = self.InPainting(
+                selected_imgs, selected_pred_flows_bi, selected_masks, selected_update_masks, l_t
+            )
+
+            pred_img = pred_img.view(-1, 3, h, w)
+
+            pred_img = (pred_img + 1) / 2
+            pred_img = pred_img.detach().cpu().permute(0, 2, 3, 1).numpy() * 255
+            binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(0, 2, 3, 1).numpy().astype(np.uint8)
+            for i in range(len(neighbor_ids)):
+                idx = neighbor_ids[i]
+                img = np.array(pred_img[i]).astype(np.uint8) * binary_masks[i] + ori_frames[idx] * (
+                    1 - binary_masks[i]
+                )
+                if comp_frames[idx] is None:
+                    comp_frames[idx] = img
+                else:
+                    comp_frames[idx] = comp_frames[idx].astype(np.float32) * 0.5 + img.astype(np.float32) * 0.5
+
+                comp_frames[idx] = comp_frames[idx].astype(np.uint8)
+
+        return ProPainterFrameModelingOutput(
+            reconstructed_frames=comp_frames,
         )
 
-        sequence_output = outputs[0]
-
-        logits = self.classifier(sequence_output[:, 0, :])
-
-        loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return ImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+    def get_ref_index(self, mid_neighbor_id, neighbor_ids, length, ref_stride=10, ref_num=-1):
+        ref_index = []
+        if ref_num == -1:
+            for i in range(0, length, ref_stride):
+                if i not in neighbor_ids:
+                    ref_index.append(i)
+        else:
+            start_idx = max(0, mid_neighbor_id - ref_stride * (ref_num // 2))
+            end_idx = min(length, mid_neighbor_id + ref_stride * (ref_num // 2))
+            for i in range(start_idx, end_idx, ref_stride):
+                if i not in neighbor_ids:
+                    if len(ref_index) > ref_num:
+                        break
+                    ref_index.append(i)
+        return ref_index
