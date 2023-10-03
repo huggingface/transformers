@@ -159,6 +159,10 @@ class PeftAdapterMixin:
                 "The one in `adapter_kwargs` will be used."
             )
 
+        # Override token with adapter_kwargs' token
+        if "token" in adapter_kwargs:
+            token = adapter_kwargs.pop("token")
+
         if peft_config is None:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
