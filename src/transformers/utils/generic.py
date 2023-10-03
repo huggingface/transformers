@@ -422,7 +422,7 @@ class ModelOutput(OrderedDict):
         callable, _args, *remaining = super().__reduce__()
         args = tuple(getattr(self, field.name) for field in fields(self))
         return callable, args, *remaining
-    
+
     def to_tuple(self) -> Tuple[Any]:
         """
         Convert self to a tuple containing all the attributes/keys that are not `None`.
