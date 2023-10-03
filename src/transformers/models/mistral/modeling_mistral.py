@@ -401,7 +401,7 @@ class MistralFlashAttention2(MistralAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # TODO: llama does not have dropout in the config??
+        # TODO: Mistral does not have dropout in the config??
         # It is recommended to use dropout with FA according to the docs
         # when training.
         dropout_rate = 0.0  # if not self.training else self.attn_dropout
@@ -409,8 +409,6 @@ class MistralFlashAttention2(MistralAttention):
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in float16 just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (LlamaRMSNorm handles it correctly)
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
             logger.warning_once(
