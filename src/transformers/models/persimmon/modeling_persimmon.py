@@ -171,10 +171,11 @@ class PersimmonDynamicNTKScalingRotaryEmbedding(PersimmonRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
 
+# Copied from transformers.models.llama.modeling_llama.rotate_half with Llama->Persimmon
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     logger.warning_once(
-        "Using the global `rotate_half` function is deprecated. Please use `PersimmonRotaryEmbedding.rotate_half` instead."
+        "Using the global `rotate_half` function is deprecated. Please use `PersimmonRotaryEmbedding.rotate_half` instead. "
         "This is deprecated to improve the export to ONNX by applying the rotary embeddings during the forward call in "
         "the rotary embedding class. "
     )
@@ -183,10 +184,11 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb with Llama->Persimmon
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     logger.warning_once(
-        "Using the global `apply_rotary_pos_emb` function is deprecated. Please use `PersimmonRotaryEmbedding.apply_rotary_pos_emb` instead."
+        "Using the global `apply_rotary_pos_emb` function is deprecated. Please use `PersimmonRotaryEmbedding.apply_rotary_pos_emb` instead. "
         "This is deprecated to improve the export to ONNX by applying the rotary embeddings during the forward call in "
         "the rotary embedding class. "
     )
