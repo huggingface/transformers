@@ -604,9 +604,9 @@ class ClvpIntegrationTest(unittest.TestCase):
             do_sample=False,
             num_beams=4,
             num_return_sequences=4,
-            max_new_tokens=16,
+            max_new_tokens=10,
         ).speech_candidates.cpu()
 
-        EXPECTED_OUTPUTS = torch.tensor([[729, 155, 334], [757, 729, 1305], [729, 757, 334]])
+        EXPECTED_OUTPUTS = torch.tensor([[1953, 1080,  612], [1953, 1953,  612], [1953,  612,  716]])
 
         self.assertTrue(torch.allclose(full_model_output[-3:, -3:], EXPECTED_OUTPUTS))

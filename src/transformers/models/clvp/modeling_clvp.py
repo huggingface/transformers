@@ -1374,6 +1374,9 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        # we consider the start token as 0 th (temporary fix, must be updated before merging)
+        position_ids = position_ids + 1
+
         model_inputs.update(
             {
                 "past_key_values": past_key_values,
