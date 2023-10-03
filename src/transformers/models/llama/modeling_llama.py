@@ -962,7 +962,7 @@ class LlamaModel(LlamaPreTrainedModel):
             )
 
             # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
-            # does not support unattended sequences in the attention mask. Details: LINK
+            # does not support unattended sequences in the attention mask. Details: https://github.com/huggingface/transformers/pull/26572
             if input_shape[-1] > 1 and is_torch_sdpa_available() and attention_mask.device.type == "cuda":
                 _inplace_unmask_padding(expanded_attn_mask, attention_mask)
 
