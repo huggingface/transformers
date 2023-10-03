@@ -48,6 +48,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_available,
+    is_torch_fx_available,
     logging,
     replace_return_docstrings,
 )
@@ -121,6 +122,21 @@ def _get_unpad_data(padding_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
+
+if is_torch_fx_available():
+
+    @torch.fx.wrap
+    def check_padding_in_attention_mask(attention_mask):
+        if 0 in attention_mask:
+            return attention_mask
+        return None
+
+else:
+
+    def check_padding_in_attention_mask(attention_mask):
+        if 0 in attention_mask:
+            return attention_mask
+        return None
 
 
 def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
@@ -460,6 +476,7 @@ class BertAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
+        padding_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -469,6 +486,7 @@ class BertAttention(nn.Module):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
+            padding_mask
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -518,6 +536,8 @@ class BertFlashAttention2(BertAttention):
         context_layer = self._flash_attention_forward(
             query_layer, key_layer, value_layer, padding_mask, seq_len, dropout=attn_dropout
         )
+
+        query_layer.shape
 
         context_layer = context_layer.reshape(bsz, seq_len, hidden_dim)
         attention_output = self.output(context_layer, hidden_states)
@@ -579,13 +599,13 @@ class BertFlashAttention2(BertAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=True,
+                causal=self.self.is_decoder,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_layer, key_layer, value_layer, dropout, softmax_scale=softmax_scale, causal=True
+                query_layer, key_layer, value_layer, dropout, softmax_scale=softmax_scale, causal=self.self.is_decoder
             )
 
         return attn_output
@@ -679,6 +699,7 @@ class BertLayer(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
+        padding_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -688,6 +709,7 @@ class BertLayer(nn.Module):
             head_mask,
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
+            padding_mask=padding_mask
         )
         attention_output = self_attention_outputs[0]
 
@@ -765,6 +787,8 @@ class BertEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        padding_mask = check_padding_in_attention_mask(1.0-attention_mask)
+
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -784,7 +808,7 @@ class BertEncoder(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, past_key_value, output_attentions, padding_mask=padding_mask)
 
                     return custom_forward
 
@@ -805,6 +829,7 @@ class BertEncoder(nn.Module):
                     encoder_attention_mask,
                     past_key_value,
                     output_attentions,
+                    padding_mask
                 )
 
             hidden_states = layer_outputs[0]
