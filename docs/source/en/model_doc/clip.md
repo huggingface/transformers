@@ -88,17 +88,17 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 <PipelineTag pipeline="image-to-text"/>
 
-- A [notebook](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing), a demo to using pretrained CLIP to inference captions with beam search. 🌎
+- A [notebook](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing) on how to use a pretrained CLIP for inference with beam search. 🌎
 
 <PipelineTag pipeline="text-to-image"/>
 
-- A [notebook](https://colab.research.google.com/drive/1py7au62Ky4ZdLtFJP0D4shNkIVym7JS6), a demo to generating image with prompting style tokens using pretrained CLIP and vqgan. 🌎
+- A [notebook](https://colab.research.google.com/drive/1py7au62Ky4ZdLtFJP0D4shNkIVym7JS6) on generating images with prompting style tokens with pretrained CLIP and VQGAN. 🌎
 
 🚀 Deploy
 
-- A [notebook](https://colab.research.google.com/drive/1bLVwVKpAndpEDHqjzxVPr_9nGrSbuOQd?usp=sharing), a guide on image retrieval using pretrained CLIP and computing MRR(Mean Reciprocal Rank) score. 🌎
-- A [notebook](https://colab.research.google.com/github/deep-diver/image_search_with_natural_language/blob/main/notebooks/Image_Search_CLIP.ipynb), a demo to image retrieval with how to show similarity score. 🌎
-- A [notebook](https://colab.research.google.com/drive/1xO-wC_m_GNzgjIBQ4a4znvQkvDoZJvH4?usp=sharing), a demo showing how to map images and texts to the same vector space using Multilingual CLIP. 🌎 
+- A [notebook](https://colab.research.google.com/drive/1bLVwVKpAndpEDHqjzxVPr_9nGrSbuOQd?usp=sharing) on image retrieval using pretrained CLIP and computing MRR(Mean Reciprocal Rank) score. 🌎
+- A [notebook](https://colab.research.google.com/github/deep-diver/image_search_with_natural_language/blob/main/notebooks/Image_Search_CLIP.ipynb) on image retrieval and showing the similarity score. 🌎
+- A [notebook](https://colab.research.google.com/drive/1xO-wC_m_GNzgjIBQ4a4znvQkvDoZJvH4?usp=sharing) on how to map images and texts to the same vector space using Multilingual CLIP. 🌎 
 
 ⚡️ Inference
 
