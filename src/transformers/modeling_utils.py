@@ -1289,7 +1289,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if torch_dtype is None:
             logger.warning(
-                "You are attempting to use Flash Attention 2.0 without specifying a torch dtype. This might lead to unexpected behaviour"
+                "You are attempting to use Flash Attention 2.0 without specifying a torch dtype. This might lead to unexpected behaviour. Make sure to "
+                "pass `torch_dtype=torch.float16` or `torch_dtype=torch.bfloat16` when initialising the model."
             )
         elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
             raise ValueError(
@@ -1319,6 +1320,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
             )
         config._flash_attn_2_enabled = True
+        config._flash_attn_2_attention_dtype = torch_dtype
         return config
 
     def enable_input_require_grads(self):

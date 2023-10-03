@@ -476,15 +476,20 @@ class LlamaFlashAttention2(LlamaAttention):
         # in fp32. (LlamaRMSNorm handles it correctly)
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            if getattr(self.config, "_flash_attn_2_attention_dtype", None) is not None:
+                attention_dtype = self.config._flash_attn_2_attention_dtype
+            else:
+                attention_dtype = torch.float16
+
             logger.warning_once(
-                "The input hidden states seems to be silently casted in float32, this might be related to"
-                " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                " float16."
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {attention_dtype}. Make sure to pass the desired dtype when calling `from_pretrained` with `torch_dtype=your_dtype`"
             )
 
-            query_states = query_states.to(torch.float16)
-            key_states = key_states.to(torch.float16)
-            value_states = value_states.to(torch.float16)
+            query_states = query_states.to(attention_dtype)
+            key_states = key_states.to(attention_dtype)
+            value_states = value_states.to(attention_dtype)
 
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, padding_mask, q_len, dropout=dropout_rate
