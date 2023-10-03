@@ -139,6 +139,38 @@ SPECIAL_MODEL_NAME_LINK_MAPPING = {
     "DonutSwin": "[DonutSwin](model_doc/donut)",
 }
 
+MODEL_NAMES_WITH_SAME_CONFIG = {
+    "BARThez": "BART",
+    "BARTpho": "BART",
+    "BertJapanese": "BERT",
+    "BERTweet": "BERT",
+    "BORT": "BERT",
+    "ByT5": "T5",
+    "CPM": "OpenAI GPT-2",
+    "DePlot": "Pix2Struct",
+    "DialoGPT": "OpenAI GPT-2",
+    "DiT": "BEiT",
+    "FLAN-T5": "T5",
+    "FLAN-UL2": "T5",
+    "HerBERT": "BERT",
+    "LayoutXLM": "LayoutLMv2",
+    "Llama2": "LLaMA",
+    "MatCha": "Pix2Struct",
+    "mBART-50": "mBART",
+    "Megatron-GPT2": "OpenAI GPT-2",
+    "mLUKE": "LUKE",
+    "MMS": "Wav2Vec2",
+    "NLLB": "M2M100",
+    "PhoBERT": "BERT",
+    "T5v1.1": "T5",
+    "TAPEX": "BART",
+    "UL2": "T5",
+    "Wav2Vec2Phoneme": "Wav2Vec2",
+    "XLM-V": "XLM-RoBERTa",
+    "XLS-R": "Wav2Vec2",
+    "XLSR-Wav2Vec2": "Wav2Vec2",
+}
+
 
 def get_model_table_from_auto_modules() -> str:
     """
@@ -179,11 +211,12 @@ def get_model_table_from_auto_modules() -> str:
                 # Try again after removing the last word in the name
                 attr_name = "".join(camel_case_split(attr_name)[:-1])
 
+
     # Let's build that table!
-    model_names = list(model_name_to_config.keys())
-    model_names_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
+    model_names = list(model_name_to_config.keys()) + list(MODEL_NAMES_WITH_SAME_CONFIG.keys())
 
     # model name to doc link mapping
+    model_names_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
     model_name_to_link_mapping = {value: f"[{value}](model_doc/{key})" for key, value in model_names_mapping.items()}
     # update mapping with special model names
     model_name_to_link_mapping = {
@@ -208,8 +241,12 @@ def get_model_table_from_auto_modules() -> str:
     table += "|" + "|".join([":" + "-" * (w - 2) + ":" for w in widths]) + "|\n"
 
     check = {True: "✅", False: "❌"}
+
     for name in model_names:
-        prefix = model_name_to_prefix[name]
+        if name in MODEL_NAMES_WITH_SAME_CONFIG.keys():
+            prefix = model_name_to_prefix[MODEL_NAMES_WITH_SAME_CONFIG[name]]
+        else:
+            prefix = model_name_to_prefix[name]
         line = [
             model_name_to_link_mapping[name],
             check[pt_models[prefix]],
