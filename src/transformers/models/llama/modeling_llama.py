@@ -35,6 +35,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_available,
+    is_torch_sdpa_available,
     logging,
     replace_return_docstrings,
 )
@@ -590,15 +591,127 @@ class LlamaFlashAttention2(LlamaAttention):
         )
 
 
+class LlamaSDPAAttention(LlamaAttention):
+    """
+    Llama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    # Adapted from LlamaAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        padding_mask: Optional[torch.LongTensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions:
+            raise ValueError("output_attentions=True can not be supported with PyTorch SDPA.")
+        attn_weights = None
+
+        bsz, q_len, _ = hidden_states.size()
+
+        if self.config.pretraining_tp > 1:
+            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
+            query_slices = self.q_proj.weight.split(
+                (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
+            )
+            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
+            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
+
+            query_states = [
+                torch.nn.functional.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)
+            ]
+            query_states = torch.cat(query_states, dim=-1)
+
+            key_states = [
+                torch.nn.functional.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)
+            ]
+            key_states = torch.cat(key_states, dim=-1)
+
+            value_states = [
+                torch.nn.functional.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)
+            ]
+            value_states = torch.cat(value_states, dim=-1)
+        else:
+            query_states = self.q_proj(hidden_states)
+            key_states = self.k_proj(hidden_states)
+            value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[0].shape[-2]
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        if past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+
+        past_key_value = (key_states, value_states) if use_cache else None
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        # Note that Llama does not use dropout in the attention, hence the hard-coded
+        # dropout_p=0.0 independent of self.training.
+        # The batch_size = 1 case is handled separately to allow to dispatch on flash attention
+        # kernel.
+        if bsz == 1:
+            if query_states.shape[2] > 1:
+                is_causal = True
+            else:
+                is_causal = False
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states, key_states, value_states, attn_mask=None, dropout_p=0.0, is_causal=is_causal
+            )
+        else:
+            if attention_mask is not None:
+                if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+                    raise ValueError(
+                        f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+                    )
+
+            # NOTE: As of PyTorch 2.1, this case can not dispatch to flash attention v2 due to the
+            # attention mask passed. Possible solution: use nested tensors.
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states, key_states, value_states, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
+            )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+
+        if self.config.pretraining_tp > 1:
+            attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
+            o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
+            attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
+        else:
+            attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights, past_key_value
+
+
 class LlamaDecoderLayer(nn.Module):
     def __init__(self, config: LlamaConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = (
-            LlamaAttention(config=config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else LlamaFlashAttention2(config=config)
-        )
+
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self.self_attn = LlamaFlashAttention2(config=config)
+        elif is_torch_sdpa_available():
+            self.self_attn = LlamaSDPAAttention(config=config)
+        else:
+            self.self_attn = LlamaAttention(config=config)
+
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
