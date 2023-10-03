@@ -12,14 +12,13 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
+
 -->
 
 # Feature Extractor
 
-A feature extractor is in charge of preparing input features for audio or vision models. This includes feature extraction
-from sequences, *e.g.*, pre-processing audio files to Log-Mel Spectrogram features, feature extraction from images
-*e.g.* cropping image image files, but also padding, normalization, and conversion to Numpy, PyTorch, and TensorFlow
-tensors.
+
+フィーチャーエクストラクタは、オーディオまたはビジョンモデルのための入力フィーチャーの準備を担当しています。これには、シーケンスからのフィーチャー抽出（例：オーディオファイルの前処理からLog-Melスペクトログラムフィーチャーへの変換）、画像からのフィーチャー抽出（例：画像ファイルのクロッピング）、またパディング、正規化、そしてNumpy、PyTorch、TensorFlowテンソルへの変換も含まれます。
 
 
 ## FeatureExtractionMixin

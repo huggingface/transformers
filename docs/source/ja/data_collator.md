@@ -16,15 +16,14 @@ rendered properly in your Markdown viewer.
 
 # Data Collator
 
-Data collators are objects that will form a batch by using a list of dataset elements as input. These elements are of
-the same type as the elements of `train_dataset` or `eval_dataset`.
+データ照合器は、データセット要素のリストを入力として使用してバッチを形成するオブジェクトです。これらの要素は、
+`train_dataset` または `eval_dataset` の要素と同じ型。
 
-To be able to build batches, data collators may apply some processing (like padding). Some of them (like
-[`DataCollatorForLanguageModeling`]) also apply some random data augmentation (like random masking)
-on the formed batch.
+バッチを構築できるようにするために、データ照合者は何らかの処理 (パディングなど) を適用する場合があります。そのうちのいくつかは（
+[`DataCollat​​orForLanguageModeling`]) ランダムなデータ拡張 (ランダム マスキングなど) も適用します
+形成されたバッチ上で。
 
-Examples of use can be found in the [example scripts](../examples) or [example notebooks](../notebooks).
-
+使用例は、[サンプル スクリプト](../examples) または [サンプル ノートブック](../notebooks) にあります。
 
 ## Default data collator
 

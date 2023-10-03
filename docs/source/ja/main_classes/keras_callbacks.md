@@ -16,8 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Keras callbacks
 
-When training a Transformers model with Keras, there are some library-specific callbacks available to automate common
-tasks:
+Keras を使用して Transformers モデルをトレーニングする場合、一般的な処理を自動化するために使用できるライブラリ固有のコールバックがいくつかあります。
+タスク:
 
 ## KerasMetricCallback
 

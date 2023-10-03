@@ -14,15 +14,20 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Keras callbacks
+# Image Processor
 
-When training a Transformers model with Keras, there are some library-specific callbacks available to automate common
-tasks:
+画像プロセッサは、ビジョン モデルの入力特徴の準備とその出力の後処理を担当します。これには、サイズ変更、正規化、PyTorch、TensorFlow、Flax、Numpy テンソルへの変換などの変換が含まれます。ロジットをセグメンテーション マスクに変換するなど、モデル固有の後処理も含まれる場合があります。
 
-## KerasMetricCallback
+## ImageProcessingMixin
 
-[[autodoc]] KerasMetricCallback
+[[autodoc]] image_processing_utils.ImageProcessingMixin
+    - from_pretrained
+    - save_pretrained
 
-## PushToHubCallback
+## BatchFeature
 
-[[autodoc]] PushToHubCallback
+[[autodoc]] BatchFeature
+
+## BaseImageProcessor
+
+[[autodoc]] image_processing_utils.BaseImageProcessor
