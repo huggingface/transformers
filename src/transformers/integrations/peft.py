@@ -385,9 +385,7 @@ class PeftAdapterMixin:
         return active_adapters
 
     def active_adapter(self) -> str:
-        logger.warning(
-            "The `active_adapter` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning("The `active_adapter` method is deprecated and will be removed in a future version. ")
 
         return self.active_adapters()[0]
 
