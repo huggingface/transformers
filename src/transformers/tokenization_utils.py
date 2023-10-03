@@ -368,6 +368,25 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._decode_use_source_tokenizer = False
 
     @property
+    def is_fast(self) -> bool:
+        return False
+
+    @property
+    def vocab_size(self) -> int:
+        """
+        `int`: Size of the base vocabulary (without the added tokens).
+        """
+        raise NotImplementedError
+
+    @property
+    def added_tokens_encoder(self) -> Dict[str, int]:
+        """
+        Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
+        optimisation in `self._added_tokens_encoder` for the slow tokenizers.
+        """
+        return {k.content: v for v, k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
+
+    @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
         """
         Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
@@ -388,17 +407,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
             self._added_tokens_encoder[str(token)] = index
-
-    @property
-    def is_fast(self) -> bool:
-        return False
-
-    @property
-    def vocab_size(self) -> int:
-        """
-        `int`: Size of the base vocabulary (without the added tokens).
-        """
-        raise NotImplementedError
 
     def get_added_vocab(self) -> Dict[str, int]:
         """
