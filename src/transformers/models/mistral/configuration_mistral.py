@@ -73,7 +73,7 @@ class MistralConfig(PretrainedConfig):
         pad_token_id (`int`, *optional*): index of the *padding* token
         bos_token_id (`int`, *optional*, defaults to 1):  index of the *begin-of-sequence* token
         eos_token_id (`int`, *optional*, defaults to 2):  index of the *end-of-sequence* token
-        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
