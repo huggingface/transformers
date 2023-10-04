@@ -31,6 +31,7 @@ Tips:
 3. The use of the [`ClvpModelForConditionalGeneration.generate()`] method is strongly recommended for tortoise usage.
 4. Note that the CLVP model expects the audio to be sampled at 22.05 kHz contrary to other audio models which expects 16 kHz. 
 
+
 Brief Explanation:
 
 - The [`ClvpTokenizer`] tokenizes the text input, and the [`ClvpFeatureExtractor`] extracts the log mel-spectrogram from the desired audio.
@@ -64,7 +65,7 @@ Example :
 
 >>> # Generate processor output and model output 
 >>> processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt")
->>> generated_output = model.generate(input_ids=processor_output["input_ids"], input_features=processor_output["input_features"], num_beams=4, num_return_sequences=4)
+>>> generated_output = model.generate(input_ids=processor_output["input_ids"], input_features=processor_output["input_features"])
 ```
 
 
