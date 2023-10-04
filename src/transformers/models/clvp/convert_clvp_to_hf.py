@@ -78,13 +78,13 @@ def convert_encoder_weights(original_weights):
     original_weights_keys = sorted(original_weights.keys())
     for original_key in original_weights_keys:
         updated_key = original_key
-        # for pre_branch_norm1.weight and pre_branch_norm2.weight
+        # for rms_1.weight and rms_2.weight
         if "0.0.g" in updated_key:
             present_index = updated_key.split(".")[4]
             if int(present_index) % 2 == 0:
-                updated_key = updated_key.replace("0.0.g", "pre_branch_norm1.weight")
+                updated_key = updated_key.replace("0.0.g", "rms_1.weight")
             else:
-                updated_key = updated_key.replace("0.0.g", "pre_branch_norm2.weight")
+                updated_key = updated_key.replace("0.0.g", "rms_2.weight")
 
         if "transformer.attn_layers.layers" in updated_key:
             present_index = updated_key.split(".")[4]

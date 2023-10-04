@@ -18,16 +18,15 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union, Dict
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ...generation import GenerationConfig
-
 from ...activations import ACT2FN
+from ...generation import GenerationConfig
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -196,7 +195,7 @@ class ClvpOutput(ModelOutput):
 class ClvpRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        `ClvpRMSNorm` is equivalent to [`T5LayerNorm`].
+        ClvpRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -447,8 +446,8 @@ class ClvpEncoderLayer(nn.Module):
         self.self_attn = ClvpSelfAttention(config)
         self.mlp = ClvpEncoderMLP(config)
 
-        self.pre_branch_norm1 = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.pre_branch_norm2 = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.rms_1 = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.rms_2 = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -471,7 +470,7 @@ class ClvpEncoderLayer(nn.Module):
         """
         residual = hidden_states
 
-        hidden_states = self.pre_branch_norm1(hidden_states)
+        hidden_states = self.rms_1(hidden_states)
 
         attention_outputs = self.self_attn(
             hidden_states=hidden_states,
@@ -485,7 +484,7 @@ class ClvpEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.pre_branch_norm2(hidden_states)
+        hidden_states = self.rms_2(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -589,14 +588,15 @@ class ClvpConditioningEncoder(nn.Module):
         self.text_pad_token_id = text_config.pad_token_id
 
         self.text_token_embedding = nn.Embedding(text_config.vocab_size, decoder_config.n_embd)
-        self.text_position_embedding = nn.Embedding(
-            decoder_config.max_text_tokens, decoder_config.n_embd
-        )
+        self.text_position_embedding = nn.Embedding(decoder_config.max_text_tokens, decoder_config.n_embd)
 
         self.mel_conv = nn.Conv1d(decoder_config.feature_size, decoder_config.n_embd, kernel_size=1)
 
         self.mel_attn_blocks = nn.ModuleList(
-            [ClvpSelfAttention(decoder_config, apply_hidden_states_norm=True) for _ in range(decoder_config.num_mel_attn_blocks)]
+            [
+                ClvpSelfAttention(decoder_config, apply_hidden_states_norm=True)
+                for _ in range(decoder_config.num_mel_attn_blocks)
+            ]
         )
 
         self.gradient_checkpointing = False
@@ -608,7 +608,6 @@ class ClvpConditioningEncoder(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-
         if self.gradient_checkpointing and self.training:
             # process each log-mel spectrogram into a single vector
             mel_spec = torch.utils.checkpoint.checkpoint(
@@ -618,10 +617,13 @@ class ClvpConditioningEncoder(nn.Module):
 
             mel_spec = torch.permute(mel_spec, (0, 2, 1))
             for mel_attn_block in self.mel_attn_blocks:
-                mel_spec = torch.utils.checkpoint.checkpoint(
-                    mel_attn_block,
-                    input_features,
-                )[0] + mel_spec
+                mel_spec = (
+                    torch.utils.checkpoint.checkpoint(
+                        mel_attn_block,
+                        input_features,
+                    )[0]
+                    + mel_spec
+                )
 
         else:
             # process each log-mel spectrogram into a single vector
@@ -1087,10 +1089,10 @@ class ClvpDecoder(ClvpPreTrainedModel):
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
-            batch_size = input_ids.shape[0]
+            input_ids.shape[0]
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size = inputs_embeds.shape[0]
+            inputs_embeds.shape[0]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -1347,11 +1349,18 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
             if hasattr(model_kwargs, "attention_mask"):
                 position_ids = model_kwargs["attention_mask"].long().cumsum(-1) - 1
             else:
-                position_ids = torch.range(0, conditioning_embeds.shape[1] - 1, dtype=torch.long, device=conditioning_embeds.device)
+                position_ids = torch.range(
+                    0, conditioning_embeds.shape[1] - 1, dtype=torch.long, device=conditioning_embeds.device
+                )
             position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1)
 
-            model_kwargs["inputs_embeds"] = conditioning_embeds - self.model.decoder.position_embeds_layer(position_ids)
-            model_kwargs["input_ids"] = torch.ones((model_kwargs["inputs_embeds"].shape[0], 1), dtype=torch.long, device=self.device) * self.config.bos_token_id
+            model_kwargs["inputs_embeds"] = conditioning_embeds - self.model.decoder.position_embeds_layer(
+                position_ids
+            )
+            model_kwargs["input_ids"] = (
+                torch.ones((model_kwargs["inputs_embeds"].shape[0], 1), dtype=torch.long, device=self.device)
+                * self.config.bos_token_id
+            )
 
             return model_kwargs["inputs_embeds"], "inputs_embeds", model_kwargs
 
