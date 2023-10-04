@@ -69,8 +69,7 @@ class MistralConfig(PretrainedConfig):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-            Whether to tie weight embeddings
+            relevant if `config.is_decoder=True`. Whether to tie weight embeddings
         pad_token_id (`int`, *optional*):
             The id of the padding token.
         bos_token_id (`int`, *optional*, defaults to 1):
