@@ -16,13 +16,18 @@ import os
 import tempfile
 import unittest
 
-from pytest import mark 
+from pytest import mark
 
 from transformers import BertConfig, is_torch_available
-
 from transformers.models.auto import get_values
-from transformers.testing_utils import CaptureLogger, require_flash_attn, require_torch, require_torch_gpu, slow, torch_device
-
+from transformers.testing_utils import (
+    CaptureLogger,
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -625,7 +630,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 torch.jit.save(traced_model, os.path.join(tmp, "bert.pt"))
                 loaded = torch.jit.load(os.path.join(tmp, "bert.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
-    
+
     # copied from tests/models/distilbert/test_modeling_distilbert.py
     @require_flash_attn
     @require_torch_gpu
@@ -662,9 +667,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False)
                 model.to(torch_device)
 
                 logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
@@ -715,9 +718,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False)
                 model.to(torch_device)
 
                 logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
@@ -734,9 +735,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 print(logits_fa[:-1])
                 print(logits[:-1])
                 self.assertTrue(torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2))
-
-
-
 
 
 @require_torch
