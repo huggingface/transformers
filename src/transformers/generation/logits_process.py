@@ -357,7 +357,7 @@ class TopPLogitsWarper(LogitsWarper):
         top_p (`float`):
             If set to < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or
             higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -419,7 +419,7 @@ class TopKLogitsWarper(LogitsWarper):
     Args:
         top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -447,9 +447,9 @@ class TypicalLogitsWarper(LogitsWarper):
     Generation](https://arxiv.org/abs/2202.00666) for more information.
 
     Args:
-        mass (`float`):
+        mass (`float`, *optional*, defaults to 0.9):
             Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -499,7 +499,7 @@ class EpsilonLogitsWarper(LogitsWarper):
     Args:
         epsilon (`float`):
             If set to > 0, only the most tokens with probabilities `epsilon` or higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -572,7 +572,7 @@ class EtaLogitsWarper(LogitsWarper):
         epsilon (`float`):
             A float value in the range (0, 1). Hyperparameter used to calculate the dynamic cutoff value, `eta`. The
             suggested values from the paper ranges from 3e-4 to 4e-3 depending on the size of the model.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All values that are found to be below the dynamic cutoff value, `eta`, are set to this float value. This
             parameter is useful when logits need to be modified for very low probability tokens that should be excluded
             from generation entirely.
@@ -1600,18 +1600,15 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality. A value smaller than 1 has the opposite effect, while
             making the negative prompt provided with negative_prompt_ids (if any) act as a positive prompt.
-        unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
-            the last token of the prompt.
-        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, **optional**):
-            Attention mask for unconditional_ids.
         model (`PreTrainedModel`):
             The model computing the unconditional scores. Supposedly the same as the one computing the conditional
             scores. Both models must use the same tokenizer.
-        smooth_factor (`float`, **optional**):
-            The interpolation weight for CFG Rescale. 1 means no rescaling, 0 reduces to the conditional scores without
-            CFG. Turn it lower if the output degenerates.
-        use_cache (`bool`, **optional**):
+        unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
+            the last token of the prompt.
+        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Attention mask for unconditional_ids.
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether to cache key/values during the negative prompt forward pass.
 
 

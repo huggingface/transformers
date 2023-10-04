@@ -361,17 +361,14 @@ class OneFormerImageProcessor(BaseImageProcessor):
             sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
             the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
             height / width, size)`.
-        max_size (`int`, *optional*, defaults to 1333):
-            The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
-            set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+        resample (`int`, *optional*, defaults to `Resampling.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
             `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
             `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
             to `True`.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the input to a certain `scale`.
-        rescale_factor (`float`, *optional*, defaults to 1/ 255):
+        rescale_factor (`float`, *optional*, defaults to `1/ 255`):
             Rescale the input by the given factor. Only has an effect if `do_rescale` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
@@ -387,9 +384,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
             Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
             The background label will be replaced by `ignore_index`.
-        repo_path (`str`, defaults to `shi-labs/oneformer_demo`):
+        repo_path (`str`, defaults to `shi-labs/oneformer_demo`, *optional*, defaults to `"shi-labs/oneformer_demo"`):
             Dataset repository on huggingface hub containing the JSON file with class information for the dataset.
-        class_info_file (`str`):
+        class_info_file (`str`, *optional*):
             JSON file containing class information for the dataset. It is stored inside on the `repo_path` dataset
             repository.
         num_text (`int`, *optional*):

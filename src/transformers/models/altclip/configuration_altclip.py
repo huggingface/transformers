@@ -259,7 +259,7 @@ class AltCLIPConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`AltCLIPTextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`AltCLIPVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
+        projection_dim (`int`, *optional*, defaults to 768):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
