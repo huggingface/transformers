@@ -21,7 +21,7 @@ import datasets
 import numpy as np
 import pytest
 from huggingface_hub.file_download import http_get
-from requests import ReadTimeout
+from requests import ConnectTimeout, ReadTimeout
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
@@ -491,7 +491,7 @@ class LoadImageTester(unittest.TestCase):
 
     @is_flaky()
     def test_load_img_url_timeout(self):
-        with self.assertRaises(ReadTimeout):
+        with self.assertRaises((ReadTimeout, ConnectTimeout)):
             load_image(INVOICE_URL, timeout=0.001)
 
     def test_load_img_local(self):

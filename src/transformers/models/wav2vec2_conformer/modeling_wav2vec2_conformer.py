@@ -406,13 +406,15 @@ class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Module):
             return self.cached_rotary_positional_embedding
 
         self.cached_sequence_length = sequence_length
+        # Embeddings are computed in the dtype of the inv_freq constant
         time_stamps = torch.arange(sequence_length).type_as(self.inv_freq)
         freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
         embeddings = torch.cat((freqs, freqs), dim=-1)
 
         cos_embeddings = embeddings.cos()[:, None, None, :]
         sin_embeddings = embeddings.sin()[:, None, None, :]
-        self.cached_rotary_positional_embedding = torch.stack([cos_embeddings, sin_embeddings])
+        # Computed embeddings are cast to the dtype of the hidden state inputs
+        self.cached_rotary_positional_embedding = torch.stack([cos_embeddings, sin_embeddings]).type_as(hidden_states)
         return self.cached_rotary_positional_embedding
 
 
@@ -582,7 +584,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         if (config.conv_depthwise_kernel_size - 1) % 2 == 1:
             raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
         self.layer_norm = nn.LayerNorm(config.hidden_size)
-        self.pointwise_conv1 = torch.nn.Conv1d(
+        self.pointwise_conv1 = nn.Conv1d(
             config.hidden_size,
             2 * config.hidden_size,
             kernel_size=1,
@@ -590,8 +592,8 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             padding=0,
             bias=False,
         )
-        self.glu = torch.nn.GLU(dim=1)
-        self.depthwise_conv = torch.nn.Conv1d(
+        self.glu = nn.GLU(dim=1)
+        self.depthwise_conv = nn.Conv1d(
             config.hidden_size,
             config.hidden_size,
             config.conv_depthwise_kernel_size,
@@ -600,9 +602,9 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             groups=config.hidden_size,
             bias=False,
         )
-        self.batch_norm = torch.nn.BatchNorm1d(config.hidden_size)
+        self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
-        self.pointwise_conv2 = torch.nn.Conv1d(
+        self.pointwise_conv2 = nn.Conv1d(
             config.hidden_size,
             config.hidden_size,
             kernel_size=1,
@@ -610,7 +612,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             padding=0,
             bias=False,
         )
-        self.dropout = torch.nn.Dropout(config.conformer_conv_dropout)
+        self.dropout = nn.Dropout(config.conformer_conv_dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.layer_norm(hidden_states)
@@ -796,7 +798,7 @@ class Wav2Vec2ConformerEncoderLayer(nn.Module):
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
-        self.self_attn_dropout = torch.nn.Dropout(dropout)
+        self.self_attn_dropout = nn.Dropout(dropout)
         self.self_attn = Wav2Vec2ConformerSelfAttention(config)
 
         # Conformer Convolution

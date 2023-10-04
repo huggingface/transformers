@@ -57,7 +57,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.33.0.dev0")
+check_min_version("4.35.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -246,13 +246,16 @@ def parse_args():
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, json or txt file."
+            if extension not in ["csv", "json", "txt"]:
+                raise ValueError("`train_file` should be a csv, json or txt file.")
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
+            if extension not in ["csv", "json", "txt"]:
+                raise ValueError("`validation_file` should be a csv, json or txt file.")
 
     if args.push_to_hub:
-        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
+        if args.output_dir is None:
+            raise ValueError("Need an `output_dir` to create a repo when `--push_to_hub` is passed.")
 
     return args
 
@@ -473,7 +476,7 @@ def main():
     # to preprocess.
     #
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-    # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+    # https://huggingface.co/docs/datasets/process#map
 
     with accelerator.main_process_first():
         lm_datasets = tokenized_datasets.map(
@@ -632,7 +635,7 @@ def main():
 
             if isinstance(checkpointing_steps, int):
                 if completed_steps % checkpointing_steps == 0:
-                    output_dir = f"step_{completed_steps }"
+                    output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)

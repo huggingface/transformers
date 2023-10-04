@@ -76,7 +76,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
@@ -474,7 +474,7 @@ def main():
         # might be slower to preprocess.
         #
         # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-        # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+        # https://huggingface.co/docs/datasets/process#map
 
         tokenized_datasets = tokenized_datasets.map(
             group_texts,

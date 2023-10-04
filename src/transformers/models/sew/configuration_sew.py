@@ -59,6 +59,8 @@ class SEWConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for activations inside the fully connected layer.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
