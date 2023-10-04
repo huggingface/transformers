@@ -287,7 +287,7 @@ message. Remember, chat models are still just language models - they're trained 
 special kind of text to them! You need to guide them with the appropriate control tokens so they know what they're 
 supposed to be doing.
 
-Note that not all models require generation prompts. Some models, like BlenderBot and LLaMA, don't have any
+Not all models require generation prompts. Some models, like BlenderBot and LLaMA, don't have any
 special tokens before bot responses. In these cases, the `add_generation_prompt` argument will have no effect. The exact
 effect that `add_generation_prompt` has will depend on the template being used.
 
