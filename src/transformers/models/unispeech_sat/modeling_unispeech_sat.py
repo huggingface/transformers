@@ -41,6 +41,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_peft_available,
     logging,
     replace_return_docstrings,
 )
