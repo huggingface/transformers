@@ -110,7 +110,10 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"shortest_edge": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, )
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict,
+            size=42,
+        )
         self.assertEqual(image_processor.size, 42)
 
     def test_call_pil(self):

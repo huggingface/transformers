@@ -41,11 +41,10 @@ if is_torch_available():
         ProPainterForImageInPainting,
         ProPainterModel,
     )
-    from transformers.models.videomae.modeling_videomae import VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
-    from transformers import ProPainterImageProcessor
+    pass
 
 
 class VideoMAEModelTester:
@@ -101,15 +100,9 @@ class VideoMAEModelTester:
         self.num_masks = int(mask_ratio * self.seq_length)
 
     def prepare_config_and_inputs(self):
-        frames = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
-        )
-        flow_masks = floats_tensor(
-            [self.batch_size, self.num_frames, 1, self.image_size, self.image_size]
-        )
-        masks_dilated = floats_tensor(
-            [self.batch_size, self.num_frames, 1, self.image_size, self.image_size]
-        )
+        frames = floats_tensor([self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size])
+        flow_masks = floats_tensor([self.batch_size, self.num_frames, 1, self.image_size, self.image_size])
+        masks_dilated = floats_tensor([self.batch_size, self.num_frames, 1, self.image_size, self.image_size])
         labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
@@ -140,19 +133,17 @@ class VideoMAEModelTester:
             decoder_num_hidden_layers=self.num_hidden_layers,
         )
 
-    def create_and_check_model(self, config, frames, flow_masks,masks_dilated,labels):
+    def create_and_check_model(self, config, frames, flow_masks, masks_dilated, labels):
         model = ProPainterForImageInPainting(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(frames, flow_masks,masks_dilated)
+        result = model(frames, flow_masks, masks_dilated)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, frames, flow_masks, masks_dilated, labels = config_and_inputs
-        inputs_dict = {"frames": frames,
-            "flow_masks": flow_masks,
-            "masks_dilated": masks_dilated}
+        inputs_dict = {"frames": frames, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
 
         return config, inputs_dict
 
@@ -164,9 +155,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (ProPainterForImageInPainting,ProPainterModel) if is_torch_available() else ()
-    )
+    all_model_classes = (ProPainterForImageInPainting, ProPainterModel) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": ProPainterModel, "video-inpainting": ProPainterForImageInPainting}
         if is_torch_available()
@@ -227,12 +216,12 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    #def test_for_pretraining(self):
+    # def test_for_pretraining(self):
     #    config_and_inputs = self.model_tester.prepare_config_and_inputs()
     #    self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     @slow
-    #def test_model_from_pretrained(self):
+    # def test_model_from_pretrained(self):
     #    for model_name in VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
     #        model = ProPainterModel.from_pretrained(model_name)
     #        self.assertIsNotNone(model)
@@ -247,10 +236,8 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             config.return_dict = True
 
             for model_class in self.all_model_classes:
-                num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
-                seq_len = (
-                    self.model_tester.seq_length
-                )
+                self.model_tester.seq_length - self.model_tester.num_masks
+                seq_len = self.model_tester.seq_length
 
                 inputs_dict["output_attentions"] = True
                 inputs_dict["output_hidden_states"] = False
@@ -298,6 +285,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, seq_len, seq_len],
                 )
+
     @unittest.skip(reason="VideoMAE does not use inputs_embeds")
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -312,7 +300,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             expected_num_layers = self.model_tester.num_hidden_layers + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
+            self.model_tester.seq_length - self.model_tester.num_masks
             seq_length = self.model_tester.seq_length
 
             self.assertListEqual(

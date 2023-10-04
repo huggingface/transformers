@@ -516,6 +516,7 @@ class FlowEncoder(nn.Module):
 
         return x
 
+
 class CorrLayer(torch.autograd.Function):
     @staticmethod
     def forward(ctx, fmap1, fmap2, coords, r):
@@ -524,15 +525,14 @@ class CorrLayer(torch.autograd.Function):
         coords = coords.contiguous()
         ctx.save_for_backward(fmap1, fmap2, coords)
         ctx.r = r
-        corr, = correlation_cudaz.forward(fmap1, fmap2, coords, ctx.r)
+        (corr,) = correlation_cudaz.forward(fmap1, fmap2, coords, ctx.r)
         return corr
 
     @staticmethod
     def backward(ctx, grad_corr):
         fmap1, fmap2, coords = ctx.saved_tensors
         grad_corr = grad_corr.contiguous()
-        fmap1_grad, fmap2_grad, coords_grad = \
-            correlation_cudaz.backward(fmap1, fmap2, coords, grad_corr, ctx.r)
+        fmap1_grad, fmap2_grad, coords_grad = correlation_cudaz.backward(fmap1, fmap2, coords, grad_corr, ctx.r)
         return fmap1_grad, fmap2_grad, coords_grad, None
 
 
@@ -600,8 +600,6 @@ class CorrBlock:
         corr = torch.matmul(fmap1.transpose(1, 2), fmap2)
         corr = corr.view(batch, ht, wd, 1, ht, wd)
         return corr / torch.sqrt(torch.tensor(dim))
-
-
 
 
 def constant_init(module, val, bias=0):
@@ -1353,6 +1351,7 @@ class TemporalSparseTransformerBlock(nn.Module):
             x = self.transformer[i](x, fold_x_size, l_mask, T_ind[i])
         return x
 
+
 class OpticalFlow(nn.Module):
     def __init__(self, config: ProPainterConfig, hidden_dim=128, context_dim=128):
         super(OpticalFlow, self).__init__()
@@ -1464,7 +1463,6 @@ class OpticalFlow(nn.Module):
         return gt_flows_forward, gt_flows_backward
 
 
-
 class ProPainterPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1475,7 +1473,7 @@ class ProPainterPreTrainedModel(PreTrainedModel):
     base_model_prefix = "propainter"
     main_input_name = "frames"
     supports_gradient_checkpointing = True
-    #_no_split_modules = ["ViTEmbeddings", "ViTLayer"]
+    # _no_split_modules = ["ViTEmbeddings", "ViTLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -1491,23 +1489,22 @@ class ProPainterPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    # elif isinstance(module, ViTEmbeddings):
-    #     module.position_embeddings.data = nn.init.trunc_normal_(
-    #         module.position_embeddings.data.to(torch.float32),
-    #         mean=0.0,
-    #         std=self.config.initializer_range,
-    #     ).to(module.position_embeddings.dtype)
+        # elif isinstance(module, ViTEmbeddings):
+        #     module.position_embeddings.data = nn.init.trunc_normal_(
+        #         module.position_embeddings.data.to(torch.float32),
+        #         mean=0.0,
+        #         std=self.config.initializer_range,
+        #     ).to(module.position_embeddings.dtype)
 
-    #     module.cls_token.data = nn.init.trunc_normal_(
-    #         module.cls_token.data.to(torch.float32),
-    #         mean=0.0,
-    #         std=self.config.initializer_range,
-    #     ).to(module.cls_token.dtype)
+        #     module.cls_token.data = nn.init.trunc_normal_(
+        #         module.cls_token.data.to(torch.float32),
+        #         mean=0.0,
+        #         std=self.config.initializer_range,
+        #     ).to(module.cls_token.dtype)
 
         def _set_gradient_checkpointing(self, module: ProPainterModel, value: bool = False) -> None:
             if isinstance(module, ProPainterModel):
                 module.gradient_checkpointing = value
-
 
 
 VIT_START_DOCSTRING = r"""
@@ -2151,4 +2148,3 @@ class ProPainterForImageOutPainting(ProPainterPreTrainedModel):
                         break
                     ref_index.append(i)
         return ref_index
-
