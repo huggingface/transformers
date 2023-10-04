@@ -650,3 +650,8 @@ end
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
         self.assertEqual(suffix_first_formatted_prompt, tokenizer.tokenize(prefix, suffix, suffix_first=True))
         self.assertEqual(suffix_first_formatted_prompt, tokenizer_fast.tokenize(prefix, suffix, suffix_first=True))
+
+        prefix, suffix = PROMPTS[0].split("<FILL_ME>")
+        suffix_first_input_ids = tokenizer.encode(PROMPTS[0], suffix_first=True)
+        self.assertEqual(suffix_first_input_ids, tokenizer.encode(prefix, suffix=suffix, suffix_first=True))
+        self.assertEqual(suffix_first_input_ids, tokenizer_fast.encode(prefix, suffix=suffix, suffix_first=True))
