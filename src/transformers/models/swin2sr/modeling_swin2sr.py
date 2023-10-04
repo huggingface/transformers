@@ -81,15 +81,16 @@ class Swin2SREncoderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+# Copied from transformers.models.swin.modeling_swin.window_partition
 def window_partition(input_feature, window_size):
     """
     Partitions the given input into windows.
     """
-    batch_size, height, width, num_channels_in = input_feature.shape
+    batch_size, height, width, num_channels = input_feature.shape
     input_feature = input_feature.view(
-        batch_size, height // window_size, window_size, width // window_size, window_size, num_channels_in
+        batch_size, height // window_size, window_size, width // window_size, window_size, num_channels
     )
-    windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels_in)
+    windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
     return windows
 
 
@@ -211,6 +212,7 @@ class Swin2SRPatchUnEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2PatchMerging with Swinv2->Swin2SR
 class Swin2SRPatchMerging(nn.Module):
     """
     Patch Merging Layer.
@@ -242,9 +244,9 @@ class Swin2SRPatchMerging(nn.Module):
     def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
         height, width = input_dimensions
         # `dim` is height * width
-        batch_size, dim, num_channels_in = input_feature.shape
+        batch_size, dim, num_channels = input_feature.shape
 
-        input_feature = input_feature.view(batch_size, height, width, num_channels_in)
+        input_feature = input_feature.view(batch_size, height, width, num_channels)
         # pad input to be disible by width and height, if needed
         input_feature = self.maybe_pad(input_feature, height, width)
         # [batch_size, height/2, width/2, num_channels]
@@ -257,9 +259,7 @@ class Swin2SRPatchMerging(nn.Module):
         input_feature_3 = input_feature[:, 1::2, 1::2, :]
         # [batch_size, height/2 * width/2, 4*num_channels]
         input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-        input_feature = input_feature.view(
-            batch_size, -1, 4 * num_channels_in
-        )  # [batch_size, height/2 * width/2, 4*C]
+        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # [batch_size, height/2 * width/2, 4*C]
 
         input_feature = self.reduction(input_feature)
         input_feature = self.norm(input_feature)
@@ -849,14 +849,14 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        if config.num_channels_in == 3:
+        if config.num_channels == 3:
             rgb_mean = (0.4488, 0.4371, 0.4040)
             self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
         else:
             self.mean = torch.zeros(1, 1, 1, 1)
         self.img_range = config.img_range
 
-        self.first_convolution = nn.Conv2d(config.num_channels_in, config.embed_dim, 3, 1, 1)
+        self.first_convolution = nn.Conv2d(config.num_channels, config.embed_dim, 3, 1, 1)
         self.embeddings = Swin2SREmbeddings(config)
         self.encoder = Swin2SREncoder(config, grid_size=self.embeddings.patch_embeddings.patches_resolution)
 
@@ -1071,10 +1071,10 @@ class PixelShuffleAuxUpsampler(nn.Module):
         super().__init__()
 
         self.upscale = config.upscale
-        self.conv_bicubic = nn.Conv2d(config.num_channels_in, num_features, 3, 1, 1)
+        self.conv_bicubic = nn.Conv2d(config.num_channels, num_features, 3, 1, 1)
         self.conv_before_upsample = nn.Conv2d(config.embed_dim, num_features, 3, 1, 1)
         self.activation = nn.LeakyReLU(inplace=True)
-        self.conv_aux = nn.Conv2d(num_features, config.num_channels_in, 3, 1, 1)
+        self.conv_aux = nn.Conv2d(num_features, config.num_channels, 3, 1, 1)
         self.conv_after_aux = nn.Sequential(nn.Conv2d(3, num_features, 3, 1, 1), nn.LeakyReLU(inplace=True))
         self.upsample = Upsample(config.upscale, num_features)
         self.final_convolution = nn.Conv2d(num_features, config.num_channels_out, 3, 1, 1)

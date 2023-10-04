@@ -42,7 +42,7 @@ class Swin2SRConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 1):
             The size (resolution) of each patch.
-        num_channels_in (`int`, *optional*, defaults to 3):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_channels_out (`int`, *optional*, defaults to 3):
             The number of output channels.
@@ -109,7 +109,7 @@ class Swin2SRConfig(PretrainedConfig):
         self,
         image_size=64,
         patch_size=1,
-        num_channels_in=3,
+        num_channels=3,
         num_channels_out=3,
         embed_dim=180,
         depths=[6, 6, 6, 6, 6, 6],
@@ -134,7 +134,7 @@ class Swin2SRConfig(PretrainedConfig):
 
         self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels_in = num_channels_in
+        self.num_channels = num_channels
         self.num_channels_out = num_channels_out
         self.embed_dim = embed_dim
         self.depths = depths
