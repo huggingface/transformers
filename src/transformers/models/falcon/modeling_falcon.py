@@ -950,6 +950,7 @@ class FalconModel(FalconPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
+
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
