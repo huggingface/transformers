@@ -259,16 +259,16 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             local_trainer.train(trial=trial)
 
         # If there hasn't been any evaluation during the training loop.
-        # if getattr(local_trainer, "objective", None) is None:
-        local_trainer.objective = local_trainer.compute_objective(metrics)
+        if getattr(local_trainer, "objective", None) is None:
+            metrics = local_trainer.evaluate()
+            local_trainer.objective = local_trainer.compute_objective(metrics)
 
-        metrics = local_trainer.evaluate()
-        metrics.update({"objective": local_trainer.objective, "done": True})
+            metrics.update({"objective": local_trainer.objective, "done": True})
 
-        with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
-            local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-            checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
-            ray.train.report(metrics, checkpoint=checkpoint)
+            with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
+                local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
+                checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+                ray.train.report(metrics, checkpoint=checkpoint)
 
     if not trainer._memory_tracker.skip_memory_metrics:
         from ..trainer_utils import TrainerMemoryTracker

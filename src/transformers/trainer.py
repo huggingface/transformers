@@ -2077,9 +2077,9 @@ class Trainer:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
             elif self.hp_search_backend == HPSearchBackend.RAY:
-                from ray import tune
+                import ray.train
 
-                run_id = tune.get_trial_id()
+                run_id = ray.train.get_context().get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.SIGOPT:
                 run_id = trial.id
             elif self.hp_search_backend == HPSearchBackend.WANDB:
