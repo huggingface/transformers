@@ -79,7 +79,8 @@ def get_fastvit_config(fastvit_name):
         config.mlp_ratio = 4.0
         config.pos_embeds = [None, None, None, "RepCPE"]
         config.token_mixers = ("repmixer", "repmixer", "repmixer", "attention")
-
+    else:
+        raise ValueError(f"FastViT model {fastvit_name} not found.")
     return config
 
 

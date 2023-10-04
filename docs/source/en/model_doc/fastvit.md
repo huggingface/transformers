@@ -25,7 +25,7 @@ The abstract from the paper is the following:
 *The recent amalgamation of transformer and convolutional designs has led to steady improvements in accuracy and efficiency of the models. 
 In this work, we introduce FastViT, a hybrid vision transformer architecture that obtains the state-of-the-art latency-accuracy trade-off. 
 To this end, we introduce a novel token mixing operator, RepMixer, a building block of FastViT, that uses structural reparameterization 
-to lower the memory access cost by removing skip-connections in the network. We further apply traintime overparametrization and 
+to lower the memory access cost by removing skip-connections in the network. We further apply train-time overparametrization and 
 large kernel convolutions to boost accuracy and empirically show that these choices have minimal effect on latency. 
 We show that – our model is 3.5× faster than CMT, a recent state-of-the-art hybrid transformer architecture, 
 4.9× faster than EfficientNet, and 1.9× faster than ConvNeXt on a mobile device for the same accuracy on the ImageNet dataset. 
@@ -34,6 +34,30 @@ Our model consistently outperforms competing architectures across several tasks 
 with significant improvement in latency on both a mobile device and a desktop GPU. Furthermore, our model is highly robust to out-of-distribution samples 
 and corruptions, improving over competing robust models.*
 
+Tips:
+
+- One can use the [`AutoImageProcessor`] class to prepare images for the model.
+
+
+Example of use:
+
+```python
+>>> from transformers import AutoImageProcessor, FastViTModel
+>>> from PIL import Image
+>>> import requests
+
+>>> ImageProcessor = AutoImageProcessor.from_pretrained("Apple/fastvit-t8")
+>>> model = FastViTModel.from_pretrained("Apple/fastvit-t8")
+
+>>> # load image
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+
+>>> pixel_values = ImageProcessor(images=image, return_tensors="pt").pixel_values
+>>> outputs = model(pixel_values)
+
+```
 This model was contributed by [JorgeAV](https://huggingface.co/JorgeAV).
 The original code can be found [here](https://github.com/apple/ml-fastvit).
 

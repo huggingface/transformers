@@ -375,9 +375,8 @@ class FastViTReparamLKConv(nn.Module):
             )
 
             if small_kernel is not None:
-                assert (
-                    small_kernel <= kernel_size
-                ), "The kernel size for re-param cannot be larger than the large kernel!"
+                if small_kernel <= kernel_size:
+                    raise ValueError("The kernel size for re-param cannot be larger than the large kernel!")
 
                 self.small_conv = nn.Sequential(
                     collections.OrderedDict(
@@ -547,7 +546,7 @@ class FastViTConvFFN(nn.Module):
         )
         self.bn = nn.BatchNorm2d(num_features=hidden_size)
         self.fc1 = nn.Conv2d(in_channels=hidden_size, out_channels=mlp_hidden_dim, kernel_size=1)
-        self.act = act_layer
+        self.act_layer = act_layer
         self.fc2 = nn.Conv2d(in_channels=mlp_hidden_dim, out_channels=hidden_size, kernel_size=1)
         self.drop = nn.Dropout(dropout_rate)
 
@@ -555,7 +554,7 @@ class FastViTConvFFN(nn.Module):
         output_features = self.conv(features)
         output_features = self.bn(output_features)
         output_features = self.fc1(output_features)
-        output_features = self.act(output_features)
+        output_features = self.act_layer(output_features)
         output_features = self.drop(output_features)
         output_features = self.fc2(output_features)
         output_features = self.drop(output_features)
@@ -666,12 +665,10 @@ class FastViTCPE(nn.Module):
         super().__init__()
         if isinstance(spatial_shape, int):
             spatial_shape = tuple([spatial_shape] * 2)
-
-        assert isinstance(spatial_shape, Tuple), (
-            f'"spatial_shape" must by a sequence or int, ' f"get {type(spatial_shape)} instead."
-        )
-
-        assert len(spatial_shape) == 2, f'Length of "spatial_shape" should be 2, ' f"got {len(spatial_shape)} instead."
+        elif not isinstance(spatial_shape, Tuple):
+            raise ValueError(f'"spatial_shape" must by a sequence or int, ' f"get {type(spatial_shape)} instead.")
+        if len(spatial_shape) != 2:
+            raise ValueError(f'Length of "spatial_shape" should be 2, ' f"got {len(spatial_shape)} instead.")
 
         self.spatial_shape = spatial_shape
         self.embed_dim = embed_dim
@@ -717,7 +714,6 @@ class FastViTIntermediate(nn.Module):
         super().__init__()
         token_mixer_type = config.token_mixers[stage]
         drop_path = config.attention_probs_dropout_prob
-        layer_scale_init_value = config.layer_norm_eps
         hidden_size = config.hidden_sizes[stage]
         self.depth = config.depths[stage]
         self.token_mixer_type = token_mixer_type
@@ -726,15 +722,15 @@ class FastViTIntermediate(nn.Module):
         if token_mixer_type == "repmixer":
             self.token_mixer_block = FastViTMixer(config, stage)
             self.layer_scale = nn.Parameter(
-                layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
+                config.layer_norm_eps * torch.ones((hidden_size, 1, 1)), requires_grad=True
             )
         elif token_mixer_type == "attention":
             self.token_mixer_block = FastViTAttention(config, stage)
             self.layer_scale_1 = nn.Parameter(
-                layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
+                config.layer_norm_eps * torch.ones((hidden_size, 1, 1)), requires_grad=True
             )
             self.layer_scale_2 = nn.Parameter(
-                layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
+                config.layer_norm_eps * torch.ones((hidden_size, 1, 1)), requires_grad=True
             )
         else:
             raise ValueError("Token mixer type: {} not supported".format(token_mixer_type))
@@ -817,7 +813,7 @@ class FastViTEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 

@@ -83,7 +83,6 @@ class FastViTModelTester:
         parent,
         batch_size=13,
         image_size=64,
-        patch_size=2,
         num_channels=3,
         last_hidden_size=384,
         num_attention_heads=4,
@@ -99,7 +98,6 @@ class FastViTModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
         self.is_training = is_training
         self.use_labels = use_labels
@@ -126,7 +124,6 @@ class FastViTModelTester:
     def get_config(self):
         return FastViTConfig(
             image_size=self.image_size,
-            patch_size=self.patch_size,
             num_channels=self.num_channels,
             num_attention_heads=self.num_attention_heads,
             hidden_act=self.hidden_act,

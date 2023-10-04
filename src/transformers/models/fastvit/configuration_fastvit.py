@@ -34,7 +34,7 @@ FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "apple/fastvit-sa24": "https://huggingface.co/apple/fastvit-sa24/resolve/main/config.json",
     "apple/fastvit-sa36": "https://huggingface.co/apple/fastvit-sa36/resolve/main/config.json",
     "apple/fastvit-ma36": "https://huggingface.co/apple/fastvit-ma36/resolve/main/config.json",
-    # See all ViT models at https://huggingface.co/models?filter=fastvit
+    # See all FastViT models at https://huggingface.co/models?filter=fastvit
 }
 
 
@@ -63,7 +63,7 @@ class FastViTConfig(PretrainedConfig):
         pos_embeds (`List[Bool]`, *optional*, defaults to `None`, equivalent to `[None, None, None, None]`)
             Whether to add a Conditional Positional Encoding in each FastViTLayer Block. `"RepCPE"` is the option to
             put CPE in a specific Layer.
-        token_mixers (`List[str]` *optional*, defaults to `[repmixer, repmixer, repmixer, repmixer]`)
+        token_mixers (`List[str]` *optional*, defaults to `["repmixer", "repmixer", "repmixer", "repmixer"]`)
             Whether to use RepMixer block or Attention block per each FastViTLayer Block. `"repmixer"` and
             `"attention"` are supported.
         mlp_ratio (`float`, *optional*, defaults to 3.0):
@@ -81,7 +81,7 @@ class FastViTConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
-        inference (`bool`, *optional*, defaults to `True`):
+        inference (`bool`, *optional*, defaults to `False`):
             Whether to delete batchnorms and residual connections for much faster inference (more info in the paper)
 
     Example:
