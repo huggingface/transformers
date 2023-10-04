@@ -1292,19 +1292,39 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         self, input_ids, past_key_values=None, inputs_embeds=None, conditioning_embeds=None, **kwargs
     ):
         # for the first pass, so we must add the start token to the conditioning_embeds and return them as `inputs_embeds`
+        # this is when use_cache=False.
         if conditioning_embeds is not None and past_key_values is None:
-            # Add the start mel token at the end
-            mel_start_token_id = torch.tensor([[self.config.bos_token_id]], device=conditioning_embeds.device)
-            mel_start_token_embedding = self.model.decoder.input_embeds_layer(
-                mel_start_token_id
-            ) + self.model.decoder.position_embeds_layer(torch.tensor([[0]], device=conditioning_embeds.device))
-            mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
-            conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
+            # Add the start mel token at the end if we are just  starting the generation, i.e. first pass
+            if input_ids is None:
+                mel_start_token_id = torch.tensor([[self.config.bos_token_id]], device=conditioning_embeds.device)
+                mel_start_token_embedding = self.model.decoder.input_embeds_layer(
+                    mel_start_token_id
+                ) + self.model.decoder.position_embeds_layer(torch.tensor([[0]], device=conditioning_embeds.device))
+                mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
+                conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
 
-            # since we will add the position embeddings in the forward pass, we must subtract it here so that it cancells
-            # out. This decision was made to make sure that `test_generate_from_inputs_embeds_decoder_only` test does not fail.
-            position_ids = torch.range(0, conditioning_embeds.shape[1] - 1, device=conditioning_embeds.device)
-            position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1).long()
+                # since we will add the position embeddings in the forward pass, we must subtract it here so that it cancells
+                # out. This decision was made to make sure that `test_generate_from_inputs_embeds_decoder_only` test does not fail.
+                position_ids = torch.range(0, conditioning_embeds.shape[1] - 1, device=conditioning_embeds.device)
+                position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1).long()
+            else:
+                input_token_embedding = self.model.decoder.input_embeds_layer(input_ids)
+                attention_mask = kwargs.pop("attention_mask")
+                if attention_mask is not None:
+                    input_position_ids = attention_mask.cumsum(-1) - 1
+                else:
+                    input_position_ids = torch.arange(0, input_ids.shape[-1], dtype=torch.long, device=input_ids.device)
+
+                input_position_ids[input_position_ids>=1] = input_position_ids[input_position_ids>=1] + 1
+                input_token_embedding = input_token_embedding + self.model.decoder.position_embeds_layer(input_position_ids)
+
+                conditioning_embeds = torch.concat([conditioning_embeds, input_token_embedding], dim=1)
+
+                # since we will add the position embeddings in the forward pass, we must subtract it here so that it cancells
+                # out. This decision was made to make sure that `test_generate_from_inputs_embeds_decoder_only` test does not fail.
+                position_ids = torch.range(0, conditioning_embeds.shape[1] - 1, device=conditioning_embeds.device)
+                position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1).long()
+
 
             conditioning_embeds = conditioning_embeds - self.model.decoder.position_embeds_layer(position_ids)
 
@@ -1340,8 +1360,11 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        # we consider the start token as 0 th (temporary fix, must be updated before merging)
-        position_ids = position_ids + 1
+        # when conditioning_embeds are used to influence generation, we use position_ids as - [0, 2, 3, 4, ..., N],
+        # instead of [0, 1, 2, 3, ..., N]. This is done to make sure that the generation output matches in addition
+        # to the passed tests.
+        if conditioning_embeds is not None:
+            position_ids[position_ids>=1] = position_ids[position_ids>=1] + 1
 
         model_inputs.update(
             {
