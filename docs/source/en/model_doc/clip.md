@@ -90,17 +90,16 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - A [notebook](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing) on how to use a pretrained CLIP for inference with beam search. 🌎
 
-<PipelineTag pipeline="text-to-image"/>
 
-- A [notebook](https://colab.research.google.com/drive/1py7au62Ky4ZdLtFJP0D4shNkIVym7JS6) on generating images with prompting style tokens with pretrained CLIP and VQGAN. 🌎
 
-🚀 Deploy
+**Image retrieval**
 
 - A [notebook](https://colab.research.google.com/drive/1bLVwVKpAndpEDHqjzxVPr_9nGrSbuOQd?usp=sharing) on image retrieval using pretrained CLIP and computing MRR(Mean Reciprocal Rank) score. 🌎
 - A [notebook](https://colab.research.google.com/github/deep-diver/image_search_with_natural_language/blob/main/notebooks/Image_Search_CLIP.ipynb) on image retrieval and showing the similarity score. 🌎
 - A [notebook](https://colab.research.google.com/drive/1xO-wC_m_GNzgjIBQ4a4znvQkvDoZJvH4?usp=sharing) on how to map images and texts to the same vector space using Multilingual CLIP. 🌎 
+A [notebook](https://colab.research.google.com/github/vivien000/clip-demo/blob/master/clip.ipynb#scrollTo=uzdFhRGqiWkR) on how to run CLIP on semantic image search using [Unsplash](https://unsplash.com) and [TMBD](https://www.themoviedb.org/) datasets.
 
-⚡️ Inference
+**Explainability**
 
 - A [notebook](https://colab.research.google.com/github/hila-chefer/Transformer-MM-Explainability/blob/main/CLIP_explainability.ipynb) on how to visualize similarity between input token and image segment. 🌎
 
