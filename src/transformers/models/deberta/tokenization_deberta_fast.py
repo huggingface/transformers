@@ -99,9 +99,9 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             Path to the vocabulary file.
-        merges_file (`str`):
+        merges_file (`str`, *optional*):
             Path to the merges file.
         tokenizer_file (`str`, *optional*):
             The path to a tokenizer file to use instead of the vocab file.
