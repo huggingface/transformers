@@ -311,10 +311,10 @@ def main():
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
-    # (the dataset will be downloaded automatically from the datasets Hub
+    # (the dataset will be downloaded automatically from the datasets Hub).
     #
     # For CSV/JSON files, this script will use the column called 'text' or the first column. You can easily tweak this
-    # behavior (see below)
+    # behavior (see below).
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
@@ -348,10 +348,15 @@ def main():
         data_files = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
-            extension = data_args.train_file.split(".")[-1]
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-            extension = data_args.validation_file.split(".")[-1]
+
+        extension = (
+            data_args.train_file.split(".")[-1]
+            if data_args.train_file is not None
+            else data_args.validation_file.split(".")[-1]
+        )
+
         if extension == "txt":
             extension = "text"
         raw_datasets = load_dataset(
