@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 -->
 # Knowledge Distillation for Computer Vision
 
-Knowledge distillation is a technique used to transfer knowledge from a larger, more complex model (teacher) to a smaller, simpler model (student). In the context of image classification, the goal is to train the student model to mimic the behavior of the teacher model. It was first introduced in [Distilling the Knowledge in a Neural Network by Hinton et al](https://arxiv.org/abs/1503.02531). In this notebook, we will do task-specific knowledge distillation. We will use [beans](https://huggingface.co/datasets/beans) for this.
+Knowledge distillation is a technique used to transfer knowledge from a larger, more complex model (teacher) to a smaller, simpler model (student). In the context of image classification, the goal is to train a student model which mimics the behavior of the teacher model. It was first introduced in [Distilling the Knowledge in a Neural Network by Hinton et al](https://arxiv.org/abs/1503.02531). In this notebook, we will do task-specific knowledge distillation. We will use the [beans dataset](https://huggingface.co/datasets/beans) for this.
 
 This tutorial aims to demonstrate how to distil a [ResNet](https://huggingface.co/microsoft/resnet-50) (teacher model) to [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (student model) using `Trainer` API of 🤗 Transformers. 
 
