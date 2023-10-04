@@ -252,6 +252,13 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
         checkpoint = ray.train.get_checkpoint()
         if checkpoint:
+            # Upon trial resume, the local_trainer's objective gets reset to None.
+            # If `local_trainer.train` is a noop (training has already reached
+            # the target number of epochs/steps), then this would
+            # trigger an unnecessary extra checkpoint at the end of training.
+            # -> Set the objective to a dummy value upon resume as a workaround.
+            local_trainer.objective = "objective"
+
             with checkpoint.as_directory() as checkpoint_dir:
                 checkpoint_path = next(Path(checkpoint_dir).glob(f"{PREFIX_CHECKPOINT_DIR}*")).as_posix()
                 local_trainer.train(resume_from_checkpoint=checkpoint_path, trial=trial)
