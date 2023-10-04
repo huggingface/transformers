@@ -210,6 +210,7 @@ class Swin2SRPatchUnEmbeddings(nn.Module):
         embeddings = embeddings.transpose(1, 2).view(batch_size, self.embed_dim, x_size[0], x_size[1])  # B Ph*Pw C
         return embeddings
 
+
 class Swin2SRPatchMerging(nn.Module):
     """
     Patch Merging Layer.
