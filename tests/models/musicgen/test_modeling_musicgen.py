@@ -513,6 +513,16 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def setUp(self):
         self.model_tester = MusicgenTester(self)
 
+    # Get `IndexError: index out of range in self` in `torch.embedding`.
+    # TODO: check tiny model creation for this model.
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "TextToAudioPipelineTests":
+            return True
+
+        return False
+
     def _check_output_with_attentions(self, outputs, config, input_ids, decoder_input_ids):
         text_encoder_config = config.text_encoder
         decoder_config = config.decoder
