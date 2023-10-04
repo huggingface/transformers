@@ -33,10 +33,12 @@ Tips:
 
 Brief Explanation:
 
-Firstly, the [`ClvpTokenizer`] tokenizes the text input, and the [`ClvpFeatureExtractor`] extracts the log mel-spectrogram from the desired audio. 
-Next, the text tokens and audio representations are passed to the [`ClvpConditioningEncoder`], which converts them into embeddings conditioned on the text and audio. The [`ClvpForCausalLM`] uses these embeddings to generate multiple speech candidates. 
-The speech encoder converts each speech candidate into a vector representation, and the text encoder converts the text tokens into the same latent space. 
-At the end, we compare each speech vector with the text vector to see which speech vector is most similar to the text vector. 
+- The [`ClvpTokenizer`] tokenizes the text input, and the [`ClvpFeatureExtractor`] extracts the log mel-spectrogram from the desired audio.
+- [`ClvpConditioningEncoder`] takes those text tokens and audio representations and converts them into embeddings conditioned on the text and audio.
+- The [`ClvpForCausalLM`] uses those embeddings to generate multiple speech candidates.
+- Each speech candidate is passed through the speech encoder ([`ClvpEncoder`]) which converts them into a vector representation, and the text encoder ([`ClvpEncoder`]) converts the text tokens into the same latent space. 
+- At the end, we compare each speech vector with the text vector to see which speech vector is most similar to the text vector. 
+- [`ClvpModelForConditionalGeneration.generate()`] compresses all of the logic described above into a single method.  
 
 
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).

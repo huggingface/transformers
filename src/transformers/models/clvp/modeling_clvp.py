@@ -312,7 +312,6 @@ class ClvpSelfAttention(nn.Module):
         attention_mask: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
-        use_causal_attention_mask: Optional[bool] = True,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
@@ -600,6 +599,8 @@ class ClvpConditioningEncoder(nn.Module):
             [ClvpSelfAttention(decoder_config, apply_hidden_states_norm=True) for _ in range(decoder_config.num_mel_attn_blocks)]
         )
 
+        self.gradient_checkpointing = False
+
     def forward(
         self,
         input_features: torch.FloatTensor,
@@ -607,12 +608,29 @@ class ClvpConditioningEncoder(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
-        # process each log-mel spectrogram into a single vector
-        mel_spec = self.mel_conv(input_features)
 
-        mel_spec = torch.permute(mel_spec, (0, 2, 1))
-        for mel_attn_block in self.mel_attn_blocks:
-            mel_spec = mel_attn_block(mel_spec, use_causal_attention_mask=False)[0] + mel_spec
+        if self.gradient_checkpointing and self.training:
+            # process each log-mel spectrogram into a single vector
+            mel_spec = torch.utils.checkpoint.checkpoint(
+                self.mel_conv,
+                input_features,
+            )
+
+            mel_spec = torch.permute(mel_spec, (0, 2, 1))
+            for mel_attn_block in self.mel_attn_blocks:
+                mel_spec = torch.utils.checkpoint.checkpoint(
+                    mel_attn_block,
+                    input_features,
+                )[0] + mel_spec
+
+        else:
+            # process each log-mel spectrogram into a single vector
+            mel_spec = self.mel_conv(input_features)
+
+            mel_spec = torch.permute(mel_spec, (0, 2, 1))
+            for mel_attn_block in self.mel_attn_blocks:
+                mel_spec = mel_attn_block(mel_spec)[0] + mel_spec
+
         mel_spec = torch.permute(mel_spec, (0, 2, 1))
         mel_spec = mel_spec[:, :, 0]
         mel_spec = mel_spec.unsqueeze(1)
@@ -710,6 +728,8 @@ class ClvpPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
         if isinstance(module, ClvpDecoder):
             module.gradient_checkpointing = value
+        if isinstance(module, ClvpConditioningEncoder):
+            module.gradient_checkpointing = value
 
 
 CLVP_START_DOCSTRING = r"""
@@ -751,8 +771,6 @@ CLVP_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether to use causal attention mask.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -867,7 +885,6 @@ class ClvpEncoder(ClvpPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        use_causal_attention_mask: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -890,8 +907,6 @@ class ClvpEncoder(ClvpPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            use_causal_attention_mask (`bool`, *optional*):
-                Whether to use the causal attention mask or not.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1559,7 +1574,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
     ) -> torch.FloatTensor:
         r"""
         This method can be used to extract text_embeds from a text. The text embeddings obtained by applying the
@@ -1580,8 +1594,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
-                Whether to use causal attention mask.
 
         Returns:
             `torch.FloatTensor` of shape `(batch_size, output_dim)`:
@@ -1610,7 +1622,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             input_ids=input_ids,
             inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
-            use_causal_attention_mask=use_causal_attention_mask,
         )[0]
 
     def get_speech_features(
@@ -1620,7 +1631,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         input_features: Optional[torch.FloatTensor] = None,
         conditioning_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
         generation_config: Optional[GenerationConfig] = None,
         **kwargs,
     ) -> torch.FloatTensor:
@@ -1648,8 +1658,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
-                Whether to use causal attention mask.
 
             generation_config (`GenerationConfig`, *optional*):
                 generation config to control the generation of speech_ids if they are not provided.
@@ -1710,7 +1718,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         return self.speech_encoder_model(
             input_ids=speech_ids,
             attention_mask=attention_mask,
-            use_causal_attention_mask=use_causal_attention_mask,
         )[0]
 
     @add_start_docstrings_to_model_forward(CLVP_INPUTS_DOCSTRING)
@@ -1722,7 +1729,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         conditioning_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1789,7 +1795,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         speech_outputs = self.speech_encoder_model(
             input_ids=speech_ids,
-            use_causal_attention_mask=use_causal_attention_mask,
             attention_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1800,7 +1805,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             input_ids=input_ids,
             inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
-            use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
