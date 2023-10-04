@@ -40,9 +40,9 @@ class UnivNetGanConfig(PretrainedConfig):
         model_in_channels (`int`, *optional*, defaults to 64):
             The number of input channels for the UnivNet residual network. This should correspond to
             `noise_sequence.shape[1]` and the value used in the [`UnivNetFeatureExtractor`] class.
-        model_hidden_channels ('int', *optional*, defaults to 32):
+        model_hidden_channels (`int`, *optional*, defaults to 32):
             The number of hidden channels of each residual block in the UnivNet residual network.
-        num_mel_bins ('int', *optional*, defaults to 100):
+        num_mel_bins (`int`, *optional*, defaults to 100):
             The number of frequency bins in the conditioning log-mel spectrogram. This should correspond to the value
             used in the [`UnivNetFeatureExtractor`] class.
         resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 3, 3]`):

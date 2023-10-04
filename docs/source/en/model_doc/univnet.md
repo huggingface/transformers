@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The UnivNet model was proposed in [UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminators for High-Fidelity Waveform Generation](https://arxiv.org/abs/2106.07889) by Won Jang, Dan Lim, Jaesam Yoon, Bongwan Kin, and Juntae Kim.
-The UnivNet model is a generative adversarial network (GAN) trained to synthesize high fidelity speech waveforms. The UnivNet model shared in `transformers` is the `generator`, which maps a conditioning log-mel spectrogram and optional noise sequence to a speech waveform (e.g. a vocoder). The `discriminator` used to train the `generator` is not implemented.
+The UnivNet model is a generative adversarial network (GAN) trained to synthesize high fidelity speech waveforms. The UnivNet model shared in `transformers` is the *generator*, which maps a conditioning log-mel spectrogram and optional noise sequence to a speech waveform (e.g. a vocoder). Only the generator is required for inference. The *discriminator* used to train the `generator` is not implemented.
 
 The abstract from the paper is the following:
 
@@ -50,7 +50,8 @@ inputs = feature_extractor(
     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], pad_end=True, return_tensors="pt"
 )
 
-audio = model(**inputs)
+with torch.no_grad():
+    audio = model(**inputs)
 
 # Remove the extra padding at the end of the output.
 audio = audio[:-(feature_extractor.pad_end_length * feature_extractor.hop_length)]

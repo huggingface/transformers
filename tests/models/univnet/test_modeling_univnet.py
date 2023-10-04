@@ -45,7 +45,7 @@ class UnivNetGanTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=7,
         in_channels=8,
         hidden_channels=8,
@@ -216,18 +216,13 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
                     unbatched_spectrogram.to(torch_device),
                     unbatched_noise_sequence.to(torch_device),
                 )
-                print(f"Unbatched outputs shape: {unbatched_outputs.shape}")
 
                 batched_outputs = model(
                     batched_spectrogram.to(torch_device),
                     batched_noise_sequence.to(torch_device),
                 )
-                print(f"Batched outputs shape: {batched_outputs.shape}")
 
-            self.assertTrue(
-                torch.allclose(unbatched_outputs, batched_outputs),
-                msg="Got different batch dims for input and output",
-            )
+            torch.testing.assert_close(unbatched_outputs, batched_outputs)
 
 
 @require_torch_gpu

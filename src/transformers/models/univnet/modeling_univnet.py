@@ -512,6 +512,8 @@ class UnivNetGan(PreTrainedModel):
          ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
          ... )
          >>> audio = model(**inputs)
+         >>> list(audio.shape)
+         [140288]
          ```
         """
         # Resolve batch sizes for noise_sequence and spectrogram
@@ -530,7 +532,6 @@ class UnivNetGan(PreTrainedModel):
             noise_sequence = torch.randn(
                 noise_sequence_shape, generator=generator, dtype=input_features.dtype, device=input_features.device
             )
-            noise_sequence_batched = True
         noise_sequence_batch_size = noise_sequence.shape[0]
 
         if spectrogram_batch_size > 1 and noise_sequence_batch_size == 1:

@@ -189,7 +189,7 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
     def mel_spectrogram(self, waveform: np.ndarray) -> np.ndarray:
         """
         Calculates log MEL spectrograms from a batch of waveforms. Note that the input waveform(s) will be padded by
-        `int(self.n_fft - self.hop_length)` on both sides using the `reflect` padding mode.
+        `int(self.n_fft - self.hop_length) / 2` on both sides using the `reflect` padding mode.
 
         Args:
             waveform (`np.ndarray` of shape `(length,)`):
