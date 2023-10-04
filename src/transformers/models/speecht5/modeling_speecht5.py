@@ -2606,16 +2606,15 @@ def _generate_speech(
         spectrogram.append(spectrum)
 
         # Extend the output sequence with the new mel spectrum.
-        output_sequence = torch.cat(
-            (output_sequence, spectrum[:, -1, :].view(bsz, 1, model.config.num_mel_bins)), dim=1
-        )
+        new_spectrogram = spectrum[:, -1, :].view(bsz, 1, model.config.num_mel_bins)
+        output_sequence = torch.cat((output_sequence, new_spectrogram), dim=1)
         # Predict the probability that this is the stop token.
         prob = torch.sigmoid(model.speech_decoder_postnet.prob_out(last_decoder_output))
 
         if idx < minlen:
             continue
         else:
-            # If the generation loops is less than maximum length times, check the ones in the batch that have met
+            # If the generation loop is less than maximum length time, check the ones in the batch that have met
             # the prob threshold. Otherwise, assume all have met thresholds and fill other spectrograms for the batch.
             if idx < maxlen:
                 meet_thresholds = torch.sum(prob, dim=-1) >= threshold
