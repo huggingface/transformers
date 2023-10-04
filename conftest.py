@@ -19,7 +19,7 @@ import doctest
 import sys
 import warnings
 from os.path import abspath, dirname, join
-
+import numpy
 import _pytest
 
 from transformers.testing_utils import HfDoctestModule, HfDocTestParser
