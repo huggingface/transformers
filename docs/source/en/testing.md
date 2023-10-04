@@ -528,7 +528,8 @@ Alternative backends may also require the replacement of device-specific functio
 
 ```
 import torch
-# !! Specify additional imports here !!
+import torch_npu
+# !! Further additional imports can be added here !!
 
 # Specify the device name (eg. 'cuda', 'cpu', 'npu')
 DEVICE_NAME = 'npu'
