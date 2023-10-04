@@ -218,10 +218,11 @@ input formats. Our default template for models that don't have a class-specific 
 {% endfor %}
 ```
 
-If you like this one, here it is in one-liner form, ready to copy into your code:
+If you like this one, here it is in one-liner form, ready to copy into your code. The one-liner also includes
+handy support for "generation prompts" - see the next section for more!
 
 ```
-tokenizer.chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}"
+tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %})"
 ```
 
 This template wraps each message in `<|im_start|>` and `<|im_end|>` tokens, and simply writes the role as a string, which
@@ -256,7 +257,7 @@ messages = [
 Here's what this will look like without a generation prompt, using the ChatML template we described above:
 
 ```python
->> tokenizer.apply_chat_template(messages, add_generation_prompt=False)
+>> tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
 """<|im_start|>user
 Hi there!<|im_end|>
 <|im_start|>assistant
@@ -269,7 +270,7 @@ Can I ask a question?<|im_end|>
 And here's what it looks like **with** a generation prompt:
 
 ```python
->> tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+>> tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 """<|im_start|>user
 Hi there!<|im_end|>
 <|im_start|>assistant
