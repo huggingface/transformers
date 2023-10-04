@@ -2926,7 +2926,7 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
 
                 dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
                 model = model_class.from_pretrained(
                     tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
@@ -2960,7 +2960,8 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
 def random_attention_mask(shape, rng=None, name=None):
     attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None)
     # make sure that at least one token is attended to for each batch
-    attn_mask[:, -1] = 1
+    # we choose the 1st token so this property of `at least one being non-zero` still holds after applying causal mask
+    attn_mask[:, 0] = 1
     return attn_mask
 
 

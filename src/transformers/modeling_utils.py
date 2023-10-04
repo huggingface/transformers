@@ -1614,7 +1614,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 new_num_tokens = old_embeddings.weight.shape[0]
             new_num_tokens = ((new_num_tokens + pad_to_multiple_of - 1) // pad_to_multiple_of) * pad_to_multiple_of
         else:
-            logger.warning(
+            logger.info(
                 "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
                 f" dimension will be {new_num_tokens}. This might induce some performance reduction as *Tensor Cores* will not be available."
                 " For more details about this, or help on choosing the correct value for resizing, refer to this guide:"
@@ -1933,15 +1933,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if token is not None:
             kwargs["token"] = token
 
+        _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
+
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
-            warnings.warn(
+        if (
+            getattr(self, "is_loaded_in_8bit", False)
+            and not getattr(self, "is_8bit_serializable", False)
+            and not _hf_peft_config_loaded
+        ):
+            raise ValueError(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
-                UserWarning,
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
             )
 
-        if getattr(self, "is_loaded_in_4bit", False):
+        # If the model has adapters attached, you can save the adapters
+        if getattr(self, "is_loaded_in_4bit", False) and not _hf_peft_config_loaded:
             raise NotImplementedError(
                 "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
             )
@@ -1981,8 +1987,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # loaded from the Hub.
         if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
-
-        _hf_peft_config_loaded = getattr(model_to_save, "_hf_peft_config_loaded", False)
 
         # Save the config
         if is_main_process:
@@ -2480,6 +2484,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             token = use_auth_token
 
+        if token is not None and adapter_kwargs is not None and "token" not in adapter_kwargs:
+            adapter_kwargs["token"] = token
+
         if use_safetensors is None and not is_safetensors_available():
             use_safetensors = False
 
@@ -2526,7 +2533,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     resume_download=resume_download,
                     proxies=proxies,
                     local_files_only=local_files_only,
-                    token=token,
                     _commit_hash=commit_hash,
                     **adapter_kwargs,
                 )

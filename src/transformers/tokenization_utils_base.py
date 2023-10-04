@@ -846,15 +846,26 @@ class SpecialTokensMixin:
         # We directly set the hidden value to allow initialization with special tokens
         # which are not yet in the vocabulary. Necessary for serialization/de-serialization
         # TODO clean this up at some point (probably by switching to fast tokenizers)
+
         for key, value in kwargs.items():
             if value is None:
                 continue
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
+                    # TODO THIS IS NASTY! Will always reset tokens to default rstrip and lstrip because self.set_attr on strings
+                    # will not check the addedtokens decoder. WILL FIX TOMORROW
                     assert isinstance(value, (list, tuple)), f"Value {value} is not a list or tuple"
                     assert all(
                         isinstance(t, (str, AddedToken)) for t in value
                     ), "One of the tokens is not a string or an AddedToken"
+                    if hasattr(self, "added_tokens_encoder"):
+                        extended_token = []
+                        for token in value:
+                            if isinstance(token, str) and str(token) in self.added_tokens_encoder:
+                                extended_token.append(self.added_tokens_decoder[self.added_tokens_encoder[str(token)]])
+                            else:
+                                extended_token.append(token)
+                        value = extended_token
                     setattr(self, key, value)
                 elif isinstance(value, (str)):
                     value = AddedToken(value, normalized=False, special=True)
@@ -1675,14 +1686,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self._processor_class = processor_class
 
     @property
-    def added_tokens_encoder(self) -> Dict[str, int]:
-        """
-        Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
-        optimisation in `self._added_tokens_encoder` for the slow tokenizers.
-        """
-        return {k.content: v for v, k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
-
-    @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
         raise NotImplementedError()
 
@@ -2196,20 +2199,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             for idx, token in init_kwargs["added_tokens_decoder"].items():
                 if isinstance(token, dict):
                     token = AddedToken(**token)
-
                 if isinstance(token, AddedToken):
                     added_tokens_decoder[int(idx)] = token
+                    if str(token) in additional_special_tokens:
+                        # at this point the token is in `additional_special_tokens` as an str, let's add the AddedToken info
+                        additional_special_tokens.remove(str(token))
+                    if token.special and token not in additional_special_tokens:
+                        additional_special_tokens.append(token)
                 else:
                     raise ValueError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
                     )
         else:
-            logger.warning_once(
-                "Loading the tokenizer from the `special_tokens_map.json` and the `added_tokens.json` will be removed in `transformers 5`, "
-                " it is kept for forward compatibility, but it is recommended to update your `tokenizer_config.json` by uploading it again."
-                " You will see the new `added_tokens_decoder` attribute that will store the relevant information."
-            )
-
             # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
@@ -2221,6 +2222,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             continue
                         if isinstance(value, dict):
                             value = AddedToken(**value)
+                            init_kwargs[key] = value
                         elif key == "additional_special_tokens" and isinstance(value, list):
                             for token in value:
                                 token = AddedToken(**token) if isinstance(token, dict) else token
@@ -2233,8 +2235,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
                 # legacy: we have to init with (rstrip=True, lstrip=True)
+                strip = True if "Fast" not in cls.__name__ else False
                 added_tokens_decoder = {
-                    index: AddedToken(token, rstrip=True, lstrip=True) for token, index in added_tok_encoder.items()
+                    index: AddedToken(token, rstrip=strip, lstrip=strip) for token, index in added_tok_encoder.items()
                 }
             # end legacy
 
@@ -2276,16 +2279,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # uses the information stored in `added_tokens_decoder`. Checks after addition that we have the same ids
         if init_kwargs.get("slow_to_fast", False):
             tokenizer.add_tokens([token for _, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])])
-            warnings = ""
-            for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0]):
-                if tokenizer.convert_tokens_to_ids(str(token)) != index:
-                    warnings += f"\texpected id: {tokenizer.convert_tokens_to_ids(str(token))}, found: {index},  token: `{token}`,\n"
-            if len(warnings) > 1:
-                logger.warn(
-                    f"You are converting a {slow_tokenizer.__class__.__name__} to a {cls.__name__}, but"
-                    f" wrong indexes were founds when adding the `added_tokens` from the `slow` tokenizer to the `fast`. "
-                    f" The following tokens had unexpected id :\n{warnings}. You should try using `from_slow`."
-                )
             # finally we add all the special_tokens to make sure eveything is initialized
             tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
 
@@ -2395,9 +2388,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
-        # TODO: Ensure the modified attributes (those are also in the __init__ kwargs) will give identical tokenizers
-        # target_keys = self.init_kwargs.keys()
-        target_keys = ["model_max_length", "clean_up_tokenization_spaces", "additional_special_tokens"]
+        target_keys = list(self.init_kwargs.keys())
+        target_keys += ["model_max_length", "clean_up_tokenization_spaces", "additional_special_tokens"]
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
