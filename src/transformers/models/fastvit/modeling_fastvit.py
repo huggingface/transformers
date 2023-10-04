@@ -375,7 +375,7 @@ class FastViTReparamLKConv(nn.Module):
             )
 
             if small_kernel is not None:
-                if small_kernel <= kernel_size:
+                if small_kernel > kernel_size:
                     raise ValueError("The kernel size for re-param cannot be larger than the large kernel!")
 
                 self.small_conv = nn.Sequential(
