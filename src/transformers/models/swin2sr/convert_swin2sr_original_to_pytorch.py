@@ -43,7 +43,6 @@ def get_config(checkpoint_url):
         config.upsampler = "nearest+conv"
     elif "Swin2SR_Jpeg_dynamic" in checkpoint_url:
         config.num_channels = 1
-        config.num_channels_out = 1
         config.upscale = 1
         config.image_size = 126
         config.window_size = 7
