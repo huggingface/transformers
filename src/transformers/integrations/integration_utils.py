@@ -248,28 +248,27 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         except ModuleNotFoundError:
             pass
 
+        local_trainer.objective = None
+
         checkpoint = ray.train.get_checkpoint()
-        checkpoint_path = None
         if checkpoint:
             with checkpoint.as_directory() as checkpoint_dir:
-                for subdir in os.listdir(checkpoint_dir):
-                    if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                        checkpoint_path = os.path.join(checkpoint_dir, subdir)
-
-        local_trainer.objective = None
-        local_trainer.train(resume_from_checkpoint=checkpoint_path, trial=trial)
+                checkpoint_path = next(Path(checkpoint_dir).glob(f"{PREFIX_CHECKPOINT_DIR}*")).as_posix()
+                local_trainer.train(resume_from_checkpoint=checkpoint_path, trial=trial)
+        else:
+            local_trainer.train(trial=trial)
 
         # If there hasn't been any evaluation during the training loop.
-        if getattr(local_trainer, "objective", None) is None:
-            metrics = local_trainer.evaluate()
-            local_trainer.objective = local_trainer.compute_objective(metrics)
-            with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
-                did_save_checkpoint = local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
-                checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir) if did_save_checkpoint else None
-                ray.train.report(
-                    {"objective": local_trainer.objective, "done": True, **metrics},
-                    checkpoint=checkpoint,
-                )
+        # if getattr(local_trainer, "objective", None) is None:
+        local_trainer.objective = local_trainer.compute_objective(metrics)
+
+        metrics = local_trainer.evaluate()
+        metrics.update({"objective": local_trainer.objective, "done": True})
+
+        with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
+            local_trainer._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
+            checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+            ray.train.report(metrics, checkpoint=checkpoint)
 
     if not trainer._memory_tracker.skip_memory_metrics:
         from ..trainer_utils import TrainerMemoryTracker
@@ -307,8 +306,6 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         from ray.tune import CLIReporter
 
         kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
-
-    trainer.use_tune_checkpoints = True
 
     if "scheduler" in kwargs:
         from ray.tune.schedulers import ASHAScheduler, HyperBandForBOHB, MedianStoppingRule, PopulationBasedTraining
