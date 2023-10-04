@@ -39,9 +39,6 @@ try:
     from xformers import ops as xops
 except ImportError:
     xops = None
-    logger.warning(
-        "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
-    )
 
 
 _CONFIG_FOR_DOC = "OpenLlamaConfig"
@@ -364,7 +361,6 @@ class OpenLlamaDecoderLayer(nn.Module):
         self.input_layernorm = OpenLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OpenLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,

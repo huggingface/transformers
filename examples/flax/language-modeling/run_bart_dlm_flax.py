@@ -531,6 +531,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            num_proc=data_args.preprocessing_num_workers,
         )
 
         if "validation" not in datasets.keys():
@@ -540,6 +541,7 @@ def main():
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
             datasets["train"] = load_dataset(
                 data_args.dataset_name,
@@ -547,6 +549,7 @@ def main():
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
     else:
         data_files = {}
@@ -562,6 +565,7 @@ def main():
             data_files=data_files,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            num_proc=data_args.preprocessing_num_workers,
         )
 
         if "validation" not in datasets.keys():
@@ -571,6 +575,7 @@ def main():
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
             datasets["train"] = load_dataset(
                 extension,
@@ -578,6 +583,7 @@ def main():
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
+                num_proc=data_args.preprocessing_num_workers,
             )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
