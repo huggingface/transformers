@@ -863,7 +863,7 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
     else:
         return input_tensor.mean(dim=dim)
-
+    
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->PatchTST
 class PatchTSTStdScaler(nn.Module):
@@ -1138,7 +1138,10 @@ class PatchTSTForMaskPretraining(PatchTSTPreTrainedModel):
         loss_val = self.loss(x_hat, model_output.patched_input)
         masked_loss = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
 
-        return PatchTSTOutput(loss=masked_loss, prediction_output=x_hat, hidden_states=model_output.hidden_states)
+        return PatchTSTOutput(loss=masked_loss, 
+                              prediction_output=x_hat, 
+                              hidden_states=model_output.hidden_states
+                              )
 
 
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
@@ -1165,8 +1168,10 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         if labels is not None:
             loss_val = self.loss(y_hat, labels)
         return PatchTSTForClassificationOutput(
-            loss=loss_val, prediction_logits=y_hat, hidden_states=model_output.hidden_states
-        )
+                                loss=loss_val, 
+                                prediction_logits=y_hat, 
+                                hidden_states=model_output.hidden_states
+                                )
 
 
 class ClassificationHead(nn.Module):
@@ -1231,7 +1236,7 @@ class PredictionHead(nn.Module):
     def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
 
-        self.num_output_channels = config.num_output_channels
+        self.num_output_channels = config.num_output_channels        
         self.use_cls_token = config.use_cls_token
         self.pooling = config.pooling
 
@@ -1240,8 +1245,8 @@ class PredictionHead(nn.Module):
         self.flatten = nn.Flatten(start_dim=1)
 
         if distribution_output is None:
-            self.projection = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)
-        else:
+            self.projection = nn.Linear(head_dim, config.prediction_length * config.num_output_channels)            
+        else:                        
             self.projection = distribution_output.get_parameter_projection(head_dim)
 
         self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
@@ -1262,17 +1267,15 @@ class PredictionHead(nn.Module):
         else:
             raise Exception(f"pooling operator {self.pooling} is not implemented yet")
 
-        # flatten the input
-        x = self.dropout(self.flatten(x))  # x: bs x (nvars * d_model)
-        # projection
+        # flatten the input        
+        x = self.dropout(self.flatten(x))  # x: bs x (nvars * d_model)        
+        # projection 
         y = self.projection(x)
         # reshape y
-        if isinstance(y, tuple):  # for distribution head
-            y = (
-                z.reshape(batch_size, -1, self.num_output_channels) for z in y
-            )  # tuple of [bs x pred_len x num_output_channels]
-        else:  # for linear head
-            y = y.reshape(batch_size, -1, self.num_output_channels)  # [bs x pred_len x num_output_channels]
+        if isinstance(y, tuple):    # for distribution head
+            y = (z.reshape(batch_size, -1, self.num_output_channels) for z in y)   # tuple of [bs x pred_len x num_output_channels]          
+        else:       # for linear head
+            y = y.reshape(batch_size, -1, self.num_output_channels)  # [bs x pred_len x num_output_channels]            
         return y
 
 
@@ -1292,9 +1295,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             elif config.distribution_output == "normal":
                 self.distribution_output = NormalOutput(dim=config.prediction_length * config.num_output_channels)
             elif config.distribution_output == "negative_binomial":
-                self.distribution_output = NegativeBinomialOutput(
-                    dim=config.prediction_length * config.num_output_channels
-                )
+                self.distribution_output = NegativeBinomialOutput(dim=config.prediction_length * config.num_output_channels)
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
@@ -1313,18 +1314,21 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         model_output = self.model(past_values, output_hidden_states=output_hidden_states)
-        y_hat = self.head(model_output.last_hidden_state)
+        y_hat = self.head(model_output.last_hidden_state)        
 
         loss_val = None
-        if future_values is not None:
-            if self.distribution_output:
+        if future_values is not None:            
+            if self.distribution_output:                
                 distribution = self.distribution_output.distribution(y_hat)
                 loss_val = self.loss(distribution, future_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
-            else:
+            else:                
                 loss_val = self.loss(y_hat, future_values)
-        return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=model_output.hidden_states)
+        return PatchTSTOutput(loss=loss_val, 
+                              prediction_output=y_hat, 
+                              hidden_states=model_output.hidden_states
+                              )
 
 
 @dataclass
@@ -1356,6 +1360,22 @@ class PatchTSTForForecastingOutput(ModelOutput):
     forecast_outputs: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loc: torch.FloatTensor = None
+    scale: torch.FloatTensor = None
+
+
+@dataclass
+class SamplePatchTSTForecastOutput(ModelOutput):
+    """
+    Base class for time series model's predictions outputs that contains the sampled values from the chosen
+    distribution.
+
+    Args:
+        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length)` or 
+        `(batch_size, num_samples, prediction_length, number_channels)`):
+                Sampled values from the chosen distribution.
+    """
+    sequences: torch.FloatTensor = None
 
 
 class ForecastHead(nn.Module):
@@ -1377,10 +1397,14 @@ class ForecastHead(nn.Module):
                 self.flattens.append(nn.Flatten(start_dim=2))
                 if distribution_output is None:
                     # use linear head
-                    self.projections.append(nn.Linear(head_dim, config.prediction_length))
+                    self.projections.append(
+                        nn.Linear(head_dim, config.prediction_length)
+                        )
                 else:
                     # use distribution head
-                    self.projections.append(distribution_output.get_parameter_projection(head_dim))
+                    self.projections.append(
+                        distribution_output.get_parameter_projection(head_dim)
+                        )
                 self.dropouts.append(nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity())
         else:
             # all the channels share the same head
@@ -1415,24 +1439,20 @@ class ForecastHead(nn.Module):
             for i in range(self.num_input_channels):
                 z = self.flattens[i](y[:, i, :])  # y: [bs x (d_model * num_patches)] or [bs x d_model)]
                 z = self.dropouts[i](z)
-                z = self.projections[i](
-                    z
-                )  # z: [bs x forecast_len]  or tuple ([bs x forecast_len], [bs x forecast_len]) if using distribution head
+                z = self.projections[i](z)  # z: [bs x forecast_len]  or tuple ([bs x forecast_len], [bs x forecast_len]) if using distribution head              
                 x_out.append(z)
-            x = torch.stack(x_out, dim=1)  # x: [bs x nvars x forecast_len]
+            output = torch.stack(x_out, dim=1)  # x: [bs x nvars x forecast_len]
         else:
             z = self.flatten(y)  # z: [bs x nvars x (d_model * num_patches)] or [bs x nvars x d_model)]
             z = self.dropout(z)
-            x = self.projection(
-                z
-            )  # x: [bs x nvars x forecast_len] or tuple ([bs x nvars x forecast_len], [bs x nvars x forecast_len]) if using distribution head
-
-        if isinstance(x, tuple):
-            x = (z.transpose(2, 1) for z in x)  # ([bs x forecast_len x nvars], [bs x forecast_len x nvars])
+            output = self.projection(z)  # x: [bs x nvars x forecast_len] or tuple ([bs x nvars x forecast_len], [bs x nvars x forecast_len]) if using distribution head            
+        
+        if isinstance(output, tuple):            
+            output = tuple(z.transpose(2,1) for z in output)   # ([bs x forecast_len x nvars], [bs x forecast_len x nvars])            
         else:
-            x = x.transpose(2, 1)  # [bs x forecast_len x nvars]
+            output = output.transpose(2, 1)  # [bs x forecast_len x nvars]
 
-        return x
+        return output
 
 
 class PatchTSTForForecasting(PatchTSTPreTrainedModel):
@@ -1455,7 +1475,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
-        self.head = ForecastHead(config, self.distribution_output)
+        self.head = ForecastHead(config, self.distribution_output)        
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1463,7 +1483,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        future_values: Optional[torch.Tensor],
+        future_values: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
         future_observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1471,28 +1491,69 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        model_output = self.model(
-            past_values, past_observed_mask=past_observed_mask, output_hidden_states=output_hidden_states
-        )
+        model_output = self.model(past_values, 
+                                  past_observed_mask=past_observed_mask, 
+                                  output_hidden_states=output_hidden_states
+                                 )
 
-        y_hat = self.head(model_output.last_hidden_state)
-
+        y_hat = self.head(model_output.last_hidden_state)        
+        
         loss_val = None
+        
         if future_values is not None:
             if self.distribution_output:
-                distribution = self.distribution_output.distribution(
-                    y_hat, loc=model_output.loc, scale=model_output.scale
-                )
+                distribution = self.distribution_output.distribution(y_hat, 
+                                                                     loc=model_output.loc,
+                                                                     scale=model_output.scale)
                 loss_val = self.loss(distribution, future_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
+                # for testing                
+                # loss_val = nn.MSELoss(reduction='none')(distribution.mean, future_values)
+                # loss_val = weighted_average(loss_val)
             else:
                 y_hat = y_hat * model_output.scale + model_output.loc
                 loss_val = self.loss(y_hat, future_values)
 
-        return PatchTSTForForecastingOutput(
-            loss=loss_val, forecast_outputs=y_hat, hidden_states=model_output.hidden_states
-        )
+        return PatchTSTForForecastingOutput(loss=loss_val, 
+                                            forecast_outputs=y_hat, 
+                                            hidden_states=model_output.hidden_states,
+                                            loc=model_output.loc,
+                                            scale=model_output.scale
+                                            )
+
+    def generate(self, 
+                 past_values: torch.Tensor,                 
+                 past_observed_mask: Optional[torch.Tensor] = None,                 
+                 output_hidden_states: Optional[bool] = None
+        ):
+        """
+        Return:
+            [`SamplePatchTSTForecastOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of
+            samples, prediction_length)` or `(batch_size, number of samples, prediction_length, number_channels)` for
+            multivariate predictions.
+        """
+        # get number of samples        
+        num_parallel_samples = self.config.num_parallel_samples
+
+        # get model output        
+        outputs = self(past_values=past_values,
+                       future_values=None,
+                       past_observed_mask=past_observed_mask,                       
+                       output_hidden_states=output_hidden_states
+                       )
+                
+        # get distribution
+        distribution = self.distribution_output.distribution(
+                                outputs.forecast_outputs, 
+                                loc=outputs.loc,
+                                scale=outputs.scale
+                                )        
+        # get samples
+        samples = [distribution.sample() for i in range(num_parallel_samples)]     # samples: list of [bs x forecast_len x nvars]
+        # stack tensors
+        samples = torch.stack(samples, dim=1)   # [bs x num_samples x forecast_len x nvars]
+        return samples        
 
 
 class RegressionHead(nn.Module):
@@ -1556,4 +1617,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         loss_val = None
         if labels is not None:
             loss_val = self.loss(y_hat, labels)
-        return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=model_output.hidden_states)
+        return PatchTSTOutput(loss=loss_val, 
+                              prediction_output=y_hat, 
+                              hidden_states=model_output.hidden_states
+                              )
