@@ -59,7 +59,7 @@ class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
             are supported.
         downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
             If `True`, the first stage will downsample the inputs using a `stride` of 2.
-        reduce_first (`bool`, *optional*, defaults to `False`):
+        downsample_in_bottleneck (`bool`, *optional*, defaults to `False`):
             If `True`, the first conv 1x1 in ResNetBottleNeckLayer will downsample the inputs using a `stride` of 2.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
@@ -96,7 +96,7 @@ class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
         layer_type="bottleneck",
         hidden_act="relu",
         downsample_in_first_stage=False,
-        reduce_first=False,
+        downsample_in_bottleneck=False,
         out_features=None,
         out_indices=None,
         **kwargs,
@@ -111,7 +111,7 @@ class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
-        self.reduce_first = reduce_first
+        self.downsample_in_bottleneck = downsample_in_bottleneck
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
