@@ -170,16 +170,6 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
         # Minimum value in spectrogram after dynamic_range_compression
         self.spectrogram_zero = np.log(self.compression_clip_val * self.compression_factor)
 
-    # Based on tacotron2.audio_processing.dynamic_range_compression
-    # https://github.com/NVIDIA/tacotron2/blob/master/audio_processing.py#L78
-    def dynamic_range_compression(self, waveform: np.ndarray):
-        return np.log(np.clip(waveform, a_min=self.compression_clip_val, a_max=None) * self.compression_factor)
-
-    # Based on tacotron2.audio_processing.dynamic_range_compression
-    # https://github.com/NVIDIA/tacotron2/blob/master/audio_processing.py#L87
-    def dynamic_range_decompression(self, waveform: np.ndarray):
-        return np.exp(waveform) / self.compression_factor
-
     def normalize(self, spectrogram):
         return 2 * ((spectrogram - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
 
@@ -227,7 +217,9 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
         mel_spectrogram = np.matmul(self.mel_filters.T, amplitude_spectrogram)
 
         # Perform spectral normalization to get the log mel spectrogram.
-        log_mel_spectrogram = self.dynamic_range_compression(mel_spectrogram)
+        log_mel_spectrogram = np.log(
+            np.clip(mel_spectrogram, a_min=self.compression_clip_val, a_max=None) * self.compression_factor
+        )
 
         # Return spectrogram with num_mel_bins last
         return log_mel_spectrogram.T
