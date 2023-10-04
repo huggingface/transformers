@@ -81,7 +81,6 @@ class Swin2SREncoderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.swin.modeling_swin.window_partition but adapted
 def window_partition(input_feature, window_size):
     """
     Partitions the given input into windows.
@@ -211,8 +210,6 @@ class Swin2SRPatchUnEmbeddings(nn.Module):
         embeddings = embeddings.transpose(1, 2).view(batch_size, self.embed_dim, x_size[0], x_size[1])  # B Ph*Pw C
         return embeddings
 
-
-# Copied from transformers.models.swinv2.modeling_swinv2.Swinv2PatchMerging with Swinv2->Swin2SR
 class Swin2SRPatchMerging(nn.Module):
     """
     Patch Merging Layer.
