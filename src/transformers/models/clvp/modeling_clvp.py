@@ -1795,7 +1795,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         speech_outputs = self.speech_encoder_model(
             input_ids=speech_ids,
-            attention_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
