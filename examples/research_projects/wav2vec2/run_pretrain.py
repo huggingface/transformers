@@ -295,7 +295,12 @@ def main():
     configure_logger(model_args, training_args)
 
     # Downloading and loading a dataset from the hub.
-    datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
+    datasets = load_dataset(
+        data_args.dataset_name,
+        data_args.dataset_config_name,
+        cache_dir=model_args.cache_dir,
+        num_proc=data_args.preprocessing_num_workers,
+    )
 
     if "validation" not in datasets.keys():
         # make sure only "validation" and "train" keys remain"
@@ -305,12 +310,14 @@ def main():
             data_args.dataset_config_name,
             split=f"{data_args.train_split_name}[:{data_args.validation_split_percentage}%]",
             cache_dir=model_args.cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
         )
         datasets["train"] = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=f"{data_args.train_split_name}[{data_args.validation_split_percentage}%:]",
             cache_dir=model_args.cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
         )
     else:
         # make sure only "validation" and "train" keys remain"
@@ -320,12 +327,14 @@ def main():
             data_args.dataset_config_name,
             split="validation",
             cache_dir=model_args.cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
         )
         datasets["train"] = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=f"{data_args.train_split_name}",
             cache_dir=model_args.cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
         )
 
     # only normalized-inputs-training is supported
