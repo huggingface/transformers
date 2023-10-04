@@ -73,7 +73,7 @@ class SamImageProcessor(BaseImageProcessor):
             Size of the output image after resizing. Resizes the longest edge of the image to match
             `size["longest_edge"]` while maintaining the aspect ratio. Can be overridden by the `size` parameter in the
             `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):

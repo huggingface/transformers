@@ -53,7 +53,7 @@ class MCTCTConfig(PretrainedConfig):
             Dimensions of each attention head for each attention layer in the Transformer encoder.
         max_position_embeddings (`int`, *optional*, defaults to 920):
             The maximum sequence length that this model might ever be used with (after log-mel spectrogram extraction).
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         layerdrop (`float`, *optional*, defaults to 0.3):
             The probability of dropping an encoder layer during training. The default 0.3 value is used in the original
@@ -63,9 +63,9 @@ class MCTCTConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.3):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.3):
             The dropout ratio for the attention probabilities.
         pad_token_id (`int`, *optional*, defaults to 1):
             The tokenizer index of the pad token.
@@ -80,17 +80,17 @@ class MCTCTConfig(PretrainedConfig):
             The probability of randomly dropping the `Conv1dSubsampler` layer during training.
         num_conv_layers (`int`, *optional*, defaults to 1):
             Number of convolution layers before applying transformer encoder layers.
-        conv_kernel (`List[int]`, *optional*, defaults to `[7]`):
+        conv_kernel (`Sequence[int]`, *optional*, defaults to `(7,)`):
             The kernel size of the 1D convolution applied before transformer layers. `len(conv_kernel)` must be equal
             to `num_conv_layers`.
-        conv_stride (`List[int]`, *optional*, defaults to `[3]`):
+        conv_stride (`Sequence[int]`, *optional*, defaults to `(3,)`):
             The stride length of the 1D convolution applied before transformer layers. `len(conv_stride)` must be equal
             to `num_conv_layers`.
         input_feat_per_channel (`int`, *optional*, defaults to 80):
             Feature dimensions of the channels of the input to the Conv1D layer.
         input_channels (`int`, *optional*, defaults to 1):
             Number of input channels of the input to the Conv1D layer.
-        conv_channels (`List[int]`, *optional*, defaults to None):
+        conv_channels (`List[int]`, *optional*):
             Channel sizes of intermediate Conv1D layers.
         ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an

@@ -181,7 +181,10 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         A simple chat template that just adds BOS/EOS tokens around messages while discarding role information.
         """
         return (
-            "{% for message in messages %}" "{{ bos_token + eos_token + message.content + eos_token }}" "{% endfor %}"
+            "{% for message in messages %}"
+            "{{ bos_token + eos_token + message.content + eos_token }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %} {{ bos_token + eos_token }} {% endif %}"
         )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:

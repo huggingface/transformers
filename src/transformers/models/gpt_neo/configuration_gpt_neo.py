@@ -54,7 +54,7 @@ class GPTNeoConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         num_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        attention_types (`List`, *optional*, defaults to `[[["global", "local"], 12]]`):
+        attention_types (`List`, *optional*, defaults to `[[['global', 'local'], 12]]`):
             The type of attention for each layer in a `List` of the following format `[[["attention_type"],
             num_layerss]]` e.g. for a 24 layer model `[[["global"], 24]]` or `[[["global", "local"], 12]]` Choose the
             value of `attention_type` from `["global", "local"]`
@@ -76,7 +76,7 @@ class GPTNeoConfig(PretrainedConfig):
         classifier_dropout (`float`, *optional*, defaults to 0.1):
             Argument used when doing token classification, used in the model [`GPTNeoForTokenClassification`]. The
             dropout ratio for the hidden layer.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

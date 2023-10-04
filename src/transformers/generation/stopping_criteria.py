@@ -49,7 +49,7 @@ class MaxLengthCriteria(StoppingCriteria):
     Args:
         max_length (`int`):
             The maximum length that the output sequence can have in number of tokens.
-        max_position_embeddings (`int`, `optional`):
+        max_position_embeddings (`int`, *optional*):
             The maximum model length, as defined by the model's `config.max_position_embeddings` attribute.
     """
 

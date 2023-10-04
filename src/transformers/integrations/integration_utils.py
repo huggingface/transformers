@@ -753,6 +753,7 @@ class WandbCallback(TrainerCallback):
             _watch_model = os.getenv("WANDB_WATCH", "false")
             if not is_torch_tpu_available() and _watch_model in ("all", "parameters", "gradients"):
                 self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
+            self._wandb.run._label(code="transformers_trainer")
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:

@@ -30,9 +30,9 @@ class CLIPSegProcessor(ProcessorMixin):
     [`~CLIPSegProcessor.__call__`] and [`~CLIPSegProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`ViTImageProcessor`]):
+        image_processor ([`ViTImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`CLIPTokenizerFast`]):
+        tokenizer ([`CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
