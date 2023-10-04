@@ -428,7 +428,7 @@ class IdeficsDecoupledLinear(nn.Linear):
         output = F.linear(input, self.weight, self.bias)
 
         if self.out_additional_features > 0:
-            additional_features = F.linear(input, self.additional_fc.weight, self.additional_fc.bias)
+            additional_features = self.additional_fc(input)
             output = torch.cat((output, additional_features), -1)
 
         return output

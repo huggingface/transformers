@@ -81,7 +81,7 @@ class FunnelConfig(PretrainedConfig):
             The standard deviation of the *normal initializer* for initializing the embedding matrix and the weight of
             linear layers. Will default to 1 for the embedding matrix and the value given by Xavier initialization for
             linear layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-9):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-09):
             The epsilon used by the layer normalization layers.
         pooling_type (`str`, *optional*, defaults to `"mean"`):
             Possible values are `"mean"` or `"max"`. The way pooling is performed at the beginning of each block.
@@ -90,10 +90,10 @@ class FunnelConfig(PretrainedConfig):
             is faster on TPU.
         separate_cls (`bool`, *optional*, defaults to `True`):
             Whether or not to separate the cls token when applying pooling.
-        truncate_seq (`bool`, *optional*, defaults to `False`):
+        truncate_seq (`bool`, *optional*, defaults to `True`):
             When using `separate_cls`, whether or not to truncate the last token when pooling, to avoid getting a
             sequence length that is not a multiple of 2.
-        pool_q_only (`bool`, *optional*, defaults to `False`):
+        pool_q_only (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
     """
     model_type = "funnel"

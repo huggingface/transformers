@@ -255,7 +255,7 @@ class CLIPSegConfig(PretrainedConfig):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIPSeg implementation.
-        extract_layers (`List[int]`, *optional*, defaults to [3, 6, 9]):
+        extract_layers (`List[int]`, *optional*, defaults to `[3, 6, 9]`):
             Layers to extract when forwarding the query image through the frozen visual backbone of CLIP.
         reduce_dim (`int`, *optional*, defaults to 64):
             Dimensionality to reduce the CLIP vision embedding.

@@ -15,7 +15,6 @@
 """PyTorch Falcon model."""
 
 import math
-import os
 from typing import Optional, Tuple, Union
 
 import torch
@@ -39,7 +38,6 @@ from ...utils import (
     is_flash_attn_available,
     logging,
 )
-from ..auto.configuration_auto import sanitize_code_revision
 from .configuration_falcon import FalconConfig
 
 
@@ -129,6 +127,11 @@ class FalconRotaryEmbedding(nn.Module):
         total_length = seq_len + past_key_values_length
         if total_length > self.seq_len_cached:
             self._set_cos_sin_cache(total_length, device, dtype)
+
+        # the cached tensors need to update their devices (for example, after we change the model's device)
+        self.cos_cached = self.cos_cached.to(device)
+        self.sin_cached = self.sin_cached.to(device)
+
         # Gather cos, sin at the designated position ids
         cos = self.cos_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
         sin = self.sin_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
@@ -689,13 +692,17 @@ class FalconFlashAttention2(FalconAttention):
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
     def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
-        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -970,37 +977,6 @@ class FalconPreTrainedModel(PreTrainedModel):
                 layer_past[1].view(batch_size_times_num_heads, kv_length, head_dim),
             )
             for layer_past in past_key_value
-        )
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
-        *model_args,
-        config: Optional[Union[str, os.PathLike]] = None,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
-        ignore_mismatched_sizes: bool = False,
-        force_download: bool = False,
-        local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
-        revision: str = "main",
-        use_safetensors: bool = None,
-        **kwargs,
-    ):
-        revision = sanitize_code_revision(pretrained_model_name_or_path, revision, kwargs.get("trust_remote_code"))
-
-        return super().from_pretrained(
-            pretrained_model_name_or_path,
-            *model_args,
-            config=config,
-            cache_dir=cache_dir,
-            ignore_mismatched_sizes=ignore_mismatched_sizes,
-            force_download=force_download,
-            local_files_only=local_files_only,
-            token=token,
-            revision=revision,
-            use_safetensors=use_safetensors,
-            **kwargs,
         )
 
 

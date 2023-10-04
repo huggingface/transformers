@@ -139,7 +139,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             The token used for unknown charactor
         pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
             The token used for padding
-        bos_token (`str`, *optional*, defaults to `"<|startoftext|>""`):
+        bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
