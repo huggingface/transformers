@@ -18,7 +18,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, Dict
 
 import torch
 import torch.utils.checkpoint
@@ -1303,53 +1303,65 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.model.decoder.input_embeds_layer = new_embeddings
 
+    def _prepare_model_inputs(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        bos_token_id: Optional[int] = None,
+        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
+        """
+        This function extracts the model-specific `inputs` for generation.
+        """
+        input_name = self.main_input_name
+
+        model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None}
+
+        inputs_kwarg = model_kwargs.pop(input_name, None)
+        if inputs_kwarg is not None and inputs is not None:
+            raise ValueError(
+                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed."
+                f"Make sure to either pass {inputs} or {input_name}=..."
+            )
+        elif inputs_kwarg is not None:
+            inputs = inputs_kwarg
+
+        if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
+            model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
+                inputs, bos_token_id, model_kwargs=model_kwargs
+            )
+            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+
+        # Check if conditioning_embeds are provided or not, if yes then concatenate the bos_token_id at the end of the conditioning_embeds.
+        # Then we must subtract the positional_ids because during the forward pass it will be added anyways, so we must cancel them out here.
+        conditioning_embeds = model_kwargs.get("conditioning_embeds", None)
+
+        if conditioning_embeds is not None:
+            mel_start_token_id = torch.tensor([[self.config.bos_token_id]], device=conditioning_embeds.device)
+            mel_start_token_embedding = self.model.decoder.input_embeds_layer(
+                mel_start_token_id
+            ) + self.model.decoder.position_embeds_layer(torch.tensor([[0]], device=conditioning_embeds.device))
+            mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
+            conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
+
+            # subtract the positional_ids here
+            if hasattr(model_kwargs, "attention_mask"):
+                position_ids = model_kwargs["attention_mask"].long().cumsum(-1) - 1
+            else:
+                position_ids = torch.range(0, conditioning_embeds.shape[1] - 1, dtype=torch.long, device=conditioning_embeds.device)
+            position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1)
+
+            model_kwargs["inputs_embeds"] = conditioning_embeds - self.model.decoder.position_embeds_layer(position_ids)
+            model_kwargs["input_ids"] = torch.ones((model_kwargs["inputs_embeds"].shape[0], 1), dtype=torch.long, device=self.device) * self.config.bos_token_id
+
+            return model_kwargs["inputs_embeds"], "inputs_embeds", model_kwargs
+
+        inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
+        return inputs, input_name, model_kwargs
+
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, conditioning_embeds=None, **kwargs
     ):
-        # for the first pass, so we must add the start token to the conditioning_embeds and return them as `inputs_embeds`
-        # this is when use_cache=False.
-        if conditioning_embeds is not None and past_key_values is None:
-            # Add the start mel token at the end if we are just  starting the generation, i.e. first pass
-            if input_ids is None:
-                mel_start_token_id = torch.tensor([[self.config.bos_token_id]], device=conditioning_embeds.device)
-                mel_start_token_embedding = self.model.decoder.input_embeds_layer(
-                    mel_start_token_id
-                ) + self.model.decoder.position_embeds_layer(torch.tensor([[0]], device=conditioning_embeds.device))
-                mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
-                conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
-
-                # since we will add the position embeddings in the forward pass, we must subtract it here so that it cancells
-                # out. This decision was made to make sure that `test_generate_from_inputs_embeds_decoder_only` test does not fail.
-                position_ids = torch.range(0, conditioning_embeds.shape[1] - 1, device=conditioning_embeds.device)
-                position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1).long()
-            else:
-                input_token_embedding = self.model.decoder.input_embeds_layer(input_ids)
-                attention_mask = kwargs.pop("attention_mask")
-                if attention_mask is not None:
-                    input_position_ids = attention_mask.cumsum(-1) - 1
-                else:
-                    input_position_ids = torch.arange(0, input_ids.shape[-1], dtype=torch.long, device=input_ids.device)
-
-                input_position_ids[input_position_ids>=1] = input_position_ids[input_position_ids>=1] + 1
-                input_token_embedding = input_token_embedding + self.model.decoder.position_embeds_layer(input_position_ids)
-
-                conditioning_embeds = torch.concat([conditioning_embeds, input_token_embedding], dim=1)
-
-                # since we will add the position embeddings in the forward pass, we must subtract it here so that it cancells
-                # out. This decision was made to make sure that `test_generate_from_inputs_embeds_decoder_only` test does not fail.
-                position_ids = torch.range(0, conditioning_embeds.shape[1] - 1, device=conditioning_embeds.device)
-                position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1).long()
-
-
-            conditioning_embeds = conditioning_embeds - self.model.decoder.position_embeds_layer(position_ids)
-
-            return {
-                "inputs_embeds": conditioning_embeds,
-                "past_key_values": None,
-                "use_cache": kwargs.get("use_cache"),
-                "position_ids": position_ids,
-            }
-
+        input_ids_length = input_ids.shape[-1]
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
@@ -1369,17 +1381,14 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         else:
             position_ids = None
 
+        if conditioning_embeds is not None and past_key_values is not None:
+            position_ids = torch.tensor([input_ids_length], dtype=torch.long, device=input_ids.device)
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-
-        # when conditioning_embeds are used to influence generation, we use position_ids as - [0, 2, 3, 4, ..., N],
-        # instead of [0, 1, 2, 3, ..., N]. This is done to make sure that the generation output matches in addition
-        # to the passed tests.
-        if conditioning_embeds is not None:
-            position_ids[position_ids>=1] = position_ids[position_ids>=1] + 1
 
         model_inputs.update(
             {
