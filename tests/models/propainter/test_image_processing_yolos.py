@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 HuggingFace Inc.
+# Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@
 # limitations under the License.
 
 
-import json
-import pathlib
 import unittest
 
-from transformers.testing_utils import require_torch, require_vision, slow
+import numpy as np
+
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_video_inputs
@@ -39,74 +39,50 @@ class ProPainterImageProcessingTester(unittest.TestCase):
         parent,
         batch_size=7,
         num_channels=3,
+        num_frames=10,
+        image_size=18,
+        min_resolution=30,
+        max_resolution=400,
         do_resize=True,
         size=None,
-        rescale_factor=1 / 255,
-        num_frames = 2,
-        min_resolution = 13,
-        max_resolution = 20,
+        do_normalize=True,
+        image_mean=[0.5, 0.5, 0.5],
+        image_std=[0.5, 0.5, 0.5],
+        crop_size=None,
     ):
-        # by setting size["longest_edge"] > max_resolution we're effectively not testing this :p
-        size = size if size is not None else {"width": 18, "height": 13}
+        size = size if size is not None else {"shortest_edge": 18}
+        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
+
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
-        self.do_resize = do_resize
-        self.size = size
-        self.rescale_factor = rescale_factor
         self.num_frames = num_frames
+        self.image_size = image_size
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
+        self.do_resize = do_resize
+        self.size = size
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean
+        self.image_std = image_std
+        self.crop_size = crop_size
 
     def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "rescale_factor": self.rescale_factor,
         }
 
-    def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to YolosImageProcessor,
-        assuming do_resize is set to True with a scalar size.
-        """
-        if not batched:
-            image = image_inputs[0]
-            if isinstance(image, Image.Image):
-                w, h = image.size
-            else:
-                h, w = image.shape[1], image.shape[2]
-            if w < h:
-                expected_height = int(self.size["shortest_edge"] * h / w)
-                expected_width = self.size["shortest_edge"]
-            elif w > h:
-                expected_height = self.size["shortest_edge"]
-                expected_width = int(self.size["shortest_edge"] * w / h)
-            else:
-                expected_height = self.size["shortest_edge"]
-                expected_width = self.size["shortest_edge"]
-
-        else:
-            expected_values = []
-            for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
-
     def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
+        return self.num_frames, self.num_channels, self.crop_size["height"], self.crop_size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_video_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_video_inputs(
             batch_size=self.batch_size,
-            num_frames = self.num_frames,
+            num_frames=self.num_frames,
             num_channels=self.num_channels,
-            min_resolution = self.min_resolution,
-            max_resolution = self.max_resolution,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
             equal_resolution=equal_resolution,
             numpify=numpify,
             torchify=torchify,
@@ -132,121 +108,97 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"width": 18, "height": 13})
+        self.assertEqual(image_processor.size, {"shortest_edge": 18})
 
-        image_processor = self.image_processing_class.from_dict(
-            self.image_processor_dict, size=42, max_size=84, pad_and_return_pixel_mask=False
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, )
+        self.assertEqual(image_processor.size, 42)
+
+    def test_call_pil(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random PIL videos
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
+        for video in video_inputs:
+            self.assertIsInstance(video, list)
+            self.assertIsInstance(video[0], Image.Image)
+
+        # Test not batched input
+        encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
+        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
+        self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
+
+        # Test batched
+        encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
+        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
+        self.assertEqual(
+            tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
         )
-        self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 84})
-        self.assertEqual(image_processor.do_pad, False)
 
-    def test_equivalence_padding(self):
-        # Initialize image_processings
-        image_processing_1 = self.image_processing_class(**self.image_processor_dict)
-        image_processing_2 = self.image_processing_class(do_resize=False, do_normalize=False, do_rescale=False)
+    def test_call_numpy(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+        for video in video_inputs:
+            self.assertIsInstance(video, list)
+            self.assertIsInstance(video[0], np.ndarray)
+
+        # Test not batched input
+        encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
+        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
+        self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
+
+        # Test batched
+        encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
+        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
+        self.assertEqual(
+            tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
+        )
+
+    def test_call_numpy_4_channels(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        self.image_processor_tester.num_channels = 4
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+        for video in video_inputs:
+            self.assertIsInstance(video, list)
+            self.assertIsInstance(video[0], np.ndarray)
+
+        # Test not batched input
+        encoded_videos = image_processing(
+            video_inputs[0], return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+        ).pixel_values
+        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
+        self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
+
+        # Test batched
+        encoded_videos = image_processing(
+            video_inputs, return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+        ).pixel_values
+        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
+        self.assertEqual(
+            tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
+        )
+        self.image_processor_tester.num_channels = 3
+
+    def test_call_pytorch(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
+        for video in video_inputs:
+            self.assertIsInstance(video, list)
+            self.assertIsInstance(video[0], torch.Tensor)
 
-        # Test whether the method "pad" and calling the image processor return the same tensors
-        encoded_images_with_method = image_processing_1.pad(image_inputs, return_tensors="pt")
-        encoded_images = image_processing_2(image_inputs, return_tensors="pt")
+        # Test not batched input
+        encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
+        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
+        self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
-        self.assertTrue(
-            torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
+        # Test batched
+        encoded_videos = image_processing(video_inputs, return_tensors="pt").pixel_values
+        expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
+        self.assertEqual(
+            tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
         )
-
-    @slow
-    def test_call_pytorch_with_coco_detection_annotations(self):
-        # prepare image and target
-        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
-            target = json.loads(f.read())
-
-        target = {"image_id": 39769, "annotations": target}
-
-        # encode them
-        image_processing = YolosImageProcessor.from_pretrained("hustvl/yolos-small")
-        encoding = image_processing(images=image, annotations=target, return_tensors="pt")
-
-        # verify pixel values
-        expected_shape = torch.Size([1, 3, 800, 1066])
-        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
-
-        expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-        self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
-
-        # verify area
-        expected_area = torch.tensor([5887.9600, 11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
-        # verify boxes
-        expected_boxes_shape = torch.Size([6, 4])
-        self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
-        expected_boxes_slice = torch.tensor([0.5503, 0.2765, 0.0604, 0.2215])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3))
-        # verify image_id
-        expected_image_id = torch.tensor([39769])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["image_id"], expected_image_id))
-        # verify is_crowd
-        expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd))
-        # verify class_labels
-        expected_class_labels = torch.tensor([75, 75, 63, 65, 17, 17])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
-        # verify orig_size
-        expected_orig_size = torch.tensor([480, 640])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
-        # verify size
-        expected_size = torch.tensor([800, 1066])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
-
-    @slow
-    def test_call_pytorch_with_coco_panoptic_annotations(self):
-        # prepare image, target and masks_path
-        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
-            target = json.loads(f.read())
-
-        target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
-
-        masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
-
-        # encode them
-        image_processing = YolosImageProcessor(format="coco_panoptic")
-        encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
-
-        # verify pixel values
-        expected_shape = torch.Size([1, 3, 800, 1066])
-        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
-
-        expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-        self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
-
-        # verify area
-        expected_area = torch.tensor([147979.6875, 165527.0469, 484638.5938, 11292.9375, 5879.6562, 7634.1147])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
-        # verify boxes
-        expected_boxes_shape = torch.Size([6, 4])
-        self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
-        expected_boxes_slice = torch.tensor([0.2625, 0.5437, 0.4688, 0.8625])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3))
-        # verify image_id
-        expected_image_id = torch.tensor([39769])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["image_id"], expected_image_id))
-        # verify is_crowd
-        expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd))
-        # verify class_labels
-        expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
-        # verify masks
-        expected_masks_sum = 822873
-        self.assertEqual(encoding["labels"][0]["masks"].sum().item(), expected_masks_sum)
-        # verify orig_size
-        expected_orig_size = torch.tensor([480, 640])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
-        # verify size
-        expected_size = torch.tensor([800, 1066])
-        self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
-

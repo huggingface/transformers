@@ -223,7 +223,7 @@ class ProPainterImageProcessor(BaseImageProcessor):
         video_path: Optional[Union[str, pathlib.Path]] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = False,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[Dict[str, int]] = {"height":-1, "width":-1},
         return_tensors: Optional[Union[TensorType, str]] = None,
         resize_ratio=1.0,
         **kwargs,
