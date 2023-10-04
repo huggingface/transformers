@@ -262,7 +262,7 @@ class ConversationalPipeline(Pipeline):
         return outputs
 
     def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
-        input_ids = self.tokenizer.apply_chat_template(conversation)
+        input_ids = self.tokenizer.apply_chat_template(conversation, add_generation_prompt=True)
 
         if self.framework == "pt":
             input_ids = torch.LongTensor([input_ids])
