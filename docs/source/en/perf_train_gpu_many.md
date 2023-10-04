@@ -15,64 +15,85 @@ rendered properly in your Markdown viewer.
 
 # Efficient Training on Multiple GPUs
 
-When training on a single GPU is too slow or the model weights don't fit in a single GPUs memory we use a multi-GPU setup. Switching from a single GPU to multiple requires some form of parallelism as the work needs to be distributed. There are several techniques to achieve parallism such as data, tensor, or pipeline parallism. However, there is no one solution to fit them all and which settings works best depends on the hardware you are running on. While the main concepts most likely will apply to any other framework, this article is focused on PyTorch-based implementations.
+If training a model on a single GPU is too slow or if the model's weights do not fit in a single GPU's memory, transitioning 
+to a multi-GPU setup may be a viable option. Prior to making this transition, thoroughly explore all the strategies covered 
+in the [Methods and tools for efficient training on a single GPU](perf_train_gpu_one) as they are universally applicable 
+to model training on any number of GPUs. Once you have employed those strategies and found them insufficient for your 
+case on a single GPU, consider moving to multiple GPUs.
+
+Transitioning from a single GPU to multiple GPUs requires the introduction of some form of parallelism, as the workload 
+must be distributed across the resources. Multiple techniques can be employed to achieve parallelism, such as data 
+parallelism, tensor parallelism, and pipeline parallelism. It's important to note that there isn't a one-size-fits-all 
+solution, and the optimal settings depend on the specific hardware configuration you are using. 
+
+This guide offers an in-depth overview of individual types of parallelism, as well as guidance on ways to combine   
+techniques and choosing an appropriate approach.  
 
 <Tip>
 
- Note: Most of the strategies introduced in the [single GPU section](perf_train_gpu_one) (such as mixed precision training or gradient accumulation) are generic and apply to training models in general so make sure to have a look at it before diving into the following sections such as multi-GPU or CPU training.
+While the main concepts discussed in this guide are likely applicable across frameworks, here we focus is on 
+PyTorch-based implementations.
 
 </Tip>
 
-We will first discuss in depth various 1D parallelism techniques and their pros and cons and then look at how they can be combined into 2D and 3D parallelism to enable an even faster training and to support even bigger models. Various other powerful alternative approaches will be presented.
 
 ## Concepts
 
-The following is the brief description of the main concepts that will be described later in depth in this document.
+Let's begin by introducing the main techniques that are discussed in this document.
 
-1. **DataParallel (DP)** - the same setup is replicated multiple times, and each being fed a slice of the data. The processing is done in parallel and all setups are synchronized at the end of each training step.
-2. **TensorParallel (TP)** - each tensor is split up into multiple chunks, so instead of having the whole tensor reside on a single gpu, each shard of the tensor resides on its designated gpu. During processing each shard gets processed separately and in parallel on different GPUs and the results are synced at the end of the step. This is what one may call horizontal parallelism, as the splitting happens on horizontal level.
-3. **PipelineParallel (PP)** - the model is split up vertically (layer-level) across multiple GPUs, so that only one or several layers of the model are places on a single gpu. Each gpu processes in parallel different stages of the pipeline and working on a small chunk of the batch.
-4. **Zero Redundancy Optimizer (ZeRO)** - Also performs sharding of the tensors somewhat similar to TP, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. It also supports various offloading techniques to compensate for limited GPU memory.
-5. **Sharded DDP** - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
+* **DataParallel (DP)** - the same setup is replicated multiple times, with each instance receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
+* **TensorParallel (TP)** - each tensor is split up into multiple chunks, so instead of having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards gets processed separately and in parallel on different GPUs and the results are synced at the end of the processing step. This is what is sometimes called horizontal parallelism, as the splitting happens on horizontal level.
+* **PipelineParallel (PP)** - the model is split up vertically (layer-level) across multiple GPUs, so that only one or several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline and working on a small chunk of the batch.
+* **Zero Redundancy Optimizer (ZeRO)** - Also performs sharding of the tensors somewhat similar to TensorParallel, except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need to be modified. This method also supports various offloading techniques to compensate for limited GPU memory.
+* **Sharded DDP** - is another name for the foundational ZeRO concept as used by various other implementations of ZeRO.
 
-Before diving deeper into the specifics of each concept we first have a look at the rough decision process when training large models on a large infrastructure.
+Before diving deeper into the specifics of each concept, let's have a look at the rough decision process when training 
+large models on a large infrastructure.
 
 ## Scalability Strategy
 
-**⇨ Single Node / Multi-GPU**
-* Model fits onto a single GPU:
+**Parallelization Strategy for Single Node / Multi-GPU setup**
 
-    1. DDP - Distributed DP
-    2. ZeRO - may or may not be faster depending on the situation and configuration used
+When training a model on a single node with multiple GPUs, your choice of parallelization strategy can significantly 
+impact performance. Here's a breakdown of your options:
 
-* Model doesn't fit onto a single GPU:
+**Case 1: Your model fits onto a single GPU**
 
-    1. PP
-    2. ZeRO
-    3. TP
+If your model can comfortably fit onto a single GPU, you have two primary options:
 
-    With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP or ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
+1. DDP - Distributed DataParallel
+2. ZeRO - depending on the situation and configuration used may or may not be faster, however, it's worth experimenting with.
 
-    TP is almost always used within a single node. That is TP size <= gpus per node.
+**Case 2: Your model doesn't fit onto a single GPU:**
 
-* Largest Layer not fitting into a single GPU:
+If your model is too large for a single GPU, you have several alternatives to consider:
 
-    1. If not using ZeRO - must use TP, as PP alone won't be able to fit.
-    2. With ZeRO see the same entry for "Single GPU" above
+1. PipelineParallel (PP)
+2. ZeRO
+3. TensorParallel (TP)
+
+With very fast intra-node connectivity (e.g., NVLINK or NVSwitch) all three strategies (PP, ZeRO, TP) should result in 
+similar performance. However, without these, PP will be faster than TP or ZeRO. The degree of TP may also 
+make a difference. It's best to experiment with your specific setup to determine the most suitable strategy.
+
+TP is almost always used within a single node. That is TP size <= GPUs per node.
+
+**Case 3: Largest layer does not fit 0nto a single GPU**
+
+1. If you are not using ZeRO, you must use TensorParallel (TP), as PipelineParallel (PP) alone won't be sufficient to accommodate the large layer.
+2. If you are using ZeRO, additionally adopt techniques from the [Methods and tools for efficient training on a single GPU](perf_train_gpu_one).
 
 
-**⇨ Multi-Node / Multi-GPU**
+**Parallelization Strategy for Multi-Node / Multi-GPU setup**
 
-* When you have fast inter-node connectivity:
+* When you have fast inter-node connectivity (e.g., NVLINK or NVSwitch) consider using one of these options:
 
     1. ZeRO - as it requires close to no modifications to the model
-    2. PP+TP+DP - less communications, but requires massive changes to the model
+    2. A combination of PipelineParallel(PP) with TensorParallel(TP) and DataParallel(DP) - this approach will result in fewer communications, but requires significant changes to the model
 
-* when you have slow inter-node connectivity and still low on GPU memory:
+* When you have slow inter-node connectivity and still low on GPU memory:
 
-    1. DP+PP+TP+ZeRO-1
-
-
+    1. Employ a combination of DataParallel(DP) with PipelineParallel(PP), TensorParallel(TP), and ZeRO-
 
 ## Data Parallelism
 
