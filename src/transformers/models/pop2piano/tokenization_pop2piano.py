@@ -101,14 +101,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
 
-        super().__init__(
-            unk_token=unk_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            bos_token=bos_token,
-            **kwargs,
-        )
-
         self.default_velocity = default_velocity
         self.num_bars = num_bars
 
@@ -118,6 +110,14 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         # create mappings for encoder
         self.decoder = {v: k for k, v in self.encoder.items()}
+
+        super().__init__(
+            unk_token=unk_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            bos_token=bos_token,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self):

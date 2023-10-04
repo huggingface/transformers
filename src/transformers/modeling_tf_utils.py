@@ -2574,7 +2574,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 output_loading_info(`bool`, *optional*, defaults to `False`): Whether ot not to also return a
                 dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(`bool`, *optional*, defaults to `False`):
-                Whether or not to only look at local files (e.g., not try doanloading the model).
+                Whether or not to only look at local files (e.g., not try downloading the model).
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
@@ -2644,6 +2644,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         tf_to_pt_weight_rename = kwargs.pop("tf_to_pt_weight_rename", None)
+
+        # Not relevant for TF models
+        _ = kwargs.pop("adapter_kwargs", None)
 
         if use_auth_token is not None:
             warnings.warn(

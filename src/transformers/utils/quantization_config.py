@@ -143,7 +143,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         load_in_4bit (`bool`, *optional*, defaults to `False`):
             This flag is used to enable 4-bit quantization by replacing the Linear layers with FP4/NF4 layers from
             `bitsandbytes`.
-        llm_int8_threshold (`float`, *optional*, defaults to 6):
+        llm_int8_threshold (`float`, *optional*, defaults to 6.0):
             This corresponds to the outlier threshold for outlier detection as described in `LLM.int8() : 8-bit Matrix
             Multiplication for Transformers at Scale` paper: https://arxiv.org/abs/2208.07339 Any hidden states value
             that is above this threshold will be considered an outlier and the operation on those values will be done
@@ -167,7 +167,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_compute_dtype (`torch.dtype` or str, *optional*, defaults to `torch.float32`):
             This sets the computational type which might be different than the input time. For example, inputs might be
             fp32, but computation can be set to bf16 for speedups.
-        bnb_4bit_quant_type (`str`, {fp4, nf4}, defaults to `fp4`):
+        bnb_4bit_quant_type (`str`,  *optional*, defaults to `"fp4"`):
             This sets the quantization data type in the bnb.nn.Linear4Bit layers. Options are FP4 and NF4 data types
             which are specified by `fp4` or `nf4`.
         bnb_4bit_use_double_quant (`bool`, *optional*, defaults to `False`):
@@ -346,6 +346,9 @@ class GPTQConfig(QuantizationConfigMixin):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
         disable_exllama (`bool`, *optional*, defaults to `False`):
             Whether to use exllama backend. Only works with `bits` = 4.
+        max_input_length (`int`, *optional*):
+            The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
+            length. It is specific to the exllama backend with act-order.
     """
 
     def __init__(
@@ -365,6 +368,7 @@ class GPTQConfig(QuantizationConfigMixin):
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
         disable_exllama: bool = False,
+        max_input_length: Optional[int] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -383,11 +387,12 @@ class GPTQConfig(QuantizationConfigMixin):
         self.batch_size = batch_size
         self.pad_token_id = pad_token_id
         self.disable_exllama = disable_exllama
+        self.max_input_length = max_input_length
         self.post_init()
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["disable_exllama", "use_cuda_fp16"]
+        loading_attibutes = ["disable_exllama", "use_cuda_fp16", "max_input_length"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
 

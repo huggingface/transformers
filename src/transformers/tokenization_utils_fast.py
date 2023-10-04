@@ -90,13 +90,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class: PreTrainedTokenizer = None
-    can_save_slow_tokenizer: bool = True
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
+        slow_to_fast = kwargs.pop("slow_to_fast", False)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
@@ -155,8 +155,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
+        # We add the additional tokens that are not part of the vocab
+        if not slow_to_fast:
+            self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
+
     @property
     def is_fast(self) -> bool:
+        return True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        """
+        `bool`: Whether or not the slow tokenizer can be saved. Usually for sentencepiece based slow tokenizer, this
+        can only be `True` if the original `"sentencepiece.model"` was not deleted.
+        """
         return True
 
     @property
@@ -173,6 +185,24 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def vocab(self) -> Dict[str, int]:
         return self.get_vocab()
 
+    @property
+    def added_tokens_encoder(self) -> Dict[str, int]:
+        """
+        Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
+        optimisation in `self._added_tokens_encoder` for the slow tokenizers.
+        """
+        return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[0])}
+
+    @property
+    def added_tokens_decoder(self) -> Dict[int, AddedToken]:
+        """
+        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
+
+        Returns:
+            `Dict[str, int]`: The added tokens.
+        """
+        return self._tokenizer.get_added_tokens_decoder()
+
     def get_added_vocab(self) -> Dict[str, int]:
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index.
@@ -180,10 +210,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Returns:
             `Dict[str, int]`: The added tokens.
         """
-        base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
-        full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
-        added_vocab = {tok: index for tok, index in full_vocab.items() if tok not in base_vocab}
-        return added_vocab
+        return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[0])}
 
     def __len__(self) -> int:
         """
@@ -772,6 +799,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                         lstrip=special_token_full.lstrip,
                         rstrip=special_token_full.rstrip,
                         normalized=special_token_full.normalized,
+                        special=True,
                     )
                 else:
                     kwargs[token] = special_token

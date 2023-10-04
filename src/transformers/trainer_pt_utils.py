@@ -55,6 +55,13 @@ except ImportError:
 logger = logging.get_logger(__name__)
 
 
+def get_dataloader_sampler(dataloader):
+    if hasattr(dataloader, "batch_sampler") and dataloader.batch_sampler is not None:
+        return get_dataloader_sampler(dataloader.batch_sampler)
+    elif hasattr(dataloader, "sampler"):
+        return dataloader.sampler
+
+
 def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
     if isinstance(tensor_or_array, torch.Tensor):
         if hasattr(torch, "atleast_1d"):
