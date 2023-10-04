@@ -849,7 +849,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        if config.num_channels == 3:
+        if config.num_channels == 3 and config.num_channels_out == 3:
             rgb_mean = (0.4488, 0.4371, 0.4040)
             self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
         else:
