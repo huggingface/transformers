@@ -1739,7 +1739,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 this is not passed, the model's default chat template will be used instead.
             add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate
                 the start of an assistant message. This is useful when you want to generate a response from the model.
-                Note that for this argument will be passed to the chat template, and so it must be supported in the
+                Note that this argument will be passed to the chat template, and so it must be supported in the
                 template for this argument to have any effect.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
