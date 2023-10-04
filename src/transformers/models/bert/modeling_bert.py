@@ -787,6 +787,7 @@ class BertEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        # Attention mask is inverted in BertModel forward,
         padding_mask = check_padding_in_attention_mask(1.0-attention_mask)
 
         if self.gradient_checkpointing and self.training:
