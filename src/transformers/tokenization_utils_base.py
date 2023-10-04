@@ -2475,7 +2475,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_tokens_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
         )
-        added_vocab = self.get_added_vocab()
+        # the new get_added_vocab() also returns special tokens and tokens that have an index < vocab_size
+        base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
+        full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
+        added_vocab = {tok: index for tok, index in full_vocab.items() if tok not in base_vocab}
+
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
