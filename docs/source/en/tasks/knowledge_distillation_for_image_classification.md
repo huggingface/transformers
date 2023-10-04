@@ -48,10 +48,10 @@ We can use either of the processors given they return the same output. We will u
 
 ```python
 from transformers import AutoImageProcessor
-teacher_extractor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+teacher_processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
 
 def process(examples):
-    processed_inputs = teacher_extractor(examples["image"])
+    processed_inputs = teacher_processor(examples["image"])
     return processed_inputs
 
 processed_datasets = dataset.map(process, batched=True)
