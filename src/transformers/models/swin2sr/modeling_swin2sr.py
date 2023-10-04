@@ -259,7 +259,9 @@ class Swin2SRPatchMerging(nn.Module):
         input_feature_3 = input_feature[:, 1::2, 1::2, :]
         # [batch_size, height/2 * width/2, 4*num_channels]
         input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-        input_feature = input_feature.view(batch_size, -1, 4 * num_channels_in)  # [batch_size, height/2 * width/2, 4*C]
+        input_feature = input_feature.view(
+            batch_size, -1, 4 * num_channels_in
+        )  # [batch_size, height/2 * width/2, 4*C]
 
         input_feature = self.reduction(input_feature)
         input_feature = self.norm(input_feature)
