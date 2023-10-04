@@ -979,11 +979,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
-        if spaces_between_special_tokens:
-            logger.warning_once(
-                "spaces_between_special_tokens is deprecated and will be removed in transformers v5. It was adding spaces between `added_tokens`, not special tokens, "
-                "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
-            )
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
         legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
             token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
