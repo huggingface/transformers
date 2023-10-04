@@ -44,7 +44,7 @@ class Swin2SRConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_channels_out (`int`, *optional*, defaults to `None`):
+        num_channels_out (`int`, *optional*, defaults to `num_channels`):
             The number of output channels. If not set, it will be set to `num_channels`.
         embed_dim (`int`, *optional*, defaults to 180):
             Dimensionality of patch embedding.
