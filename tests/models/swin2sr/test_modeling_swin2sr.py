@@ -148,7 +148,8 @@ class Swin2SRModelTester:
 
         expected_image_size = self.image_size * self.upscale
         self.parent.assertEqual(
-            result.reconstruction.shape, (self.batch_size, self.num_channels_out, expected_image_size, expected_image_size)
+            result.reconstruction.shape,
+            (self.batch_size, self.num_channels_out, expected_image_size, expected_image_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
