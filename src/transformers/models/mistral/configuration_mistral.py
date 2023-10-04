@@ -71,10 +71,14 @@ class MistralConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
             Whether to tie weight embeddings
-        pad_token_id (`<fill_type>`, *optional*): <fill_docstring>
-        bos_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        eos_token_id (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            The id of the "beginning-of-sequence" token.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The id of the "end-of-sequence" token.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*, defaults to 4096):
