@@ -63,7 +63,7 @@ class PatchTSMixerModelTester:
         input_size: int = 3,
         stride: int = 8,
         # num_features: int = 128,
-        hidden_size: int = 128,
+        hidden_size: int = 8,
         # num_layers: int = 8,
         num_hidden_layers: int = 2,
         expansion_factor: int = 2,
