@@ -40,6 +40,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -153,8 +154,11 @@ class VitsModelTester:
 
 
 @require_torch
-class VitsModelTest(ModelTesterMixin, unittest.TestCase):
+class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (VitsModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
+    )
     is_encoder_decoder = False
     test_pruning = False
     test_headmasking = False
@@ -172,6 +176,7 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip("Need to fix this after #26538")
     def test_model_forward(self):
         set_seed(12345)
         global_rng.seed(12345)

@@ -49,7 +49,7 @@ class PvtConfig(PretrainedConfig):
             The input image size
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_encoder_blocks (`[int]`, *optional*., defaults to 4):
+        num_encoder_blocks (`int`, *optional*, defaults to 4):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
         depths (`List[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
@@ -77,11 +77,11 @@ class PvtConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not a learnable bias should be added to the queries, keys and values.
-        num_labels ('int', *optional*, defaults to 1000)
+        num_labels ('int', *optional*, defaults to 1000):
             The number of classes.
     Example:
 

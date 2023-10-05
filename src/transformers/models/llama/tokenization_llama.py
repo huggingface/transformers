@@ -122,6 +122,24 @@ class LlamaTokenizer(PreTrainedTokenizer):
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        if legacy is None:
+            logger.warning_once(
+                f"You are using the default legacy behaviour of the {self.__class__}. This is"
+                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
+                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
+                " means, and thouroughly read the reason why this was added as explained in"
+                " https://github.com/huggingface/transformers/pull/24565"
+            )
+            legacy = True
+
+        self.legacy = legacy
+        self.vocab_file = vocab_file
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
+        self.use_default_system_prompt = use_default_system_prompt
+        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -136,32 +154,15 @@ class LlamaTokenizer(PreTrainedTokenizer):
             legacy=legacy,
             **kwargs,
         )
-        if legacy is None:
-            logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
-                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
-                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
-                " means, and thouroughly read the reason why this was added as explained in"
-                " https://github.com/huggingface/transformers/pull/24565"
-            )
-            legacy = True
-
-        self.legacy = legacy
-        self.vocab_file = vocab_file
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
-        self.use_default_system_prompt = use_default_system_prompt
-
-        self.sp_model = self.get_spm_processor()
 
     @property
     def unk_token_length(self):
         return len(self.sp_model.encode(str(self.unk_token)))
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
-    def get_spm_processor(self):
+    def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if self.legacy:  # no dependency on protobuf
+        if self.legacy or from_slow:  # no dependency on protobuf
             tokenizer.Load(self.vocab_file)
             return tokenizer
 

@@ -262,7 +262,7 @@ class ConversationalPipeline(Pipeline):
         return outputs
 
     def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
-        input_ids = self.tokenizer.apply_chat_template(conversation)
+        input_ids = self.tokenizer.apply_chat_template(conversation, add_generation_prompt=True)
 
         if self.framework == "pt":
             input_ids = torch.LongTensor([input_ids])
@@ -275,7 +275,9 @@ class ConversationalPipeline(Pipeline):
 
         n = model_inputs["input_ids"].shape[1]
         if max_length - minimum_tokens < n:
-            logger.warning(f"Conversation input is to long ({n}), trimming it to ({max_length} - {minimum_tokens})")
+            logger.warning(
+                f"Conversation input is too long ({n}), trimming it to {max_length - minimum_tokens} tokens. Consider increasing `max_length` to avoid truncation."
+            )
             trim = max_length - minimum_tokens
             model_inputs["input_ids"] = model_inputs["input_ids"][:, -trim:]
             if "attention_mask" in model_inputs:

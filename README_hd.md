@@ -43,7 +43,7 @@ checkpoint: जाँच बिंदु
     <br>
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_logo_name.png" width="400"/>
     <br>
-<p>
+</p>
 <p align="center">
     <a href="https://circleci.com/gh/huggingface/transformers">
         <img alt="Build" src="https://img.shields.io/circleci/build/github/huggingface/transformers/main">
@@ -72,7 +72,7 @@ checkpoint: जाँच बिंदु
         <a href="https://github.com/huggingface/transformers/blob/main/README_es.md">Español</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a> |
         <b>हिन्दी</b> |
-    <p>
+    </p>
 </h4>
 
 <h3 align="center">
@@ -259,6 +259,7 @@ conda install -c huggingface transformers
 1. **[BLOOM](https://huggingface.co/docs/transformers/model_doc/bloom)** (from BigScience workshop) released by the [BigSicence Workshop](https://bigscience.huggingface.co/).
 1. **[BORT](https://huggingface.co/docs/transformers/model_doc/bort)** (एलेक्सा से) कागज के साथ [बीईआरटी के लिए ऑप्टिमल सबआर्किटेक्चर एक्सट्रैक्शन](https://arxiv.org/abs/ 2010.10499) एड्रियन डी विंटर और डैनियल जे पेरी द्वारा।
 1. **[BridgeTower](https://huggingface.co/docs/transformers/model_doc/bridgetower)** (हरबिन इंस्टिट्यूट ऑफ़ टेक्नोलॉजी/माइक्रोसॉफ्ट रिसर्च एशिया/इंटेल लैब्स से) कागज के साथ [ब्रिजटॉवर: विजन-लैंग्वेज रिप्रेजेंटेशन लर्निंग में एनकोडर्स के बीच ब्रिज बनाना](<https://arxiv.org/abs/2206.08657>) by Xiao Xu, Chenfei Wu, Shachar Rosenman, Vasudev Lal, Wanxiang Che, Nan Duan.
+1. **[BROS](https://huggingface.co/docs/transformers/model_doc/bros)** (NAVER CLOVA से) Teakgyu Hong, Donghyun Kim, Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park. द्वाराअनुसंधान पत्र [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://arxiv.org/abs/2108.04539) के साथ जारी किया गया
 1. **[ByT5](https://huggingface.co/docs/transformers/model_doc/byt5)** (Google अनुसंधान से) साथ में कागज [ByT5: पूर्व-प्रशिक्षित बाइट-टू-बाइट मॉडल के साथ एक टोकन-मुक्त भविष्य की ओर] (https://arxiv.org/abs/2105.13626) Linting Xue, Aditya Barua, Noah Constant, रामी अल-रफू, शरण नारंग, मिहिर काले, एडम रॉबर्ट्स, कॉलिन रैफेल द्वारा पोस्ट किया गया।
 1. **[CamemBERT](https://huggingface.co/docs/transformers/model_doc/camembert)** (इनरिया/फेसबुक/सोरबोन से) साथ में कागज [CamemBERT: एक टेस्टी फ्रेंच लैंग्वेज मॉडल](https:// arxiv.org/abs/1911.03894) लुई मार्टिन*, बेंजामिन मुलर*, पेड्रो जेवियर ऑर्टिज़ सुआरेज़*, योआन ड्यूपॉन्ट, लॉरेंट रोमरी, एरिक विलेमोन्टे डे ला क्लर्जरी, जैमे सेडाह और बेनोइट सगोट द्वारा।
 1. **[CANINE](https://huggingface.co/docs/transformers/model_doc/canine)** (Google रिसर्च से) साथ में दिया गया पेपर [कैनाइन: प्री-ट्रेनिंग ए एफिशिएंट टोकनाइजेशन-फ्री एनकोडर फॉर लैंग्वेज रिप्रेजेंटेशन]( https://arxiv.org/abs/2103.06874) जोनाथन एच क्लार्क, डैन गैरेट, यूलिया टर्क, जॉन विएटिंग द्वारा।
@@ -356,6 +357,7 @@ conda install -c huggingface transformers
 1. **[Megatron-BERT](https://huggingface.co/docs/transformers/model_doc/megatron-bert)** (NVIDIA से) कागज के साथ [Megatron-LM: मॉडल का उपयोग करके बहु-अरब पैरामीटर भाषा मॉडल का प्रशिक्षण Parallelism](https://arxiv.org/abs/1909.08053) मोहम्मद शोएबी, मोस्टोफा पटवारी, राउल पुरी, पैट्रिक लेग्रेस्ले, जेरेड कैस्पर और ब्रायन कैटानज़ारो द्वारा।
 1. **[Megatron-GPT2](https://huggingface.co/docs/transformers/model_doc/megatron_gpt2)** (NVIDIA से) साथ वाला पेपर [Megatron-LM: ट्रेनिंग मल्टी-बिलियन पैरामीटर लैंग्वेज मॉडल्स यूजिंग मॉडल पैरेललिज़्म] (https://arxiv.org/abs/1909.08053) मोहम्मद शोएबी, मोस्टोफा पटवारी, राउल पुरी, पैट्रिक लेग्रेस्ले, जेरेड कैस्पर और ब्रायन कैटानज़ारो द्वारा पोस्ट किया गया।
 1. **[MGP-STR](https://huggingface.co/docs/transformers/model_doc/mgp-str)** (Alibaba Research से) Peng Wang, Cheng Da, and Cong Yao. द्वाराअनुसंधान पत्र [Multi-Granularity Prediction for Scene Text Recognition](https://arxiv.org/abs/2209.03592) के साथ जारी किया गया
+1. **[Mistral](https://huggingface.co/docs/transformers/model_doc/mistral)** (from Mistral AI) by The Mistral AI team: Albert Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lélio Renard Lavaud, Lucile Saulnier, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas Wang, Timothée Lacroix, William El Sayed.. 
 1. **[mLUKE](https://huggingface.co/docs/transformers/model_doc/mluke)** (फ्रॉम Studio Ousia) साथ में पेपर [mLUKE: द पावर ऑफ एंटिटी रिप्रेजेंटेशन इन मल्टीलिंगुअल प्रीट्रेन्ड लैंग्वेज मॉडल्स](https://arxiv.org/abs/2110.08151) रयोकन री, इकुया यामाडा, और योशिमासा त्सुरोका द्वारा।
 1. **[MMS](https://huggingface.co/docs/transformers/model_doc/mms)** (Facebook से) Vineel Pratap, Andros Tjandra, Bowen Shi, Paden Tomasello, Arun Babu, Sayani Kundu, Ali Elkahky, Zhaoheng Ni, Apoorv Vyas, Maryam Fazel-Zarandi, Alexei Baevski, Yossi Adi, Xiaohui Zhang, Wei-Ning Hsu, Alexis Conneau, Michael Auli. द्वाराअनुसंधान पत्र [Scaling Speech Technology to 1,000+ Languages](https://arxiv.org/abs/2305.13516) के साथ जारी किया गया
 1. **[MobileBERT](https://huggingface.co/docs/transformers/model_doc/mobilebert)** (सीएमयू/गूगल ब्रेन से) साथ में कागज [मोबाइलबर्ट: संसाधन-सीमित उपकरणों के लिए एक कॉम्पैक्ट टास्क-अज्ञेय बीईआरटी] (https://arxiv.org/abs/2004.02984) Zhiqing Sun, Hongkun Yu, Xiaodan Song, Renjie Liu, Yiming Yang, और Denny Zhou द्वारा पोस्ट किया गया।
@@ -373,6 +375,7 @@ conda install -c huggingface transformers
 1. **[Nezha](https://huggingface.co/docs/transformers/model_doc/nezha)** (हुआवेई नूह के आर्क लैब से) साथ में कागज़ [NEZHA: चीनी भाषा समझ के लिए तंत्रिका प्रासंगिक प्रतिनिधित्व](https :/ /arxiv.org/abs/1909.00204) जुन्किउ वेई, ज़ियाओज़े रेन, ज़िआओगुआंग ली, वेनयोंग हुआंग, यी लियाओ, याशेंग वांग, जियाशू लिन, शिन जियांग, जिओ चेन और कुन लियू द्वारा।
 1. **[NLLB](https://huggingface.co/docs/transformers/model_doc/nllb)** (फ्रॉम मेटा) साथ में पेपर [नो लैंग्वेज लेफ्ट बिहाइंड: स्केलिंग ह्यूमन-सेंटेड मशीन ट्रांसलेशन] (https://arxiv.org/abs/2207.04672) एनएलएलबी टीम द्वारा प्रकाशित।
 1. **[NLLB-MOE](https://huggingface.co/docs/transformers/model_doc/nllb-moe)** (Meta से) the NLLB team. द्वाराअनुसंधान पत्र [No Language Left Behind: Scaling Human-Centered Machine Translation](https://arxiv.org/abs/2207.04672) के साथ जारी किया गया
+1. **[Nougat](https://huggingface.co/docs/transformers/model_doc/nougat)** (Meta AI से) Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic. द्वाराअनुसंधान पत्र [Nougat: Neural Optical Understanding for Academic Documents](https://arxiv.org/abs/2308.13418) के साथ जारी किया गया
 1. **[Nyströmformer](https://huggingface.co/docs/transformers/model_doc/nystromformer)** (विस्कॉन्सिन विश्वविद्यालय - मैडिसन से) साथ में कागज [Nyströmformer: A Nyström- आधारित एल्गोरिथम आत्म-ध्यान का अनुमान लगाने के लिए ](https://arxiv.org/abs/2102.03902) युनयांग ज़िओंग, झानपेंग ज़ेंग, रुद्रसिस चक्रवर्ती, मिंगक्सिंग टैन, ग्लेन फंग, यिन ली, विकास सिंह द्वारा पोस्ट किया गया।
 1. **[OneFormer](https://huggingface.co/docs/transformers/model_doc/oneformer)** (SHI Labs से) पेपर [OneFormer: One Transformer to Rule Universal Image Segmentation](https://arxiv.org/abs/2211.06220) जितेश जैन, जिआचेन ली, मांगटिक चिउ, अली हसनी, निकिता ओरलोव, हम्फ्री शि के द्वारा जारी किया गया है।
 1. **[OpenLlama](https://huggingface.co/docs/transformers/model_doc/open-llama)** (from [s-JoL](https://huggingface.co/s-JoL)) released in [Open-Llama](https://github.com/s-JoL/Open-Llama).
@@ -440,6 +443,7 @@ conda install -c huggingface transformers
 1. **[ViT Hybrid](https://huggingface.co/docs/transformers/model_doc/vit_hybrid)** (from Google AI) released with the paper [An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale](https://arxiv.org/abs/2010.11929) by Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, Neil Houlsby.
 1. **[VitDet](https://huggingface.co/docs/transformers/model_doc/vitdet)** (Meta AI से) Yanghao Li, Hanzi Mao, Ross Girshick, Kaiming He. द्वाराअनुसंधान पत्र [Exploring Plain Vision Transformer Backbones for Object Detection](https://arxiv.org/abs/2203.16527) के साथ जारी किया गया
 1. **[ViTMAE](https://huggingface.co/docs/transformers/model_doc/vit_mae)** (मेटा एआई से) साथ में कागज [मास्कड ऑटोएन्कोडर स्केलेबल विजन लर्नर्स हैं](https://arxiv.org/ एब्स/2111.06377) कैमिंग हे, ज़िनेली चेन, सेनिंग ज़ी, यांगहो ली, पिओट्र डॉलर, रॉस गिर्शिक द्वारा।
+1. **[ViTMatte](https://huggingface.co/docs/transformers/model_doc/vitmatte)** (HUST-VL से) Jingfeng Yao, Xinggang Wang, Shusheng Yang, Baoyuan Wang. द्वाराअनुसंधान पत्र [ViTMatte: Boosting Image Matting with Pretrained Plain Vision Transformers](https://arxiv.org/abs/2305.15272) के साथ जारी किया गया
 1. **[ViTMSN](https://huggingface.co/docs/transformers/model_doc/vit_msn)** (मेटा एआई से) साथ में कागज [लेबल-कुशल सीखने के लिए मास्क्ड स्याम देश के नेटवर्क](https://arxiv. org/abs/2204.07141) महमूद असरान, मथिल्डे कैरन, ईशान मिश्रा, पियोट्र बोजानोवस्की, फ्लोरियन बोर्डेस, पास्कल विंसेंट, आर्मंड जौलिन, माइकल रब्बत, निकोलस बल्लास द्वारा।
 1. **[VITS](https://huggingface.co/docs/transformers/model_doc/vits)** (Kakao Enterprise से) Jaehyeon Kim, Jungil Kong, Juhee Son. द्वाराअनुसंधान पत्र [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) के साथ जारी किया गया
 1. **[ViViT](https://huggingface.co/docs/transformers/model_doc/vivit)** (from Google Research) released with the paper [ViViT: A Video Vision Transformer](https://arxiv.org/abs/2103.15691) by Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Lučić, Cordelia Schmid.

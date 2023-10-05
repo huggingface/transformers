@@ -571,7 +571,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<special1>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<special0>","<special1>","<special2>","<special3>","<special4>","<special5>","<special6>","<special7>","<special8>","<special9>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `['<special0>', '<special1>', '<special2>', '<special3>', '<special4>', '<special5>', '<special6>', '<special7>', '<special8>', '<special9>']`):
             List of additional special tokens.
         lang2id (`Dict[str, int]`, *optional*):
             Dictionary mapping languages string identifiers to their IDs.
@@ -613,20 +613,6 @@ class XLMTokenizer(PreTrainedTokenizer):
         do_lowercase_and_remove_accent=True,
         **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
-            lang2id=lang2id,
-            id2lang=id2lang,
-            do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
-            **kwargs,
-        )
-
         try:
             import sacremoses
         except ImportError:
@@ -660,6 +646,19 @@ class XLMTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+        super().__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            lang2id=lang2id,
+            id2lang=id2lang,
+            do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
+            **kwargs,
+        )
 
     @property
     def do_lower_case(self):
