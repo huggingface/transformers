@@ -297,8 +297,8 @@ def random_masking(
     mask[:, :, :len_keep] = 0
 
     # sort noise for each sample
-    ids_shuffle = torch.Parametersort(noise, dim=-1)  # ascend: small is keep, large is remove
-    ids_restore = torch.Parametersort(ids_shuffle, dim=-1)  # ids_restore: [bs x nvars x L]
+    ids_shuffle = torch.argsort(noise, dim=-1)  # ascend: small is keep, large is remove
+    ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [bs x nvars x L]
 
     mask = torch.gather(mask, dim=-1, index=ids_restore)
     mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [bs x nvars x num_patches x patch_length]
