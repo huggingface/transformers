@@ -1342,9 +1342,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         encoder_states = model_output.hidden_states
         if not return_dict:
             return tuple(v for v in [loss_val, y_hat, encoder_states] if v is not None)
-        return PatchTSTForClassificationOutput(
-            loss=loss_val, prediction_logits=y_hat, hidden_states=encoder_states
-        )
+        return PatchTSTForClassificationOutput(loss=loss_val, prediction_logits=y_hat, hidden_states=encoder_states)
 
 
 class ClassificationHead(nn.Module):
@@ -1485,9 +1483,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         encoder_states = model_output.hidden_states
         if not return_dict:
             return tuple(v for v in [loss_val, y_hat, encoder_states] if v is not None)
-        return PatchTSTForPredictionOutput(
-            loss=loss_val, prediction_output=y_hat, hidden_states=encoder_states
-        )
+        return PatchTSTForPredictionOutput(loss=loss_val, prediction_output=y_hat, hidden_states=encoder_states)
 
     def generate(
         self,
@@ -1809,5 +1805,5 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         encoder_states = model_output.hidden_states
         if not return_dict:
-            return tuple(v for v in [loss_val, y_hat, encoder_states] if v is not None)            
+            return tuple(v for v in [loss_val, y_hat, encoder_states] if v is not None)
         return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=encoder_states)

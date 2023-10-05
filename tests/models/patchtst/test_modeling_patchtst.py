@@ -248,7 +248,6 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-
     # Ignore since we have no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
