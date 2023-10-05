@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,9 +40,9 @@ class Beit3Config(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        encoder_normalize_before (`bool`, *optional*, defaults to `True`):
+        encoder_normalize_before (`bool`, *optional*, defaults to `False`):
             Whether to normalize before the encoder block.
-        normalize_before (`bool`, *optional*, defaults to `True`):
+        normalize_before (`bool`, *optional*, defaults to `False`):
             Whether to normalize before (`True`) or after (`False`) passing through every Beit3 encoder layer
         activation_fn (`str`, *optional*, defaults to `"gelu"`):
             Activation function to apply within Mega encoder blocks. Choose one of `"silu"`, `"relu"`, `"linear"`,
@@ -70,7 +70,7 @@ class Beit3Config(PretrainedConfig):
             The number of input channels.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        label_smoothing (`float`, *optional*, defaults to 0.0):
+        label_smoothing (`float`, *optional*, defaults to 0.1):
             Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label smoothing
             in the loss calculation. If set to 0, no label smoothing is performed.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):

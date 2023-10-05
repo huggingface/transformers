@@ -13,7 +13,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ... import is_vision_available
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 

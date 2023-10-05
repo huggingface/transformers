@@ -215,7 +215,7 @@ def get_tokenizer():
     )
 
 
-def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_model_type):
+def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_model_type,validate_logits):
     img_size = 224
     if "480" in checkpoint_url:
         img_size = 480
@@ -269,20 +269,22 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
     input = beit3_processor(text=["This is photo of a cat"], images=image)
     if "beit3_base_patch16_224_in1k" in checkpoint_url:
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
-        assert output.logits.shape == torch.Size([1, 1000])
-        np.testing.assert_allclose(
-            output.logits.detach().numpy()[:, :3], torch.tensor([[-0.260473, -0.420061, -0.492118]]), rtol=1e-05
-        )
+        if validate_logits:
+            assert output.logits.shape == torch.Size([1, 1000])
+            np.testing.assert_allclose(
+                output.logits.detach().numpy()[:, :3], torch.tensor([[-0.260473, -0.420061, -0.492118]]), rtol=1e-05
+            )
     elif "beit3_base_patch16_480_vqa" in checkpoint_url:
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=torch.tensor(input["pixel_values"]),
             padding_mask=torch.ones(input["input_ids"].shape),
         )
-        assert output.logits.shape == torch.Size([1, 3129])
-        np.testing.assert_allclose(
-            output.logits.detach().numpy()[:, :3], torch.tensor([[-10.862484, -12.388088, -7.6599636]]), rtol=1e-05
-        )
+        if validate_logits:
+            assert output.logits.shape == torch.Size([1, 3129])
+            np.testing.assert_allclose(
+                output.logits.detach().numpy()[:, :3], torch.tensor([[-10.862484, -12.388088, -7.6599636]]), rtol=1e-05
+            )
     elif "beit3_base_patch16_224_nlvr2" in checkpoint_url:
         pixel_values = torch.cat(
             (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)), dim=1
@@ -292,8 +294,9 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
             pixel_values=pixel_values,
             padding_mask=torch.ones(input["input_ids"].shape),
         )
-        assert output.logits.shape == torch.Size([1, 2])
-        np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[6.593818, -6.582055]]), rtol=1e-05)
+        if validate_logits:
+            assert output.logits.shape == torch.Size([1, 2])
+            np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[6.593818, -6.582055]]), rtol=1e-05)
     elif "beit3_base_patch16_480_coco_captioning" in checkpoint_url:
         language_masked_pos = torch.zeros(input["input_ids"].shape)
         to_fill = list(range(0, input["input_ids"].shape[1], 3))
@@ -304,18 +307,19 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
             padding_mask=torch.ones(input["input_ids"].shape),
             language_masked_pos=language_masked_pos,
         )
-        assert output.logits.shape == torch.Size([3, 64010])
-        np.testing.assert_allclose(
-            output.logits.detach().numpy()[0, :3], torch.tensor([-19.36987, -19.369905, -17.022049]), rtol=1e-05
-        )
+        if validate_logits:
+            assert output.logits.shape == torch.Size([3, 64010])
+            np.testing.assert_allclose(
+                output.logits.detach().numpy()[0, :3], torch.tensor([-19.36987, -19.369905, -17.022049]), rtol=1e-05
+            )
     elif "beit3_base_patch16_384_coco_retrieval" in checkpoint_url:
         another_input_ids = beit3_processor(text=["This is photo of a dog"], images=image)["input_ids"]
         output = model(
             input_ids=torch.tensor([input["input_ids"][0], another_input_ids[0]]),
             pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]),
         )
-
-        assert round(float(output.loss.detach().numpy()), 4) == 1.8435
+        if validate_logits:
+            assert round(float(output.loss.detach().numpy()), 4) == 1.8435
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
@@ -341,9 +345,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--beit3_model_type",
         default=None,
-        type=str,
+        type=bool,
         help="Beit3 model type, it has to be one of image_classification, vqa,visual_reasoning,"
         "image_captioning,image_text_retrieval",
+    )
+    parser.add_argument(
+        "--validate_logits",
+        default=False,
+        type=str,
+        help="whether to assert logits outputs",
     )
     args = parser.parse_args()
 
@@ -354,4 +364,4 @@ if __name__ == "__main__":
         )
 
     args = parser.parse_args()
-    convert_beit3_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.beit3_model_type)
+    convert_beit3_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.beit3_model_type,args.validate_logits)

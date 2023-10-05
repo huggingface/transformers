@@ -18,9 +18,9 @@ The BEiT-3 model was proposed in [Image as a Foreign Language: BEiT Pretraining 
 Tasks](https://arxiv.org/abs/2208.10442) by Wenhui Wang, Hangbo Bao, Li Dong, Johan Bjorck, Zhiliang Peng, Qiang Liu,
 Kriti Aggarwal, Owais Khan Mohammed, Saksham Singhal, Subhojit Som, Furu Wei. 
 
-Beit3 belongs to the family of multimodal models that treat images as as a foreign language and incorporate them 
-through embedding. Beit3 uses Multiway transformers (from VLMo) and does deep fusion of modality-specific encoding, 
-then trained for various languages, vision tasks. 
+BEiT-3 is a general-purpose multimodal foundation model that excels in both vision and vision-language tasks. It
+utilizes  [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific encoding, 
+and unifies masked modeling on images, texts, and image-text pairs, achieving top performance on multiple benchmarks.
 
 The abstract from the paper is the following:
 
@@ -36,6 +36,36 @@ image classification (ImageNet), visual reasoning (NLVR2), visual question answe
 
 This model was contributed by [Raghavan](https://huggingface.co/Raghavan).
 The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit3).
+
+## Examples 
+    Here is a sample usage:
+    
+    ```python
+    >>> from transformers import Beit3ForVisualReasoning, Beit3Processor
+    >>> from PIL import Image
+    >>> import requests
+    >>> import torch
+
+    >>> model = Beit3ForVisualReasoning.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
+
+    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    >>> image = Image.open(requests.get(url, stream=True).raw)
+
+    >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
+    >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+
+    >>> pixel_values = torch.cat(
+    ...     (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)),
+    ...     dim=1,
+    ... )
+
+    >>> # forward pass
+    >>> output = model(
+    ...     input_ids=torch.tensor(input["input_ids"]),
+    ...     pixel_values=pixel_values,
+    ...     text_padding_mask=torch.ones(input["input_ids"].shape),
+    ... )
+    ```"""
 
 ## BEiT3 specific outputs
 

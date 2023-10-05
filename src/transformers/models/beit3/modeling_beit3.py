@@ -80,7 +80,7 @@ BEIT3_MODEL = r"""
             - 0 indicates the token is **masked**.
         incremental_state (`Dict`):
             A Dictionary containing the incremental states layerwise/
-        positions (`int`):
+        text_end_positions (`int`):
             Position of where text representations end and image representation start.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
@@ -89,7 +89,7 @@ BEIT3_MODEL = r"""
             more detail.
 """
 
-BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
+BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -250,8 +250,8 @@ class Beit3MultiwayFeedForwardNetwork(nn.Module):
             [split_position, hidden_states.size(self.dim) - split_position],
             dim=self.dim,
         )
-        y1, y2 = self.first(text_hidden), self.second(image_hidden)
-        return torch.cat([y1, y2], dim=self.dim)
+        text_out, image_out = self.first(text_hidden), self.second(image_hidden)
+        return torch.cat([text_out, image_out], dim=self.dim)
 
 
 class Beit3Linear(nn.Module):
@@ -298,70 +298,6 @@ class Beit3LayerNorm(nn.Module):
         return hidden_states
 
 
-class Beit3Embedder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        img_size = (config.img_size, config.img_size)
-        patch_size = (config.patch_size, config.patch_size)
-        self.num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0]) + 1
-
-        self.first = Beit3PositionalEmbedding(self.num_patches + 2, config.embed_dim)
-        self.second = Beit3PositionalEmbedding(config.max_source_positions, config.embed_dim)
-
-    def forward(self, hidden_states, positions, multiway_split_position=-1):
-        if multiway_split_position == -1:
-            return self.first(hidden_states, positions=positions)
-        if multiway_split_position == 0:
-            return self.second(hidden_states, positions=positions)
-        text_hidden, image_hidden = torch.split(
-            hidden_states,
-            [multiway_split_position, hidden_states.size(1) - multiway_split_position],
-            dim=1,
-        )
-        y1, y2 = self.first(text_hidden, positions=positions), self.second(image_hidden, positions=positions)
-        return torch.cat([y1, y2], dim=1)
-
-
-class Beit3VisionEmbedding(nn.Module):
-    """Image to Patch Embedding"""
-
-    def __init__(self, config):
-        super().__init__()
-        img_size = (config.img_size, config.img_size)
-        patch_size = (config.patch_size, config.patch_size)
-        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
-        self.patch_shape = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.num_patches = num_patches
-
-        self.proj = nn.Conv2d(config.num_channels, config.embed_dim, kernel_size=patch_size, stride=patch_size)
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
-
-    def num_position_embeddings(self):
-        if self.cls_token is None:
-            return self.num_patches
-        else:
-            return self.num_patches + 1
-
-    def forward(self, hidden_states: torch.Tensor, masked_position: bool = None) -> torch.Tensor:
-        hidden_states = self.proj(hidden_states).flatten(2).transpose(1, 2)
-
-        batch_size, seq_len, _ = hidden_states.size()
-
-        if masked_position is not None:
-            mask_token = self.mask_token.expand(batch_size, seq_len, -1)
-            mask_position = masked_position.unsqueeze(-1).type_as(mask_token)
-            hidden_states = hidden_states * (1 - mask_position) + mask_token * mask_position
-
-        if self.cls_token is not None:
-            cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-            hidden_states = torch.cat((cls_tokens, hidden_states), dim=1)
-
-        return hidden_states
-
-
 class Beit3PositionalEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__(num_embeddings, embedding_dim)
@@ -382,6 +318,64 @@ class Beit3PositionalEmbedding(nn.Embedding):
             self.scale_grad_by_freq,
             self.sparse,
         )
+
+
+class Beit3Embedder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        img_size = (config.img_size, config.img_size)
+        patch_size = (config.patch_size, config.patch_size)
+        self.num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0]) + 1
+
+        self.first = Beit3PositionalEmbedding(self.num_patches + 2, config.embed_dim)
+        self.second = Beit3PositionalEmbedding(config.max_source_positions, config.embed_dim)
+
+    def forward(self, hidden_states, text_end_position, multiway_split_position=-1):
+        if multiway_split_position == -1:
+            return self.first(hidden_states, positions=text_end_position)
+        if multiway_split_position == 0:
+            return self.second(hidden_states, positions=text_end_position)
+        text_hidden, image_hidden = torch.split(
+            hidden_states,
+            [multiway_split_position, hidden_states.size(1) - multiway_split_position],
+            dim=1,
+        )
+        y1, y2 = self.first(text_hidden, positions=text_end_position), self.second(image_hidden, positions=text_end_position)
+        return torch.cat([y1, y2], dim=1)
+
+
+class Beit3VisionEmbedding(nn.Module):
+    """Image to Patch Embedding"""
+
+    def __init__(self, config):
+        super().__init__()
+        img_size = (config.img_size, config.img_size)
+        patch_size = (config.patch_size, config.patch_size)
+        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
+        self.patch_shape = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.num_patches = num_patches
+
+        self.proj = nn.Conv2d(config.num_channels, config.embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
+        self.num_position_embeddings = self.num_patches + 1
+
+    def forward(self, hidden_states: torch.Tensor, masked_position: bool = None) -> torch.Tensor:
+        hidden_states = self.proj(hidden_states).flatten(2).transpose(1, 2)
+
+        batch_size, seq_len, _ = hidden_states.size()
+
+        if masked_position is not None:
+            mask_token = self.mask_token.expand(batch_size, seq_len, -1)
+            mask_position = masked_position.unsqueeze(-1).type_as(mask_token)
+            hidden_states = hidden_states * (1 - mask_position) + mask_token * mask_position
+
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        hidden_states = torch.cat((cls_tokens, hidden_states), dim=1)
+
+        return hidden_states
 
 
 class Beit3MultiheadAttention(nn.Module):
@@ -544,12 +538,6 @@ class Beit3PreTrainedModel(PreTrainedModel):
         if isinstance(module, Beit3Encoder):
             module.gradient_checkpointing = value
 
-    def reset_parameters(self):
-        self.fc1.reset_parameters()
-        self.fc2.reset_parameters()
-        if self.ffn_layernorm is not None:
-            self.ffn_layernorm.reset_parameters()
-
 
 class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
     def __init__(self, config):
@@ -661,18 +649,18 @@ class Beit3Encoder(nn.Module):
         self,
         src_tokens,
         token_embedding=None,
-        positions=None,
+        text_end_positions=None,
         multiway_split_position=None,
     ):
         x = embed = token_embedding
         if self.embed_positions is not None:
             if src_tokens is not None:
                 x = embed + self.embed_positions(
-                    src_tokens, positions=positions, multiway_split_position=multiway_split_position
+                    src_tokens, positions=text_end_positions, multiway_split_position=multiway_split_position
                 )
             else:
                 x = embed + self.embed_positions(
-                    x, positions=positions, multiway_split_position=multiway_split_position
+                    x, text_end_position=text_end_positions, multiway_split_position=multiway_split_position
                 )
         x = self.dropout_module(x)
         return x, embed
@@ -686,7 +674,7 @@ class Beit3Encoder(nn.Module):
         token_embeddings=None,
         multiway_split_position=None,
         incremental_state=None,
-        positions=None,
+        text_end_positions=None,
         return_dict=None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -699,7 +687,7 @@ class Beit3Encoder(nn.Module):
                     device=token_embeddings.device,
                 ).bool()
 
-        x, encoder_embedding = self.forward_embedding(src_tokens, token_embeddings, positions, multiway_split_position)
+        x, encoder_embedding = self.forward_embedding(src_tokens, token_embeddings, text_end_positions, multiway_split_position)
         x = x * (1 - encoder_padding_mask.unsqueeze(-1).type_as(x))
 
         hidden_states = []
@@ -774,7 +762,7 @@ class Beit3Model(Beit3PreTrainedModel):
         attention_mask=None,
         vision_masked_position=None,
         incremental_state=None,
-        positions=None,
+        text_end_positions=None,
         return_dict=None,
         output_hidden_states=True,
     ):
@@ -810,7 +798,7 @@ class Beit3Model(Beit3PreTrainedModel):
             token_embeddings=x,
             multiway_split_position=multiway_split_position,
             incremental_state=incremental_state,
-            positions=positions,
+            text_end_positions=text_end_positions,
             return_dict=return_dict,
         )
         if not return_dict:
@@ -834,7 +822,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         self.classifier = Beit3MLP(config)
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1081,7 +1069,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         text_len = text_len if text_len is not None else input_ids.size(1)
-        image_len = self.beit3.vision_embedding.num_position_embeddings()
+        image_len = self.beit3.vision_embedding.num_position_embeddings
         max_len = text_len + image_len
         uni_mask = torch.zeros((max_len, max_len), dtype=torch.long, device=input_ids.device)
         i_start, i_end = 0, image_len
@@ -1102,12 +1090,12 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
                     incremental_state[idx] = {}
 
         # for incremental decoding
-        positions = None
+        text_end_positions = None
         if pixel_values is None:
             uni_mask = uni_mask[-2:]
             text_padding_mask = None
             # start position (2 (fairseq starts at 2) + cur_position) is equal to text_len
-            positions = (
+            text_end_positions = (
                 torch.arange(text_len, input_ids.size(1) + text_len, device=input_ids.device).long().unsqueeze(0)
             )
 
@@ -1117,7 +1105,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             text_padding_mask=text_padding_mask,
             attention_mask=uni_mask,
             incremental_state=incremental_state,
-            positions=positions,
+            text_end_positions=text_end_positions,
         )
         if pixel_values is not None:
             text_feats = outputs.encoder_out[:, image_len:]
