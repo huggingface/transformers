@@ -23,6 +23,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from ...activations import ACT2CLS
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
@@ -195,14 +196,6 @@ class PatchTSTAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-def get_activation_fn(activation):
-    if callable(activation):
-        return activation()
-    elif activation.lower() == "relu":
-        return nn.ReLU()
-    elif activation.lower() == "gelu":
-        return nn.GELU()
-    raise ValueError(f'{activation} is not available. You can use "relu", "gelu", or a callable')
 
 
 class Transpose(nn.Module):
@@ -562,7 +555,7 @@ class ChannelAttentionTSTEncoderLayer(nn.Module):
         # Position-wise Feed-Forward
         self.ff = nn.Sequential(
             nn.Linear(config.d_model, config.encoder_ffn_dim, bias=config.bias),
-            get_activation_fn(config.activation_function),
+            ACT2CLS[config.activation_function](),
             nn.Dropout(config.ff_dropout) if config.ff_dropout > 0 else nn.Identity(),
             nn.Linear(config.encoder_ffn_dim, config.d_model, bias=config.bias),
         )
