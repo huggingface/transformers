@@ -40,14 +40,14 @@ Tips:
 
 
 Example of use:
-
+# TODO: change to Apple/fastvit-t8
 ```python
 >>> from transformers import AutoImageProcessor, FastViTModel
 >>> from PIL import Image
 >>> import requests
 
->>> ImageProcessor = AutoImageProcessor.from_pretrained("Apple/fastvit-t8")
->>> model = FastViTModel.from_pretrained("Apple/fastvit-t8")
+>>> ImageProcessor = AutoImageProcessor.from_pretrained("JorgeAV/fastvit_t8")
+>>> model = FastViTModel.from_pretrained("JorgeAV/fastvit_t8")
 
 >>> # load image
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
