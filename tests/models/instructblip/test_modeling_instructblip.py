@@ -29,7 +29,14 @@ from transformers import (
     InstructBlipQFormerConfig,
     InstructBlipVisionConfig,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_bitsandbytes,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -522,6 +529,7 @@ def prepare_img():
 @slow
 class InstructBlipModelIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
+    @require_accelerate
     def test_inference_vicuna_7b(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
