@@ -216,7 +216,7 @@ _import_structure = {
     "models.bliva": [
         "BLIVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BLIVAConfig",
-       
+        "BLIVAImageProcessor",
         "BLIVAQFormerConfig",
         "BLIVAVisionConfig",
     ],
@@ -954,6 +954,7 @@ else:
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
+    _import_structure["models.bliva"].extend(["BLIVAImageProcessor"])
     _import_structure["models.bridgetower"].append("BridgeTowerImageProcessor")
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
@@ -5038,6 +5039,7 @@ if TYPE_CHECKING:
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
         from .models.blip import BlipImageProcessor
+        from .models.bliva import BLIVAImageProcessor
         from .models.bridgetower import BridgeTowerImageProcessor
         from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor

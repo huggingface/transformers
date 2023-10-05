@@ -42,6 +42,9 @@ class BLIVAVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        # VISUAL Transformation
+        vit_model (`str`, *optional*, defaults to `"eva_clip_g"`): TODO
+        
         hidden_size (`int`, *optional*, defaults to 1408):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 6144):
