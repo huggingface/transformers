@@ -41,8 +41,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`FastSpeech2ConformerModel`]. It is used to
     instantiate a FastSpeech2Conformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    FastSpeech2Conformer
-    [espnet/fastspeech2_conformer](https://huggingface.co/espnet/fastspeech2_conformer)
+    FastSpeech2Conformer [espnet/fastspeech2_conformer](https://huggingface.co/espnet/fastspeech2_conformer)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -341,8 +340,7 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     instantiate a FastSpeech2Conformer HiFi-GAN vocoder model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     FastSpeech2Conformer
-    [espnet/fastspeech2_conformer_hifigan](https://huggingface.co/espnet/fastspeech2_conformer_hifigan)
-    architecture.
+    [espnet/fastspeech2_conformer_hifigan](https://huggingface.co/espnet/fastspeech2_conformer_hifigan) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -421,11 +419,9 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    FastSpeech2ConformerModel
-    [espnet/fastspeech2_conformer](https://huggingface.co/espnet/fastspeech2_conformer) and
+    FastSpeech2ConformerModel [espnet/fastspeech2_conformer](https://huggingface.co/espnet/fastspeech2_conformer) and
     FastSpeech2ConformerHifiGan
-    [espnet/fastspeech2_conformer_hifigan](https://huggingface.co/espnet/fastspeech2_conformer_hifigan)
-    architectures.
+    [espnet/fastspeech2_conformer_hifigan](https://huggingface.co/espnet/fastspeech2_conformer_hifigan) architectures.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
