@@ -244,9 +244,8 @@ class ClvpSelfAttention(nn.Module):
     Multi-headed attention to combine Absolute and Rotary Positional Embeddings into a single Attention module.
     """
 
-    def __init__(self, config, apply_hidden_states_norm=False):
+    def __init__(self, config):
         super().__init__()
-        self.apply_hidden_states_norm = apply_hidden_states_norm
         self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -274,32 +273,6 @@ class ClvpSelfAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-        if self.apply_hidden_states_norm:
-            num_groups = self.compute_groupnorm_groups(self.embed_dim)
-            self.norm = nn.GroupNorm(num_groups, self.embed_dim, eps=1e-5, affine=True)
-
-    def compute_groupnorm_groups(self, channels: int):
-        """
-        Calculates the value of both `num_groups` and `num_channels` for nn.GroupNorm. This logic is taken from the
-        official tortoise repository. link :
-        https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/models/arch_util.py#L26
-        """
-        groups = 32
-        if channels <= 16:
-            groups = 8
-        elif channels <= 64:
-            groups = 16
-        while channels % groups != 0:
-            groups = int(groups / 2)
-
-        if groups <= 2:
-            raise ValueError(
-                f"Number of groups for the GroupNorm must be greater than 2, but it is {groups}."
-                f"Please consider using a different `hidden_size`"
-            )
-
-        return groups
-
     # Copied from transformers.models.clip.modeling_clip.CLIPAttention._shape
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -314,13 +287,6 @@ class ClvpSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
-        # This logic is only used for the attention in ClvpConditioningEncoder. For the attention of AutoRegressive,
-        # speech and text models it is not used.
-        if self.apply_hidden_states_norm:
-            hidden_states = torch.permute(hidden_states, (0, 2, 1))
-            hidden_states = self.norm(hidden_states)
-            hidden_states = torch.permute(hidden_states, (0, 2, 1))
-
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         # get query proj
@@ -592,14 +558,43 @@ class ClvpConditioningEncoder(nn.Module):
 
         self.mel_conv = nn.Conv1d(decoder_config.feature_size, decoder_config.n_embd, kernel_size=1)
 
-        self.mel_attn_blocks = nn.ModuleList(
+        # define group norms to be used before each attention layer
+        num_groups = self.compute_groupnorm_groups(decoder_config.hidden_size)
+        self.group_norms = nn.ModuleList(
             [
-                ClvpSelfAttention(decoder_config, apply_hidden_states_norm=True)
+                nn.GroupNorm(num_groups, decoder_config.hidden_size, eps=1e-5, affine=True)
                 for _ in range(decoder_config.num_mel_attn_blocks)
             ]
         )
 
+        # define the attention layers
+        self.mel_attn_blocks = nn.ModuleList(
+            [ClvpSelfAttention(decoder_config) for _ in range(decoder_config.num_mel_attn_blocks)]
+        )
+
         self.gradient_checkpointing = False
+
+    def compute_groupnorm_groups(self, channels: int):
+        """
+        Calculates the value of both `num_groups` and `num_channels` for nn.GroupNorm. This logic is taken from the
+        official tortoise repository. link :
+        https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/models/arch_util.py#L26
+        """
+        groups = 32
+        if channels <= 16:
+            groups = 8
+        elif channels <= 64:
+            groups = 16
+        while channels % groups != 0:
+            groups = int(groups / 2)
+
+        if groups <= 2:
+            raise ValueError(
+                f"Number of groups for the GroupNorm must be greater than 2, but it is {groups}."
+                f"Please consider using a different `hidden_size`"
+            )
+
+        return groups
 
     def forward(
         self,
@@ -610,30 +605,26 @@ class ClvpConditioningEncoder(nn.Module):
     ):
         if self.gradient_checkpointing and self.training:
             # process each log-mel spectrogram into a single vector
-            mel_spec = torch.utils.checkpoint.checkpoint(
-                self.mel_conv,
-                input_features,
-            )
+            mel_spec = torch.utils.checkpoint.checkpoint(self.mel_conv, input_features)
 
-            mel_spec = torch.permute(mel_spec, (0, 2, 1))
-            for mel_attn_block in self.mel_attn_blocks:
-                mel_spec = (
-                    torch.utils.checkpoint.checkpoint(
-                        mel_attn_block,
-                        input_features,
-                    )[0]
-                    + mel_spec
-                )
+            for i, mel_attn_block in enumerate(self.mel_attn_blocks):
+                residual_mel_spec = mel_spec.transpose(1, 2)
+
+                mel_spec = torch.utils.checkpoint.checkpoint(self.group_norms[i], mel_spec).transpose(1, 2)
+                mel_spec = torch.utils.checkpoint.checkpoint(mel_attn_block, mel_spec)[0] + residual_mel_spec
+                mel_spec = mel_spec.transpose(1, 2)
 
         else:
             # process each log-mel spectrogram into a single vector
             mel_spec = self.mel_conv(input_features)
 
-            mel_spec = torch.permute(mel_spec, (0, 2, 1))
-            for mel_attn_block in self.mel_attn_blocks:
-                mel_spec = mel_attn_block(mel_spec)[0] + mel_spec
+            for i, mel_attn_block in enumerate(self.mel_attn_blocks):
+                residual_mel_spec = mel_spec.transpose(1, 2)
 
-        mel_spec = torch.permute(mel_spec, (0, 2, 1))
+                mel_spec = self.group_norms[i](mel_spec).transpose(1, 2)
+                mel_spec = mel_attn_block(mel_spec)[0] + residual_mel_spec
+                mel_spec = mel_spec.transpose(1, 2)
+
         mel_spec = mel_spec[:, :, 0]
         mel_spec = mel_spec.unsqueeze(1)
 
@@ -641,7 +632,8 @@ class ClvpConditioningEncoder(nn.Module):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            # we add bos and eos input_ids in the modeling file instead of the tokenizer file(same as the original repo)
+            # We add bos and eos input_ids in the modeling file instead of the tokenizer file(same as the original repo)
+            # This logic is specific to ClvpConditioningEncoder and not used by other modules.
             input_ids = torch.nn.functional.pad(input_ids, (1, 0), value=self.text_start_token_id)
             input_ids = torch.nn.functional.pad(input_ids, (0, 1), value=self.text_end_token_id)
             batch_size, seq_length = input_ids.size()

@@ -55,6 +55,9 @@ CLVP_ENCODERS_MAPPING = {
 CLVP_DECODER_MAPPING = {
     "conditioning_encoder.init": "conditioning_encoder.mel_conv",
     "conditioning_encoder.attn": "conditioning_encoder.mel_attn_blocks",
+    "mel_attn_blocks": "group_norms",
+    ".norm.weight": ".weight",
+    ".norm.bias": ".bias",
     "text_embedding": "conditioning_encoder.text_token_embedding",
     "text_pos_embedding.emb": "conditioning_encoder.text_position_embedding",
     "final_norm": "speech_decoder_model.final_norm",
@@ -107,24 +110,21 @@ def convert_decoder_weights(original_weights):
     original_weights_keys = sorted(original_weights.keys())
     for original_key in original_weights_keys:
         updated_key = original_key
+        if len(updated_key.split(".")) > 3:
+            index, attr = updated_key.split(".")[2], updated_key.split(".")[-1]
 
         # for decoder attention
         if "attn.c_attn" in updated_key:
-            attr = updated_key.split(".")[-1]
             if attr == "weight":
                 slice1, slice2, slice3 = original_weights[updated_key].squeeze(-1).T.split(split_size=dim, dim=0)
             else:
                 slice1, slice2, slice3 = original_weights[updated_key].split(split_size=dim, dim=0)
-            index = updated_key.split(".")[2]
             converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.q_proj.{attr}"] = slice1
             converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.k_proj.{attr}"] = slice2
             converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.v_proj.{attr}"] = slice3
             continue
 
         if "attn.c_proj" in updated_key:
-            index = updated_key.split(".")[2]
-            attr = updated_key.split(".")[-1]
-
             converted_weights[f"speech_decoder_model.model.decoder.layers.{index}.attn.out_proj.{attr}"] = (
                 original_weights[updated_key].squeeze(-1).T
             )
@@ -136,12 +136,10 @@ def convert_decoder_weights(original_weights):
 
         # conditional encoder attention
         if "qkv" in updated_key:
-            attr = updated_key.split(".")[-1]
             if attr == "weight":
                 slice1, slice2, slice3 = original_weights[updated_key].squeeze(-1).split(split_size=dim, dim=0)
             else:
                 slice1, slice2, slice3 = original_weights[updated_key].split(split_size=dim, dim=0)
-            index = updated_key.split(".")[2]
             sub_dim = dim // 16
 
             converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.q_proj.{attr}"] = torch.concatenate(
@@ -169,9 +167,8 @@ def convert_decoder_weights(original_weights):
                 axis=0,
             )
             continue
+
         if "proj_out" in updated_key:
-            index = updated_key.split(".")[2]
-            attr = updated_key.split(".")[-1]
             converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.out_proj.{attr}"] = original_weights[
                 updated_key
             ].squeeze(-1)
