@@ -856,6 +856,14 @@ class SpecialTokensMixin:
                     assert all(
                         isinstance(t, (str, AddedToken)) for t in value
                     ), "One of the tokens is not a string or an AddedToken"
+                    if hasattr(self, "added_tokens_encoder"):
+                        extended_token = []
+                        for token in value:
+                            if isinstance(token, str) and str(token) in self.added_tokens_encoder:
+                                extended_token.append(self.added_tokens_decoder[self.added_tokens_encoder[str(token)]])
+                            else:
+                                extended_token.append(token)
+                        value = extended_token
                     setattr(self, key, value)
                 elif isinstance(value, (str)):
                     value = AddedToken(value, normalized=False, special=True)
@@ -1116,7 +1124,7 @@ class SpecialTokensMixin:
             if self.verbose:
                 logger.error("Using additional_special_tokens, but it is not set yet.")
             return None
-        return [str(tok) for tok in self.added_tokens_decoder.values() if tok.special]
+        return [str(tok) for tok in self._additional_special_tokens]
 
     @bos_token.setter
     def bos_token(self, value):
@@ -1190,6 +1198,15 @@ class SpecialTokensMixin:
         else:
             self._additional_special_tokens = value
             return
+        if self._additional_special_tokens is None:
+            self._additional_special_tokens = []
+        # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
+        for token in value:
+            if isinstance(token, str) and token != "":
+                token = AddedToken(token, normalized=False, rstrip=True, lstrip=True, special=True)
+            elif not isinstance(token, AddedToken):
+                raise ValueError(f"Cannot add instance of type {type(value)} to additional_special_tokens!")
+            self._additional_special_tokens.append(token)
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -2374,14 +2391,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
-
-        # Let's make sure we properly save the special AddedToken. TODO ArthurZ only str should be saved
+        # Let's make sure we properly save the special AddedToken.
         tokenizer_config.update(self.special_tokens_map_extended)
 
         # Let's save the init kwargs
         target_keys = set(self.init_kwargs.keys())
         # Let's save the special tokens map (only the strings)
-        # target_keys.update(self.special_tokens_map_extended.keys())
         target_keys.update(["model_max_length", "clean_up_tokenization_spaces"])
 
         for k in target_keys:
@@ -2432,7 +2447,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Sanitize AddedTokens in special_tokens_map
 
-        # kept for forward compatibility, will be removed in transoformers 5. Adding typefield
+        # kept for forward compatibility, will be removed in transoformers 5.
         write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=True)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"

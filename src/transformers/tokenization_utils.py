@@ -408,27 +408,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
             self._added_tokens_encoder[str(token)] = index
 
-    @property
-    def additional_special_tokens(self):
-        return super().additional_special_tokens
-
-    @additional_special_tokens.setter
-    def additional_special_tokens(self, value):
-        self._additional_special_tokens = [] if value is not None else value
-        for token in self._added_tokens_decoder.values():
-            token.special = False
-        if value is not None:
-            # slow tokenizers: we can update the info of the added vocab
-            for token in value:
-                if not isinstance(token, (AddedToken, str)):
-                    raise ValueError(f"Cannot add instance of type {type(value)} to additional_special_tokens!")
-                # let's make sure we don't add a special token twice when initializing
-                if str(token) in self.added_tokens_encoder:
-                    self.added_tokens_decoder[self.added_tokens_encoder[str(token)]].special = True
-                    continue
-                # otherwise the token is new but not added. TODO chose: add it or do nothing
-                # If we add it, we add it to ``
-
     def get_added_vocab(self) -> Dict[str, int]:
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index. Results might be different from
