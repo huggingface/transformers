@@ -156,7 +156,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self,
         seq_len: int = 32,
         patch_len: int = 8,
-        input_size: int = 3,
+        input_size: int = 1,
         stride: int = 8,
         num_features: int = 8,
         expansion_factor: int = 2,

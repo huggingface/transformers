@@ -15,7 +15,7 @@
 """ PyTorch PatchTSMixer model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -122,9 +122,9 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class PatchTSMixerEncoderOutputWithNoAttention(ModelOutput):
+class PatchTSMixerEncoderOutput(ModelOutput):
     """
-    Base class for `PatchTSMixerEncoderOutputWithNoAttention`, with potential hidden states.
+    Base class for `PatchTSMixerEncoderOutput`, with potential hidden states.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, num_features)`):
@@ -167,10 +167,13 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
-    @replace_return_docstrings(output_type=PatchTSMixerEncoderOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PatchTSMixerEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> PatchTSMixerEncoderOutputWithNoAttention:
+        self,
+        context_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, PatchTSMixerEncoderOutput]:
         r"""
         Args:
         context_values (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`):
@@ -185,13 +188,11 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         # context_values: [bs  x n_vars x num_patches x patch_len]
         # return: [bs x n_vars x num_patches x num_features]
         last_hidden_state, hidden_states = self.encoder(context_values, output_hidden_states=output_hidden_states)
-        return PatchTSMixerEncoderOutputWithNoAttention(
-            last_hidden_state=last_hidden_state, hidden_states=hidden_states
-        )
+        return PatchTSMixerEncoderOutput(last_hidden_state=last_hidden_state, hidden_states=hidden_states)
 
 
 @dataclass
-class PatchTSMixerModelOutputWithNoAttention(ModelOutput):
+class PatchTSMixerModelOutput(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states.
 
@@ -256,10 +257,13 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
-    @replace_return_docstrings(output_type=PatchTSMixerModelOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PatchTSMixerModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False
-    ) -> PatchTSMixerModelOutputWithNoAttention:
+        self,
+        context_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, PatchTSMixerModelOutput]:
         r"""
         Args:
         context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
@@ -297,7 +301,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 
         encoder_output = self.encoder(enc_input, output_hidden_states=output_hidden_states)
 
-        return PatchTSMixerModelOutputWithNoAttention(
+        return PatchTSMixerModelOutput(
             last_hidden_state=encoder_output.last_hidden_state,
             hidden_states=encoder_output.hidden_states,
             patched_input=patched_x,
@@ -336,9 +340,9 @@ class PatchTSMixerMaskedPretrainHead(nn.Module):
 
 
 @dataclass
-class PatchTSMixerForMaskPreTrainingOutputWithNoAttention(ModelOutput):
+class PatchTSMixerForMaskPreTrainingOutput(ModelOutput):
     """
-    Output type of [`PatchTSMixerForMaskPreTrainingOutputWithNoAttention`].
+    Output type of [`PatchTSMixerForMaskPreTrainingOutput`].
 
     Args:
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`):
@@ -389,12 +393,10 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
             self.post_init()
 
     # @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=PatchTSMixerForMaskPreTrainingOutputWithNoAttention, config_class=_CONFIG_FOR_DOC
-    )
+    @replace_return_docstrings(output_type=PatchTSMixerForMaskPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False, return_loss: bool = True
-    ) -> PatchTSMixerForMaskPreTrainingOutputWithNoAttention:
+    ) -> PatchTSMixerForMaskPreTrainingOutput:
         r"""
         Args:
         context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
@@ -429,7 +431,7 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
         if self.masked_loss is True and loss_val is not None:
             loss_val = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
 
-        return PatchTSMixerForMaskPreTrainingOutputWithNoAttention(
+        return PatchTSMixerForMaskPreTrainingOutput(
             prediction_logits=x_hat,  # tensor [bs x nvars x num_patch x patch_len]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
@@ -474,7 +476,7 @@ class PatchTSMixerForecastHead(nn.Module):
 
 
 @dataclass
-class PatchTSMixerForForecastOutputWithNoAttention(ModelOutput):
+class PatchTSMixerForForecastOutput(ModelOutput):
     """
     Output type of [`PatchTSMixerForForecastOutput`].
 
@@ -523,14 +525,14 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             self.post_init()
 
     @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PatchTSMixerForForecastOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=PatchTSMixerForForecastOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         context_values: torch.Tensor,
         target_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
-    ) -> PatchTSMixerForForecastOutputWithNoAttention:
+    ) -> PatchTSMixerForForecastOutput:
         r"""
 
         Returns:
@@ -559,7 +561,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         else:
             loss_val = None
 
-        return PatchTSMixerForForecastOutputWithNoAttention(
+        return PatchTSMixerForForecastOutput(
             prediction_logits=y_hat,  # tensor [bs x forecast_len x input_size]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
@@ -598,7 +600,7 @@ class PatchTSMixerClassificationHead(nn.Module):
 
 
 @dataclass
-class PatchTSMixerForClassificationOutputWithNoAttention(ModelOutput):
+class PatchTSMixerForClassificationOutput(ModelOutput):
     """
     Output type of [`PatchTSMixerForClassificationOutput`].
 
@@ -653,16 +655,14 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             self.post_init()
 
     @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=PatchTSMixerForClassificationOutputWithNoAttention, config_class=_CONFIG_FOR_DOC
-    )
+    @replace_return_docstrings(output_type=PatchTSMixerForClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         context_values: torch.Tensor,
         target_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
-    ) -> PatchTSMixerForClassificationOutputWithNoAttention:
+    ) -> PatchTSMixerForClassificationOutput:
         r"""
 
         Returns:
@@ -690,7 +690,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         else:
             loss_val = None
 
-        return PatchTSMixerForClassificationOutputWithNoAttention(
+        return PatchTSMixerForClassificationOutput(
             prediction_logits=y_hat,  # tensor [bs x n_labels]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
@@ -729,9 +729,9 @@ class PatchTSMixerRegressionHead(nn.Module):
 
 
 @dataclass
-class PatchTSMixerForRegressionOutputWithNoAttention(ModelOutput):
+class PatchTSMixerForRegressionOutput(ModelOutput):
     """
-    Output type of [`PatchTSMixerForRegressionOutputWithNoAttention`].
+    Output type of [`PatchTSMixerForRegressionOutput`].
 
     Args:
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, n_targets)`):
@@ -783,16 +783,14 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             self.post_init()
 
     @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=PatchTSMixerForRegressionOutputWithNoAttention, config_class=_CONFIG_FOR_DOC
-    )
+    @replace_return_docstrings(output_type=PatchTSMixerForRegressionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         context_values: torch.Tensor,
         target_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
-    ) -> PatchTSMixerForRegressionOutputWithNoAttention:
+    ) -> PatchTSMixerForRegressionOutput:
         r"""
 
         Returns:
@@ -823,7 +821,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         else:
             loss_val = None
 
-        return PatchTSMixerForRegressionOutputWithNoAttention(
+        return PatchTSMixerForRegressionOutput(
             prediction_logits=y_hat,  # tensor [bs x n_targets]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
