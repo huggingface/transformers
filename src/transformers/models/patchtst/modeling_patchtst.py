@@ -790,10 +790,6 @@ PATCHTST_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-@add_start_docstrings(
-    "The bare PatchTST Model outputting raw hidden-states without any specific head.",
-    PATCHTST_START_DOCSTRING,
-)
 class PatchTSTModelOutputWithNoAttention(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states.
@@ -1152,6 +1148,10 @@ class PatchTSTNOPScaler(nn.Module):
         return data, loc, scale
 
 
+@add_start_docstrings(
+    "The bare PatchTST Model outputting raw hidden-states without any specific head.",
+    PATCHTST_START_DOCSTRING,
+)
 class PatchTSTModel(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
