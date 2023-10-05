@@ -60,10 +60,10 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             The number of layers in the encoder.
         encoder_linear_units (`int`, *optional*, defaults to 1536):
             The number of units in the linear layer of the encoder.
-        decoder_num_attention_heads (`int`, *optional*, defaults to 2):
-            The number of attention heads in the decoder.
         decoder_layers (`int`, *optional*, defaults to 4):
             The number of layers in the decoder.
+        decoder_num_attention_heads (`int`, *optional*, defaults to 2):
+            The number of attention heads in the decoder.
         decoder_linear_units (`int`, *optional*, defaults to 1536):
             The number of units in the linear layer of the decoder.
         speech_decoder_postnet_layers (`int`, *optional*, defaults to 5):
@@ -84,6 +84,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             Specifies whether to concatenate after decoder layers.
         reduction_factor (`int`, *optional*, defaults to 1):
             The factor by which the speech frame rate is reduced.
+        speaking_speed (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
         use_macaron_style_in_conformer (`bool`, *optional*, defaults to `True`):
             Specifies whether to use macaron style in the conformer.
         use_cnn_in_conformer (`bool`, *optional*, defaults to `True`):
@@ -148,13 +149,13 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             Specifies whether to use masking in the model.
         use_weighted_masking (`bool`, *optional*, defaults to `False`):
             Specifies whether to use weighted masking in the model.
-        num_speakers (`int`, *optional*, defaults to `None`):
+        num_speakers (`int`, *optional*):
             Number of speakers. If set to > 1, assume that the speaker ids will be provided as the input and use
             speaker id embedding layer.
-        num_languages (`int`, *optional*, defaults to `None`):
+        num_languages (`int`, *optional*):
             Number of languages. If set to > 1, assume that the language ids will be provided as the input and use the
             languge id embedding layer.
-        speaker_embed_dim (`int`, *optional*, defaults to `None`):
+        speaker_embed_dim (`int`, *optional*):
             Speaker embedding dimension. If set to > 0, assume that speaker_embedding will be provided as the input.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Specifies whether the model is an encoder-decoder.
@@ -350,11 +351,11 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
             The number of frequency bins in the input log-mel spectrogram.
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the upsampling network.
-        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
+        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 2, 2]`):
             A tuple of integers defining the stride of each 1D convolutional layer in the upsampling network. The
             length of *upsample_rates* defines the number of convolutional layers and has to match the length of
             *upsample_kernel_sizes*.
-        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 8, 8]`):
+        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[16, 16, 4, 4]`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the upsampling network. The
             length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match the length of
             *upsample_rates*.
@@ -427,6 +428,8 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        model_config (`typing.Dict`, *optional*): <fill_docstring>
+        vocoder_config (`typing.Dict`, *optional*): <fill_docstring>
     model_config ([`FastSpeech2ConformerConfig`], *optional*):
         Configuration of the text-to-speech model.
     vocoder_config ([`FastSpeech2ConformerHiFiGanConfig`], *optional*):
