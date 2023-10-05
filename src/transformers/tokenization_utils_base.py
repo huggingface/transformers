@@ -856,14 +856,6 @@ class SpecialTokensMixin:
                     assert all(
                         isinstance(t, (str, AddedToken)) for t in value
                     ), "One of the tokens is not a string or an AddedToken"
-                    if hasattr(self, "added_tokens_encoder"):
-                        extended_token = []
-                        for token in value:
-                            if isinstance(token, str) and str(token) in self.added_tokens_encoder:
-                                extended_token.append(self.added_tokens_decoder[self.added_tokens_encoder[str(token)]])
-                            else:
-                                extended_token.append(token)
-                        value = extended_token
                     setattr(self, key, value)
                 elif isinstance(value, (str)):
                     value = AddedToken(value, normalized=False, special=True)
@@ -1124,7 +1116,7 @@ class SpecialTokensMixin:
             if self.verbose:
                 logger.error("Using additional_special_tokens, but it is not set yet.")
             return None
-        return [str(tok) for tok in self._additional_special_tokens]
+        return [str(tok) for tok in self.added_tokens_decoder.values() if tok.special]
 
     @bos_token.setter
     def bos_token(self, value):
@@ -1184,18 +1176,20 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        if value is None:
+        """
+        The fast tokenizer cannot change so there's not point in reseting the cached `_additional_special_tokens`
+        Only the init kwargs will be passed and saved. So for fast we need the init kwargs's additional_special_tokens
+        because that's the only way they are added? Not anymore, with the added_tokens_decoder being saved, the token.special
+        can be used. It's more fullproof.
+        """
+
+        if self.hasattr("_added_tokens_decoder"):
+            # reset the special tokens for slow and conversion
+            for token in self._added_tokens_decoder:
+                token.special = False
+        else:
             self._additional_special_tokens = value
             return
-        if self._additional_special_tokens is None:
-            self._additional_special_tokens = []
-        # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
-        for token in value:
-            if isinstance(token, str) and token != "":
-                token = AddedToken(token, normalized=False, rstrip=True, lstrip=True, special=True)
-            elif not isinstance(token, AddedToken):
-                raise ValueError(f"Cannot add instance of type {type(value)} to additional_special_tokens!")
-            self._additional_special_tokens.append(token)
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -2199,13 +2193,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     token = AddedToken(**token)
                 if isinstance(token, AddedToken):
                     added_tokens_decoder[int(idx)] = token
-                    if str(token) in additional_special_tokens:
-                        # at this point the token is in `additional_special_tokens` as an str, let's add the AddedToken info
-                        additional_special_tokens.remove(str(token))
-                        if token.special and token not in additional_special_tokens:
-                            additional_special_tokens.append(token)
-                    else:
-                        additional_special_tokens.append(token)
                 else:
                     raise ValueError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
@@ -2304,7 +2291,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return AddedToken(**obj)
         if isinstance(obj, AddedToken):
             if add_type_field:
-                obj = obj.content
+                obj = obj.__getstate__()
             return obj
         elif isinstance(obj, (list, tuple)):
             return [cls.convert_added_tokens(o, add_type_field=add_type_field) for o in obj]
@@ -2491,7 +2478,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_tokens_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
         )
-        added_vocab = self.get_added_vocab()
+        # the new get_added_vocab() also returns special tokens and tokens that have an index < vocab_size
+        base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
+        full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
+        added_vocab = {tok: index for tok, index in full_vocab.items() if tok not in base_vocab}
+
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
