@@ -62,7 +62,7 @@ print(upscaled.size)
 # (1072, 880)
 ```
 
-If you wish to do inference yourself with no pipeline, you can use `Swin2SRForImageSuperResolution` and `Swin2SRImageProcessor` classes of transformers. We will use the same model checkpoint for this. Let's initialize the model and the processor.
+If you wish to do inference yourself with no pipeline, you can use the `Swin2SRForImageSuperResolution` and `Swin2SRImageProcessor` classes of transformers. We will use the same model checkpoint for this. Let's initialize the model and the processor.
 
 ```python
 from transformers import Swin2SRForImageSuperResolution, Swin2SRImageProcessor 
