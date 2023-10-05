@@ -1,0 +1,32 @@
+{
+    "dataset_name": "hf-internal-testing/librispeech_asr_dummy",     
+    "audio_column_name": "audio", 
+    "text_column_name":"text",
+    "train_split_name": "validation",
+    "eval_split_name": "validation",
+    "dataset_config_name": "clean",
+
+    "model_name_or_path": "/home/yoach/tmp/vits_generator",
+    "discriminator_model_name_or_path": "/home/yoach/tmp/vits_discriminator",
+    "tokenizer_name": "facebook/mms-tts-eng",
+
+    "overwrite_output_dir": true,
+    "output_dir": "/home/yoach/tmp/tentative_vits_finetuning",
+    "report_to": ["wandb", "tensorboard"],
+
+    "preprocessing_num_workers": 1,
+
+    "do_train": true,
+    "num_train_epochs": 50,
+    "gradient_accumulation_steps": 1,
+    "per_device_train_batch_size": 2,
+    "learning_rate": 2e-4,
+    "adam_beta1": 0.8,
+    "adam_beta2": 0.99,
+    "lr_scheduler_type": "cosine_with_restarts",
+    "warmup_ratio": 0.01,
+
+    "do_eval": true, 
+    "eval_steps": 50,
+    "per_device_eval_batch_size": 4
+}
