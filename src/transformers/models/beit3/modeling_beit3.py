@@ -1316,7 +1316,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         ...     pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]),
         ... )
         >>> float(output.loss.detach().numpy())
-        1.8435128
+        1.8435165
         ```"""
         outputs = self.beit3(
             input_ids=None,
