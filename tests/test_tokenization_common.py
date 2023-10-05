@@ -4043,12 +4043,11 @@ class TokenizerTesterMixin:
                         self.assertTrue(len(encoded_split_special_token) > 1)
 
     def core_tokenization_test(self):
-        new_eos = AddedToken("[NEW_EOS]", rstrip = False, lstrip = True, normalized=False)
+        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 # Load a slow tokenizer from the hub
-                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token = new_eos)
+                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
                 self.asserEquals(tokenizer._eos_token, new_eos)
 
                 # make sure the exact added token made it to the added tokens decoder
@@ -4064,7 +4063,9 @@ class TokenizerTesterMixin:
                 self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
 
                 if self.rust_tokenizer_class is not None:
-                    tokenizer_fast = self.rust_tokenizer_class.from_pretrained(pretrained_name, eos_token = new_eos, use_fast=True)
+                    tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
+                        pretrained_name, eos_token=new_eos, use_fast=True
+                    )
                     self.asserEquals(tokenizer._eos_token, new_eos)
                     self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
 

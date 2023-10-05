@@ -2229,7 +2229,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # legacy: we have to init with (rstrip=True, lstrip=True)
                 strip = True if "Fast" not in cls.__name__ else False
                 added_tokens_decoder = {
-                    index: AddedToken(token, rstrip=strip, lstrip=strip, special=token in all_special_strings) for token, index in added_tok_encoder.items()
+                    index: AddedToken(token, rstrip=strip, lstrip=strip, special=token in all_special_strings)
+                    for token, index in added_tok_encoder.items()
                 }
             # end legacy
 
@@ -2389,7 +2390,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Let's save the init kwargs
         target_keys = set(self.init_kwargs.keys())
         # Let's save the special tokens map (only the strings)
-        target_keys.update(["model_max_length", "clean_up_tokenization_spaces","added_tokens_decoder"])
+        target_keys.update(["model_max_length", "clean_up_tokenization_spaces", "added_tokens_decoder"])
 
         for k in target_keys:
             if hasattr(self, k):
