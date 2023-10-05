@@ -33,7 +33,6 @@ from transformers.modeling_outputs import (
 from transformers.models.beit3.configuration_beit3 import Beit3Config
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Beit3Config"
@@ -78,7 +77,7 @@ BEIT3_MODEL = r"""
 
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
-        incremental_state (`Dict`):
+        past_key_value (`Dict`):
             A Dictionary containing the incremental states layerwise/
         text_end_positions (`int`):
             Position of where text representations end and image representation start.
@@ -150,7 +149,7 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             - 0 indicates the token is **absent**.
         text_len (`torch.LongTensor` of shape `({0})`):
             Length of text for captioning
-        incremental_state (`Dict`):
+        past_key_value (`Dict`):
             A Dictionary containing the incremental states layerwise
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -211,6 +210,27 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+@dataclass
+class Beit3ImageTextMatchingModelOutput(ModelOutput):
+    """
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
+    scores.
+
+    Args:
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Languge modeling loss from the text decoder.
+        text_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
+            The image hidden states.
+        image_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
+            The image hidden states.
+    """
+
+    loss: Optional[torch.Tensor] = None
+    text_hidden: Optional[torch.FloatTensor] = None
+    image_hidden: Optional[torch.FloatTensor] = None
+
+
 
 class Beit3MLP(nn.Module):
     def __init__(self, config):
@@ -270,8 +290,8 @@ class Beit3Linear(nn.Module):
             [split_position, hidden_states.size(1) - split_position],
             dim=1,
         )
-        y1, y2 = self.first(text_hidden), self.second(image_hidden)
-        return torch.cat([y1, y2], dim=1)
+        text_hidden, image_hidden = self.first(text_hidden), self.second(image_hidden)
+        return torch.cat([text_hidden, image_hidden], dim=1)
 
 
 class Beit3LayerNorm(nn.Module):
@@ -330,8 +350,8 @@ class Beit3Embedder(nn.Module):
             image_positions = torch.arange(2, image_hidden.size(1) + 2, device=image_hidden.device).long().unsqueeze(0)
         else:
             image_positions = text_end_position
-        y1, y2 = self.first(text_positions), self.second(image_positions)
-        return torch.cat([y1, y2], dim=1)
+        text_representations, image_representatations = self.first(text_positions), self.second(image_positions)
+        return torch.cat([text_representations, image_representatations], dim=1)
 
 
 class Beit3VisionEmbedding(nn.Module):
@@ -374,25 +394,25 @@ class Beit3MultiheadAttention(nn.Module):
         self.embed_dim = config.embed_dim
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
 
         self.key_proj = Beit3Linear(config)
         self.value_proj = Beit3Linear(config)
         self.query_proj = Beit3Linear(config)
         self.out_proj = Beit3Linear(config)
         self.inner_attn_ln = Beit3LayerNorm(config) if config.sub_layernorm else None
-        self.dropout_module = torch.nn.Dropout(config.attention_dropout)
+        self.dropout_module = nn.Dropout(config.attention_dropout)
 
     def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        incremental_state: Dict = None,
-        key_padding_mask: torch.Tensor = None,
-        attention_mask: torch.Tensor = None,
-        relative_pos: torch.Tensor = None,
-        multiway_split_position=-1,
+            self,
+            query: torch.Tensor,
+            key: torch.Tensor,
+            value: torch.Tensor,
+            past_key_value: Dict = None,
+            key_padding_mask: torch.Tensor = None,
+            attention_mask: torch.Tensor = None,
+            relative_pos: torch.Tensor = None,
+            multiway_split_position=-1,
     ):
         batch_size, target_length, embed_dim = query.size()
 
@@ -417,14 +437,14 @@ class Beit3MultiheadAttention(nn.Module):
         key = key.reshape(batch_size * self.num_heads, src_len, self.head_dim)
         value = value.reshape(batch_size * self.num_heads, src_len, self.head_dim)
 
-        if incremental_state is not None:
-            if "prev_key" in incremental_state:
-                prev_key = incremental_state["prev_key"].view(batch_size * self.num_heads, -1, self.head_dim)
-                prev_value = incremental_state["prev_value"].view(batch_size * self.num_heads, -1, self.head_dim)
+        if past_key_value is not None:
+            if "prev_key" in past_key_value:
+                prev_key = past_key_value["prev_key"].view(batch_size * self.num_heads, -1, self.head_dim)
+                prev_value = past_key_value["prev_value"].view(batch_size * self.num_heads, -1, self.head_dim)
                 key = torch.cat([prev_key, key], dim=1)
                 value = torch.cat([prev_value, value], dim=1)
-            incremental_state["prev_key"] = key.view(batch_size, self.num_heads, -1, self.head_dim)
-            incremental_state["prev_value"] = value.view(batch_size, self.num_heads, -1, self.head_dim)
+            past_key_value["prev_key"] = key.view(batch_size, self.num_heads, -1, self.head_dim)
+            past_key_value["prev_value"] = value.view(batch_size, self.num_heads, -1, self.head_dim)
             src_len = key.size(1)
 
         attn_weights = torch.bmm(query, key.transpose(1, 2))
@@ -513,14 +533,14 @@ class Beit3PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(
-            module,
-            (
-                Beit3ForVisualReasoning,
-                Beit3ForImageTextRetrieval,
-                Beit3ForVisualQuestionAnswering,
-                Beit3ForImageClassification,
-                Beit3ForCaptioning,
-            ),
+                module,
+                (
+                        Beit3ForVisualReasoning,
+                        Beit3ForImageTextRetrieval,
+                        Beit3ForVisualQuestionAnswering,
+                        Beit3ForImageClassification,
+                        Beit3ForCaptioning,
+                ),
         ):
             module.beit3.text_embedding.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
@@ -534,8 +554,8 @@ class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
         super().__init__(config)
         self.embed_dim = config.embed_dim
         self.activation_fn = get_activation(config.activation_fn)
-        self.activation_dropout = torch.nn.Dropout(config.activation_dropout)
-        self.dropout = torch.nn.Dropout(config.dropout)
+        self.activation_dropout = nn.Dropout(config.activation_dropout)
+        self.dropout = nn.Dropout(config.dropout)
         self.fc1 = nn.Linear(self.embed_dim, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, self.embed_dim)
         self.ffn_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.sub_layernorm else None
@@ -560,7 +580,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         self.embed_dim = config.embed_dim
         self.self_attn = Beit3MultiheadAttention(config)
         self.self_attn_layer_norm = Beit3LayerNorm(config)
-        self.dropout_module = torch.nn.Dropout(config.dropout)
+        self.dropout_module = nn.Dropout(config.dropout)
 
         self.normalize_before = config.normalize_before
         self.ffn_dim = config.hidden_size
@@ -569,17 +589,17 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         self.final_layer_norm = Beit3LayerNorm(config)
         self.alpha = 1.0
 
-    def residual_connection(self, x, residual):
-        return residual * self.alpha + x
+    def residual_connection(self, hidden_states, residual):
+        return residual * self.alpha + hidden_states
 
     def forward(
-        self,
-        hidden_states,
-        encoder_padding_mask,
-        attention_mask=None,
-        relative_pos=None,
-        multiway_split_position=None,
-        incremental_state=None,
+            self,
+            hidden_states,
+            encoder_padding_mask,
+            attention_mask=None,
+            relative_pos=None,
+            multiway_split_position=None,
+            past_key_value=None,
     ):
         if attention_mask is not None:
             attention_mask = attention_mask.masked_fill(attention_mask.to(torch.bool), -1e8)
@@ -594,7 +614,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
             key_padding_mask=encoder_padding_mask,
             attention_mask=attention_mask,
             relative_pos=relative_pos,
-            incremental_state=incremental_state,
+            past_key_value=past_key_value,
             multiway_split_position=split_position,
         )
         hidden_states = self.dropout_module(hidden_states)
@@ -616,7 +636,7 @@ class Beit3Encoder(nn.Module):
         super().__init__()
 
         self.config = config
-        self.dropout_module = torch.nn.Dropout(config.dropout)
+        self.dropout_module = nn.Dropout(config.dropout)
         self.embed_positions = embed_positions
         self.layers = nn.ModuleList([])
 
@@ -629,18 +649,12 @@ class Beit3Encoder(nn.Module):
             self.fc_norm = None
         self.relative_position = None
 
-        if config.sub_layernorm:
-            init_scale = math.sqrt(math.log(config.layers * 2))
-            for name, p in self.named_parameters():
-                if "fc1" in name or "fc2" in name or "out_proj" in name or "v_proj" in name:
-                    p.data.mul_(init_scale)
-
     def forward_embedding(
-        self,
-        src_tokens,
-        token_embedding=None,
-        text_end_positions=None,
-        multiway_split_position=None,
+            self,
+            src_tokens,
+            token_embedding=None,
+            text_end_positions=None,
+            multiway_split_position=None,
     ):
         x = embed = token_embedding
         if self.embed_positions is not None:
@@ -656,16 +670,16 @@ class Beit3Encoder(nn.Module):
         return x, embed
 
     def forward(
-        self,
-        src_tokens,
-        encoder_padding_mask=None,
-        attention_mask=None,
-        return_all_hiddens=True,
-        token_embeddings=None,
-        multiway_split_position=None,
-        incremental_state=None,
-        text_end_positions=None,
-        return_dict=None,
+            self,
+            src_tokens,
+            encoder_padding_mask=None,
+            attention_mask=None,
+            return_all_hiddens=True,
+            token_embeddings=None,
+            multiway_split_position=None,
+            past_key_value=None,
+            text_end_positions=None,
+            return_dict=None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if encoder_padding_mask is None:
@@ -677,50 +691,52 @@ class Beit3Encoder(nn.Module):
                     device=token_embeddings.device,
                 ).bool()
 
-        x, encoder_embedding = self.forward_embedding(
+        hidden_state, encoder_embedding = self.forward_embedding(
             src_tokens, token_embeddings, text_end_positions, multiway_split_position
         )
-        x = x * (1 - encoder_padding_mask.unsqueeze(-1).type_as(x))
+        hidden_state = hidden_state * (1 - encoder_padding_mask.unsqueeze(-1).type_as(hidden_state))
 
         hidden_states = []
 
         if return_all_hiddens:
-            hidden_states.append(x)
+            hidden_states.append(hidden_state)
 
         relative_pos_bias = None
         if self.relative_position is not None:
-            relative_pos_bias = self.relative_position(batch_size=x.size(0), qlen=x.size(1), klen=x.size(1))
+            relative_pos_bias = self.relative_position(batch_size=hidden_state.size(0), qlen=hidden_state.size(1),
+                                                       klen=hidden_state.size(1))
 
-        # incremental_state is not None during inference if we use the bidirectional encoder as a generator as in s2s-ft (https://arxiv.org/abs/2110.13640)
+        # past_key_value is not None during inference if we use the bidirectional encoder as a generator as in s2s-ft (https://arxiv.org/abs/2110.13640)
         for idx, layer in enumerate(self.layers):
-            x = layer(
-                x,
-                encoder_padding_mask=encoder_padding_mask if incremental_state is None else None,
+            hidden_state = layer(
+                hidden_state,
+                encoder_padding_mask=encoder_padding_mask if past_key_value is None else None,
                 attention_mask=attention_mask,
                 relative_pos=relative_pos_bias,
                 multiway_split_position=multiway_split_position,
-                incremental_state=incremental_state[idx] if incremental_state is not None else None,
+                past_key_value=past_key_value[idx] if past_key_value is not None else None,
             )
             if return_all_hiddens:
-                hidden_states.append(x)
+                hidden_states.append(hidden_state)
 
         if self.fc_norm is not None:
-            x = self.fc_norm(x, split_position=multiway_split_position)
+            hidden_state = self.fc_norm(hidden_state, split_position=multiway_split_position)
 
         if not return_dict:
-            return [x, encoder_embedding, hidden_states]
+            return [hidden_state, encoder_embedding, hidden_states]
 
         return Beit3ModelOutput(
-            encoder_out=x,
+            encoder_out=hidden_state,
             encoder_embedding=encoder_embedding,
             hidden_states=hidden_states,
         )
 
 
 @add_start_docstrings(
-    """Beit3 is a multimodal foundation model, It which treats image as a foreign langauge and embeds images. Beit3 uses
-     Multiway transformers (from VLMo). The key idea in BEiT-3 is to model images as another language. Beit3 uses
-     multiway Transformers architecture which uses a shared self-attention module.""",
+    """BEiT-3 is a general-purpose multimodal foundation model that excels in both vision and vision-language tasks. It
+        utilizes  [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific 
+        encoding, and unifies masked modeling on images, texts, and image-text pairs, achieving top performance 
+        on multiple benchmarks.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3Model(Beit3PreTrainedModel):
@@ -747,16 +763,16 @@ class Beit3Model(Beit3PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BEIT3_MODEL)
     def forward(
-        self,
-        input_ids=None,
-        pixel_values=None,
-        text_padding_mask=None,
-        attention_mask=None,
-        vision_masked_position=None,
-        incremental_state=None,
-        text_end_positions=None,
-        return_dict=None,
-        output_hidden_states=True,
+            self,
+            input_ids=None,
+            pixel_values=None,
+            text_padding_mask=None,
+            attention_mask=None,
+            vision_masked_position=None,
+            past_key_value=None,
+            text_end_positions=None,
+            return_dict=None,
+            output_hidden_states=True,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if input_ids is None:
@@ -774,13 +790,8 @@ class Beit3Model(Beit3PreTrainedModel):
             x = torch.cat([x1, x2], dim=1)
 
             if text_padding_mask is not None:
-                encoder_padding_mask = torch.cat(
-                    [
-                        torch.zeros(x1.shape[:-1]).to(x1.device).bool(),
-                        text_padding_mask,
-                    ],
-                    dim=1,
-                )
+                zeros_for_vision_padding = torch.zeros(x1.shape[:-1]).to(x1.device).bool()
+                encoder_padding_mask = torch.cat([zeros_for_vision_padding, text_padding_mask, ], dim=1, )
             else:
                 encoder_padding_mask = None
         encoder_out = self.encoder(
@@ -789,7 +800,7 @@ class Beit3Model(Beit3PreTrainedModel):
             attention_mask=attention_mask,
             token_embeddings=x,
             multiway_split_position=multiway_split_position,
-            incremental_state=incremental_state,
+            past_key_value=past_key_value,
             text_end_positions=text_end_positions,
             return_dict=return_dict,
         )
@@ -817,13 +828,13 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids,
-        pixel_values,
-        text_padding_mask,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
+            self,
+            input_ids,
+            pixel_values,
+            text_padding_mask,
+            output_hidden_states=None,
+            return_dict=None,
+            labels=None,
     ):
         r"""
         Returns:
@@ -842,7 +853,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
-        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+        >>> input = beit3_processor(text=["This is photo of vision_cls_rep cat"], images=image)
 
         >>> pixel_values = torch.cat(
         ...     (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)),
@@ -878,8 +889,8 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         vision_cls = x[:, 0, :]
         language_cls = x[:, multiway_split_position, :]
         cls_rep = torch.cat((vision_cls, language_cls), dim=-1)
-        a, b = torch.split(cls_rep, split_size_or_sections=[batch_size, batch_size], dim=0)
-        cls_rep = torch.cat((a, b), dim=-1)
+        vision_cls_rep, language_cls_rep = torch.split(cls_rep, split_size_or_sections=[batch_size, batch_size], dim=0)
+        cls_rep = torch.cat((vision_cls_rep, language_cls_rep), dim=-1)
 
         logits = self.classifier(cls_rep)
         reshaped_logits = logits.contiguous()
@@ -921,11 +932,11 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+            self,
+            pixel_values: Optional[torch.FloatTensor] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[Any], ImageClassifierOutputWithNoAttention]:
         r"""
         Returns:
@@ -1012,16 +1023,16 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids,
-        pixel_values,
-        text_padding_mask,
-        language_masked_pos,
-        text_len=None,
-        incremental_state=None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+            self,
+            input_ids,
+            pixel_values,
+            text_padding_mask,
+            language_masked_pos,
+            text_len=None,
+            past_key_value=None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.LongTensor] = None,
     ):
         r"""
         Returns:
@@ -1076,10 +1087,10 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         uni_mask[i_start:i_end, i_start:i_end] = 1
         uni_mask = 1 - uni_mask
 
-        if incremental_state is not None:
+        if past_key_value is not None:
             for idx in range(self.get_num_layers()):
-                if idx not in incremental_state:
-                    incremental_state[idx] = {}
+                if idx not in past_key_value:
+                    past_key_value[idx] = {}
 
         # for incremental decoding
         text_end_positions = None
@@ -1096,7 +1107,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             pixel_values=pixel_values,
             text_padding_mask=text_padding_mask,
             attention_mask=uni_mask,
-            incremental_state=incremental_state,
+            past_key_value=past_key_value,
             text_end_positions=text_end_positions,
         )
         if pixel_values is not None:
@@ -1172,13 +1183,13 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_VQA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids,
-        pixel_values,
-        text_padding_mask,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+            self,
+            input_ids,
+            pixel_values,
+            text_padding_mask,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[Any], SequenceClassifierOutput]:
         r"""
         Returns:
@@ -1249,26 +1260,6 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-@dataclass
-class Beit3ImageTextMatchingModelOutput(ModelOutput):
-    """
-    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
-    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
-    scores.
-
-    Args:
-        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Languge modeling loss from the text decoder.
-        text_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
-            The image hidden states.
-        image_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
-            The image hidden states.
-    """
-
-    loss: Optional[torch.Tensor] = None
-    text_hidden: Optional[torch.FloatTensor] = None
-    image_hidden: Optional[torch.FloatTensor] = None
-
 
 @add_start_docstrings(
     """Beit 3 Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
@@ -1290,12 +1281,12 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Beit3ImageTextMatchingModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids: torch.LongTensor,
-        pixel_values: torch.FloatTensor,
-        text_padding_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: torch.LongTensor,
+            pixel_values: torch.FloatTensor,
+            text_padding_mask: Optional[torch.Tensor] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple[Any], Beit3ImageTextMatchingModelOutput]:
         r"""
         Returns:
