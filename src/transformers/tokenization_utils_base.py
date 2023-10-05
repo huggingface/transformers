@@ -2299,6 +2299,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if isinstance(obj, AddedToken):
             if add_type_field:
                 obj = obj.__getstate__()
+                obj["__type"] = "AddedToken"
             return obj
         elif isinstance(obj, (list, tuple)):
             return [cls.convert_added_tokens(o, add_type_field=add_type_field) for o in obj]
@@ -2388,7 +2389,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Let's save the init kwargs
         target_keys = set(self.init_kwargs.keys())
         # Let's save the special tokens map (only the strings)
-        target_keys.update(["model_max_length", "clean_up_tokenization_spaces"])
+        target_keys.update(["model_max_length", "clean_up_tokenization_spaces","added_tokens_decoder"])
 
         for k in target_keys:
             if hasattr(self, k):
@@ -2405,10 +2406,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
         tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True)
 
-        added_tokens = {}
-        for key, value in self.added_tokens_decoder.items():
-            added_tokens[key] = value.__getstate__()
-        tokenizer_config["added_tokens_decoder"] = added_tokens
+        # added_tokens = {}
+        # for key, value in self.added_tokens_decoder.items():
+        #     added_tokens[key] = value.__getstate__()
+        # tokenizer_config["added_tokens_decoder"] = added_tokens
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
