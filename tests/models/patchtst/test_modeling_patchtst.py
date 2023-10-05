@@ -248,12 +248,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Ignore since we have no tokens embeddings
+    @unittest.skip(reason="we have no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
-
-    # def test_model_outputs_equivalence(self):
-    #     pass
 
     def test_model_main_input_name(self):
         model_signature = inspect.signature(getattr(PatchTSTModel, "forward"))
