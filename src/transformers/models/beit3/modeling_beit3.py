@@ -632,12 +632,12 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
 
 
 class Beit3Encoder(nn.Module):
-    def __init__(self, config, embed_positions=None):
+    def __init__(self, config):
         super().__init__()
 
         self.config = config
         self.dropout_module = nn.Dropout(config.dropout)
-        self.embed_positions = embed_positions
+        self.embed_positions = Beit3Embedder(config)
         self.layers = nn.ModuleList([])
 
         for i in range(config.layers):
@@ -745,11 +745,8 @@ class Beit3Model(Beit3PreTrainedModel):
         super().__init__(config)
         self.text_embedding = nn.Embedding(config.vocab_size, config.embed_dim)
         self.vision_embedding = Beit3VisionEmbedding(config)
-        embed_positions = Beit3Embedder(config)
-        self.encoder = Beit3Encoder(
-            config,
-            embed_positions=embed_positions,
-        )
+        Beit3Embedder(config)
+        self.encoder = Beit3Encoder(config)
         self.gradient_checkpointing = False
         self.post_init()
 
