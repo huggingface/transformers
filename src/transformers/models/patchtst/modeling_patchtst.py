@@ -196,8 +196,6 @@ class PatchTSTAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-
-
 class Transpose(nn.Module):
     def __init__(self, *dims, contiguous=False):
         super().__init__()
