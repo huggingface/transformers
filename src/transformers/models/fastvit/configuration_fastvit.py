@@ -26,14 +26,15 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+# TODO: change to Apple/fastvit-t8
 FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "apple/fastvit-t8": "https://huggingface.co/apple/fastvit-t8/resolve/main/config.json",
-    "apple/fastvit-t12": "https://huggingface.co/apple/fastvit-t12/resolve/main/config.json",
-    "apple/fastvit-s12": "https://huggingface.co/apple/fastvit-s12/resolve/main/config.json",
-    "apple/fastvit-sa12": "https://huggingface.co/apple/fastvit-sa12/resolve/main/config.json",
-    "apple/fastvit-sa24": "https://huggingface.co/apple/fastvit-sa24/resolve/main/config.json",
-    "apple/fastvit-sa36": "https://huggingface.co/apple/fastvit-sa36/resolve/main/config.json",
-    "apple/fastvit-ma36": "https://huggingface.co/apple/fastvit-ma36/resolve/main/config.json",
+    "jorgeav/fastvit_t8": "https://huggingface.co/apple/fastvit-t8/resolve/main/config.json",
+    # "apple/fastvit-t12": "https://huggingface.co/apple/fastvit-t12/resolve/main/config.json",
+    # "apple/fastvit-s12": "https://huggingface.co/apple/fastvit-s12/resolve/main/config.json",
+    # "apple/fastvit-sa12": "https://huggingface.co/apple/fastvit-sa12/resolve/main/config.json",
+    # "apple/fastvit-sa24": "https://huggingface.co/apple/fastvit-sa24/resolve/main/config.json",
+    # "apple/fastvit-sa36": "https://huggingface.co/apple/fastvit-sa36/resolve/main/config.json",
+    # "apple/fastvit-ma36": "https://huggingface.co/apple/fastvit-ma36/resolve/main/config.json",
     # See all FastViT models at https://huggingface.co/models?filter=fastvit
 }
 
