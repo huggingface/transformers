@@ -38,7 +38,7 @@ class PatchTSTConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-    Args:
+    Parameters:
         num_input_channels (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
@@ -173,8 +173,7 @@ class PatchTSTConfig(PretrainedConfig):
         pre_norm: bool = False,
         positional_encoding: str = "sincos",
         learn_pe: bool = False,
-        use_cls_token: bool = False,
-        num_parallel_samples: int = 100,
+        use_cls_token: bool = False,        
         init_std: float = 0.02,
         shared_projection: bool = True,
         seed_number: int = None,
@@ -195,6 +194,8 @@ class PatchTSTConfig(PretrainedConfig):
         prediction_length: int = 24,
         num_output_channels: int = 1,
         prediction_range: List = None,
+        # distribution head
+        num_parallel_samples: int = 100,
         **kwargs,
     ):
         # time series specific configuration
@@ -254,6 +255,7 @@ class PatchTSTConfig(PretrainedConfig):
 
         # Forcasting and prediction
         self.prediction_length = prediction_length
+        self.num_parallel_samples = num_parallel_samples
 
         # Regression
         self.num_output_channels = num_output_channels
