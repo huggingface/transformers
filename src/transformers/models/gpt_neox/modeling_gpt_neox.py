@@ -287,7 +287,7 @@ def attention_mask_func(attention_scores, ltor_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LlamaRotary->GPTNeoXRotary
-class GPTNeoXRotaryEmbedding(torch.nn.Module):
+class GPTNeoXRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
