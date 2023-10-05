@@ -139,9 +139,12 @@ class VitsConfig(PretrainedConfig):
             Kernel size of the first channel of the 2D convolution layers used in the discriminator model.
         discriminator_stride (`int`, *optional*, defaults to 3):
             Stride of the first channel of the 2D convolution layers used in the discriminator model.
-        discriminator_periods (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
+        discriminator_periods (`Tuple[int]` or `List[int]`, *optional*, defaults to `[2, 3, 5, 7, 11]`):
             A tuple of integers defining the period of each sub-discriminator of the discriminator model.
-
+        segment_size (`int`, *optional*, defaults to 8192):
+            Segment size of the spectrogam used to compute the recontruction loss during training.
+        hop_length (`int`, defaults to 256):
+            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients. Used during training.
     Example:
 
     ```python
@@ -206,7 +209,9 @@ class VitsConfig(PretrainedConfig):
         sampling_rate=16_000,
         discriminator_kernel_size=5,
         discriminator_stride=3,
-        discriminator_periods=[1, 2, 3, 5, 7, 11],
+        discriminator_periods=[2, 3, 5, 7, 11],
+        segment_size=8192,
+        hop_length=256,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -254,10 +259,13 @@ class VitsConfig(PretrainedConfig):
         self.noise_scale_duration = noise_scale_duration
         self.sampling_rate = sampling_rate
 
+        # used for training
         self.discriminator_kernel_size = discriminator_kernel_size
         self.discriminator_stride = discriminator_stride
         self.discriminator_periods = discriminator_periods
-
+        self.segment_size = segment_size
+        self.hop_length = hop_length
+        
         if len(upsample_kernel_sizes) != len(upsample_rates):
             raise ValueError(
                 f"The length of `upsample_kernel_sizes` ({len(upsample_kernel_sizes)}) must match the length of "

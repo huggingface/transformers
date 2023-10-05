@@ -72,6 +72,8 @@ class VitsModelOutput(ModelOutput):
 
             Attention weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        training_outputs (`tuple(torch.FloatTensor), *optional*, returned when `labels` is passed and `VitsModelForPreTraining` is used):
+            Tuple of `torch.FloatTensor` used to compute losses when training.
     """
 
     waveform: torch.FloatTensor = None
@@ -79,6 +81,7 @@ class VitsModelOutput(ModelOutput):
     spectrogram: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    training_outputs: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -135,6 +138,70 @@ def fused_add_tanh_sigmoid_multiply(input_a, input_b, num_channels):
     s_act = torch.sigmoid(in_act[:, num_channels:, :])
     acts = t_act * s_act
     return acts
+
+
+
+def slice_segments(hidden_states, ids_str, segment_size=4):
+  ret = torch.zeros_like(hidden_states[:, :, :segment_size])
+  for i in range(hidden_states.size(0)):
+    idx_str = ids_str[i]
+    idx_end = idx_str + segment_size  # + 1 # TODO: +1 was added by me, why doesn't it work w/o if it works?
+    ret[i] = hidden_states[i, :, idx_str:idx_end]
+  return ret
+
+
+def rand_slice_segments(hidden_states, sample_lengths=None, segment_size=4):
+  b, d, t = hidden_states.size()
+  if sample_lengths is None:
+    sample_lengths = t
+  ids_str_max = sample_lengths - segment_size + 1
+  ids_str = (torch.rand([b]).to(device=hidden_states.device) * ids_str_max).to(dtype=torch.long)
+  ret = slice_segments(hidden_states, ids_str, segment_size)
+  return ret, ids_str
+
+# TODO: original implementation use cython, should I use torchscript?
+# https://github.com/jaywalnut310/vits/tree/main/monotonic_align
+# TODO: make it work - optimization
+# @torch.jit.script
+def monotonic_align_max_path(neg_cent,mask):
+    path = torch.zeros_like(neg_cent)
+    
+    text_length_maxs = mask.sum(1)[:,0]
+    latent_length_maxs = mask.sum(2)[:,0]
+    
+    indexes = text_length_maxs - 1
+    
+    max_neg_val=-1e9
+    
+    for batch_id in range(len(path)):
+        index = int(indexes[batch_id].item())
+        text_length_max = int(text_length_maxs[batch_id].item())
+        latent_length_max = int(latent_length_maxs[batch_id].item())
+        
+        
+        
+        for y in range(text_length_max):
+            for x in range(max(0, latent_length_max + y - text_length_max), min(latent_length_max, y + 1)):
+                if x == y:
+                    v_cur = max_neg_val
+                else:
+                    v_cur = neg_cent[batch_id, y-1,x]
+                if x == 0:
+                    if y == 0:
+                        v_prev = 0.
+                    else:
+                        v_prev = max_neg_val
+                else:
+                    v_prev = neg_cent[batch_id, y-1, x-1]
+                neg_cent[batch_id, y,x] += max(v_prev, v_cur)
+                
+            
+        for y in range(text_length_max - 1, -1, -1):
+            path[batch_id, y, index] = 1
+            if index != 0 and (index == y or neg_cent[batch_id, y-1, index] < neg_cent[batch_id, y-1, index-1]):
+                index = index - 1
+    return path
+
 
 
 def _unconstrained_rational_quadratic_spline(
@@ -445,15 +512,53 @@ class VitsPosteriorEncoder(nn.Module):
         return sampled, mean, log_stddev
 
 
-class HifiGanDiscriminatorResidualBlock(nn.Module):
+class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
+    def __init__(self, leaky_relu_slope=0.1):
+        super().__init__()
+        self.leaky_relu_slope = leaky_relu_slope
+        self.convs =  nn.ModuleList([
+            nn.Conv1d(1, 16, 15, 1, padding=7),
+            nn.Conv1d(16, 64, 41, 4, groups=4, padding=20),
+            nn.Conv1d(64, 256, 41, 4, groups=16, padding=20),
+            nn.Conv1d(256, 1024, 41, 4, groups=64, padding=20),
+            nn.Conv1d(1024, 1024, 41, 4, groups=256, padding=20),
+            nn.Conv1d(1024, 1024, 5, 1, padding=2),
+        ])
+        self.final_conv = nn.Conv1d(1024, 1, 3, 1, padding=1)
+
+    def apply_weight_norm(self):
+        for layer in self.convs:
+            nn.utils.weight_norm(layer)
+        nn.utils.weight_norm(self.conv_post)
+
+    def remove_weight_norm(self):
+        for layer in self.convs:
+            nn.utils.remove_weight_norm(layer)
+        nn.utils.remove_weight_norm(self.conv_post)
+
+    def forward(self, hidden_states):
+        fmap = []
+
+        for conv in self.convs:
+            hidden_states = conv(hidden_states)
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            fmap.append(hidden_states)
+
+        hidden_states = self.final_conv(hidden_states)
+        fmap.append(hidden_states)
+        hidden_states = torch.flatten(hidden_states, 1, -1)
+        
+        return hidden_states, fmap
+
+class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
     def __init__(self, period, kernel_size=5, stride=3, leaky_relu_slope=0.1):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
         self.period = period
 
-        convs = []
-        for in_channels, out_channels in [(1, 32), (32, 128), (128, 512), (5012, 1024), (1024, 1024)]:
-            convs.append(
+        self.convs = nn.ModuleList()
+        for in_channels, out_channels in [(1, 32), (32, 128), (128, 512), (512, 1024), (1024, 1024)]:
+            self.convs.append(
                 nn.Conv2d(
                     in_channels,
                     out_channels,
@@ -462,9 +567,6 @@ class HifiGanDiscriminatorResidualBlock(nn.Module):
                     padding=(self.get_padding(kernel_size, 1), 0),
                 )
             )
-
-        self.convs = nn.ModuleList([convs])
-
         self.final_conv = nn.Conv2d(1024, 1, (stride, 1), 1, padding=(1, 0))
 
     def get_padding(self, kernel_size, dilation=1):
@@ -499,33 +601,9 @@ class HifiGanDiscriminatorResidualBlock(nn.Module):
 
         hidden_states = self.final_conv(hidden_states)
         fmap.append(hidden_states)
-
         hidden_states = torch.flatten(hidden_states, 1, -1)
+        
         return hidden_states, fmap
-
-
-class VitsDiscriminator(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        self.discriminators = nn.ModuleList(
-            [
-                HifiGanDiscriminatorResidualBlock(
-                    period, config.discriminator_kernel_size, config.discriminator_stride, config.leaky_relu_slope
-                )
-            ]
-            for period in config.discriminator_periods
-        )
-
-    def forward(self, hidden_states):
-        fmaps = []
-
-        for discriminator in self.discriminators:
-            hidden_states, fmap = discriminator(hidden_states)
-            fmaps.append(fmap)
-
-        return hidden_states, fmaps
-
 
 # Copied from transformers.models.speecht5.modeling_speecht5.HifiGanResidualBlock
 class HifiGanResidualBlock(nn.Module):
@@ -1436,6 +1514,7 @@ VITS_INPUTS_DOCSTRING = r"""
     VITS_START_DOCSTRING,
 )
 class VitsModel(VitsPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["discriminator"]
     def __init__(self, config: VitsConfig):
         super().__init__(config)
         self.config = config
@@ -1524,7 +1603,7 @@ class VitsModel(VitsPreTrainedModel):
             speaker_embeddings = None
 
         if labels is not None:
-            raise NotImplementedError("Training of VITS is not supported yet.")
+            raise NotImplementedError("Training of VITS is not supported by this model. See `VitsModelForPreTraining`.")
 
         text_encoder_output = self.text_encoder(
             input_ids=input_ids,
@@ -1593,3 +1672,323 @@ class VitsModel(VitsPreTrainedModel):
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
         )
+
+
+
+@add_start_docstrings(
+    "The complete VITS model, for text-to-speech synthesis.",
+    VITS_START_DOCSTRING,
+)
+class VitsModelForPreTraining(VitsPreTrainedModel):
+    def __init__(self, config: VitsConfig):
+        super().__init__(config)
+        self.config = config
+        self.text_encoder = VitsTextEncoder(config)
+        self.flow = VitsResidualCouplingBlock(config)
+        self.decoder = VitsHifiGan(config)
+
+        if config.use_stochastic_duration_prediction:
+            self.duration_predictor = VitsStochasticDurationPredictor(config)
+        else:
+            self.duration_predictor = VitsDurationPredictor(config)
+
+        if config.num_speakers > 1:
+            self.embed_speaker = nn.Embedding(config.num_speakers, config.speaker_embedding_size)
+
+        # This is used only for training.
+        self.posterior_encoder = VitsPosteriorEncoder(config)
+
+        # These parameters control the synthesised speech properties
+        self.speaking_rate = config.speaking_rate
+        self.noise_scale = config.noise_scale
+        self.noise_scale_duration = config.noise_scale_duration
+        self.segment_size = self.config.segment_size//self.config.hop_length
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_encoder(self):
+        return self.text_encoder
+    
+    
+    def _inference_forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        speaker_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+    ):
+        text_encoder_output = self.text_encoder(
+            input_ids=input_ids,
+            padding_mask=padding_mask,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = text_encoder_output[0] if not return_dict else text_encoder_output.last_hidden_state
+        hidden_states = hidden_states.transpose(1, 2)
+        input_padding_mask = padding_mask.transpose(1, 2)
+        prior_means = text_encoder_output[1] if not return_dict else text_encoder_output.prior_means
+        prior_log_variances = text_encoder_output[2] if not return_dict else text_encoder_output.prior_log_variances
+
+        if self.config.use_stochastic_duration_prediction:
+            log_duration = self.duration_predictor(
+                hidden_states,
+                input_padding_mask,
+                speaker_embeddings,
+                reverse=True,
+                noise_scale=self.noise_scale_duration,
+            )
+        else:
+            log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
+
+        length_scale = 1.0 / self.speaking_rate
+        duration = torch.ceil(torch.exp(log_duration) * input_padding_mask * length_scale)
+        predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
+
+        # Create a padding mask for the output lengths of shape (batch, 1, max_output_length)
+        indices = torch.arange(predicted_lengths.max(), dtype=predicted_lengths.dtype, device=predicted_lengths.device)
+        output_padding_mask = indices.unsqueeze(0) < predicted_lengths.unsqueeze(1)
+        output_padding_mask = output_padding_mask.unsqueeze(1).to(input_padding_mask.dtype)
+
+        # Reconstruct an attention tensor of shape (batch, 1, out_length, in_length)
+        attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(output_padding_mask, -1)
+        batch_size, _, output_length, input_length = attn_mask.shape
+        cum_duration = torch.cumsum(duration, -1).view(batch_size * input_length, 1)
+        indices = torch.arange(output_length, dtype=duration.dtype, device=duration.device)
+        valid_indices = indices.unsqueeze(0) < cum_duration
+        valid_indices = valid_indices.to(attn_mask.dtype).view(batch_size, input_length, output_length)
+        padded_indices = valid_indices - nn.functional.pad(valid_indices, [0, 0, 1, 0, 0, 0])[:, :-1]
+        attn = padded_indices.unsqueeze(1).transpose(2, 3) * attn_mask
+
+        # Expand prior distribution
+        prior_means = torch.matmul(attn.squeeze(1), prior_means).transpose(1, 2)
+        prior_log_variances = torch.matmul(attn.squeeze(1), prior_log_variances).transpose(1, 2)
+
+        prior_latents = prior_means + torch.randn_like(prior_means) * torch.exp(prior_log_variances) * self.noise_scale
+        latents = self.flow(prior_latents, output_padding_mask, speaker_embeddings, reverse=True)
+
+        spectrogram = latents * output_padding_mask
+        waveform = self.decoder(spectrogram, speaker_embeddings)
+        waveform = waveform.squeeze(1)
+        sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
+
+        if not return_dict:
+            outputs = (waveform, sequence_lengths, spectrogram) + text_encoder_output[3:]
+            return outputs
+
+        return VitsModelOutput(
+            waveform=waveform,
+            sequence_lengths=sequence_lengths,
+            spectrogram=spectrogram,
+            hidden_states=text_encoder_output.hidden_states,
+            attentions=text_encoder_output.attentions,
+        )
+
+    @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=VitsModelOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        speaker_id: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.FloatTensor] = None,
+        labels_attention_mask: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple[Any], VitsModelOutput]:
+        r"""
+        labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
+            Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
+            computation. TODO: is the time steps things True here ?
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import VitsTokenizer, VitsModel, set_seed
+        >>> import torch
+
+        >>> tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
+        >>> model = VitsModel.from_pretrained("facebook/mms-tts-eng")
+
+        >>> inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
+
+        >>> set_seed(555)  # make deterministic
+
+        >>> with torch.no_grad():
+        ...     outputs = model(inputs["input_ids"])
+        >>> outputs.waveform.shape
+        torch.Size([1, 45824])
+        ```
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
+
+        if attention_mask is not None:
+            input_padding_mask = attention_mask.unsqueeze(-1).float()
+        else:
+            input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
+            
+        if self.config.num_speakers > 1 and speaker_id is not None:
+            if not 0 <= speaker_id < self.config.num_speakers:
+                raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
+            if isinstance(speaker_id, int):
+                speaker_id = torch.full(size=(1,), fill_value=speaker_id, device=self.device)
+            speaker_embeddings = self.embed_speaker(speaker_id).unsqueeze(-1)
+        else:
+            speaker_embeddings = None
+
+        # if inference, return inference forward of VitsModel
+        if labels is None:
+            return self._inference_forward(input_ids, attention_mask, speaker_embeddings, output_attentions, output_hidden_states, return_dict, input_padding_mask)
+        
+
+        if labels_attention_mask is not None:
+            labels_padding_mask = labels_attention_mask.unsqueeze(1).float()
+        else:
+            labels_padding_mask = torch.ones((labels.shape[0], labels.shape[1])).unsqueeze(-1).float()
+
+        text_encoder_output = self.text_encoder(
+            input_ids=input_ids,
+            padding_mask=input_padding_mask,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = text_encoder_output[0] if not return_dict else text_encoder_output.last_hidden_state
+        hidden_states = hidden_states.transpose(1, 2)
+        input_padding_mask = input_padding_mask.transpose(1, 2)
+        prior_means = text_encoder_output[1] if not return_dict else text_encoder_output.prior_means
+        prior_log_variances = text_encoder_output[2] if not return_dict else text_encoder_output.prior_log_variances
+        
+        
+        # TODO: pass through posterior encoder
+        # ATTENTION: not same input as the text_encoder !!! 
+        # should be labels padding_mask
+        # z: latents
+        # z, m_q, logs_q, y_mask = self.enc_q(y, y_lengths, g=g)
+        latents, posterior_means, posterior_log_variances = self.posterior_encoder(labels, labels_padding_mask, speaker_embeddings)
+        # TODO: generate y_mask
+        # LABELS !!!
+
+        
+        # TODO: flow - g is speaker embeddings
+        # z_p: prior_latents
+        # z_p = self.flow(z, y_mask, g=g)
+        prior_latents = self.flow(latents, labels_padding_mask, speaker_embeddings, reverse=False)
+        
+        # TODO: probably should transpose(1,2) of prior_log_variances and prior_means 
+        prior_means, prior_log_variances = prior_means.transpose(1,2), prior_log_variances.transpose(1,2)
+        with torch.no_grad():
+            # negative cross-entropy
+            
+            # [batch_size, d, latent_length]
+            prior_variances = torch.exp(-2 * prior_log_variances)
+            # [batch_size, 1, latent_length]
+            neg_cent1 = torch.sum(-0.5 * math.log(2 * math.pi) - prior_log_variances, [1], keepdim=True) 
+            # [batch_size, text_length, d] x [batch_size, d, latent_length] = [batch_size, text_length, latent_length]
+            neg_cent2 = torch.matmul(-0.5 * (prior_latents ** 2).transpose(1, 2), prior_variances)
+            # [batch_size, text_length, d] x [batch_size, d, latent_length] = [batch_size, text_length, latent_length]
+            neg_cent3 = torch.matmul(prior_latents.transpose(1, 2), (prior_means * prior_variances)) 
+            # [batch_size, 1, latent_length]
+            neg_cent4 = torch.sum(-0.5 * (prior_means ** 2) * prior_variances, [1], keepdim=True) 
+            
+            # [batch_size, text_length, latent_length]
+            neg_cent = neg_cent1 + neg_cent2 + neg_cent3 + neg_cent4
+
+            # TODO: first padding mask is related to text_encoder and second to posterior encoder, might not be the same at the end of the day
+            attn_mask = (torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1)).transpose(2,3)
+            
+            
+            attn = monotonic_align_max_path(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
+
+            
+        durations = attn.sum(2)
+        
+        if self.config.use_stochastic_duration_prediction:
+            log_duration = self.duration_predictor(
+                hidden_states, input_padding_mask, speaker_embeddings, durations=durations, reverse=False
+            )
+            log_duration = log_duration / torch.sum(input_padding_mask)
+        else:
+            log_duration_padded = torch.log(durations + 1e-6) * input_padding_mask
+            log_duration = self.duration_predictor(hidden_states, input_padding_mask,speaker_embeddings)
+            log_duration = torch.sum((log_duration-log_duration_padded)**2, [1,2]) / torch.sum(input_padding_mask)
+        
+        # optional, shall we keep it ?
+        duration = torch.ceil(torch.exp(log_duration).unsqueeze(1).unsqueeze(2) * input_padding_mask)
+        predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
+        sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
+
+        
+        # expand priors
+        prior_means = torch.matmul(attn.squeeze(1), prior_means.transpose(1,2)).transpose(1,2)
+        prior_log_variances = torch.matmul(attn.squeeze(1), prior_log_variances.transpose(1,2)).transpose(1,2)
+        
+        
+        label_lengths = labels_attention_mask.sum(dim=1)
+        latents_slice, ids_slice = rand_slice_segments(latents, label_lengths, segment_size=self.segment_size)
+        
+        waveform = self.decoder(latents_slice, speaker_embeddings)
+        
+        # correspondance: 
+        # o - waveform
+        # l_length - log_duration
+        # x_mask - input_padding_mask
+        # y_mask - label_padding_mask
+        # z, z_p, m_p, logs_p, m_q, logs_q -> latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances
+        
+
+        if not return_dict:
+            outputs = (waveform, sequence_lengths) + text_encoder_output[3:] + ((waveform, log_duration, ids_slice, input_padding_mask, labels_padding_mask, latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances))
+            return outputs
+
+        return VitsModelOutput(
+            waveform=waveform,
+            sequence_lengths=sequence_lengths,
+            hidden_states=text_encoder_output.hidden_states,
+            attentions=text_encoder_output.attentions,
+            training_outputs=(waveform, log_duration, ids_slice, input_padding_mask, labels_padding_mask, latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances)
+        )
+        
+
+class VitsDiscriminator(VitsPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        
+        self.discriminators = nn.ModuleList([HifiGanDiscriminatorScaleResidualBlock(config.leaky_relu_slope)])
+
+        self.discriminators.extend(
+            [
+                HifiGanDiscriminatorPeriodResidualBlock(
+                    period, config.discriminator_kernel_size, config.discriminator_stride, config.leaky_relu_slope
+                )
+                for period in config.discriminator_periods
+            ]
+        )
+        
+        # Initialize weights and apply final processing
+        self.post_init()
+        
+    def forward(self, hidden_states):
+        fmaps = []
+        discriminated_hidden_states_list = []
+        
+        for discriminator in self.discriminators:
+            discriminated_hidden_states, fmap = discriminator(hidden_states)
+            fmaps.append(fmap)
+            discriminated_hidden_states_list.append(discriminated_hidden_states)
+
+        return discriminated_hidden_states_list, fmaps
