@@ -1335,13 +1335,15 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         labels: torch.Tensor = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> PatchTSTForClassificationOutput:
+    ) -> Union[tuple, PatchTSTForClassificationOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        model_output = self.model(past_values, output_hidden_states=output_hidden_states)
+        model_output = self.model(past_values,
+                                  past_observed_mask=past_observed_mask,
+                                  output_hidden_states=output_hidden_states)
         y_hat = self.head(model_output[0])
 
         loss_val = None
@@ -1472,21 +1474,12 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # get model output
-<<<<<<< Updated upstream
-        model_output = self.model(
-            past_values, past_observed_mask=past_observed_mask, output_hidden_states=output_hidden_states
-        )
-
-        # get output head. y_hat is of shape [bs x pred_len x num_output_channels] of tuple of this shape
-        y_hat = self.head(model_output.last_hidden_state)
-=======
         model_output = self.model(past_values, 
                                   past_observed_mask=past_observed_mask, 
                                   output_hidden_states=output_hidden_states)
         
         # get output head. y_hat is of shape [bs x pred_len x num_output_channels] or tuple of this shape           
         y_hat = self.head(model_output.last_hidden_state)        
->>>>>>> Stashed changes
 
         loss_val = None
         if future_values is not None:
@@ -1523,14 +1516,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-<<<<<<< Updated upstream
-            [`SamplePatchTSTPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
-            number of samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length,
-            num_input_channels)` for multivariate predictions.
-=======
             [`SamplePatchTSTPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of
             samples, prediction_length, num_output_channels)`
->>>>>>> Stashed changes
         """
         # get number of samples
         num_parallel_samples = self.config.num_parallel_samples
@@ -1547,7 +1534,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         distribution = self.distribution_output.distribution(outputs.prediction_output)
         # get samples
         samples = [
-            distribution.sample() for i in range(num_parallel_samples)
+            distribution.sample() for _ in range(num_parallel_samples)
         ]  # samples: list of [bs x pred_len x num_output_channels]
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [bs x num_samples x pred_len x num_output_channels]
@@ -1750,7 +1737,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         )
         # get samples
         samples = [
-            distribution.sample() for i in range(num_parallel_samples)
+            distribution.sample() for _ in range(num_parallel_samples)
         ]  # samples: list of [bs x forecast_len x nvars]
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [bs x num_samples x forecast_len x nvars]
@@ -1827,36 +1814,13 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         self.post_init()
 
     def forward(
-<<<<<<< Updated upstream
         self,
         past_values: torch.Tensor,
-        past_observed_mask: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PatchTSTOutput]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        model_output = self.model(past_values, output_hidden_states=output_hidden_states)
-        y_hat = self.head(model_output.last_hidden_state)
-
-        loss_val = None
-        if labels is not None:
-            loss_val = self.loss(y_hat, labels)
-
-        encoder_states = model_output.hidden_states
-        if not return_dict:
-            return tuple(v for v in [loss_val, y_hat, encoder_states] if v is not None)
-        return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=encoder_states)
-=======
-        self, past_values: torch.Tensor, 
         labels: Optional[torch.Tensor], 
         past_observed_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None
-    ) -> PatchTSTForRegressionOutput:
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, PatchTSTForRegressionOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1876,16 +1840,17 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             else:                
                 loss_val = self.loss(y_hat, labels)
 
+        if not return_dict:
+            return tuple(v for v in [loss_val, y_hat, encoder_states, loc, scale] if v is not None)
         return PatchTSTForRegressionOutput(loss=loss_val, 
-                              prediction_output=y_hat, 
-                              hidden_states=model_output.hidden_states
-                              )
-    
+                                          prediction_output=y_hat,
+                                          hidden_states=model_output.hidden_states
+                                          )
 
     def generate(self, 
                  past_values: torch.Tensor,                 
                  past_observed_mask: Optional[torch.Tensor] = None,                                  
-        ) -> SamplePatchTSTPredictionOutput:
+        ) -> SamplePatchTSTRegressionOutput:
         """
         Generate sequences of sample predictions from a model with a probability distribution head.
 
@@ -1919,8 +1884,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                                 outputs.prediction_output                                 
                                 )        
         # get samples
-        samples = [distribution.sample() for i in range(num_parallel_samples)]     # samples: list of [bs x num_output_channels]
+        samples = [distribution.sample() for _ in range(num_parallel_samples)]     # samples: list of [bs x num_output_channels]
         # stack tensors
         samples = torch.stack(samples, dim=1)   # [bs x num_samples x num_output_channels]
         return SamplePatchTSTRegressionOutput(sequences=samples)
->>>>>>> Stashed changes
