@@ -19,7 +19,6 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The PatchTST model was proposed in [A Time Series is Worth 64 Words: Long-term Forecasting with Transformers](https://arxiv.org/abs/2211.14730) by Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam.
-<INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
 
@@ -27,9 +26,10 @@ The abstract from the paper is the following:
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+The model also adds a time series classification pipeline and time series regression pipeline.
 
 This model was contributed by [namctin](https://huggingface.co/namctin), [gsinthong](https://huggingface.co/gsinthong), [diepi](https://huggingface.co/diepi), [vijaye12](https://huggingface.co/vijaye12), [wmgifford](https://huggingface.co/wmgifford), and [kashif](https://huggingface.co/kashif).
+
 The original code can be found [here](https://github.com/yuqinie98/PatchTST).
 
 
