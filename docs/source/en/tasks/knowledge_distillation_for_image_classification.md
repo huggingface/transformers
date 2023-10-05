@@ -25,7 +25,7 @@ Let's install the libraries needed for distillation and evaluating the process.
 pip install transformers datasets accelerate tensorboard evaluate --upgrade
 ```
 
-In this example, we are using the `microsoft/resnet-50` model, trained with ImageNet-1k dataset with a resolution of 224x224.
+In this example, we are using the `microsoft/resnet-50` model, trained on the [ImageNet-1k dataset](https://huggingface.co/datasets/imagenet-1k) with a resolution of 224x224.
 
 ```python
 from PIL import Image
