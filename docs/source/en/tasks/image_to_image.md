@@ -71,7 +71,7 @@ model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-lightweig
 processor = Swin2SRImageProcessor("caidas/swin2SR-lightweight-x2-64")
 ```
 
-`pipeline` abstracts away the preprocessing and postprocessing steps that we have to do ourselves, so let's preprocess the image. We will pass the image to processor and then take the pixel values to GPU. 
+`pipeline` abstracts away the preprocessing and postprocessing steps that we have to do ourselves, so let's preprocess the image. We will pass the image to the processor and then move the pixel values to GPU. 
 
 ```python
 pixel_values = processor(image, return_tensors="pt").pixel_values
