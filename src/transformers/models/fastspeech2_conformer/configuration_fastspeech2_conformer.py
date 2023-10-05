@@ -84,7 +84,8 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             Specifies whether to concatenate after decoder layers.
         reduction_factor (`int`, *optional*, defaults to 1):
             The factor by which the speech frame rate is reduced.
-        speaking_speed (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+        speaking_speed (`float`, *optional*, defaults to 1.0):
+            The speed of the speech produced.
         use_macaron_style_in_conformer (`bool`, *optional*, defaults to `True`):
             Specifies whether to use macaron style in the conformer.
         use_cnn_in_conformer (`bool`, *optional*, defaults to `True`):
@@ -428,8 +429,10 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        model_config (`typing.Dict`, *optional*): <fill_docstring>
-        vocoder_config (`typing.Dict`, *optional*): <fill_docstring>
+        model_config (`typing.Dict`, *optional*):
+            Configuration of the text-to-speech model.
+        vocoder_config (`typing.Dict`, *optional*):
+            Configuration of the vocoder model.
     model_config ([`FastSpeech2ConformerConfig`], *optional*):
         Configuration of the text-to-speech model.
     vocoder_config ([`FastSpeech2ConformerHiFiGanConfig`], *optional*):
