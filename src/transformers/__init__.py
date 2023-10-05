@@ -183,6 +183,13 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
+    "models.character_bert": [
+        "CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BasicTokenizer",
+        "CharacterBertConfig",
+        "CharacterBertTokenizer",
+        "WordpieceTokenizer",
+    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
@@ -828,6 +835,7 @@ else:
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
+    _import_structure["models.character_bert"].append("CharacterBertTokenizerFast")
     _import_structure["models.big_bird"].append("BigBirdTokenizerFast")
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
@@ -924,6 +932,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.bert"].append("TFBertTokenizer")
+    _import_structure["models.character_bert"].append("TFCharacterBertTokenizer")
 
 # keras-nlp-specific objects
 try:
@@ -1256,6 +1265,23 @@ else:
             "BertModel",
             "BertPreTrainedModel",
             "load_tf_weights_in_bert",
+        ]
+    )
+    _import_structure["models.character_bert"].extend(
+        [
+            "CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CharacterBertForMaskedLM",
+            "CharacterBertForMultipleChoice",
+            "CharacterBertForNextSentencePrediction",
+            "CharacterBertForPreTraining",
+            "CharacterBertForQuestionAnswering",
+            "CharacterBertForSequenceClassification",
+            "CharacterBertForTokenClassification",
+            "CharacterBertLayer",
+            "CharacterBertLMHeadModel",
+            "CharacterBertModel",
+            "CharacterBertPreTrainedModel",
+            "load_tf_weights_in_character_bert",
         ]
     )
     _import_structure["models.bert_generation"].extend(
@@ -4338,6 +4364,13 @@ if TYPE_CHECKING:
         BertTokenizer,
         WordpieceTokenizer,
     )
+    from .models.character_bert import (
+        CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BasicTokenizer,
+        CharacterBertConfig,
+        CharacterBertTokenizer,
+        WordpieceTokenizer,
+    )
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
@@ -4940,6 +4973,7 @@ if TYPE_CHECKING:
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
+        from .models.character_bert import CharacterBertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
         from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
@@ -5019,6 +5053,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tensorflow_text_objects import *
     else:
         from .models.bert import TFBertTokenizer
+        from .models.character_bert import TFCharacterBertTokenizer
 
     try:
         if not is_keras_nlp_available():
@@ -5311,6 +5346,21 @@ if TYPE_CHECKING:
             BertModel,
             BertPreTrainedModel,
             load_tf_weights_in_bert,
+        )
+        from .models.character_bert import (
+            CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CharacterBertForMaskedLM,
+            CharacterBertForMultipleChoice,
+            CharacterBertForNextSentencePrediction,
+            CharacterBertForPreTraining,
+            CharacterBertForQuestionAnswering,
+            CharacterBertForSequenceClassification,
+            CharacterBertForTokenClassification,
+            CharacterBertLayer,
+            CharacterBertLMHeadModel,
+            CharacterBertModel,
+            CharacterBertPreTrainedModel,
+            load_tf_weights_in_character_bert,
         )
         from .models.bert_generation import (
             BertGenerationDecoder,
