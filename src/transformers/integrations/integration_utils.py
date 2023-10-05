@@ -1447,6 +1447,7 @@ class ClearMLCallback(TrainerCallback):
             raise RuntimeError("ClearMLCallback requires 'clearml' to be installed. Run `pip install clearml`.")
 
         self._initialized = False
+        self._initialized_externally = False
         self._clearml_task = None
 
         self._log_model = os.getenv("CLEARML_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
@@ -1464,6 +1465,7 @@ class ClearMLCallback(TrainerCallback):
                 if self._clearml.Task.current_task():
                     self._clearml_task = self._clearml.Task.current_task()
                     self._initialized = True
+                    self._initialized_externally = True
                     logger.info("External ClearML Task has been connected.")
                 else:
                     self._clearml_task = self._clearml.Task.init(
@@ -1490,7 +1492,7 @@ class ClearMLCallback(TrainerCallback):
     def on_train_end(self, args, state, control, model=None, tokenizer=None, metrics=None, logs=None, **kwargs):
         if self._clearml is None:
             return
-        if self._clearml_task and state.is_world_process_zero:
+        if self._clearml_task and state.is_world_process_zero and not self._initialized_externally:
             # Close ClearML Task at the end end of training
             self._clearml_task.close()
 
