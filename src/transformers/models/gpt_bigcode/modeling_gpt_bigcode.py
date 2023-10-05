@@ -409,6 +409,10 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
         if isinstance(module, GPTBigCodeModel):
             module.gradient_checkpointing = value
 
+    @property
+    def word_embeddings(self):
+        return self.transformer.wte
+
 
 GPT_BIGCODE_START_DOCSTRING = r"""
 
