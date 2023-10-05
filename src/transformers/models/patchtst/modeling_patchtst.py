@@ -1430,8 +1430,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        future_values: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> PatchTSTForPredictionOutput:
         output_hidden_states = (
@@ -1612,8 +1612,8 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        future_values: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
         future_observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> PatchTSTForForecastingOutput:

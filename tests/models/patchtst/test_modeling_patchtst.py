@@ -277,6 +277,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             expected_arg_names = [
                 "past_values",
+                "past_observed_mask",
                 "future_values",
             ]
             if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
