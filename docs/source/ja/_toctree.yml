@@ -102,7 +102,7 @@
   - local: tf_xla
     title: TensorFlowモデルのXLA統合
   - local: perf_torch_compile
-    title: `torch.compile()`を使用した推論の最適化
+    title: torch.compile()を使用した推論の最適化
   title: パフォーマンスとスケーラビリティ
 - sections:
   - local: contributing
