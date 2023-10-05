@@ -53,7 +53,7 @@ print(image.size)
 ```
 ![Image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat.jpg)
 
-We can now do inference with pipeline. We will get an upscaled version of the cat image. 
+We can now do inference with the pipeline. We will get an upscaled version of the cat image. 
 
 ```python
 upscaled = pipe(image)
