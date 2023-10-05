@@ -40,12 +40,12 @@ Tips:
 
 
 Example of use:
-# TODO: change to Apple/fastvit-t8
+
 ```python
 >>> from transformers import AutoImageProcessor, FastViTModel
 >>> from PIL import Image
 >>> import requests
-
+# TODO: change to Apple/fastvit-t8
 >>> ImageProcessor = AutoImageProcessor.from_pretrained("JorgeAV/fastvit_t8")
 >>> model = FastViTModel.from_pretrained("JorgeAV/fastvit_t8")
 
