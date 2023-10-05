@@ -278,7 +278,7 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=torch.tensor(input["pixel_values"]),
-            padding_mask=torch.ones(input["input_ids"].shape),
+            text_padding_mask=torch.ones(input["input_ids"].shape),
         )
         if validate_logits:
             assert output.logits.shape == torch.Size([1, 3129])
@@ -292,7 +292,7 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=pixel_values,
-            padding_mask=torch.ones(input["input_ids"].shape),
+            text_padding_mask=torch.ones(input["input_ids"].shape),
         )
         if validate_logits:
             assert output.logits.shape == torch.Size([1, 2])
@@ -306,7 +306,7 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=torch.tensor(input["pixel_values"]),
-            padding_mask=torch.ones(input["input_ids"].shape),
+            text_padding_mask=torch.ones(input["input_ids"].shape),
             language_masked_pos=language_masked_pos,
         )
         if validate_logits:
@@ -347,14 +347,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--beit3_model_type",
         default=None,
-        type=bool,
+        type=str,
         help="Beit3 model type, it has to be one of image_classification, vqa,visual_reasoning,"
         "image_captioning,image_text_retrieval",
     )
     parser.add_argument(
         "--validate_logits",
         default=False,
-        type=str,
+        type=bool,
         help="whether to assert logits outputs",
     )
     args = parser.parse_args()
