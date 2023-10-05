@@ -2375,11 +2375,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
+        # Let's make sure we properly save the special AddedToken. TODO ArthurZ only str should be saved
+        tokenizer_config.update(self.special_tokens_map_extended)
+
         # Let's save the init kwargs
         target_keys = set(self.init_kwargs.keys())
         # Let's save the special tokens map (only the strings)
-        target_keys.update(self.special_tokens_map_extended.keys())
+        # target_keys.update(self.special_tokens_map_extended.keys())
         target_keys.update(["model_max_length", "clean_up_tokenization_spaces"])
+
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
