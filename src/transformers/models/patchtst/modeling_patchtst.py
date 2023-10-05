@@ -1266,6 +1266,7 @@ class PatchTSTForMaskPretraining(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
+        past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> PatchTSTForMaskPretrainingOutput:
@@ -1306,7 +1307,11 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         self.post_init()
 
     def forward(
-        self, past_values: torch.Tensor, labels: torch.Tensor = None, output_hidden_states: Optional[bool] = None
+        self,
+        past_values: torch.Tensor,
+        past_observed_mask: Optional[bool] = None,
+        labels: torch.Tensor = None,
+        output_hidden_states: Optional[bool] = None,
     ) -> PatchTSTForClassificationOutput:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1614,7 +1619,6 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
-        future_observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> PatchTSTForForecastingOutput:
         output_hidden_states = (
@@ -1750,7 +1754,11 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         self.post_init()
 
     def forward(
-        self, past_values: torch.Tensor, labels: Optional[torch.Tensor], output_hidden_states: Optional[bool] = None
+        self,
+        past_values: torch.Tensor,
+        past_observed_mask: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
     ):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
