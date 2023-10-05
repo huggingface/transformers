@@ -23,7 +23,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import is_flaky, require_torch, torch_device
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -316,14 +316,11 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
             # check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Ignore since we have no tokens embeddings
+    @unittest.skip("No tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
     def test_model_outputs_equivalence(self):
-        pass
-
-    def test_determinism(self):
         pass
 
     def test_model_main_input_name(self):
@@ -373,7 +370,7 @@ def prepare_batch(repo_id="ibm/patchtsmixer-etth1-test-data", file="pretrain_bat
 
 
 @require_torch
-# @slow
+@slow
 class PatchTSMixerModelIntegrationTests(unittest.TestCase):
     def test_pretrain_head(self):
         # TODO: Make repo public
