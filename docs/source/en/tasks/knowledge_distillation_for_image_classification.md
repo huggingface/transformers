@@ -100,7 +100,7 @@ class ImageDistilTrainer(Trainer):
         return (loss, student_output) if return_outputs else loss
 ```
 
-We will now login to Hugging Face Hub so we can push out model to Hugging Face Hub through `Trainer`. 
+We will now login to Hugging Face Hub so we can push our model to the Hugging Face Hub through the `Trainer`. 
 
 ```python
 from huggingface_hub import notebook_login
