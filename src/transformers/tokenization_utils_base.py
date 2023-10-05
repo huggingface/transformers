@@ -1185,21 +1185,19 @@ class SpecialTokensMixin:
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
         """
-        The fast tokenizer cannot change so there's not point in reseting the cached `_additional_special_tokens`
-        Only the init kwargs will be passed and saved. So for fast we need the init kwargs's additional_special_tokens
-        because that's the only way they are added? Not anymore, with the added_tokens_decoder being saved, the token.special
-        can be used. It's more fullproof.
+        The fast tokenizer cannot change so there's not point in reseting the cached `_additional_special_tokens` Only
+        the init kwargs will be passed and saved. So for fast we need the init kwargs's additional_special_tokens
+        because that's the only way they are added? Not anymore, with the added_tokens_decoder being saved, the
+        token.special can be used. It's more fullproof.
         """
 
-        if self.hasattr("_added_tokens_decoder"):
-            # reset the special tokens for slow and conversion
+        if hasattr(self, "_added_tokens_decoder"):
+            # reset the previous special tokens
             for token in self._added_tokens_decoder:
-                token.special = False
-        else:
-            self._additional_special_tokens = value
-            return
-        if self._additional_special_tokens is None:
-            self._additional_special_tokens = []
+                if str(token) in self.additional_special_tokens:
+                    token.special = False
+        self._additional_special_tokens = [] if value is not None else value
+
         # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
         for token in value:
             if isinstance(token, str) and token != "":
