@@ -188,4 +188,4 @@ We can evaluate the model on the test set.
 trainer.evaluate(processed_datasets["test"])
 ```
 
-On test set, our model reaches 65 percent accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on beans dataset from scratch with same hyperparameters and observed 63 percent accuracy on test set. We invite the readers to try different pre-trained teacher models, student architectures, distillation parameters and report their findings. The training logs can be found in [this repository](https://huggingface.co/merve/resnet-mobilenet-beans).
+On test set, our model reaches 65 percent accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on the beans dataset from scratch with the same hyperparameters and observed 63 percent accuracy on the test set. We invite the readers to try different pre-trained teacher models, student architectures, distillation parameters and report their findings. The training logs can be found in [this repository](https://huggingface.co/merve/resnet-mobilenet-beans).
