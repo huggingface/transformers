@@ -373,7 +373,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         if output_attentions:
             outputs += (attn_weights_reshaped,)
 
-        return outputs  # a, present, (attentions)
+        return outputs
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
