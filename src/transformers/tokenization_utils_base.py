@@ -2484,8 +2484,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         save_directory = str(save_directory)
-        vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
-        files_written = file_names + vocab_files
 
         added_tokens_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
@@ -2497,10 +2495,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
                 f.write(out_str)
                 logger.info(f"added tokens file saved in {added_tokens_file}")
-            files_written += (added_tokens_file,)
 
+        vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
-        return files_written
+        return file_names + vocab_files + (added_tokens_file,)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
