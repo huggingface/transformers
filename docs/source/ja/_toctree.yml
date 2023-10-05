@@ -28,10 +28,10 @@
   - local: llm_tutorial
     title: LLM を使用した生成
   title: Tutorials
- - sections:
-    - local: generation_strategies
-      title: 生成戦略をカスタマイズする
-    title: Generation
+- sections:
+   - local: generation_strategies
+     title: 生成戦略をカスタマイズする
+   title: Generation
 - sections:
   - local: fast_tokenizers
     title: 🤗 トークナイザーの高速トークナイザーを使用する
