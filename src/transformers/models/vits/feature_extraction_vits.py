@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 
 from ... import is_torch_available
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -68,7 +68,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         n_fft=1024,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        max_wav_value=32768.0, # TODO : add to docstrings
+        max_wav_value=32768.0,  # TODO : add to docstrings
         **kwargs,
     ):
         super().__init__(
@@ -85,13 +85,12 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             num_frequency_bins=1 + n_fft // 2,
             num_mel_filters=feature_size,
             min_frequency=0.0,
-            max_frequency=22050//2,
+            max_frequency=22050 // 2,
             sampling_rate=sampling_rate,
             norm="slaney",
             mel_scale="slaney",
         )
         self.max_wav_value = max_wav_value
-
 
     def _torch_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
@@ -99,16 +98,28 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         """
         if len(waveform.shape) == 1:
             waveform = waveform.unsqueeze(0)
-        
+
         # TODO: verify squeeze
-        waveform = torch.nn.functional.pad(waveform, (int((self.n_fft-self.hop_length)/2), int((self.n_fft-self.hop_length)/2)), mode='reflect')
-        
+        waveform = torch.nn.functional.pad(
+            waveform,
+            (int((self.n_fft - self.hop_length) / 2), int((self.n_fft - self.hop_length) / 2)),
+            mode="reflect",
+        )
+
         window = torch.hann_window(self.n_fft).to(waveform.device)
-        stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, center=False, pad_mode='reflect', normalized=False, onesided=True,return_complex=False)
+        stft = torch.stft(
+            waveform,
+            self.n_fft,
+            self.hop_length,
+            window=window,
+            center=False,
+            pad_mode="reflect",
+            normalized=False,
+            onesided=True,
+            return_complex=False,
+        )
         magnitudes = torch.sqrt(stft.pow(2).sum(-1) + 1e-6)
-        
-        
-        
+
         mel_filters = torch.from_numpy(self.mel_filters).type(torch.float32).to(waveform.device)
         mel_spec = mel_filters.T @ magnitudes
 
@@ -227,9 +238,11 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         # always return batch
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
-        
+
         if self.max_wav_value is not None:
-            raw_speech = [speech if self.max_wav_value is not None else speech/self.max_wav_value for speech in raw_speech]
+            raw_speech = [
+                speech if self.max_wav_value is not None else speech / self.max_wav_value for speech in raw_speech
+            ]
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 
@@ -255,13 +268,12 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_features"] = np.stack(padded_inputs["input_features"], axis=0)
 
         # make sure list is in array format
-        input_features = padded_inputs.get("input_features").transpose(1,2).transpose(0,1)
-        
+        input_features = padded_inputs.get("input_features").transpose(1, 2).transpose(0, 1)
+
         input_features = [self._torch_extract_fbank_features(waveform) for waveform in input_features[0]]
-        
+
         mel_scaled_input_features = [inputs[1] for inputs in input_features]
         input_features = [inputs[0].squeeze() for inputs in input_features]
-
 
         padded_inputs["input_features"] = input_features
         padded_inputs["mel_scaled_input_features"] = mel_scaled_input_features

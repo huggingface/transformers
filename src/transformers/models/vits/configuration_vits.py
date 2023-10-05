@@ -265,7 +265,7 @@ class VitsConfig(PretrainedConfig):
         self.discriminator_periods = discriminator_periods
         self.segment_size = segment_size
         self.hop_length = hop_length
-        
+
         if len(upsample_kernel_sizes) != len(upsample_rates):
             raise ValueError(
                 f"The length of `upsample_kernel_sizes` ({len(upsample_kernel_sizes)}) must match the length of "

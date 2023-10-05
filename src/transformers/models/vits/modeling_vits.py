@@ -140,68 +140,64 @@ def fused_add_tanh_sigmoid_multiply(input_a, input_b, num_channels):
     return acts
 
 
-
 def slice_segments(hidden_states, ids_str, segment_size=4):
-  ret = torch.zeros_like(hidden_states[:, :, :segment_size])
-  for i in range(hidden_states.size(0)):
-    idx_str = ids_str[i]
-    idx_end = idx_str + segment_size  # + 1 # TODO: +1 was added by me, why doesn't it work w/o if it works?
-    ret[i] = hidden_states[i, :, idx_str:idx_end]
-  return ret
+    ret = torch.zeros_like(hidden_states[:, :, :segment_size])
+    for i in range(hidden_states.size(0)):
+        idx_str = ids_str[i]
+        idx_end = idx_str + segment_size  # + 1 # TODO: +1 was added by me, why doesn't it work w/o if it works?
+        ret[i] = hidden_states[i, :, idx_str:idx_end]
+    return ret
 
 
 def rand_slice_segments(hidden_states, sample_lengths=None, segment_size=4):
-  b, d, t = hidden_states.size()
-  if sample_lengths is None:
-    sample_lengths = t
-  ids_str_max = sample_lengths - segment_size + 1
-  ids_str = (torch.rand([b]).to(device=hidden_states.device) * ids_str_max).to(dtype=torch.long)
-  ret = slice_segments(hidden_states, ids_str, segment_size)
-  return ret, ids_str
+    b, d, t = hidden_states.size()
+    if sample_lengths is None:
+        sample_lengths = t
+    ids_str_max = sample_lengths - segment_size + 1
+    ids_str = (torch.rand([b]).to(device=hidden_states.device) * ids_str_max).to(dtype=torch.long)
+    ret = slice_segments(hidden_states, ids_str, segment_size)
+    return ret, ids_str
+
 
 # TODO: original implementation use cython, should I use torchscript?
 # https://github.com/jaywalnut310/vits/tree/main/monotonic_align
 # TODO: make it work - optimization
 # @torch.jit.script
-def monotonic_align_max_path(neg_cent,mask):
+def monotonic_align_max_path(neg_cent, mask):
     path = torch.zeros_like(neg_cent)
-    
-    text_length_maxs = mask.sum(1)[:,0]
-    latent_length_maxs = mask.sum(2)[:,0]
-    
+
+    text_length_maxs = mask.sum(1)[:, 0]
+    latent_length_maxs = mask.sum(2)[:, 0]
+
     indexes = text_length_maxs - 1
-    
-    max_neg_val=-1e9
-    
+
+    max_neg_val = -1e9
+
     for batch_id in range(len(path)):
         index = int(indexes[batch_id].item())
         text_length_max = int(text_length_maxs[batch_id].item())
         latent_length_max = int(latent_length_maxs[batch_id].item())
-        
-        
-        
+
         for y in range(text_length_max):
             for x in range(max(0, latent_length_max + y - text_length_max), min(latent_length_max, y + 1)):
                 if x == y:
                     v_cur = max_neg_val
                 else:
-                    v_cur = neg_cent[batch_id, y-1,x]
+                    v_cur = neg_cent[batch_id, y - 1, x]
                 if x == 0:
                     if y == 0:
-                        v_prev = 0.
+                        v_prev = 0.0
                     else:
                         v_prev = max_neg_val
                 else:
-                    v_prev = neg_cent[batch_id, y-1, x-1]
-                neg_cent[batch_id, y,x] += max(v_prev, v_cur)
-                
-            
+                    v_prev = neg_cent[batch_id, y - 1, x - 1]
+                neg_cent[batch_id, y, x] += max(v_prev, v_cur)
+
         for y in range(text_length_max - 1, -1, -1):
             path[batch_id, y, index] = 1
-            if index != 0 and (index == y or neg_cent[batch_id, y-1, index] < neg_cent[batch_id, y-1, index-1]):
+            if index != 0 and (index == y or neg_cent[batch_id, y - 1, index] < neg_cent[batch_id, y - 1, index - 1]):
                 index = index - 1
     return path
-
 
 
 def _unconstrained_rational_quadratic_spline(
@@ -516,14 +512,16 @@ class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
     def __init__(self, leaky_relu_slope=0.1):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
-        self.convs =  nn.ModuleList([
-            nn.Conv1d(1, 16, 15, 1, padding=7),
-            nn.Conv1d(16, 64, 41, 4, groups=4, padding=20),
-            nn.Conv1d(64, 256, 41, 4, groups=16, padding=20),
-            nn.Conv1d(256, 1024, 41, 4, groups=64, padding=20),
-            nn.Conv1d(1024, 1024, 41, 4, groups=256, padding=20),
-            nn.Conv1d(1024, 1024, 5, 1, padding=2),
-        ])
+        self.convs = nn.ModuleList(
+            [
+                nn.Conv1d(1, 16, 15, 1, padding=7),
+                nn.Conv1d(16, 64, 41, 4, groups=4, padding=20),
+                nn.Conv1d(64, 256, 41, 4, groups=16, padding=20),
+                nn.Conv1d(256, 1024, 41, 4, groups=64, padding=20),
+                nn.Conv1d(1024, 1024, 41, 4, groups=256, padding=20),
+                nn.Conv1d(1024, 1024, 5, 1, padding=2),
+            ]
+        )
         self.final_conv = nn.Conv1d(1024, 1, 3, 1, padding=1)
 
     def apply_weight_norm(self):
@@ -547,8 +545,9 @@ class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
         hidden_states = self.final_conv(hidden_states)
         fmap.append(hidden_states)
         hidden_states = torch.flatten(hidden_states, 1, -1)
-        
+
         return hidden_states, fmap
+
 
 class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
     def __init__(self, period, kernel_size=5, stride=3, leaky_relu_slope=0.1):
@@ -602,8 +601,9 @@ class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
         hidden_states = self.final_conv(hidden_states)
         fmap.append(hidden_states)
         hidden_states = torch.flatten(hidden_states, 1, -1)
-        
+
         return hidden_states, fmap
+
 
 # Copied from transformers.models.speecht5.modeling_speecht5.HifiGanResidualBlock
 class HifiGanResidualBlock(nn.Module):
@@ -1515,6 +1515,7 @@ VITS_INPUTS_DOCSTRING = r"""
 )
 class VitsModel(VitsPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["discriminator"]
+
     def __init__(self, config: VitsConfig):
         super().__init__(config)
         self.config = config
@@ -1603,7 +1604,9 @@ class VitsModel(VitsPreTrainedModel):
             speaker_embeddings = None
 
         if labels is not None:
-            raise NotImplementedError("Training of VITS is not supported by this model. See `VitsModelForPreTraining`.")
+            raise NotImplementedError(
+                "Training of VITS is not supported by this model. See `VitsModelForPreTraining`."
+            )
 
         text_encoder_output = self.text_encoder(
             input_ids=input_ids,
@@ -1674,7 +1677,6 @@ class VitsModel(VitsPreTrainedModel):
         )
 
 
-
 @add_start_docstrings(
     "The complete VITS model, for text-to-speech synthesis.",
     VITS_START_DOCSTRING,
@@ -1702,15 +1704,14 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         self.speaking_rate = config.speaking_rate
         self.noise_scale = config.noise_scale
         self.noise_scale_duration = config.noise_scale_duration
-        self.segment_size = self.config.segment_size//self.config.hop_length
+        self.segment_size = self.config.segment_size // self.config.hop_length
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_encoder(self):
         return self.text_encoder
-    
-    
+
     def _inference_forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1833,13 +1834,12 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
 
         if attention_mask is not None:
             input_padding_mask = attention_mask.unsqueeze(-1).float()
         else:
             input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
-            
+
         if self.config.num_speakers > 1 and speaker_id is not None:
             if not 0 <= speaker_id < self.config.num_speakers:
                 raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
@@ -1851,8 +1851,15 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
         # if inference, return inference forward of VitsModel
         if labels is None:
-            return self._inference_forward(input_ids, attention_mask, speaker_embeddings, output_attentions, output_hidden_states, return_dict, input_padding_mask)
-        
+            return self._inference_forward(
+                input_ids,
+                attention_mask,
+                speaker_embeddings,
+                output_attentions,
+                output_hidden_states,
+                return_dict,
+                input_padding_mask,
+            )
 
         if labels_attention_mask is not None:
             labels_padding_mask = labels_attention_mask.unsqueeze(1).float()
@@ -1872,51 +1879,51 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         input_padding_mask = input_padding_mask.transpose(1, 2)
         prior_means = text_encoder_output[1] if not return_dict else text_encoder_output.prior_means
         prior_log_variances = text_encoder_output[2] if not return_dict else text_encoder_output.prior_log_variances
-        
-        
+
         # TODO: pass through posterior encoder
-        # ATTENTION: not same input as the text_encoder !!! 
+        # ATTENTION: not same input as the text_encoder !!!
         # should be labels padding_mask
         # z: latents
         # z, m_q, logs_q, y_mask = self.enc_q(y, y_lengths, g=g)
-        latents, posterior_means, posterior_log_variances = self.posterior_encoder(labels, labels_padding_mask, speaker_embeddings)
+        latents, posterior_means, posterior_log_variances = self.posterior_encoder(
+            labels, labels_padding_mask, speaker_embeddings
+        )
         # TODO: generate y_mask
         # LABELS !!!
 
-        
         # TODO: flow - g is speaker embeddings
         # z_p: prior_latents
         # z_p = self.flow(z, y_mask, g=g)
         prior_latents = self.flow(latents, labels_padding_mask, speaker_embeddings, reverse=False)
-        
-        # TODO: probably should transpose(1,2) of prior_log_variances and prior_means 
-        prior_means, prior_log_variances = prior_means.transpose(1,2), prior_log_variances.transpose(1,2)
+
+        # TODO: probably should transpose(1,2) of prior_log_variances and prior_means
+        prior_means, prior_log_variances = prior_means.transpose(1, 2), prior_log_variances.transpose(1, 2)
         with torch.no_grad():
             # negative cross-entropy
-            
+
             # [batch_size, d, latent_length]
             prior_variances = torch.exp(-2 * prior_log_variances)
             # [batch_size, 1, latent_length]
-            neg_cent1 = torch.sum(-0.5 * math.log(2 * math.pi) - prior_log_variances, [1], keepdim=True) 
+            neg_cent1 = torch.sum(-0.5 * math.log(2 * math.pi) - prior_log_variances, [1], keepdim=True)
             # [batch_size, text_length, d] x [batch_size, d, latent_length] = [batch_size, text_length, latent_length]
-            neg_cent2 = torch.matmul(-0.5 * (prior_latents ** 2).transpose(1, 2), prior_variances)
+            neg_cent2 = torch.matmul(-0.5 * (prior_latents**2).transpose(1, 2), prior_variances)
             # [batch_size, text_length, d] x [batch_size, d, latent_length] = [batch_size, text_length, latent_length]
-            neg_cent3 = torch.matmul(prior_latents.transpose(1, 2), (prior_means * prior_variances)) 
+            neg_cent3 = torch.matmul(prior_latents.transpose(1, 2), (prior_means * prior_variances))
             # [batch_size, 1, latent_length]
-            neg_cent4 = torch.sum(-0.5 * (prior_means ** 2) * prior_variances, [1], keepdim=True) 
-            
+            neg_cent4 = torch.sum(-0.5 * (prior_means**2) * prior_variances, [1], keepdim=True)
+
             # [batch_size, text_length, latent_length]
             neg_cent = neg_cent1 + neg_cent2 + neg_cent3 + neg_cent4
 
             # TODO: first padding mask is related to text_encoder and second to posterior encoder, might not be the same at the end of the day
-            attn_mask = (torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1)).transpose(2,3)
-            
-            
+            attn_mask = (torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1)).transpose(
+                2, 3
+            )
+
             attn = monotonic_align_max_path(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
 
-            
         durations = attn.sum(2)
-        
+
         if self.config.use_stochastic_duration_prediction:
             log_duration = self.duration_predictor(
                 hidden_states, input_padding_mask, speaker_embeddings, durations=durations, reverse=False
@@ -1924,35 +1931,50 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             log_duration = log_duration / torch.sum(input_padding_mask)
         else:
             log_duration_padded = torch.log(durations + 1e-6) * input_padding_mask
-            log_duration = self.duration_predictor(hidden_states, input_padding_mask,speaker_embeddings)
-            log_duration = torch.sum((log_duration-log_duration_padded)**2, [1,2]) / torch.sum(input_padding_mask)
-        
+            log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
+            log_duration = torch.sum((log_duration - log_duration_padded) ** 2, [1, 2]) / torch.sum(input_padding_mask)
+
         # optional, shall we keep it ?
         duration = torch.ceil(torch.exp(log_duration).unsqueeze(1).unsqueeze(2) * input_padding_mask)
         predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
-        
         # expand priors
-        prior_means = torch.matmul(attn.squeeze(1), prior_means.transpose(1,2)).transpose(1,2)
-        prior_log_variances = torch.matmul(attn.squeeze(1), prior_log_variances.transpose(1,2)).transpose(1,2)
-        
-        
+        prior_means = torch.matmul(attn.squeeze(1), prior_means.transpose(1, 2)).transpose(1, 2)
+        prior_log_variances = torch.matmul(attn.squeeze(1), prior_log_variances.transpose(1, 2)).transpose(1, 2)
+
         label_lengths = labels_attention_mask.sum(dim=1)
         latents_slice, ids_slice = rand_slice_segments(latents, label_lengths, segment_size=self.segment_size)
-        
+
         waveform = self.decoder(latents_slice, speaker_embeddings)
-        
-        # correspondance: 
+
+        # correspondance:
         # o - waveform
         # l_length - log_duration
         # x_mask - input_padding_mask
         # y_mask - label_padding_mask
         # z, z_p, m_p, logs_p, m_q, logs_q -> latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances
-        
 
         if not return_dict:
-            outputs = (waveform, sequence_lengths) + text_encoder_output[3:] + ((waveform, log_duration, ids_slice, input_padding_mask, labels_padding_mask, latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances))
+            outputs = (
+                (waveform, sequence_lengths)
+                + text_encoder_output[3:]
+                + (
+                    (
+                        waveform,
+                        log_duration,
+                        ids_slice,
+                        input_padding_mask,
+                        labels_padding_mask,
+                        latents,
+                        prior_latents,
+                        prior_means,
+                        prior_log_variances,
+                        posterior_means,
+                        posterior_log_variances,
+                    )
+                )
+            )
             return outputs
 
         return VitsModelOutput(
@@ -1960,14 +1982,26 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             sequence_lengths=sequence_lengths,
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
-            training_outputs=(waveform, log_duration, ids_slice, input_padding_mask, labels_padding_mask, latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances)
+            training_outputs=(
+                waveform,
+                log_duration,
+                ids_slice,
+                input_padding_mask,
+                labels_padding_mask,
+                latents,
+                prior_latents,
+                prior_means,
+                prior_log_variances,
+                posterior_means,
+                posterior_log_variances,
+            ),
         )
-        
+
 
 class VitsDiscriminator(VitsPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        
+
         self.discriminators = nn.ModuleList([HifiGanDiscriminatorScaleResidualBlock(config.leaky_relu_slope)])
 
         self.discriminators.extend(
@@ -1978,14 +2012,14 @@ class VitsDiscriminator(VitsPreTrainedModel):
                 for period in config.discriminator_periods
             ]
         )
-        
+
         # Initialize weights and apply final processing
         self.post_init()
-        
+
     def forward(self, hidden_states):
         fmaps = []
         discriminated_hidden_states_list = []
-        
+
         for discriminator in self.discriminators:
             discriminated_hidden_states, fmap = discriminator(hidden_states)
             fmaps.append(fmap)
