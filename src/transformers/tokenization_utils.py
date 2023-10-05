@@ -356,7 +356,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             self._added_tokens_decoder: Dict[int, AddedToken] = {}
 
         # 3. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer, we overwrite
-        self._added_tokens_decoder.update(kwargs.pop("added_tokens_decoder"))
+        self._added_tokens_decoder.update(kwargs.pop("added_tokens_decoder", {}))
         self._added_tokens_encoder: Dict[str, int] = {k.content: v for v, k in self._added_tokens_decoder.items()}
 
         # 4 init the parent class
