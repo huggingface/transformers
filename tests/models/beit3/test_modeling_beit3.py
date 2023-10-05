@@ -234,6 +234,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": Beit3Model,
             "image-classification": Beit3ForImageClassification,
+            "visual-question-answering": Beit3ForVisualQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -497,8 +498,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
         # forward pass
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
         assert output.logits.shape == torch.Size([1, 1000])
-        np.testing.assert_allclose(
-            output.logits.detach().numpy()[:, :3], torch.tensor([[-0.260473, -0.420061, -0.492118]]), rtol=1e-05
+        torch.testing.assert_allclose(
+            output.logits.detach()[:, :3], torch.tensor([[-0.260473, -0.420061, -0.492118]]), rtol=1e-05
         )
 
     @slow
@@ -521,8 +522,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
             text_padding_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 3129])
-        np.testing.assert_allclose(
-            output.logits.detach().numpy()[:, :3], torch.tensor([[-10.862484, -12.388088, -7.6599636]]), rtol=1e-05
+        torch.testing.assert_allclose(
+            output.logits.detach()[:, :3], torch.tensor([[-10.862484, -12.388088, -7.6599636]]), rtol=1e-05
         )
 
     @slow
@@ -547,7 +548,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             text_padding_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 2])
-        np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[6.593818, -6.582055]]), rtol=1e-05)
+        torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[6.593818, -6.582055]]), rtol=1e-05)
 
     @slow
     def test_inference_beit3_for_image_captioning(self):
@@ -572,8 +573,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
             language_masked_pos=language_masked_pos,
         )
         assert output.logits.shape == torch.Size([1, 64010])
-        np.testing.assert_allclose(
-            output.logits.detach().numpy()[0, :3], torch.tensor([-2.697914, -2.697912, -2.645459]), rtol=1e-05
+        torch.testing.assert_allclose(
+            output.logits.detach()[0, :3], torch.tensor([-2.697914, -2.697912, -2.645459]), rtol=1e-05
         )
 
     @slow
