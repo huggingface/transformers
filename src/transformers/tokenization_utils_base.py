@@ -2242,7 +2242,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
 
         # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
-        init_kwargs = cls.convert_added_tokens(init_kwargs, False)
+        init_kwargs = cls.convert_added_tokens(init_kwargs, save = False)
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -2292,19 +2292,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return max_model_length
 
     @classmethod
-    def convert_added_tokens(cls, obj: Union[AddedToken, Any], add_type_field=True):
+    def convert_added_tokens(cls, obj: Union[AddedToken, Any], save = False, add_type_field=True):
         if isinstance(obj, dict) and "__type" in obj and obj["__type"] == "AddedToken":
             obj.pop("__type")
             return AddedToken(**obj)
-        if isinstance(obj, AddedToken):
+        if isinstance(obj, AddedToken) and save:
+            obj = obj.__getstate__()
             if add_type_field:
-                obj = obj.__getstate__()
                 obj["__type"] = "AddedToken"
             return obj
         elif isinstance(obj, (list, tuple)):
-            return [cls.convert_added_tokens(o, add_type_field=add_type_field) for o in obj]
+            return [cls.convert_added_tokens(o, save=save, add_type_field=add_type_field) for o in obj]
         elif isinstance(obj, dict):
-            return {k: cls.convert_added_tokens(v, add_type_field=add_type_field) for k, v in obj.items()}
+            return {k: cls.convert_added_tokens(v, save=save, add_type_field=add_type_field) for k, v in obj.items()}
         return obj
 
     def save_pretrained(
@@ -2389,11 +2389,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Let's save the init kwargs
         target_keys = set(self.init_kwargs.keys())
         # Let's save the special tokens map (only the strings)
-        target_keys.update(["model_max_length", "clean_up_tokenization_spaces","added_tokens_decoder"])
+        target_keys.update(["model_max_length", "clean_up_tokenization_spaces"])
 
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
+
+        # Process added_tokens_decoder seperatly because typefields should not be added
+        added_tokens = {}
+        for key, value in self.added_tokens_decoder.items():
+            added_tokens[key] = value.__getstate__()
+        tokenizer_config["added_tokens_decoder"] = added_tokens
 
         if self.chat_template is not None:
             tokenizer_config["chat_template"] = self.chat_template
@@ -2403,13 +2409,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
-        # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
+        # no typefields, this way old fast and slow can load it
         tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True)
 
-        # added_tokens = {}
-        # for key, value in self.added_tokens_decoder.items():
-        #     added_tokens[key] = value.__getstate__()
-        # tokenizer_config["added_tokens_decoder"] = added_tokens
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
@@ -2439,8 +2441,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Sanitize AddedTokens in special_tokens_map
 
-        # kept for forward compatibility, will be removed in transoformers 5.
-        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=True)
+        # kept for forward compatibility, will be removed in transoformers 5. Typefields are required
+        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, save = True, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
