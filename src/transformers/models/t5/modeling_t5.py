@@ -382,11 +382,12 @@ class T5Attention(nn.Module):
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)  # regular weights of T5. to support pretrained weights
-            self.relative_attention_bias_dict = nn.ModuleDict()
-            for position_embedding_name, position_embedding_config in self.relative_position_embedding_definitions.items():
-                relative_attention_num_buckets = position_embedding_config.get("num_buckets", self.relative_attention_num_buckets)
-                self.relative_attention_bias_dict[position_embedding_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
+            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)  
+            if self.relative_position_embedding_definitions: # regular weights of T5. to support pretrained weights
+                self.relative_attention_bias_dict = nn.ModuleDict()
+                for position_embedding_name, position_embedding_config in self.relative_position_embedding_definitions.items():
+                    relative_attention_num_buckets = position_embedding_config.get("num_buckets", self.relative_attention_num_buckets)
+                    self.relative_attention_bias_dict[position_embedding_name] = nn.Embedding(relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
@@ -472,10 +473,10 @@ class T5Attention(nn.Module):
         if device is None:
             device = relative_attention_bias.weight.device
         if position_ids is not None:
-            context_position = position_ids.unsqueeze(2)
-            memory_position = position_ids.unsqueeze(1)
+            context_position = position_ids.unsqueeze(2) # shape (num_batches, key_and_query_lnegth) ->  (num_batches, key_and_query_lnegth, 1)
+            memory_position = position_ids.unsqueeze(1) # shape (num_batches, key_and_query_lnegth) ->  (num_batches, 1, key_and_query_lnegth)
         else:
-            context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+            context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None] # shape ()
             memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
@@ -484,11 +485,11 @@ class T5Attention(nn.Module):
             num_buckets=num_buckets,
             max_distance=max_distance,
         )
-        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
+        values = self.relative_attention_bias(relative_position_bucket)  # shape (num_batches - optional, query_length, key_length, num_heads)
         if position_ids is not None:
-            values = values.permute([0, 3, 1, 2])
+            values = values.permute([0, 3, 1, 2]) # shape (num_batches, num_heads, query_length, key_length)
         else:
-            values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+            values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length), 
         return values
 
     def forward(
@@ -970,12 +971,15 @@ class T5Stack(T5PreTrainedModel):
 
         self.abs_position_embedding_dict = nn.ModuleDict()
         relative_position_embedding_definitions = {}
-        self.abs_position_embedding_dict[POSITION_EMBEDDING_SINUSOIDAL] = SinusoidalPositionalEmbedding(config.d_model)
+       
         for position_embedding_name, embedding_config in config.position_embedding_definitions.items():
             if embedding_config.is_relative:
                 relative_position_embedding_definitions[position_embedding_name] = {k:v for k,v in embedding_config.items() if k!= "is_relative"}
             else:
-                self.abs_position_embedding_dict[position_embedding_name] =  nn.Embedding(embedding_config.num_embeddings, config.d_model)
+                if position_embedding_name == POSITION_EMBEDDING_SINUSOIDAL:
+                    self.abs_position_embedding_dict[POSITION_EMBEDDING_SINUSOIDAL] = SinusoidalPositionalEmbedding(config.d_model)
+                else:
+                    self.abs_position_embedding_dict[position_embedding_name] =  nn.Embedding(embedding_config.num_embeddings, config.d_model)
 
 
         self.block = nn.ModuleList(
@@ -1769,8 +1773,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        encoder_position_ids_dict: Optional[Dict[str, Tuple[torch.LongTensor,str]]] = None,
-        decoder_position_ids_dict: Optional[Dict[str, Tuple[torch.LongTensor,str]]] = None,
+        encoder_position_ids_dict: Optional[Dict[str, Tuple[torch.LongTensor,str]]] = None,  # shape of each LongTensor (num_batches, n_input_tokens)
+        decoder_position_ids_dict: Optional[Dict[str, Tuple[torch.LongTensor,str]]] = None, # shape of each LongTensor (num_batches, n_input_tokens)
         add_t5_relative_position_embedding=True,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
