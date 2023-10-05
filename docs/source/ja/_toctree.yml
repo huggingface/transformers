@@ -28,7 +28,7 @@
   - local: llm_tutorial
     title: LLM を使用した生成
   title: Tutorials
-  sections:
+ - sections:
     - local: generation_strategies
       title: 生成戦略をカスタマイズする
     title: Generation
