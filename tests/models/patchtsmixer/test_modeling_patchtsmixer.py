@@ -60,7 +60,7 @@ class PatchTSMixerModelTester:
         self,
         seq_len: int = 32,
         patch_len: int = 8,
-        in_channels: int = 3,
+        input_size: int = 3,
         stride: int = 8,
         # num_features: int = 128,
         hidden_size: int = 128,
@@ -98,7 +98,7 @@ class PatchTSMixerModelTester:
         seed_number=42,
         post_init=True,
     ):
-        self.in_channels = in_channels
+        self.input_size = input_size
         self.seq_len = seq_len
         self.patch_len = patch_len
         self.stride = stride
@@ -141,7 +141,7 @@ class PatchTSMixerModelTester:
 
     def get_config(self):
         config_ = PatchTSMixerConfig(
-            in_channels=self.in_channels,
+            input_size=self.input_size,
             seq_len=self.seq_len,
             patch_len=self.patch_len,
             stride=self.stride,
@@ -181,9 +181,9 @@ class PatchTSMixerModelTester:
         # bs, n_vars, num_patch, patch_len
 
         # [bs x seq_len x n_vars]
-        context_values = floats_tensor([self.batch_size, _past_length, self.in_channels])
+        context_values = floats_tensor([self.batch_size, _past_length, self.input_size])
 
-        target_values = floats_tensor([self.batch_size, config.forecast_len, self.in_channels])
+        target_values = floats_tensor([self.batch_size, config.forecast_len, self.input_size])
 
         inputs_dict = {
             "context_values": context_values,
@@ -383,7 +383,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         num_patch = (
             max(model.config.seq_len, model.config.patch_len) - model.config.patch_len
         ) // model.config.stride + 1
-        expected_shape = torch.Size([1024, model.config.in_channels, num_patch, model.config.patch_len])
+        expected_shape = torch.Size([1024, model.config.input_size, num_patch, model.config.patch_len])
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -405,7 +405,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
             ).prediction_logits
 
         print(output[0, :1, :7])
-        expected_shape = torch.Size([1024, model.config.forecast_len, model.config.in_channels])
+        expected_shape = torch.Size([1024, model.config.forecast_len, model.config.input_size])
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -423,7 +423,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         cls.params.update(
             seq_len=32,
             patch_len=8,
-            in_channels=3,
+            input_size=3,
             stride=8,
             num_features=4,
             expansion_factor=2,
@@ -466,19 +466,19 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         cls.data = torch.rand(
             batch_size,
             cls.params["seq_len"],
-            cls.params["in_channels"],
+            cls.params["input_size"],
         )
 
         cls.enc_data = torch.rand(
             batch_size,
-            cls.params["in_channels"],
+            cls.params["input_size"],
             cls.num_patches,
             cls.params["patch_len"],
         )
 
         cls.enc_output = torch.rand(
             batch_size,
-            cls.params["in_channels"],
+            cls.params["input_size"],
             cls.num_patches,
             cls.params["num_features"],
         )
@@ -489,12 +489,12 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             cls.params["num_features"],
         )
 
-        cls.correct_pred_output = torch.rand(batch_size, cls.params["forecast_len"], cls.params["in_channels"])
+        cls.correct_pred_output = torch.rand(batch_size, cls.params["forecast_len"], cls.params["input_size"])
         cls.correct_regression_output = torch.rand(batch_size, cls.params["n_targets"])
 
         cls.correct_pretrain_output = torch.rand(
             batch_size,
-            cls.params["in_channels"],
+            cls.params["input_size"],
             cls.num_patches,
             cls.params["patch_len"],
         )
@@ -502,7 +502,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         cls.correct_forecast_output = torch.rand(
             batch_size,
             cls.params["forecast_len"],
-            cls.params["in_channels"],
+            cls.params["input_size"],
         )
 
         cls.correct_sel_forecast_output = torch.rand(batch_size, cls.params["forecast_len"], 2)

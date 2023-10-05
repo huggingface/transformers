@@ -761,7 +761,7 @@ class PretrainHead(nn.Module):
     Args:
         num_patches (int): Number of patches to segment
         patch_size (int, optional): Patch length. Defaults to 16.
-        in_channels (int, optional): Number of input variables. Defaults to 3.
+        input_size (int, optional): Number of input variables. Defaults to 1.
         num_features (int, optional): Hidden feature size. Defaults to 16.
         head_dropout (float, optional): Head Dropout rate. Defaults to 0.2.
         mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
@@ -775,7 +775,7 @@ class PretrainHead(nn.Module):
         self,
         num_patches: int,
         num_features: int = 16,
-        in_channels: int = 3,
+        input_size: int = 1,
         patch_size: int = 16,
         head_dropout: float = 0,
         mode: str = "common_channel",
@@ -783,7 +783,7 @@ class PretrainHead(nn.Module):
         super().__init__()
         self.mode = mode
         self.patch_size = patch_size
-        self.in_channels = in_channels
+        self.input_size = input_size
         self.num_patches = num_patches
 
         if self.mode in ["common_channel", "mix_channel"]:
@@ -794,7 +794,7 @@ class PretrainHead(nn.Module):
         else:
             self.base_pt_block = nn.Sequential(
                 nn.Dropout(head_dropout),
-                nn.Linear(num_features, patch_size * in_channels),
+                nn.Linear(num_features, patch_size * input_size),
             )
 
     def forward(self, x, y=None):
@@ -810,7 +810,7 @@ class PretrainHead(nn.Module):
         if self.mode == "flatten":
             x = self.base_pt_block(x)  # x: [bs x num_patch x n_vars*patch_size]
             x = torch.reshape(
-                x, (x.shape[0], x.shape[1], self.patch_size, self.in_channels)
+                x, (x.shape[0], x.shape[1], self.patch_size, self.input_size)
             )  # [bs x num_patch x patch_size x n_vars]
             x = x.permute(0, 3, 1, 2)  # [bs x nvars x num_patch  x patch_len]
             return x

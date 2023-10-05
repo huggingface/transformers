@@ -68,23 +68,23 @@ PATCHTSMIXER_START_DOCSTRING = r"""
 
 PATCHTSMIXER_INPUTS_DOCSTRING = r"""
     Args:
-        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, in_channels)`):
+        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
             Context values of the time series. For a pretraining task, this denotes the input time series to predict
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
             for classification or regression tasks, it denotes the appropriate context values of the time series.
 
-            For univariate time series, `in_channels` dimension should be 1. For multivariate time series, it is > 1.
+            For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is > 1.
 
-        target_values (`torch.FloatTensor` of shape `(batch_size, target_len, in_channels)` for forecasting,
+        target_values (`torch.FloatTensor` of shape `(batch_size, target_len, input_size)` for forecasting,
             `(batch_size, n_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target values
             of the time series, that serve as labels for the model. The `target_values` is what the Transformer needs
             during training to learn to output, given the `context_values`. Note that, this is NOT required for a
             pretraining task.
 
-            For a forecasting task, the shape is be `(batch_size, target_len, in_channels)`. Even if we want to
-            forecast only specific channels by setting the indices in `forecast_channel_indices` parameter, pass the
-            target data with all channels, as channel Filtering for both prediction and target will be manually applied
-            before the loss computation.
+            For a forecasting task, the shape is be `(batch_size, target_len, input_size)`. Even if we want to forecast
+            only specific channels by setting the indices in `forecast_channel_indices` parameter, pass the target data
+            with all channels, as channel Filtering for both prediction and target will be manually applied before the
+            loss computation.
 
             For a classification task, it has a shape of `(batch_size,)`.
 
@@ -148,7 +148,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         self.encoder = PatchTSMixer(
             num_patches=config.num_patches,
             patch_size=config.patch_len,
-            in_channels=config.in_channels,
+            in_channels=config.input_size,
             num_features=config.num_features,
             expansion_factor=config.expansion_factor,
             num_layers=config.num_layers,
@@ -173,7 +173,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     ) -> PatchTSMixerEncoderOutputWithNoAttention:
         r"""
         Args:
-        context_values (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, patch_len)`):
+        context_values (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`):
             Patched input context.
 
         output_hidden_states (`bool`, *optional*):
@@ -262,12 +262,12 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     ) -> PatchTSMixerModelOutputWithNoAttention:
         r"""
         Args:
-        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, in_channels)`):
+        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
             Context values of the time series. For a pretraining task, this denotes the input time series to predict
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
             for classification or regression tasks, it denotes the appropriate context values of the time series.
 
-            For univariate time series, `in_channels` dimension should be 1. For multivariate time series, it is > 1.
+            For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is > 1.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers.
@@ -282,18 +282,18 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         mask = None
 
         if self.revin is not None:
-            context_values = self.revin(context_values, mode="norm")  # x: tensor [bs x seq_len x in_channels]
+            context_values = self.revin(context_values, mode="norm")  # x: tensor [bs x seq_len x input_size]
             revin_mean = self.revin.mean
             revin_stdev = self.revin.stdev
 
-        patched_x = self.patching(context_values)  # [bs x in_channels x num_patch x patch_len]
+        patched_x = self.patching(context_values)  # [bs x input_size x num_patch x patch_len]
 
         enc_input = patched_x
 
         if self.masking is not None:
             enc_input, mask = self.masking(patched_x)
-            # enc_input: [bs x in_channels x num_patch x patch_len]
-            # mask: [bs x in_channels x num_patch]
+            # enc_input: [bs x input_size x num_patch x patch_len]
+            # mask: [bs x input_size x num_patch]
 
         encoder_output = self.encoder(enc_input, output_hidden_states=output_hidden_states)
 
@@ -313,7 +313,7 @@ class PatchTSMixerMaskedPretrainHead(nn.Module):
         self.head = PretrainHead(
             num_patches=config.num_patches,
             num_features=config.num_features,
-            in_channels=config.in_channels,
+            input_size=config.input_size,
             patch_size=config.patch_len,
             head_dropout=config.head_dropout,
             mode=config.mode,
@@ -322,10 +322,10 @@ class PatchTSMixerMaskedPretrainHead(nn.Module):
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
         Args:
-        hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Refers the embedding output from the backbone
 
-        Returns: `torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, patch_len)`
+        Returns: `torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`
 
         """
 
@@ -341,11 +341,11 @@ class PatchTSMixerForMaskPreTrainingOutputWithNoAttention(ModelOutput):
     Output type of [`PatchTSMixerForMaskPreTrainingOutputWithNoAttention`].
 
     Args:
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, patch_len)`):
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`):
             Prediction output from the pretrain head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
         loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
             Total loss
@@ -397,12 +397,12 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
     ) -> PatchTSMixerForMaskPreTrainingOutputWithNoAttention:
         r"""
         Args:
-        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, in_channels)`):
+        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
             Context values of the time series. For a pretraining task, this denotes the input time series to predict
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
             for classification or regression tasks, it denotes the appropriate context values of the time series.
 
-            For univariate time series, `in_channels` dimension should be 1. For multivariate time series, it is > 1.
+            For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is > 1.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers.
@@ -414,7 +414,7 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
 
         """
 
-        # context_values: tensor [bs x seq_len x in_channels]
+        # context_values: tensor [bs x seq_len x input_size]
         model_output = self.model(
             context_values, output_hidden_states=output_hidden_states
         )  # x.last_hidden_state: [bs x nvars x num_patch x num_features]
@@ -442,7 +442,7 @@ class PatchTSMixerForecastHead(nn.Module):
         super().__init__()
         self.head = ForecastHead(
             num_patches=config.num_patches,
-            in_channels=config.in_channels,
+            in_channels=config.input_size,
             patch_size=config.patch_len,
             num_features=config.num_features,
             forecast_len=config.forecast_len,
@@ -454,21 +454,21 @@ class PatchTSMixerForecastHead(nn.Module):
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
         Args:
-        hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Backbone embedding.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, forecast_len, in_channels)` or `(batch_size, forecast_len,
+            `torch.FloatTensor` of shape `(batch_size, forecast_len, input_size)` or `(batch_size, forecast_len,
             forecast_channels)`:
         Forecast output. If forecast_channel_indices is not None, then only the channel indices to be forecasted will
         be returned.
         """
 
-        # x: [bs x in_channels x num_patches x num_features]
-        # return: [bs x forecast_len x in_channels]
+        # x: [bs x input_size x num_patches x num_features]
+        # return: [bs x forecast_len x input_size]
 
         return self.head(hidden_state, y=None)
 
@@ -479,9 +479,9 @@ class PatchTSMixerForForecastOutputWithNoAttention(ModelOutput):
     Output type of [`PatchTSMixerForForecastOutput`].
 
     Args:
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, forecast_len, in_channels)`):
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, forecast_len, input_size)`):
             Prediction output from the forecast head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
@@ -537,7 +537,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         """
 
-        # context_values: tensor [bs x seq_len x in_channels]
+        # context_values: tensor [bs x seq_len x input_size]
         model_output = self.model(
             context_values,
             output_hidden_states=output_hidden_states,
@@ -545,7 +545,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         y_hat = self.head(
             model_output.last_hidden_state,
-        )  # tensor [bs x forecast_len x in_channels]
+        )  # tensor [bs x forecast_len x input_size]
 
         if self.revin is not None:
             self.revin.set_statistics(mean=model_output.revin_mean, stdev=model_output.revin_stdev)
@@ -560,7 +560,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             loss_val = None
 
         return PatchTSMixerForForecastOutputWithNoAttention(
-            prediction_logits=y_hat,  # tensor [bs x forecast_len x in_channels]
+            prediction_logits=y_hat,  # tensor [bs x forecast_len x input_size]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
@@ -572,7 +572,7 @@ class PatchTSMixerClassificationHead(nn.Module):
         super().__init__()
         self.head = LinearHead(
             num_patches=config.num_patches,
-            in_channels=config.in_channels,
+            in_channels=config.input_size,
             num_features=config.num_features,
             head_dropout=config.head_dropout,
             output_dim=config.n_classes,
@@ -584,7 +584,7 @@ class PatchTSMixerClassificationHead(nn.Module):
     def forward(self, hidden_state) -> torch.Tensor:
         """
         Args:
-        hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Refers the embedding output from the backbone.
 
         Returns: `torch.FloatTensor` of shape `(batch_size, no_classes)`
@@ -605,7 +605,7 @@ class PatchTSMixerForClassificationOutputWithNoAttention(ModelOutput):
     Args:
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, n_classes)`):
             Prediction output from the classfication head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
@@ -704,7 +704,7 @@ class PatchTSMixerRegressionHead(nn.Module):
 
         self.head = LinearHead(
             num_patches=config.num_patches,
-            in_channels=config.in_channels,
+            in_channels=config.input_size,
             num_features=config.num_features,
             head_dropout=config.head_dropout,
             output_dim=config.n_targets,
@@ -716,14 +716,14 @@ class PatchTSMixerRegressionHead(nn.Module):
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         """
         Args:
-        hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Refers the embedding output from the backbone.
 
         Returns: `torch.FloatTensor` of shape `(batch_size, n_targets)`
 
         """
 
-        # hidden_state: [bs x in_channels x num_patches x num_features]
+        # hidden_state: [bs x input_size x num_patches x num_features]
         # return: [bs x n_targets]
         return self.head(hidden_state, y=None)
 
@@ -736,7 +736,7 @@ class PatchTSMixerForRegressionOutputWithNoAttention(ModelOutput):
     Args:
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, n_targets)`):
             Prediction output from the regression head.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
@@ -799,7 +799,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         """
 
-        # context_values: tensor [bs x seq_len x in_channels]
+        # context_values: tensor [bs x seq_len x input_size]
         # target_values: tensor [bs x n_targets]
 
         model_output = self.model(
