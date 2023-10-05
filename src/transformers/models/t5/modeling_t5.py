@@ -1866,6 +1866,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 )
 class T5EncoderModel(T5PreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_unexpected = [r"decoder"]
 
     def __init__(self, config: T5Config):
         super().__init__(config)

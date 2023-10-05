@@ -57,7 +57,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.34.0.dev0")
+check_min_version("4.35.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -246,13 +246,16 @@ def parse_args():
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, json or txt file."
+            if extension not in ["csv", "json", "txt"]:
+                raise ValueError("`train_file` should be a csv, json or txt file.")
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
+            if extension not in ["csv", "json", "txt"]:
+                raise ValueError("`validation_file` should be a csv, json or txt file.")
 
     if args.push_to_hub:
-        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
+        if args.output_dir is None:
+            raise ValueError("Need an `output_dir` to create a repo when `--push_to_hub` is passed.")
 
     return args
 
@@ -437,13 +440,12 @@ def main():
 
     if args.block_size is None:
         block_size = tokenizer.model_max_length
-        if block_size > 1024:
+        if block_size > config.max_position_embeddings:
             logger.warning(
-                "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
-                " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
-                " override this default with `--block_size xxx`."
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                f"Using block_size={min(1024, config.max_position_embeddings)} instead. You can change that default value by passing --block_size xxx."
             )
-        block_size = 1024
+            block_size = min(1024, config.max_position_embeddings)
     else:
         if args.block_size > tokenizer.model_max_length:
             logger.warning(

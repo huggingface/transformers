@@ -144,26 +144,13 @@ class MarianTokenizer(PreTrainedTokenizer):
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        super().__init__(
-            # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
-            source_lang=source_lang,
-            target_lang=target_lang,
-            unk_token=unk_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            model_max_length=model_max_length,
-            sp_model_kwargs=self.sp_model_kwargs,
-            target_vocab_file=target_vocab_file,
-            separate_vocabs=separate_vocabs,
-            **kwargs,
-        )
         assert Path(source_spm).exists(), f"cannot find spm source {source_spm}"
 
         self.separate_vocabs = separate_vocabs
         self.encoder = load_json(vocab)
-        if self.unk_token not in self.encoder:
-            raise KeyError("<unk> token must be in vocab")
-        assert self.pad_token in self.encoder
+        if unk_token not in self.encoder:
+            raise KeyError("<unk> token must be in the vocab")
+        assert pad_token in self.encoder
 
         if separate_vocabs:
             self.target_encoder = load_json(target_vocab_file)
@@ -186,6 +173,20 @@ class MarianTokenizer(PreTrainedTokenizer):
         # Multilingual target side: default to using first supported language code.
 
         self._setup_normalizer()
+
+        super().__init__(
+            # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
+            source_lang=source_lang,
+            target_lang=target_lang,
+            unk_token=unk_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            model_max_length=model_max_length,
+            sp_model_kwargs=self.sp_model_kwargs,
+            target_vocab_file=target_vocab_file,
+            separate_vocabs=separate_vocabs,
+            **kwargs,
+        )
 
     def _setup_normalizer(self):
         try:
