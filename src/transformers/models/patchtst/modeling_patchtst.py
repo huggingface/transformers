@@ -1505,9 +1505,9 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSTPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of
-            samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length, num_input_channels)` for
-            multivariate predictions.
+            [`SamplePatchTSTPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
+            number of samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length,
+            num_input_channels)` for multivariate predictions.
         """
         # get number of samples
         num_parallel_samples = self.config.num_parallel_samples
@@ -1706,9 +1706,9 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSTForecastOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of
-            samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length, num_input_channels)` for
-            multivariate predictions.
+            [`SamplePatchTSTForecastOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number
+            of samples, prediction_length, 1)` or `(batch_size, number of samples, prediction_length,
+            num_input_channels)` for multivariate predictions.
         """
         # get number of samples
         num_parallel_samples = self.config.num_parallel_samples
