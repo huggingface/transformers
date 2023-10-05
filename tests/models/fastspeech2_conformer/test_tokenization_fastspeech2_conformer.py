@@ -29,7 +29,7 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
 
     def setUp(self):
         super().setUp()
-        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
@@ -109,7 +109,7 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
             "The quick brown fox jumps over the lazy dog.",
         ]
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained(
-            "connor-henderson/fastspeech2_conformer", revision="07f9c4a2d6bbc69b277d87d2202ad1e35b05e113"
+            "espnet/fastspeech2_conformer", revision="07f9c4a2d6bbc69b277d87d2202ad1e35b05e113"
         )
         actual_encoding = tokenizer(sequences)
 

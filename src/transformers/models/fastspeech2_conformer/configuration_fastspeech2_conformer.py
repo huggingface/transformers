@@ -24,15 +24,15 @@ logger = logging.get_logger(__name__)
 
 
 FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "connor-henderson/fastspeech2_conformer": "https://huggingface.co/connor-henderson/fastspeech2_conformer/raw/main/config.json",
+    "espnet/fastspeech2_conformer": "https://huggingface.co/espnet/fastspeech2_conformer/raw/main/config.json",
 }
 
 FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "connor-henderson/fastspeech2_conformer_hifigan": "https://huggingface.co/connor-henderson/fastspeech2_conformer_hifigan/raw/main/config.json",
+    "espnet/fastspeech2_conformer_hifigan": "https://huggingface.co/espnet/fastspeech2_conformer_hifigan/raw/main/config.json",
 }
 
 FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "connor-henderson/fastspeech2_conformer_with_hifigan": "https://huggingface.co/connor-henderson/fastspeech2_conformer_with_hifigan/raw/main/config.json",
+    "espnet/fastspeech2_conformer_with_hifigan": "https://huggingface.co/espnet/fastspeech2_conformer_with_hifigan/raw/main/config.json",
 }
 
 
@@ -42,7 +42,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     instantiate a FastSpeech2Conformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     FastSpeech2Conformer
-    [connor-henderson/fastspeech2_conformer](https://huggingface.co/connor-henderson/fastspeech2_conformer)
+    [espnet/fastspeech2_conformer](https://huggingface.co/espnet/fastspeech2_conformer)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -341,7 +341,7 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     instantiate a FastSpeech2Conformer HiFi-GAN vocoder model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     FastSpeech2Conformer
-    [connor-henderson/fastspeech2_conformer_hifigan](https://huggingface.co/connor-henderson/fastspeech2_conformer_hifigan)
+    [espnet/fastspeech2_conformer_hifigan](https://huggingface.co/espnet/fastspeech2_conformer_hifigan)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -422,9 +422,9 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     FastSpeech2ConformerModel
-    [connor-henderson/fastspeech2_conformer](https://huggingface.co/connor-henderson/fastspeech2_conformer) and
+    [espnet/fastspeech2_conformer](https://huggingface.co/espnet/fastspeech2_conformer) and
     FastSpeech2ConformerHifiGan
-    [connor-henderson/fastspeech2_conformer_hifigan](https://huggingface.co/connor-henderson/fastspeech2_conformer_hifigan)
+    [espnet/fastspeech2_conformer_hifigan](https://huggingface.co/espnet/fastspeech2_conformer_hifigan)
     architectures.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

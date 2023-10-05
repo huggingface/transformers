@@ -29,14 +29,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "connor-henderson/fastspeech2_conformer": "https://huggingface.co/connor-henderson/fastspeech2_conformer/raw/main/vocab.json",
+        "espnet/fastspeech2_conformer": "https://huggingface.co/espnet/fastspeech2_conformer/raw/main/vocab.json",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     # Set to somewhat arbitrary large number as the model input
     # isn't constrained by the relative positional encoding
-    "connor-henderson/fastspeech2_conformer": 4096,
+    "espnet/fastspeech2_conformer": 4096,
 }
 
 

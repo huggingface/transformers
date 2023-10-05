@@ -34,7 +34,7 @@ from .configuration_fastspeech2_conformer import (
 logger = logging.get_logger(__name__)
 
 FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "connor-henderson/fastspeech2_conformer",
+    "espnet/fastspeech2_conformer",
     # See all FastSpeech2Conformer models at https://huggingface.co/models?filter=fastspeech2_conformer
 ]
 
@@ -1245,15 +1245,15 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         ...     FastSpeech2ConformerHifiGan,
         ... )
 
-        >>> tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
+        >>> tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
         >>> inputs = tokenizer("some text to convert to speech", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
 
-        >>> model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
+        >>> model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
         >>> output_dict = model(input_ids, return_dict=True)
         >>> spectrogram = output_dict["spectrogram"]
 
-        >>> vocoder = FastSpeech2ConformerHifiGan.from_pretrained("connor-henderson/fastspeech2_conformer_hifigan")
+        >>> vocoder = FastSpeech2ConformerHifiGan.from_pretrained("espnet/fastspeech2_conformer_hifigan")
         >>> waveform = vocoder(spectrogram)
         >>> print(waveform.shape)
         torch.Size([1, 49664])
@@ -1644,12 +1644,12 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         ...     FastSpeech2ConformerWithHifiGan,
         ... )
 
-        >>> tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
+        >>> tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
         >>> inputs = tokenizer("some text to convert to speech", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
 
         >>> model = FastSpeech2ConformerWithHifiGan.from_pretrained(
-        ...     "connor-henderson/fastspeech2_conformer_with_hifigan"
+        ...     "espnet/fastspeech2_conformer_with_hifigan"
         ... )
         >>> output_dict = model(input_ids, return_dict=True)
         >>> waveform = output_dict["waveform"]

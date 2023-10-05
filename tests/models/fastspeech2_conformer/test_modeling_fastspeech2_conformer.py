@@ -335,7 +335,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
+        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
         self.assertIsNotNone(model)
 
     @unittest.skip(reason="FastSpeech2Conformer does not accept inputs_embeds")
@@ -352,11 +352,11 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
     def test_inference_integration(self):
-        model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
+        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
         model.to(torch_device)
         model.eval()
 
-        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
         text = "Test that this generates speech"
         input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
 
@@ -386,13 +386,13 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(spectrogram.shape, (1, 205, model.config.num_mel_bins))
 
     def test_training_integration(self):
-        model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
+        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
         model.to(torch_device)
         # Set self.training manually to keep deterministic but run the training path
         model.training = True
         set_seed(0)
 
-        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
         text = "Test that this generates speech"
         input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
 
@@ -748,7 +748,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
+        model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
         self.assertIsNotNone(model)
 
     @unittest.skip(reason="FastSpeech2Conformer does not accept inputs_embeds")
@@ -765,11 +765,11 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class FastSpeech2ConformerWithHifiGanIntegrationTest(unittest.TestCase):
     def test_inference_integration(self):
-        model = FastSpeech2ConformerWithHifiGan.from_pretrained("connor-henderson/fastspeech2_conformer_with_hifigan")
+        model = FastSpeech2ConformerWithHifiGan.from_pretrained("espnet/fastspeech2_conformer_with_hifigan")
         model.to(torch_device)
         model.eval()
 
-        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
         text = "Test that this generates speech"
         input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
 
