@@ -205,3 +205,4 @@ class ProPainterImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertEqual(
             tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
         )
+

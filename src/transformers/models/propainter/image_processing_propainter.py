@@ -19,7 +19,6 @@ import pathlib
 from typing import Dict, List, Optional, Tuple, Union
 
 import cv2
-import imageio
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
@@ -274,10 +273,11 @@ class ProPainterImageProcessor(BaseImageProcessor):
         frames = self.to_tensors()(frames).unsqueeze(0) * 2 - 1
         flow_masks = self.to_tensors()(flow_masks).unsqueeze(0)
         masks_dilated = self.to_tensors()(masks_dilated).unsqueeze(0)
+        print(torch.tensor(frames_inp).shape)
+        data = {"frames": frames, "flow_masks": flow_masks, "masks_dilated": masks_dilated,
+        "frames_inp":torch.tensor(frames_inp)}
 
-        data = {"frames": frames, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
-
-        return BatchFeature(data=data, tensor_type=return_tensors), frames_inp
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def preprocess_outpainting(
         self,
@@ -435,3 +435,4 @@ class ToTorchFormatTensor(object):
             img = img.transpose(0, 1).transpose(0, 2).contiguous()
         img = img.float().div(255) if self.div else img.float()
         return img
+

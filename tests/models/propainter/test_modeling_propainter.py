@@ -47,20 +47,19 @@ if is_vision_available():
     pass
 
 
-class VideoMAEModelTester:
+class ProPainterModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        image_size=10,
-        num_channels=3,
+        batch_size=1,
+        image_size=64,
         patch_size=2,
         tubelet_size=2,
         num_frames=5,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
+        is_training=False,
+        use_labels=False,
+        hidden_size=512,
+        num_hidden_layers=3,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -74,7 +73,6 @@ class VideoMAEModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
-        self.num_channels = num_channels
         self.patch_size = patch_size
         self.tubelet_size = tubelet_size
         self.num_frames = num_frames
@@ -100,22 +98,23 @@ class VideoMAEModelTester:
         self.num_masks = int(mask_ratio * self.seq_length)
 
     def prepare_config_and_inputs(self):
-        frames = floats_tensor([self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size])
+        frames = floats_tensor([self.batch_size, self.num_frames, 3, self.image_size, self.image_size])
         flow_masks = floats_tensor([self.batch_size, self.num_frames, 1, self.image_size, self.image_size])
         masks_dilated = floats_tensor([self.batch_size, self.num_frames, 1, self.image_size, self.image_size])
+        frames_inp = floats_tensor([self.num_frames, self.image_size, self.image_size, 3])
+
         labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = self.get_config()
 
-        return config, frames, flow_masks, masks_dilated, labels
+        return config, frames, flow_masks, masks_dilated, frames_inp,labels
 
     def get_config(self):
         return ProPainterConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
-            num_channels=self.num_channels,
             num_frames=self.num_frames,
             tubelet_size=self.tubelet_size,
             hidden_size=self.hidden_size,
@@ -133,31 +132,32 @@ class VideoMAEModelTester:
             decoder_num_hidden_layers=self.num_hidden_layers,
         )
 
-    def create_and_check_model(self, config, frames, flow_masks, masks_dilated, labels):
+    def create_and_check_model(self, config, frames, flow_masks, masks_dilated,frames_inp, labels):
         model = ProPainterForImageInPainting(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(frames, flow_masks, masks_dilated)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        result = model(frames, flow_masks, masks_dilated,frames_inp)
+        self.parent.assertEqual(result.reconstructed_frames.shape, (self.num_frames, self.image_size, self.image_size, 3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, frames, flow_masks, masks_dilated, labels = config_and_inputs
-        inputs_dict = {"frames": frames, "flow_masks": flow_masks, "masks_dilated": masks_dilated}
+        config, frames, flow_masks, masks_dilated, frames_inp, labels = config_and_inputs
+        inputs_dict = {"frames": frames, "flow_masks": flow_masks, "masks_dilated": masks_dilated,
+        "frames_inp":frames_inp}
 
         return config, inputs_dict
 
 
 @require_torch
-class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class ProPainterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as VideoMAE does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ProPainterForImageInPainting, ProPainterModel) if is_torch_available() else ()
+    all_model_classes = (ProPainterForImageInPainting,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": ProPainterModel, "video-inpainting": ProPainterForImageInPainting}
+        {"video-inpainting": ProPainterForImageInPainting}
         if is_torch_available()
         else {}
     )
@@ -168,7 +168,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = VideoMAEModelTester(self)
+        self.model_tester = ProPainterModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ProPainterConfig, has_text_modality=False, hidden_size=37)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -191,9 +191,9 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="VideoMAE does not use inputs_embeds")
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
             model = model_class(config)
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
@@ -225,7 +225,6 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     #    for model_name in VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
     #        model = ProPainterModel.from_pretrained(model_name)
     #        self.assertIsNotNone(model)
-
     @unittest.skip(reason="VideoMAE does not use inputs_embeds")
     def test_attention_outputs(self):
         if not self.has_attentions:
@@ -285,7 +284,6 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, seq_len, seq_len],
                 )
-
     @unittest.skip(reason="VideoMAE does not use inputs_embeds")
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -403,3 +401,4 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
         expected_loss = torch.tensor(torch.tensor([0.6469]), device=torch_device)
         self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+

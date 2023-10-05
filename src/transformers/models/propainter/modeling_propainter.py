@@ -474,14 +474,14 @@ class FlowEncoder(nn.Module):
         if dropout > 0:
             self.Dropout = nn.Dropout2d(p=dropout)
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-            elif isinstance(m, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm)):
-                if m.weight is not None:
-                    nn.init.constant_(m.weight, 1)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
+        #for m in self.modules():
+        #    if isinstance(m, nn.Conv2d):
+        #        nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+        #    elif isinstance(m, (nn.BatchNorm2d, nn.InstanceNorm2d, nn.GroupNorm)):
+        #        if m.weight is not None:
+        #            nn.init.constant_(m.weight, 1)
+        #        if m.bias is not None:
+        #            nn.init.constant_(m.bias, 0)
 
     def _make_layer(self, dim, stride=1):
         layer1 = ResidualBlock(self.in_planes, dim, self.norm_fn, stride=stride)
@@ -583,7 +583,6 @@ class CorrBlock:
             centroid_lvl = coords.reshape(batch * h1 * w1, 1, 1, 2) / 2**i
             delta_lvl = delta.view(1, 2 * r + 1, 2 * r + 1, 2)
             coords_lvl = centroid_lvl + delta_lvl
-
             corr = self.bilinear_sampler(corr, coords_lvl)
             corr = corr.view(batch, h1, w1, -1)
             out_pyramid.append(corr)
@@ -1471,10 +1470,11 @@ class ProPainterPreTrainedModel(PreTrainedModel):
 
     config_class = ProPainterConfig
     base_model_prefix = "propainter"
-    main_input_name = "frames"
+    #main_input_name = "frames"
     supports_gradient_checkpointing = True
-    # _no_split_modules = ["ViTEmbeddings", "ViTLayer"]
+    _tied_weights_keys = ["OpticalFlow.ContextNet.layer2.0","OpticalFlow.ContextNet.layer3.0"]
 
+  
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -1689,6 +1689,7 @@ class ProPainterModel(ProPainterPreTrainedModel):
     """,
     VIT_START_DOCSTRING,
 )
+
 class ProPainterForImageInPainting(ProPainterPreTrainedModel):
     def __init__(self, config: ProPainterConfig) -> None:
         super().__init__(config)
@@ -1743,9 +1744,8 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
         [1, 3, 224, 224]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # frames_inp = [np.array(f).astype(np.int8) for f in ((frames + 1) / 2).squeeze(0).permute(0,2,3,1)]
-
+        frames_inp = frames_inp.cpu().tolist()
+        
         video_length = frames.size(1)
         h, w = frames.shape[-2], frames.shape[-1]
 
@@ -1757,7 +1757,6 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             short_clip_len = 4
         else:
             short_clip_len = 2
-
         # frames = frames.float()
         # flow_masks = flow_masks.float()
         # masks_dilated = masks_dilated.float()
@@ -1882,7 +1881,7 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
             pred_img = pred_img.view(-1, 3, h, w)
 
             pred_img = (pred_img + 1) / 2
-            pred_img = pred_img.detach().cpu().permute(0, 2, 3, 1).numpy() * 255
+            pred_img = pred_img.cpu().permute(0, 2, 3, 1).detach().numpy() * 255
             binary_masks = masks_dilated[0, neighbor_ids, :, :, :].cpu().permute(0, 2, 3, 1).numpy().astype(np.uint8)
             for i in range(len(neighbor_ids)):
                 idx = neighbor_ids[i]
@@ -1897,7 +1896,8 @@ class ProPainterForImageInPainting(ProPainterPreTrainedModel):
                 comp_frames[idx] = comp_frames[idx].astype(np.uint8)
 
         return ProPainterFrameModelingOutput(
-            reconstructed_frames=comp_frames,
+            reconstructed_frames=torch.tensor(comp_frames),
+            loss=None,
         )
 
     def get_ref_index(self, mid_neighbor_id, neighbor_ids, length, ref_stride=10, ref_num=-1):
@@ -2148,3 +2148,4 @@ class ProPainterForImageOutPainting(ProPainterPreTrainedModel):
                         break
                     ref_index.append(i)
         return ref_index
+
