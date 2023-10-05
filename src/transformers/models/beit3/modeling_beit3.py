@@ -340,7 +340,9 @@ class Beit3Embedder(nn.Module):
             [multiway_split_position, hidden_states.size(1) - multiway_split_position],
             dim=1,
         )
-        y1, y2 = self.first(text_hidden, positions=text_end_position), self.second(image_hidden, positions=text_end_position)
+        y1, y2 = self.first(text_hidden, positions=text_end_position), self.second(
+            image_hidden, positions=text_end_position
+        )
         return torch.cat([y1, y2], dim=1)
 
 
@@ -687,7 +689,9 @@ class Beit3Encoder(nn.Module):
                     device=token_embeddings.device,
                 ).bool()
 
-        x, encoder_embedding = self.forward_embedding(src_tokens, token_embeddings, text_end_positions, multiway_split_position)
+        x, encoder_embedding = self.forward_embedding(
+            src_tokens, token_embeddings, text_end_positions, multiway_split_position
+        )
         x = x * (1 - encoder_padding_mask.unsqueeze(-1).type_as(x))
 
         hidden_states = []

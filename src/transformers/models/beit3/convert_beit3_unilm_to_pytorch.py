@@ -215,7 +215,7 @@ def get_tokenizer():
     )
 
 
-def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_model_type,validate_logits):
+def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_model_type, validate_logits):
     img_size = 224
     if "480" in checkpoint_url:
         img_size = 480
@@ -296,7 +296,9 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
         )
         if validate_logits:
             assert output.logits.shape == torch.Size([1, 2])
-            np.testing.assert_allclose(output.logits.detach().numpy(), torch.tensor([[6.593818, -6.582055]]), rtol=1e-05)
+            np.testing.assert_allclose(
+                output.logits.detach().numpy(), torch.tensor([[6.593818, -6.582055]]), rtol=1e-05
+            )
     elif "beit3_base_patch16_480_coco_captioning" in checkpoint_url:
         language_masked_pos = torch.zeros(input["input_ids"].shape)
         to_fill = list(range(0, input["input_ids"].shape[1], 3))
@@ -364,4 +366,6 @@ if __name__ == "__main__":
         )
 
     args = parser.parse_args()
-    convert_beit3_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.beit3_model_type,args.validate_logits)
+    convert_beit3_checkpoint(
+        args.checkpoint_url, args.pytorch_dump_folder_path, args.beit3_model_type, args.validate_logits
+    )
