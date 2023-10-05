@@ -1126,8 +1126,8 @@ MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES = OrderedDict(
     [
         ("patchtst", "PatchTSTForRegression"),
     ]
-)     
- 
+)
+
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         ("swin2sr", "Swin2SRForImageSuperResolution"),

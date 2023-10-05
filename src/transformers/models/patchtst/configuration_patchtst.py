@@ -173,7 +173,7 @@ class PatchTSTConfig(PretrainedConfig):
         pre_norm: bool = False,
         positional_encoding: str = "sincos",
         learn_pe: bool = False,
-        use_cls_token: bool = False,        
+        use_cls_token: bool = False,
         init_std: float = 0.02,
         shared_projection: bool = True,
         seed_number: int = None,
