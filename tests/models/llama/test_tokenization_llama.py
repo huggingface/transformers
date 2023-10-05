@@ -583,11 +583,15 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁▁", out_type=str))
 
     def test_fast_post_processor(self):
-        tokenizer = LlamaTokenizerFast(SAMPLE_VOCAB,eos_token=None, bos_token=None, add_bos_token=False, add_eos_token=False)
+        tokenizer = LlamaTokenizerFast(
+            SAMPLE_VOCAB, eos_token=None, bos_token=None, add_bos_token=False, add_eos_token=False
+        )
         tokenizer.encode(" Hey ")
 
         with self.assertRaises(ValueError):
-            tokenizer = LlamaTokenizerFast(SAMPLE_VOCAB, bos_token=None, eos_token="<s>", add_bos_token=True, add_eos_token=False)
+            tokenizer = LlamaTokenizerFast(
+                SAMPLE_VOCAB, bos_token=None, eos_token="<s>", add_bos_token=True, add_eos_token=False
+            )
         with self.assertRaises(ValueError):
             tokenizer = LlamaTokenizerFast(SAMPLE_VOCAB, eos_token=None, add_bos_token=True, add_eos_token=True)
 

@@ -178,12 +178,12 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         """
         bos = self.bos_token
         bos_token_id = self.bos_token_id
-        if bos is not None and self.add_bos_token:
+        if bos is None and self.add_bos_token:
             raise ValueError("add_bos_token = True but bos_token = None")
 
         eos = self.eos_token
         eos_token_id = self.eos_token_id
-        if eos is not None and self.add_eos_token:
+        if eos is None and self.add_eos_token:
             raise ValueError("add_eos_token = True but eos_token = None")
 
         single = f"{(bos+':0 ') if self.add_bos_token else ''}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
