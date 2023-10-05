@@ -111,8 +111,8 @@ def _sanitize_parameters(self, **kwargs):
 ```
 
 Try to keep the inputs/outputs very simple and ideally JSON-serializable as it makes the pipeline usage very easy
-without requiring users to understand new kind of objects. It's also relatively common to support many different types
-of arguments for ease of use (audio files, can be filenames, URLs or pure bytes)
+without requiring users to understand new kinds of objects. It's also relatively common to support many different types
+of arguments for ease of use (audio files, which can be filenames, URLs or pure bytes)
 
 
 
@@ -219,8 +219,8 @@ repo.push_to_hub()
 ```
 
 This will copy the file where you defined `PairClassificationPipeline` inside the folder `"test-dynamic-pipeline"`,
-along with saving the model and tokenizer of the pipeline, before pushing everything in the repository
-`{your_username}/test-dynamic-pipeline`. After that anyone can use it as long as they provide the option
+along with saving the model and tokenizer of the pipeline, before pushing everything into the repository
+`{your_username}/test-dynamic-pipeline`. After that, anyone can use it as long as they provide the option
 `trust_remote_code=True`:
 
 ```py
@@ -232,9 +232,9 @@ classifier = pipeline(model="{your_username}/test-dynamic-pipeline", trust_remot
 ## Add the pipeline to 🤗 Transformers
 
 If you want to contribute your pipeline to 🤗 Transformers, you will need to add a new module in the `pipelines` submodule
-with the code of your pipeline, then add it in the list of tasks defined in `pipelines/__init__.py`.
+with the code of your pipeline, then add it to the list of tasks defined in `pipelines/__init__.py`.
 
-Then you will need to add tests. Create a new file `tests/test_pipelines_MY_PIPELINE.py` with example with the other tests.
+Then you will need to add tests. Create a new file `tests/test_pipelines_MY_PIPELINE.py` with examples of the other tests.
 
 The `run_pipeline_test` function will be very generic and run on small random models on every possible
 architecture as defined by `model_mapping` and `tf_model_mapping`.

@@ -16,7 +16,7 @@ import unittest
 
 from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_jinja, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -52,14 +52,13 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
-    @unittest.skip("TODO @Sanchit. Let's make the CI green in the mean time")
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "!")
         self.assertEqual(vocab_keys[1], '"')
-        self.assertEqual(vocab_keys[-1], "<|notimestamps|>")
-        self.assertEqual(len(vocab_keys), 50364)
+        self.assertEqual(vocab_keys[-1], "<|30.00|>")
+        self.assertEqual(len(vocab_keys), 51865)
 
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 50258)
@@ -117,7 +116,6 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             expected_encoding=expected_encoding, model_name="openai/whisper-tiny.en", padding=False
         )
 
-    @unittest.skip("TODO @Sanchit. Let's make the CI green in the mean time")
     def test_output_offsets(self):
         tokenizer = self.get_tokenizer()
         previous_sequence = [51492, 406, 3163, 1953, 466, 13, 51612, 51612]
@@ -275,6 +273,40 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(expected_tokens, output_rust[1])
         self.assertEqual(expected_indices, output_rust[2])
 
+    def test_basic_normalizer(self):
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        input_str = "Hola güey!"
+        expected_output_normalize = "hola güey "
+        expected_output_diacritics = "hola guey "
+
+        # tokenizer tests
+        encoded_input = tokenizer(input_str).input_ids
+        decoded_output = tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=False)
+        self.assertEqual(decoded_output, input_str)
+
+        decoded_output_normalize = tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=True)
+        self.assertEqual(decoded_output_normalize, expected_output_normalize)
+
+        decoded_output_diacritics = tokenizer.decode(
+            encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
+        )
+        self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
+
+        # fast tokenizer tests
+        encoded_input = rust_tokenizer(input_str).input_ids
+        decoded_output = rust_tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=False)
+        self.assertEqual(decoded_output, input_str)
+
+        decoded_output_normalize = rust_tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=True)
+        self.assertEqual(decoded_output_normalize, expected_output_normalize)
+
+        decoded_output_diacritics = rust_tokenizer.decode(
+            encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
+        )
+        self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
+
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "openai/whisper-small.en"
@@ -400,7 +432,6 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         transcription = multilingual_tokenizer.batch_decode(batch_encoding, skip_special_tokens=True)
         self.assertListEqual(batch, transcription)
 
-    @unittest.skip("TODO @Sanchit. Let's make the CI green in the mean time")
     def test_offset_decoding(self):
         multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
         # fmt: off
@@ -476,3 +507,25 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
         self.assertEqual(output, [])
+
+    @require_jinja
+    def test_tokenization_for_chat(self):
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+        # This is in English, but it's just here to make sure the chat control tokens are being added properly
+        test_chats = [
+            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+                {"role": "assistant", "content": "Nice to meet you."},
+            ],
+            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
+        ]
+        tokenized_chats = [multilingual_tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        expected_tokens = [
+            [3223, 366, 257, 4961, 5081, 18870, 13, 50257, 15947, 0, 50257],
+            [3223, 366, 257, 4961, 5081, 18870, 13, 50257, 15947, 0, 50257, 37717, 220, 1353, 1677, 291, 13, 50257],
+            [37717, 220, 1353, 1677, 291, 13, 50257, 15947, 0, 50257],
+        ]
+        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
+            self.assertListEqual(tokenized_chat, expected_tokens)

@@ -41,35 +41,32 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
     @slow
     @require_torch
-    def test_small_model_pt(self):
-        speech_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+    def test_small_musicgen_pt(self):
+        music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
 
         forward_params = {
             "do_sample": False,
             "max_new_tokens": 250,
         }
 
-        outputs = speech_generator("This is a test", forward_params=forward_params)
-        # musicgen sampling_rate is not straightforward to get
-        self.assertIsNone(outputs["sampling_rate"])
-
-        audio = outputs["audio"]
-        self.assertEqual(ANY(np.ndarray), audio)
+        outputs = music_generator("This is a test", forward_params=forward_params)
+        self.assertEqual({"audio": ANY(np.ndarray), "sampling_rate": 32000}, outputs)
 
         # test two examples side-by-side
-        outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params)
+        outputs = music_generator(["This is a test", "This is a second test"], forward_params=forward_params)
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
         # test batching
-        outputs = speech_generator(
+        outputs = music_generator(
             ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
         )
-        self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
+        audio = [output["audio"] for output in outputs]
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
     @slow
     @require_torch
-    def test_large_model_pt(self):
+    def test_small_bark_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
 
         forward_params = {
@@ -184,7 +181,9 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = speech_generator("This is a test")
         self.assertEqual(ANY(np.ndarray), outputs["audio"])
 
-        forward_params = {"num_return_sequences": 2, "do_sample": True}
+        forward_params = (
+            {"num_return_sequences": 2, "do_sample": True} if speech_generator.model.can_generate() else {}
+        )
         outputs = speech_generator(["This is great !", "Something else"], forward_params=forward_params)
         audio = [output["audio"] for output in outputs]
         self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)

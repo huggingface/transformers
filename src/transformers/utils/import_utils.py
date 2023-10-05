@@ -71,9 +71,12 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_flash_attn_available = _is_package_available("flash_attn")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
+# `importlib.metadata.util` doesn't work with `opencv-python-headless`.
+_cv2_available = importlib.util.find_spec("cv2") is not None
 _datasets_available = _is_package_available("datasets")
 _decord_available = importlib.util.find_spec("decord") is not None
 _detectron2_available = _is_package_available("detectron2")
@@ -91,10 +94,13 @@ except importlib.metadata.PackageNotFoundError:
 _ftfy_available = _is_package_available("ftfy")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jieba_available = _is_package_available("jieba")
+_jinja_available = _is_package_available("jinja2")
 _kenlm_available = _is_package_available("kenlm")
 _keras_nlp_available = _is_package_available("keras_nlp")
+_levenshtein_available = _is_package_available("Levenshtein")
 _librosa_available = _is_package_available("librosa")
 _natten_available = _is_package_available("natten")
+_nltk_available = _is_package_available("nltk")
 _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
@@ -236,6 +242,10 @@ if _torch_available:
 
 def is_kenlm_available():
     return _kenlm_available
+
+
+def is_cv2_available():
+    return _cv2_available
 
 
 def is_torch_available():
@@ -569,6 +579,16 @@ def is_bitsandbytes_available():
     return _bitsandbytes_available and torch.cuda.is_available()
 
 
+def is_flash_attn_available():
+    if not is_torch_available():
+        return False
+
+    # Let's add an extra check to see if cuda is available
+    import torch
+
+    return _flash_attn_available and torch.cuda.is_available()
+
+
 def is_torchdistx_available():
     return _torchdistx_available
 
@@ -605,12 +625,20 @@ def is_accelerate_available(min_version: str = None):
     return _accelerate_available
 
 
+def is_fsdp_available(min_version: str = "1.12.0"):
+    return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
+
+
 def is_optimum_available():
     return _optimum_available
 
 
 def is_auto_gptq_available():
     return _auto_gptq_available
+
+
+def is_levenshtein_available():
+    return _levenshtein_available
 
 
 def is_optimum_neuron_available():
@@ -743,6 +771,10 @@ def is_natten_available():
     return _natten_available
 
 
+def is_nltk_available():
+    return _nltk_available
+
+
 def is_torchaudio_available():
     return _torchaudio_available
 
@@ -791,6 +823,20 @@ def is_cython_available():
 
 def is_jieba_available():
     return _jieba_available
+
+
+def is_jinja_available():
+    return _jinja_available
+
+
+# docstyle-ignore
+CV2_IMPORT_ERROR = """
+{0} requires the OpenCV library but it was not found in your environment. You can install it with:
+```
+pip install opencv-python
+```
+Please note that you may need to restart your runtime after installation.
+"""
 
 
 # docstyle-ignore
@@ -939,6 +985,11 @@ installation section: https://github.com/rspeer/python-ftfy/tree/master#installi
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
+LEVENSHTEIN_IMPORT_ERROR = """
+{0} requires the python-Levenshtein library but it was not found in your environment. You can install it with pip: `pip
+install python-Levenshtein`. Please note that you may need to restart your runtime after installation.
+"""
+
 # docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
@@ -1007,6 +1058,14 @@ NATTEN_IMPORT_ERROR = """
 shi-labs.com/natten . You can also install it with pip (may take longer to build):
 `pip install natten`. Please note that you may need to restart your runtime after installation.
 """
+
+
+# docstyle-ignore
+NLTK_IMPORT_ERROR = """
+{0} requires the NLTK library but it was not found in your environment. You can install it by referring to:
+https://www.nltk.org/install.html. Please note that you may need to restart your runtime after installation.
+"""
+
 
 # docstyle-ignore
 VISION_IMPORT_ERROR = """
@@ -1081,9 +1140,15 @@ PEFT_IMPORT_ERROR = """
 peft`. Please note that you may need to restart your runtime after installation.
 """
 
+JINJA_IMPORT_ERROR = """
+{0} requires the jinja library but it was not found in your environment. You can install it with pip: `pip install
+jinja2`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
+        ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
@@ -1093,6 +1158,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
+        ("levenshtein", (is_levenshtein_available, LEVENSHTEIN_IMPORT_ERROR)),
         ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
@@ -1107,6 +1173,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
+        ("nltk", (is_nltk_available, NLTK_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
@@ -1118,6 +1185,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
+        ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
     ]
 )
 

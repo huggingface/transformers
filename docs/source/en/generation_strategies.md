@@ -55,12 +55,10 @@ When you load a model explicitly, you can inspect the generation configuration t
 >>> from transformers import AutoModelForCausalLM
 
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
->>> model.generation_config  # doctest: +IGNORE_RESULT
+>>> model.generation_config
 GenerationConfig {
-    "_from_model_config": true,
     "bos_token_id": 50256,
     "eos_token_id": 50256,
-    "transformers_version": "4.26.0.dev0"
 }
 ```
 
@@ -84,7 +82,8 @@ Even if the default decoding strategy mostly works for your task, you can still 
 commonly adjusted parameters include:
 
 - `max_new_tokens`: the maximum number of tokens to generate. In other words, the size of the output sequence, not
-including the tokens in the prompt.
+including the tokens in the prompt. As an alternative to using the output's length as a stopping criteria, you can choose 
+to stop generation whenever the full generation exceeds some amount of time. To learn more, check [`StoppingCriteria`].
 - `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
 beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
 has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability

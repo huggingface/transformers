@@ -70,7 +70,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
             Size of the image after resizing. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image pixel value to between [-1, 1]. Can be overridden by `do_normalize` in
