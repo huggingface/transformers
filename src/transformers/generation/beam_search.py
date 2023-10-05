@@ -152,7 +152,7 @@ class BeamSearchScorer(BeamScorer):
         num_beam_hyps_to_keep (`int`, *optional*, defaults to 1):
             The number of beam hypotheses that shall be returned upon calling
             [`~transformer.BeamSearchScorer.finalize`].
-        num_beam_groups (`int`):
+        num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
         max_length (`int`, *optional*):
@@ -437,7 +437,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         num_beam_hyps_to_keep (`int`, *optional*, defaults to 1):
             The number of beam hypotheses that shall be returned upon calling
             [`~transformer.BeamSearchScorer.finalize`].
-        num_beam_groups (`int`):
+        num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
         max_length (`int`, *optional*):

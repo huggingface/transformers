@@ -146,13 +146,13 @@ class FSMTTokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Args:
-        langs (`List[str]`):
+        langs (`List[str]`, *optional*):
             A list of two languages to translate from and to, for instance `["en", "ru"]`.
-        src_vocab_file (`str`):
+        src_vocab_file (`str`, *optional*):
             File containing the vocabulary for the source language.
-        tgt_vocab_file (`st`):
+        tgt_vocab_file (`st`, *optional*):
             File containing the vocabulary for the target language.
-        merges_file (`str`):
+        merges_file (`str`, *optional*):
             File containing the merges.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.

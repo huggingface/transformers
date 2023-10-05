@@ -29,7 +29,7 @@ Mistral-7B-v0.1 is a decoder-based LM with the following architectural choices:
 
 We also provide an instruction fine-tuned model: `Mistral-7B-Instruct-v0.1` which can be used for chat-based inference.
 
-For more details please read our [release blog post](https://mistral.ai/news/announcing-mistral-7b-v0.1/)
+For more details please read our [release blog post](https://mistral.ai/news/announcing-mistral-7b/)
 
 ## License
 

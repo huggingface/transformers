@@ -61,7 +61,7 @@ class NougatProcessor(ProcessorMixin):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        data_format: Optional["ChannelDimension"] = "ChannelDimension.FIRST",  # noqa: F821
+        data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
         input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
         text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,

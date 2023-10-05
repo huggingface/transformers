@@ -206,14 +206,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         # make sure that tokens made of several
         # characters are not split at tokenization
-
-        # TODO @ArthurZ add them or just update the trie?
-        unique_no_split_tokens = []
         for token in self.encoder.keys():
             if len(token) > 1:
-                unique_no_split_tokens.append(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
-
-        self.add_tokens(unique_no_split_tokens)
+                self.add_tokens(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
 
     def set_target_lang(self, target_lang: str):
         """
@@ -232,7 +227,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         # make sure that tokens made of several
         # characters are not split at tokenization
-        self.add_tokens([token for token in self.encoder.keys() if len(token) > 1])
+        for token in self.encoder.keys():
+            if len(token) > 1:
+                self.add_tokens(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
 
     @property
     def word_delimiter_token(self) -> str:

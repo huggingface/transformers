@@ -54,15 +54,15 @@ class MobileViTV2Config(PretrainedConfig):
             The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
         conv_kernel_size (`int`, *optional*, defaults to 3):
             The size of the convolutional kernel in the MobileViTV2 layer.
-        output_stride (`int`, `optional`, defaults to 32):
+        output_stride (`int`, *optional*, defaults to 32):
             The ratio of the spatial resolution of the output to the resolution of the input image.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for attached classifiers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        aspp_out_channels (`int`, `optional`, defaults to 512):
+        aspp_out_channels (`int`, *optional*, defaults to 512):
             Number of output channels used in the ASPP layer for semantic segmentation.
         atrous_rates (`List[int]`, *optional*, defaults to `[6, 12, 18]`):
             Dilation (atrous) factors used in the ASPP layer for semantic segmentation.
@@ -74,13 +74,13 @@ class MobileViTV2Config(PretrainedConfig):
             The number of attention blocks in each MobileViTV2Layer
         base_attn_unit_dims (`List[int]`, *optional*, defaults to `[128, 192, 256]`):
             The base multiplier for dimensions of attention blocks in each MobileViTV2Layer
-        width_multiplier (`float`, *optional*, defaults to 1.0)
+        width_multiplier (`float`, *optional*, defaults to 1.0):
             The width multiplier for MobileViTV2.
-        ffn_multiplier (`int`, *optional*, defaults to 2)
+        ffn_multiplier (`int`, *optional*, defaults to 2):
             The FFN multiplier for MobileViTV2.
-        attn_dropout (`float`, *optional*, defaults to 0.0)
+        attn_dropout (`float`, *optional*, defaults to 0.0):
             The dropout in the attention layer.
-        ffn_dropout (`float`, *optional*, defaults to 0.0)
+        ffn_dropout (`float`, *optional*, defaults to 0.0):
             The dropout between FFN layers.
 
     Example:
