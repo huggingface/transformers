@@ -87,8 +87,8 @@ tokenizer.batch_decode(generated_ids)[0]
 
 ### Expected speedups
 
-Below is a expected speedup diagram that compares pure inference time between the native implementation in transformers using `EleutherAI/gpt-neo-2.7B` checkpoint and the Flash Attention 2 version of the model using two different sequence lengths.
-Note that for GPT-Neo it is not possible to train / run on very long context as the max position embeddings is limited to 2048 - but this is applicable to all gpt-neo models and not specific to FA-2
+Below is an expected speedup diagram that compares pure inference time between the native implementation in transformers using `EleutherAI/gpt-neo-2.7B` checkpoint and the Flash Attention 2 version of the model.
+Note that for GPT-Neo it is not possible to train / run on very long context as the max [position embeddings](https://huggingface.co/EleutherAI/gpt-neo-2.7B/blob/main/config.json#L58 ) is limited to 2048 - but this is applicable to all gpt-neo models and not specific to FA-2
 
 <div style="text-align: center">
 <img src="https://user-images.githubusercontent.com/49240599/272241893-b1c66b75-3a48-4265-bc47-688448568b3d.png">
