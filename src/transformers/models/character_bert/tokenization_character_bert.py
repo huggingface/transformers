@@ -258,14 +258,17 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             split_tokens = whitespace_tokenize(text)
         return split_tokens
 
-    def _convert_mlm_token_to_id(self, token):
+    def convert_mlm_token_to_id(self, token):
         """Converts a token (str) into an id using the MLM vocab."""
         return self.mlm_vocab.get(token, self.mlm_vocab.get(self.unk_token))
 
-    def _convert_mlm_id_to_token(self, index):
+    def convert_mlm_id_to_token(self, index):
         """Converts an index (integer) into a token (str) using the MLM vocab."""
         return self.mlm_ids_to_tokens.get(index, self.unk_token)
 
+    # NOTE: the following two methods have misleading names since we are
+    # working with character id lists instead of standard token ids.
+    # Changing these names breaks a lot of things so we keep them for now.
     def _convert_token_to_id(self, token):
         """Converts a token (str) into a list of character ids (integer)."""
         if token == self.cls_token:
