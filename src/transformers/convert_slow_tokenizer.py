@@ -1206,8 +1206,8 @@ class LlamaConverter(SpmConverter):
             eos = self.original_tokenizer.eos_token
             eos_token_id = self.original_tokenizer.eos_token_id
 
-            single = f"{(bos+':0 ') * add_bos}$A:0{(' '+eos+':0') if add_eos else ''}"
-            pair = f"{single}{(' '+bos+':1') * add_bos} $B:1{(' '+eos+':1') if add_eos else ''}"
+            single = f"{(bos+':0 ') if add_bos else ''}$A:0{(' '+eos+':0') if add_eos else ''}"
+            pair = f"{single}{(' '+bos+':1') if add_bos else ''} $B:1{(' '+eos+':1') if add_eos else ''}"
 
             special_tokens = []
             if add_bos:
