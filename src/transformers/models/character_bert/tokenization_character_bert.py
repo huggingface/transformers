@@ -147,6 +147,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
+        self.vocab = dict()
         if mlm_vocab_file:
             if not os.path.isfile(mlm_vocab_file):
                 raise ValueError(
@@ -233,11 +234,15 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return self.basic_tokenizer.do_lower_case
 
     @property
+    def vocab_size(self):
+        return len(self.vocab)
+
+    @property
     def mlm_vocab_size(self):
         return len(self.mlm_vocab)
 
     def get_vocab(self):
-        return dict()
+        return self.vocab
 
     def get_mlm_vocab(self):
         return self.mlm_vocab
