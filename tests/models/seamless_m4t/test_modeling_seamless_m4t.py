@@ -74,7 +74,7 @@ class SeamlessM4TModelTester:
         num_choices=4,
         scope=None,
         vocab_size=20,
-        unit_vocab_size=20,
+        t2u_vocab_size=20,
         hidden_size=6,
         num_hidden_layers=2,
         intermediate_size=6,
@@ -118,7 +118,7 @@ class SeamlessM4TModelTester:
         self.scope = scope
 
         self.vocab_size = vocab_size
-        self.unit_vocab_size = unit_vocab_size
+        self.t2u_vocab_size = t2u_vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
@@ -175,7 +175,7 @@ class SeamlessM4TModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
-            unit_vocab_size=self.unit_vocab_size,
+            t2u_vocab_size=self.t2u_vocab_size,
             hidden_size=self.hidden_size,
             speech_encoder_layers=self.num_heads,
             speech_encoder_intermediate_size=self.intermediate_size,
@@ -194,7 +194,7 @@ class SeamlessM4TModelTester:
             t2u_encoder_attention_heads=self.num_heads,
             t2u_decoder_attention_heads=self.num_heads,
             speech_encoder_attention_heads=self.num_heads,
-            unit_hifigan_vocab_vise=self.unit_vocab_size,
+            unit_hifigan_vocab_vise=self.t2u_vocab_size,
             vocoder_num_spkrs=self.vocoder_num_spkrs,
             vocoder_num_langs=self.vocoder_num_langs,
             upsample_initial_channel=self.upsample_initial_channel,

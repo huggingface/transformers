@@ -153,7 +153,7 @@ def _load_hf_config(model_type="medium"):
     if model_type == "medium":
         kwargs = {
             "vocab_size": 256206,
-            "unit_vocab_size": 10082,
+            "t2u_vocab_size": 10082,
             "hidden_size": 1024,
             "max_position_embeddings": 4096,
             "encoder_layers": 12,

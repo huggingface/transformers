@@ -42,7 +42,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             Vocabulary size of the SeamlessM4T model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`~SeamlessM4TModel`], [`~SeamlessM4TForTextToSpeech`] or
             [`~SeamlessM4TForTextToText`].
-        unit_vocab_size (`int`, *optional*, defaults to 10082):
+        t2u_vocab_size (`int`, *optional*, defaults to 10082):
             Unit vocabulary size of the SeamlessM4T model. Defines the number of different unit tokens that can be
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4TModel`],
             [`~SeamlessM4TForSpeechToSpeech`] or [`~SeamlessM4TForTextToSpeech`].
@@ -240,7 +240,7 @@ class SeamlessM4TConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=256102,
-        unit_vocab_size=10082,
+        t2u_vocab_size=10082,
         # shared config
         hidden_size=1024,
         initializer_range=0.02,
@@ -321,7 +321,7 @@ class SeamlessM4TConfig(PretrainedConfig):
     ):
         # overall_config
         self.vocab_size = vocab_size
-        self.unit_vocab_size = unit_vocab_size
+        self.t2u_vocab_size = t2u_vocab_size
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps

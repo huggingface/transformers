@@ -1327,12 +1327,6 @@ class SeamlessM4TEncoderLayer(nn.Module):
 
         hidden_states = residual + hidden_states
 
-        if hidden_states.dtype == torch.float16 and (
-            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
-        ):
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
         outputs = (hidden_states,)
 
         if output_attentions:
@@ -1455,11 +1449,6 @@ class SeamlessM4TDecoderLayer(nn.Module):
         hidden_states = self.ffn_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
-
-        # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states, present_key_value)
 
@@ -1678,13 +1667,9 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = config.t2u_pad_token_id if is_t2u_encoder else config.pad_token_id
+        self.padding_idx = config.pad_token_id
         embed_dim = config.hidden_size
-        encoder_layers = config.t2u_encoder_layers if is_t2u_encoder else config.encoder_layers
-        encoder_attention_heads = (
-            config.t2u_encoder_attention_heads if is_t2u_encoder else config.encoder_attention_heads
-        )
-        encoder_ffn_dim = config.t2u_encoder_ffn_dim if is_t2u_encoder else config.encoder_ffn_dim
+        
         self.is_t2u_encoder = is_t2u_encoder
         self.max_source_positions = config.max_position_embeddings
 
@@ -1702,14 +1687,14 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
                 self.padding_idx,
             )
 
-        self.layers = nn.ModuleList(
-            [
-                SeamlessM4TEncoderLayer(
-                    config, encoder_attention_heads=encoder_attention_heads, encoder_ffn_dim=encoder_ffn_dim
-                )
-                for _ in range(encoder_layers)
-            ]
-        )
+        layers = []
+        for _ in range(config.encoder_layers):
+            layers.append(SeamlessM4TEncoderLayer(
+                    config, encoder_attention_heads=config.encoder_attention_heads, encoder_ffn_dim=config.encoder_ffn_dim
+                ))
+            
+        self.layers = nn.ModuleList(layers)
+
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
         self.gradient_checkpointing = False
@@ -1869,8 +1854,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
     "Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`].",
     SEAMLESS_M4T_START_DOCSTRING,
     """
-        embed_tokens (`nn.Embedding`, *optional*): output embedding is_t2u_decoder (`bool`, *optional*, defaults to
-        `False`): indicates if it belongs to the text-to-units model
+        embed_tokens (`nn.Embedding`, *optional*): output embedding
     """,
 )
 class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
@@ -1878,22 +1862,14 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         self,
         config: SeamlessM4TConfig,
         embed_tokens: Optional[nn.Embedding] = None,
-        is_t2u_decoder: Optional[bool] = False,
     ):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.t2u_pad_token_id if is_t2u_decoder else config.pad_token_id
-        self.vocab_size = config.unit_vocab_size if is_t2u_decoder else config.vocab_size
-        self.max_target_positions = (
-            config.t2u_max_position_embeddings if is_t2u_decoder else config.max_position_embeddings
-        )
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+        self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
-        decoder_layers = config.t2u_decoder_layers if is_t2u_decoder else config.decoder_layers
-        decoder_attention_heads = (
-            config.t2u_decoder_attention_heads if is_t2u_decoder else config.decoder_attention_heads
-        )
-        decoder_ffn_dim = config.t2u_decoder_ffn_dim if is_t2u_decoder else config.decoder_ffn_dim
 
         if embed_tokens is not None:
             # if embed_tokens defined, use its shape instead
@@ -1908,16 +1884,14 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
             padding_idx=self.padding_idx,
         )
 
-        self.layers = nn.ModuleList(
-            [
-                SeamlessM4TDecoderLayer(
+        layers = []
+        for _ in range(config.decoder_layers):
+            layers.append(SeamlessM4TDecoderLayer(
                     config,
-                    decoder_attention_heads=decoder_attention_heads,
-                    decoder_ffn_dim=decoder_ffn_dim,
-                )
-                for _ in range(decoder_layers)
-            ]
-        )
+                    decoder_attention_heads=config.decoder_attention_heads,
+                    decoder_ffn_dim=config.decoder_ffn_dim,
+                ))
+        self.layers = nn.ModuleList(layers)
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 
         self.gradient_checkpointing = False
@@ -2196,7 +2170,6 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         self.decoder = SeamlessM4TDecoder(
             config,
             embed_tokens_decoder,
-            is_t2u_decoder=True,
         )
 
         # Initialize weights and apply final processing
@@ -2307,7 +2280,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
 
         self.model = SeamlessM4TTextToUnitModel(config, embed_tokens_decoder)
 
-        self.lm_head = nn.Linear(config.hidden_size, config.unit_vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.t2u_vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
