@@ -15,17 +15,16 @@
 """ PyTorch PatchTSMixer model."""
 
 import math
+import random
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import numpy as np
-import random
-import torch.nn.functional as F
-from torch.nn.modules.activation import MultiheadAttention
-
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.checkpoint
+from torch.nn.modules.activation import MultiheadAttention
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
@@ -1207,18 +1206,17 @@ class PatchMasking(nn.Module):
     """
     Parameters:
     PatchMasking: Class to random or forcast masking.
-        mask_type (str, optional): Masking type. Allowed values are random, forecast. Defaults to random.
-        mask_ratio (float, optional): Mask ratio.
-        mask_patches (list, optional): List of patch lengths to mask in the end of the data.
-        mask_patch_ratios (list, optional): List of weights to use for each patch length. For Ex.
-        if patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to None.
+        mask_type (str, optional): Masking type. Allowed values are random, forecast. Defaults to random. mask_ratio
+        (float, optional): Mask ratio. mask_patches (list, optional): List of patch lengths to mask in the end of the
+        data. mask_patch_ratios (list, optional): List of weights to use for each patch length. For Ex. if
+        patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to None.
         unmasked_channel_indices (list, optional):
             Control Variable channel indices. These channels will not be masked. Defaults to None.
         channel_consistent_masking (bool, optional):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels. Defaults to True.
-        mask_value (int, optional): Value to use for masking. Defaults to 0.
-        seed_number (int, optional): Random seed, when None seed is not set. Defaults to None.
+        mask_value (int, optional): Value to use for masking. Defaults to 0. seed_number (int, optional): Random seed,
+        when None seed is not set. Defaults to None.
     """
 
     def __init__(
