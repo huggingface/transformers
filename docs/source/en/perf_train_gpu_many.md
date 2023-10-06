@@ -72,7 +72,7 @@ If your model is too large for a single GPU, you have several alternatives to co
 2. ZeRO
 3. TensorParallel (TP)
 
-With very fast intra-node connectivity (e.g., NVLINK or NVSwitch) all three strategies (PP, ZeRO, TP) should result in 
+With very fast inter-node connectivity (e.g., NVLINK or NVSwitch) all three strategies (PP, ZeRO, TP) should result in 
 similar performance. However, without these, PP will be faster than TP or ZeRO. The degree of TP may also 
 make a difference. It's best to experiment with your specific setup to determine the most suitable strategy.
 
@@ -80,9 +80,8 @@ TP is almost always used within a single node. That is TP size <= GPUs per node.
 
 **Case 3: Largest layer does not fit 0nto a single GPU**
 
-1. If you are not using ZeRO, you must use TensorParallel (TP), as PipelineParallel (PP) alone won't be sufficient to accommodate the large layer.
+1. If you are not using ZeRO, you have to use TensorParallel (TP), as PipelineParallel (PP) alone won't be sufficient to accommodate the large layer.
 2. If you are using ZeRO, additionally adopt techniques from the [Methods and tools for efficient training on a single GPU](perf_train_gpu_one).
-
 
 **Parallelization Strategy for Multi-Node / Multi-GPU setup**
 
@@ -95,60 +94,51 @@ TP is almost always used within a single node. That is TP size <= GPUs per node.
 
     1. Employ a combination of DataParallel(DP) with PipelineParallel(PP), TensorParallel(TP), and ZeRO-
 
+In the following sections of this guide we explain how these different parallelism methods work.
+
 ## Data Parallelism
 
-Most users with just 2 GPUs already enjoy the increased training speed up thanks to `DataParallel` (DP) and `DistributedDataParallel` (DDP) that are almost trivial to use. This is a built-in feature of Pytorch. Note that in general it is advised to use DDP as it is better maintained and works for all models while DP might fail for some models. [PyTorch documentation](https://pytorch.org/docs/master/generated/torch.nn.DataParallel.html) itself recommends the use of DDP.
+Most users with just 2 GPUs already enjoy the increased training speed up thanks to `DataParallel` (DP) and 
+`DistributedDataParallel` (DDP) that are almost trivial to use. This is a built-in feature of PyTorch. 
+Note that [PyTorch documentation](https://pytorch.org/docs/master/generated/torch.nn.DataParallel.html) recommends to use 
+`DistributedDataParallel` (DDP), instead of `DataParallel` (DP), to do multi-GPU training as it works for all models.
+Let's take a look at how these two methods work and what makes them different.
 
 ### DP vs DDP
 
-`DistributedDataParallel` (DDP) is typically faster than `DataParallel` (DP), but it is not always the case:
-* while DP is python threads-based, DDP is multiprocess-based - and as such it has no python threads limitations, such as GIL
-* on the other hand a slow inter-connectivity between the GPU cards could lead to an actual slower outcome with DDP
-
-Here are the main differences in the inter-GPU communication overhead between the two modes:
+To understand the key differences in inter-GPU communication overhead between the two methods, let's review the processes per batch:
 
 [DDP](https://pytorch.org/docs/master/notes/ddp.html):
 
-- At the start time the main process replicates the model once from gpu 0 to the rest of gpus
+- At the start time the main process replicates the model once from GPU 0 to the rest of GPUs
 - Then for each batch:
-   1. each gpu consumes each own mini-batch of data directly
-   2. during `backward`, once the local gradients are ready, they are then averaged across all processes
+   1. Each GPU directly consumes its mini-batch of data.
+   2. During `backward`, once the local gradients are ready, they are averaged across all processes.
 
 [DP](https://pytorch.org/docs/master/generated/torch.nn.DataParallel.html):
 
 For each batch:
-   1. gpu 0 reads the batch of data and then sends a mini-batch to each gpu
-   2. replicates the up-to-date model from gpu 0 to each gpu
-   3. runs `forward` and sends output from each gpu to gpu 0, computes loss
-   4. scatters loss from gpu 0 to all gpus, runs `backward`
-   5. sends gradients from each gpu to gpu 0 and averages those
+   1. GPU 0 reads the batch of data and then sends a mini-batch to each GPU.
+   2. The up-to-date model is replicated from GPU 0 to each GPU. 
+   3. `forward` is executed, and output from each GPU is sent to GPU 0 to compute the loss.
+   4. The loss is distributed from GPU 0 to all GPUs, and `backward` is run. 
+   5. Gradients from each GPU are sent to GPU 0 and averaged. 
 
-The only communication DDP performs per batch is sending gradients, whereas DP does 5 different data exchanges per batch.
+Key differences include:
+1. DDP performs only a single communication per batch - sending gradients, while DP performs five different data exchanges per batch.
+DDP copies data using [torch.distributed](https://pytorch.org/docs/master/distributed.html), while DP copies data within 
+the process via Python threads (which introduces limitations associated with GIL). As a result, **`DistributedDataParallel` (DDP) is generally faster than `DataParallel` (DP)** unless you have slow GPU card inter-connectivity.
+2. Under DP, GPU 0 performs significantly more work than other GPUs, resulting in GPU under-utilization. 
+3. DDP supports distributed training across multiple machines, whereas DP does not.
 
-DP copies data within the process via python threads, whereas DDP copies data via [torch.distributed](https://pytorch.org/docs/master/distributed.html).
+This is not an exhaustive list of differences between DP and DDP, however, other nuances are out of scope of this guide.
+You can get a deeper understanding of these methods by reading this [article](https://www.telesens.co/2019/04/04/distributed-data-parallel-training-using-pytorch-on-aws/).
 
-Under DP gpu 0 performs a lot more work than the rest of the gpus, thus resulting in under-utilization of gpus.
+Let's illustrate the differences between DP and DDP with an experiment. We'll benchmark the differences between DP and 
+DDP with an added context of NVLink presence:  
 
-You can use DDP across multiple machines, but this is not the case with DP.
-
-There are other differences between DP and DDP but they aren't relevant to this discussion.
-
-If you want to go really deep into understanding these 2 modes, this [article](https://www.telesens.co/2019/04/04/distributed-data-parallel-training-using-pytorch-on-aws/) is highly recommended, as it has great diagrams, includes multiple benchmarks and profiler outputs on various hardware, explains all the nuances that you may need to know.
-
-Let's look at an actual benchmark:
-
-| Type   | NVlink | Time |
-| :----- | -----  | ---: |
-| 2:DP   | Y      | 110s |
-| 2:DDP  | Y      | 101s |
-| 2:DDP  | N      | 131s |
-
-
-Analysis:
-
-Here DP is ~10% slower than DDP w/ NVlink, but ~15% faster than DDP w/o NVlink
-
-The real difference will depend on how much data each GPU needs to sync with the others - the more there is to sync, the more a slow link will slow down the total runtime.
+Hardware: 2x TITAN RTX 24GB each + NVlink with 2 NVLinks (`NV2` in `nvidia-smi topo -m`)
+Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 
 Here is the full benchmark code and outputs:
 
@@ -181,17 +171,34 @@ python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-
 {'train_runtime': 131.4367, 'train_samples_per_second': 1.522, 'epoch': 0.69}
 ```
 
-Hardware: 2x TITAN RTX 24GB each + NVlink with 2 NVLinks (`NV2` in `nvidia-smi topo -m`)
-Software: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
+Here are the benchmarking results gathered in a table:
+
+| Type   | NVlink | Time |
+| :----- | -----  | ---: |
+| 2:DP   | Y      | 110s |
+| 2:DDP  | Y      | 101s |
+| 2:DDP  | N      | 131s |
+
+
+As you can see, in this case DP is ~10% slower than DDP with NVlink, but ~15% faster than DDP without NVlink.
+The real difference will depend on how much data each GPU needs to sync with the others - the more there is to sync, 
+the more a slow link will slow down the total runtime.
 
 ## ZeRO Data Parallelism
 
-ZeRO-powered data parallelism (ZeRO-DP) is described on the following diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/)
-![DeepSpeed-Image-1](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero.png)
+ZeRO-powered data parallelism (ZeRO-DP) is illustrated in the following diagram from this [blog post](https://www.microsoft.com/en-us/research/blog/zero-deepspeed-new-system-optimizations-enable-training-models-with-over-100-billion-parameters/).
 
-It can be difficult to wrap one's head around it, but in reality the concept is quite simple. This is just the usual `DataParallel` (DP), except, instead of replicating the full model params, gradients and optimizer states, each GPU stores only a slice of it.  And then at run-time when the full layer params are needed just for the given layer, all GPUs synchronize to give each other parts that they miss - this is it.
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-zero.png" alt="DeepSpeed-Image-1"/>
+ </div>
 
-Consider this simple model with 3 layers, where each layer has 3 params:
+While it may appear complex, it is very similar concept to `DataParallel` (DP). The difference is that instead of 
+replicating the full model parameters, gradients and optimizer states, each GPU stores only a slice of it. Then, at 
+run-time when the full layer parameters are needed just for the given layer, all GPUs synchronize to give each other 
+parts that they miss.
+
+To illustrate this idea, consider a simple model with 3 layers (La, Lb, and Lc), where each layer has 3 parameters. 
+Layer La, for example, has weights a0, a1 and a2:
 ```
 La | Lb | Lc
 ---|----|---
@@ -199,9 +206,8 @@ a0 | b0 | c0
 a1 | b1 | c1
 a2 | b2 | c2
 ```
-Layer La has weights a0, a1 and a2.
 
-If we have 3 GPUs, the Sharded DDP (= Zero-DP) splits the model onto 3 GPUs like so:
+If we have 3 GPUs, ZeRO-DP splits the model onto 3 GPUs like so:
 
 ```
 GPU0:
@@ -220,93 +226,117 @@ La | Lb | Lc
 a2 | b2 | c2
 ```
 
-In a way this is the same horizontal slicing, as tensor parallelism, if you imagine the typical DNN diagram. Vertical slicing is where one puts whole layer-groups on different GPUs. But it's just the starting point.
+In a way this is the same horizontal slicing, as tensor parallelism, as opposed to Vertical 
+slicing, where one puts whole layer-groups on different GPUs. Now let's see how this works: 
 
-Now each of these GPUs will get the usual mini-batch as it works in DP:
+Each of these GPUs will get the usual mini-batch as it works in DP:
 ```
 x0 => GPU0
 x1 => GPU1
 x2 => GPU2
 ```
 
-The inputs are unmodified - they think they are going to be processed by the normal model.
+The inputs are unmodified as if they would be processed by the normal model.
 
-First, the inputs hit the layer La.
+First, the inputs get to the layer La. What happens at this point?
 
-Let's focus just on GPU0: x0 needs a0, a1, a2 params to do its forward path, but GPU0 has only a0 - it gets sent a1 from GPU1 and a2 from GPU2, bringing all pieces of the model together.
+On GPU0: the x0 mini-batch needs the a0, a1, a2 parameters to do its forward path through the layer, but the GPU0 has only a0. 
+It will get a1 from GPU1 and a2 from GPU2, bringing all the pieces of the model together.
 
-In parallel, GPU1 gets mini-batch x1 and it only has a1, but needs a0 and a2 params, so it gets those from GPU0 and GPU2.
+In parallel, GPU1 gets another mini-batch - x1. GPU1 has the a1 parameter, but needs a0 and a2, so it gets those from GPU0 and GPU2.
+Same happens to GPU2 that gets the mini-batch x2. It gets a0 and a1 from GPU0 and GPU1.
 
-Same happens to GPU2 that gets input x2. It gets a0 and a1 from GPU0 and GPU1, and with its a2 it reconstructs the full tensor.
+This way each of the 3 GPUs gets the full tensors reconstructed and makes a forward pass with its own mini-batch.
+As soon as the calculation is done, the data that is no longer needed gets dropped - it's only used during the calculation. 
+The reconstruction is done efficiently via a pre-fetch.
 
-All 3 GPUs get the full tensors reconstructed and a forward happens.
+Then the whole process is repeated for layer Lb, then Lc forward-wise, and then backward Lc -> Lb -> La.
 
-As soon as the calculation is done, the data that is no longer needed gets dropped - it's only used during the calculation. The reconstruction is done efficiently via a pre-fetch.
+<Tip>
 
-And the whole process is repeated for layer Lb, then Lc forward-wise, and then backward Lc -> Lb -> La.
+This mechanism is similar to an efficient group backpacking strategy: person A carries the tent, person B carries the stove,
+and person C carries the axe. Each night they all share what they have with others and get from others what they don't have, 
+and in the morning they pack up their allocated type of gear and continue on their way. This is Sharded DDP / Zero DP.
+Compare this strategy to the simple one where each person has to carry their own tent, stove and axe (similar to 
+DataParallel (DP and DDP) in PyTorch), which would be far more inefficient. 
 
-To me this sounds like an efficient group backpacking weight distribution strategy:
-
-1. person A carries the tent
-2. person B carries the stove
-3. person C carries the axe
-
-Now each night they all share what they have with others and get from others what they don't have, and in the morning they pack up their allocated type of gear and continue on their way. This is Sharded DDP / Zero DP.
-
-Compare this strategy to the simple one where each person has to carry their own tent, stove and axe, which would be far more inefficient. This is DataParallel (DP and DDP) in Pytorch.
+</Tip>
 
 While reading the literature on this topic you may encounter the following synonyms: Sharded, Partitioned.
-
-If you pay close attention the way ZeRO partitions the model's weights - it looks very similar to tensor parallelism which will be discussed later. This is because it partitions/shards each layer's weights, unlike vertical model parallelism which is discussed next.
+If you pay close attention the way ZeRO partitions the model's weights - it looks very similar to tensor parallelism 
+which will be discussed later. This is because it partitions/shards each layer's weights, unlike vertical model parallelism 
+which is discussed next.
 
 Implementations:
 
 - [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
+- [`Accelerate` integration](https://huggingface.co/docs/accelerate/en/usage_guides/deepspeed) 
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
-## Naive Model Parallelism (Vertical) and Pipeline Parallelism
+## From Naive Model Parallelism to Pipeline Parallelism
 
-Naive Model Parallelism (MP) is where one spreads groups of model layers across multiple GPUs. The mechanism is relatively simple - switch the desired layers `.to()` the desired devices and now whenever the data goes in and out those layers switch the data to the same device as the layer and leave the rest unmodified.
+To explain Pipeline parallelism, we'll first look into Naive Model Parallelism (MP), also known as Vertical MP. This approach
+involves distributing groups of model layers across multiple GPUs by assigning specific layers to specific GPUs with `.to()`. 
+As data flows through these layers, it is switched to the same GPU as the layer, while the other layers remain untouched.
 
-We refer to it as Vertical MP, because if you remember how most models are drawn, we slice the layers vertically. For example, if the following diagram shows an 8-layer model:
+We refer to this Model parallelism as "Vertical" because of how models are typically visualized. For example, the 
+following diagram shows an 8-layer model splint vertically into two slices, placing layers 0-3 onto 
+GPU0 and 4-7 to GPU1:
 
 ```
 ===================  ===================
 |  0 | 1 | 2 | 3  |  |  4 | 5 | 6 | 7  |
 ===================  ===================
-        gpu0                 gpu1
+        GPU0                 GPU1
 ```
-we just sliced it in 2 vertically, placing layers 0-3 onto GPU0 and 4-7 to GPU1.
 
-Now while data travels from layer 0 to 1, 1 to 2 and 2 to 3 this is just the normal model. But when data needs to pass from layer 3 to layer 4 it needs to travel from GPU0 to GPU1 which introduces a communication overhead. If the participating GPUs are on the same compute node (e.g. same physical machine) this copying is pretty fast, but if the GPUs are located on different compute nodes (e.g. multiple machines) the communication overhead could be significantly larger.
+Here, when data moves from layer 0 to 3, it's no different from regular forward pass. However, passing data from layer 3 
+to 4 requires moving it from GPU0 to GPU1, introducing communication overhead. If the participating 
+GPUs are on the same compute node (e.g. same physical machine) this copying is fast, but if the GPUs are located 
+on different compute nodes (e.g. multiple machines) the communication overhead could be significantly larger.
 
-Then layers 4 to 5 to 6 to 7 are as a normal model would have and when the 7th layer completes we often need to send the data back to layer 0 where the labels are (or alternatively send the labels to the last layer). Now the loss can be computed and the optimizer can do its work.
+Then layers 4 to 7 work as a normal model would have. When the 7th layer completes we often need to send the 
+data back to layer 0 where the labels are (or alternatively send the labels to the last layer). Now the loss can be 
+computed and the optimizer can do its work.
 
-Problems:
-- the main deficiency and why this one is called "naive" MP, is that all but one GPU is idle at any given moment. So if 4 GPUs are used, it's almost identical to quadrupling the amount of memory of a single GPU, and ignoring the rest of the hardware. Plus there is the overhead of copying the data between devices. So 4x 6GB cards will be able to accommodate the same size as 1x 24GB card using naive MP, except the latter will complete the training faster, since it doesn't have the data copying overhead. But, say, if you have 40GB cards and need to fit a 45GB model you can with 4x 40GB cards (but barely because of the gradient and optimizer states)
-- shared embeddings may need to get copied back and forth between GPUs.
+Naive Model Parallelism has several issues:
+- All but one GPU are idle at any given moment: if 4 GPUs are used, it's nearly identical to quadrupling the amount of memory of a single GPU, and ignoring the rest of the hardware. 
+- Overhead is introduced when copying the data between devices. E.g. 4x 6GB cards will be able to accommodate the same size as 1x 24GB card using naive MP, but a single 24GB card will complete the training faster, because it doesn't have the data copying overhead. But, say, if you have 40GB cards and need to fit a 45GB model you can with 4x 40GB cards (but barely because of the gradient and optimizer states)
+- Shared embeddings may need to get copied back and forth between GPUs.
 
-Pipeline Parallelism (PP) is almost identical to a naive MP, but it solves the GPU idling problem, by chunking the incoming batch into micro-batches and artificially creating a pipeline, which allows different GPUs to concurrently participate in the computation process.
+Now that you know how naive approach to model parallelism works and what its limitations are, let's introduce Pipeline Parallelism (PP).
+PP is almost identical to a naive MP, but it solves the GPU idling problem, by chunking the incoming batch into micro-batches a
+nd artificially creating a pipeline, which allows different GPUs to concurrently participate in the computation process.
 
-The following illustration from the [GPipe paper](https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.html) shows the naive MP on the top, and PP on the bottom:
+The following illustration from the [GPipe paper](https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.html) 
+shows the naive MP on the top, and PP on the bottom:
 
-![mp-pp](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-gpipe-bubble.png)
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/parallelism-gpipe-bubble.png" alt="MP vs PP"/>
+</div>
 
 It's easy to see from the bottom diagram how PP has less dead zones, where GPUs are idle. The idle parts are referred to as the "bubble".
+Both parts of the diagram show a parallelism that is of degree 4. That is 4 GPUs are participating in the pipeline. 
+So there is the forward path of 4 pipe stages F0, F1, F2 and F3 and then the return reverse order backward path of B3, B2, B1 and B0.
 
-Both parts of the diagram show a parallelism that is of degree 4. That is 4 GPUs are participating in the pipeline. So there is the forward path of 4 pipe stages F0, F1, F2 and F3 and then the return reverse order backward path of B3, B2, B1 and B0.
+PP introduces a new hyperparameter to tune - `chunks`, which defines how many chunks of data are sent in a sequence 
+through the same pipe stage. For example, in the bottom diagram you can see that `chunks=4`. GPU0 performs the same 
+forward path on chunk 0, 1, 2 and 3 (F0,0, F0,1, F0,2, F0,3) and then it waits for other GPUs to do their work and only 
+when their work is starting to be complete, GPU0 starts to work again doing the backward path for chunks 3, 2, 1 and 0 (B0,3, B0,2, B0,1, B0,0).
 
-PP introduces a new hyper-parameter to tune and it's `chunks` which defines how many chunks of data are sent in a sequence through the same pipe stage. For example, in the bottom diagram you can see that `chunks=4`. GPU0 performs the same forward path on chunk 0, 1, 2 and 3 (F0,0, F0,1, F0,2, F0,3) and then it waits for other GPUs to do their work and only when their work is starting to be complete, GPU0 starts to work again doing the backward path for chunks 3, 2, 1 and 0 (B0,3, B0,2, B0,1, B0,0).
+Note that this is the same concept as gradient accumulation steps. PyTorch uses `chunks`, whereas DeepSpeed refers 
+to the same hyperparameter as gradient accumulation steps.
 
-Note that conceptually this is the same concept as gradient accumulation steps (GAS). Pytorch uses `chunks`, whereas DeepSpeed refers to the same hyper-parameter as GAS.
-
-Because of the chunks, PP introduces the concept of micro-batches (MBS). DP splits the global data batch size into mini-batches, so if you have a DP degree of 4, a global batch size of 1024 gets split up into 4 mini-batches of 256 each (1024/4). And if the number of `chunks` (or GAS) is 32 we end up with a micro-batch size of 8 (256/32). Each Pipeline stage works with a single micro-batch at a time.
+Because of the chunks, PP introduces the concept of micro-batches (MBS). DP splits the global data batch size into 
+mini-batches, so if you have a DP degree of 4, a global batch size of 1024 gets split up into 4 mini-batches of 
+256 each (1024/4). And if the number of `chunks` (or GAS) is 32 we end up with a micro-batch size of 8 (256/32). Each 
+Pipeline stage works with a single micro-batch at a time.
 
 To calculate the global batch size of the DP + PP setup we then do: `mbs*chunks*dp_degree` (`8*32*4=1024`).
 
 Let's go back to the diagram.
 
-With `chunks=1` you end up with the naive MP, which is very inefficient. With a very large `chunks` value you end up with tiny micro-batch sizes which could be not every efficient either. So one has to experiment to find the value that leads to the highest efficient utilization of the gpus.
+With `chunks=1` you end up with the naive MP, which is very inefficient. With a very large `chunks` value you end up with tiny micro-batch sizes which could be not every efficient either. So one has to experiment to find the value that leads to the highest efficient utilization of the GPUs.
 
 While the diagram shows that there is a bubble of "dead" time that can't be parallelized because the last `forward` stage has to wait for `backward` to complete the pipeline, the purpose of finding the best value for `chunks` is to enable a high concurrent GPU utilization across all participating GPUs which translates to minimizing the size of the bubble.
 
@@ -330,7 +360,7 @@ Problems with traditional Pipeline API solutions:
 We are yet to experiment with Varuna and SageMaker but their papers report that they have overcome the list of problems mentioned above and that they require much smaller changes to the user's model.
 
 Implementations:
-- [Pytorch](https://pytorch.org/docs/stable/pipeline.html) (initial support in pytorch-1.8, and progressively getting improved in 1.9 and more so in 1.10). Some [examples](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py)
+- [PyTorch](https://pytorch.org/docs/stable/pipeline.html) (initial support in pytorch-1.8, and progressively getting improved in 1.9 and more so in 1.10). Some [examples](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py)
 - [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
 - [Varuna](https://github.com/microsoft/varuna)
@@ -531,7 +561,7 @@ Here is a very rough outline at which parallelism strategy to use when. The firs
 
     With very fast intra-node connectivity of NVLINK or NVSwitch all three should be mostly on par, without these PP will be faster than TP or ZeRO. The degree of TP may also make a difference. Best to experiment to find the winner on your particular setup.
 
-    TP is almost always used within a single node. That is TP size <= gpus per node.
+    TP is almost always used within a single node. That is TP size <= GPUs per node.
 
 * Largest Layer not fitting into a single GPU:
 
