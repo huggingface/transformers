@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.33.0.dev0"
+__version__ = "4.35.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -221,6 +221,7 @@ _import_structure = {
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
     ],
+    "models.bros": ["BROS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BrosConfig", "BrosProcessor"],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -433,6 +434,7 @@ _import_structure = {
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
     "models.mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig", "MgpstrProcessor", "MgpstrTokenizer"],
+    "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
     "models.mluke": [],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mobilenet_v1": ["MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV1Config"],
@@ -453,6 +455,7 @@ _import_structure = {
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "NllbMoeConfig"],
+    "models.nougat": ["NougatProcessor"],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
@@ -470,6 +473,7 @@ _import_structure = {
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
+    "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -588,6 +592,7 @@ _import_structure = {
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
+    "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
     "models.vits": [
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VitsConfig",
@@ -651,6 +656,7 @@ _import_structure = {
         "FillMaskPipeline",
         "ImageClassificationPipeline",
         "ImageSegmentationPipeline",
+        "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
         "NerPipeline",
@@ -749,6 +755,7 @@ _import_structure = {
         "is_torch_npu_available",
         "is_torch_tpu_available",
         "is_torchvision_available",
+        "is_torch_xpu_available",
         "is_vision_available",
         "logging",
     ],
@@ -855,6 +862,7 @@ else:
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.mvp"].append("MvpTokenizerFast")
     _import_structure["models.nllb"].append("NllbTokenizerFast")
+    _import_structure["models.nougat"].append("NougatTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
@@ -969,6 +977,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
+    _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
@@ -983,6 +992,7 @@ else:
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
     _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
+    _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
@@ -1116,6 +1126,7 @@ else:
             "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
+            "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING",
             "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
             "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
@@ -1153,6 +1164,7 @@ else:
             "AutoModelForDocumentQuestionAnswering",
             "AutoModelForImageClassification",
             "AutoModelForImageSegmentation",
+            "AutoModelForImageToImage",
             "AutoModelForInstanceSegmentation",
             "AutoModelForMaskedImageModeling",
             "AutoModelForMaskedLM",
@@ -1352,6 +1364,17 @@ else:
             "BridgeTowerForMaskedLM",
             "BridgeTowerModel",
             "BridgeTowerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bros"].extend(
+        [
+            "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BrosForTokenClassification",
+            "BrosModel",
+            "BrosPreTrainedModel",
+            "BrosProcessor",
+            "BrosSpadeEEForTokenClassification",
+            "BrosSpadeELForTokenClassification",
         ]
     )
     _import_structure["models.camembert"].extend(
@@ -2204,6 +2227,9 @@ else:
             "MgpstrPreTrainedModel",
         ]
     )
+    _import_structure["models.mistral"].extend(
+        ["MistralForCausalLM", "MistralForSequenceClassification", "MistralModel", "MistralPreTrainedModel"]
+    )
     _import_structure["models.mobilebert"].extend(
         [
             "MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2434,6 +2460,9 @@ else:
             "PerceiverModel",
             "PerceiverPreTrainedModel",
         ]
+    )
+    _import_structure["models.persimmon"].extend(
+        ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
     )
     _import_structure["models.pix2struct"].extend(
         [
@@ -2944,6 +2973,13 @@ else:
             "VitDetPreTrainedModel",
         ]
     )
+    _import_structure["models.vitmatte"].extend(
+        [
+            "VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitMatteForImageMatting",
+            "VitMattePreTrainedModel",
+        ]
+    )
     _import_structure["models.vits"].extend(
         [
             "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3363,6 +3399,7 @@ else:
         [
             "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFDebertaV2ForMaskedLM",
+            "TFDebertaV2ForMultipleChoice",
             "TFDebertaV2ForQuestionAnswering",
             "TFDebertaV2ForSequenceClassification",
             "TFDebertaV2ForTokenClassification",
@@ -4322,6 +4359,7 @@ if TYPE_CHECKING:
         BridgeTowerTextConfig,
         BridgeTowerVisionConfig,
     )
+    from .models.bros import BROS_PRETRAINED_CONFIG_ARCHIVE_MAP, BrosConfig, BrosProcessor
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
@@ -4522,6 +4560,7 @@ if TYPE_CHECKING:
     from .models.mega import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, MegaConfig
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig, MgpstrProcessor, MgpstrTokenizer
+    from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config
     from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
@@ -4540,6 +4579,7 @@ if TYPE_CHECKING:
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nllb_moe import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, NllbMoeConfig
+    from .models.nougat import NougatProcessor
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig, OneFormerProcessor
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
@@ -4554,6 +4594,7 @@ if TYPE_CHECKING:
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
+    from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4660,6 +4701,7 @@ if TYPE_CHECKING:
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
+    from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
     from .models.vits import (
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
@@ -4715,6 +4757,7 @@ if TYPE_CHECKING:
         FillMaskPipeline,
         ImageClassificationPipeline,
         ImageSegmentationPipeline,
+        ImageToImagePipeline,
         ImageToTextPipeline,
         JsonPipelineDataFormat,
         NerPipeline,
@@ -4819,6 +4862,7 @@ if TYPE_CHECKING:
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
+        is_torch_xpu_available,
         is_torchvision_available,
         is_vision_available,
         logging,
@@ -4914,6 +4958,7 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
         from .models.nllb import NllbTokenizerFast
+        from .models.nougat import NougatTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.realm import RealmTokenizerFast
@@ -4999,6 +5044,7 @@ if TYPE_CHECKING:
         from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
+        from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
@@ -5013,6 +5059,7 @@ if TYPE_CHECKING:
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.vit_hybrid import ViTHybridImageProcessor
+        from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
 
@@ -5130,6 +5177,7 @@ if TYPE_CHECKING:
             MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+            MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
             MODEL_FOR_MASK_GENERATION_MAPPING,
             MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
@@ -5167,6 +5215,7 @@ if TYPE_CHECKING:
             AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
@@ -5334,6 +5383,15 @@ if TYPE_CHECKING:
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,
+        )
+        from .models.bros import (
+            BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BrosForTokenClassification,
+            BrosModel,
+            BrosPreTrainedModel,
+            BrosProcessor,
+            BrosSpadeEEForTokenClassification,
+            BrosSpadeELForTokenClassification,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6027,6 +6085,12 @@ if TYPE_CHECKING:
             MgpstrModel,
             MgpstrPreTrainedModel,
         )
+        from .models.mistral import (
+            MistralForCausalLM,
+            MistralForSequenceClassification,
+            MistralModel,
+            MistralPreTrainedModel,
+        )
         from .models.mobilebert import (
             MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileBertForMaskedLM,
@@ -6218,6 +6282,12 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
+        )
+        from .models.persimmon import (
+            PersimmonForCausalLM,
+            PersimmonForSequenceClassification,
+            PersimmonModel,
+            PersimmonPreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6623,6 +6693,11 @@ if TYPE_CHECKING:
             VitDetModel,
             VitDetPreTrainedModel,
         )
+        from .models.vitmatte import (
+            VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitMatteForImageMatting,
+            VitMattePreTrainedModel,
+        )
         from .models.vits import (
             VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitsModel,
@@ -6978,6 +7053,7 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import (
             TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaV2ForMaskedLM,
+            TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForQuestionAnswering,
             TFDebertaV2ForSequenceClassification,
             TFDebertaV2ForTokenClassification,

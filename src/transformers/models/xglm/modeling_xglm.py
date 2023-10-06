@@ -623,9 +623,7 @@ class XGLMModel(XGLMPreTrainedModel):
                 dtype=torch.long,
                 device=input_ids.device if input_ids is not None else inputs_embeds.device,
             )
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
-        else:
-            position_ids = position_ids.view(-1, input_shape[-1])
+            position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -881,5 +879,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel):
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past

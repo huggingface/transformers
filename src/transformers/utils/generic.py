@@ -20,7 +20,7 @@ import tempfile
 from collections import OrderedDict, UserDict
 from collections.abc import MutableMapping
 from contextlib import ExitStack, contextmanager
-from dataclasses import fields
+from dataclasses import fields, is_dataclass
 from enum import Enum
 from typing import Any, ContextManager, List, Tuple
 
@@ -76,14 +76,14 @@ def infer_framework_from_repr(x):
     Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
     frameworks in a smart order, without the need to import the frameworks).
     """
-    representation = repr(x)
-    if representation.startswith("tensor"):
+    representation = str(type(x))
+    if representation.startswith("<class 'torch."):
         return "pt"
-    elif "tf.Tensor" in representation:
+    elif representation.startswith("<class 'tensorflow."):
         return "tf"
-    elif representation.startswith("Array"):
+    elif representation.startswith("<class 'jax"):
         return "jax"
-    elif representation.startswith("array"):
+    elif representation.startswith("<class 'numpy."):
         return "np"
 
 
@@ -314,7 +314,26 @@ class ModelOutput(OrderedDict):
                 lambda values, context: cls(**torch.utils._pytree._dict_unflatten(values, context)),
             )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Subclasses of ModelOutput must use the @dataclass decorator
+        # This check is done in __init__ because the @dataclass decorator operates after __init_subclass__
+        # issubclass() would return True for issubclass(ModelOutput, ModelOutput) when False is needed
+        # Just need to check that the current class is not ModelOutput
+        is_modeloutput_subclass = self.__class__ != ModelOutput
+
+        if is_modeloutput_subclass and not is_dataclass(self):
+            raise TypeError(
+                f"{self.__module__}.{self.__class__.__name__} is not a dataclasss."
+                " This is a subclass of ModelOutput and so must use the @dataclass decorator."
+            )
+
     def __post_init__(self):
+        """Check the ModelOutput dataclass.
+
+        Only occurs if @dataclass decorator has been used.
+        """
         class_fields = fields(self)
 
         # Safety and consistency checks
@@ -396,6 +415,13 @@ class ModelOutput(OrderedDict):
         super().__setitem__(key, value)
         # Don't call self.__setattr__ to avoid recursion errors
         super().__setattr__(key, value)
+
+    def __reduce__(self):
+        if not is_dataclass(self):
+            return super().__reduce__()
+        callable, _args, *remaining = super().__reduce__()
+        args = tuple(getattr(self, field.name) for field in fields(self))
+        return callable, args, *remaining
 
     def to_tuple(self) -> Tuple[Any]:
         """

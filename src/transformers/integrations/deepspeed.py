@@ -15,6 +15,7 @@
 Integration with Deepspeed
 """
 
+import importlib.metadata as importlib_metadata
 import importlib.util
 import weakref
 from functools import partialmethod
@@ -26,11 +27,22 @@ from ..utils import is_accelerate_available, is_torch_available, logging
 if is_torch_available():
     import torch
 
+    from ..optimization import get_scheduler
+
 logger = logging.get_logger(__name__)
 
 
 def is_deepspeed_available():
-    return importlib.util.find_spec("deepspeed") is not None
+    package_exists = importlib.util.find_spec("deepspeed") is not None
+
+    # Check we're not importing a "deepspeed" directory somewhere but the actual library by trying to grab the version
+    # AND checking it has an author field in the metadata that is HuggingFace.
+    if package_exists:
+        try:
+            _ = importlib_metadata.metadata("deepspeed")
+            return True
+        except importlib_metadata.PackageNotFoundError:
+            return False
 
 
 if is_accelerate_available() and is_deepspeed_available():
@@ -274,7 +286,7 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Mostly*
     # 3. DS scheduler + HF optimizer: Mostly*
-    # 4. HF scheduler + DS optimizer: No
+    # 4. HF scheduler + DS optimizer: Yes
     #
     # Mostly*: All non-native DeepSpeed optimizers that have both CPU and GPU implementation should work (except LAMB)
 
@@ -304,11 +316,18 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
         lr_scheduler = DummyScheduler(optimizer)
     else:
         if isinstance(optimizer, DummyOptim):
-            raise ValueError(
-                "Found `optimizer` configured in the DeepSpeed config, but no `scheduler`. "
-                "Please configure a scheduler in the DeepSpeed config."
-            )
-        lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
+
+            def _lr_scheduler_callable(optimizer):
+                return get_scheduler(
+                    trainer.args.lr_scheduler_type,
+                    optimizer=optimizer,
+                    num_warmup_steps=trainer.args.get_warmup_steps(num_training_steps),
+                    num_training_steps=num_training_steps,
+                )
+
+            lr_scheduler = DummyScheduler(optimizer, lr_scheduler_callable=_lr_scheduler_callable)
+        else:
+            lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     return optimizer, lr_scheduler
 

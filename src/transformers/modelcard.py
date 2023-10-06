@@ -387,7 +387,7 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except (requests.exceptions.HTTPError, HFValidationError):
+            except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, HFValidationError):
                 pass
 
     def create_model_index(self, metric_mapping):
@@ -459,7 +459,7 @@ class TrainingSummary:
         metadata = {}
         metadata = _insert_values_as_list(metadata, "language", self.language)
         metadata = _insert_value(metadata, "license", self.license)
-        if self.finetuned_from is not None:
+        if self.finetuned_from is not None and isinstance(self.finetuned_from, str) and len(self.finetuned_from) > 0:
             metadata = _insert_value(metadata, "base_model", self.finetuned_from)
         metadata = _insert_values_as_list(metadata, "tags", self.tags)
         metadata = _insert_values_as_list(metadata, "datasets", self.dataset_tags)

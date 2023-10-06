@@ -31,6 +31,7 @@ from ... import PreTrainedModel
 from ...activations import ACT2FN
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -236,6 +237,7 @@ def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
     image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
     perceiver_embeddings = kwargs.get("perceiver_embeddings", None)
     image_attention_mask = kwargs.get("image_attention_mask", None)
+    interpolate_pos_encoding = kwargs.get("interpolate_pos_encoding", False)
 
     return {
         "input_ids": input_ids,
@@ -248,6 +250,7 @@ def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
         "image_encoder_embeddings": image_encoder_embeddings,
         "perceiver_embeddings": perceiver_embeddings,
         "image_attention_mask": image_attention_mask,
+        "interpolate_pos_encoding": interpolate_pos_encoding,
     }
 
 
@@ -259,7 +262,7 @@ def freeze_model(model, module_exceptions=[]):
     }
     module_exceptions_mapped = [mapping[m] for m in module_exceptions]
     for module in model.modules():
-        if module_exceptions and any([isinstance(module, t) for t in module_exceptions_mapped]):
+        if module_exceptions and any(isinstance(module, t) for t in module_exceptions_mapped):
             module.requires_grad_(True)  # Explicitely setting it to true to avoid any mistakes
         else:
             module.requires_grad_(False)
@@ -425,7 +428,7 @@ class IdeficsDecoupledLinear(nn.Linear):
         output = F.linear(input, self.weight, self.bias)
 
         if self.out_additional_features > 0:
-            additional_features = F.linear(input, self.additional_fc.weight, self.additional_fc.bias)
+            additional_features = self.additional_fc(input)
             output = torch.cat((output, additional_features), -1)
 
         return output
@@ -494,36 +497,43 @@ class IdeficsRMSNorm(nn.Module):
         return self.weight * hidden_states
 
 
+ALL_LAYERNORM_LAYERS.append(IdeficsRMSNorm)
+
+
 # this was adapted from LlamaRotaryEmbedding
 class IdeficsEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
-        self.register_buffer("inv_freq", inv_freq)
+
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
-        self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        self._set_cos_sin_cache(
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+        )
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos()[None, None, :, :], persistent=False)
-        self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
         if seq_len > self.max_seq_len_cached:
-            self.max_seq_len_cached = seq_len
-            t = torch.arange(self.max_seq_len_cached, device=x.device, dtype=self.inv_freq.dtype)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            # Different from paper, but it uses a different permutation in order to obtain the same calculation
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.register_buffer("cos_cached", emb.cos()[None, None, :, :], persistent=False)
-            self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+
         return (
-            self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
-            self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
+            self.cos_cached[:seq_len].to(dtype=x.dtype),
+            self.sin_cached[:seq_len].to(dtype=x.dtype),
         )
 
 
@@ -534,11 +544,10 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    gather_indices = position_ids[:, None, :, None]  # [bs, 1, seq_len, 1]
-    gather_indices = gather_indices.repeat(1, cos.shape[1], 1, cos.shape[3])
-    cos = torch.gather(cos.repeat(gather_indices.shape[0], 1, 1, 1), 2, gather_indices)
-    sin = torch.gather(sin.repeat(gather_indices.shape[0], 1, 1, 1), 2, gather_indices)
+    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
+    sin = sin[position_ids].unsqueeze(1)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -1157,6 +1166,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, IdeficsBaseModelOutputWithPast]:
         device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -1195,9 +1205,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
             )
-            position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
-        else:
-            position_ids = position_ids.view(-1, seq_length).long()
+            position_ids = position_ids.unsqueeze(0)
 
         no_images = False
         if (pixel_values, image_encoder_embeddings, perceiver_embeddings).count(None) != 2:
@@ -1212,7 +1220,9 @@ class IdeficsModel(IdeficsPreTrainedModel):
             pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
 
             # Get sequence from the vision encoder
-            image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
+            image_hidden_states = self.vision_model(
+                pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
+            ).last_hidden_state
 
         elif image_encoder_embeddings is not None:
             batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
@@ -1468,6 +1478,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, IdeficsCausalLMOutputWithPast]:
         r"""
@@ -1516,6 +1527,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
