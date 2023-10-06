@@ -804,8 +804,6 @@ OBJECTS_TO_IGNORE = [
     "WhisperConfig",
     "WhisperFeatureExtractor",
     "WhisperForAudioClassification",
-    "WhisperTokenizer",
-    "WhisperTokenizer",
     "XCLIPTextConfig",
     "XCLIPVisionConfig",
     "XGLMConfig",
