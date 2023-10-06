@@ -67,16 +67,16 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
             The maximum input lenght of the model in seconds. This is used to pad the audio.
         fmin (`float`, *optional*, defaults to 0.0):
             Minimum mel frequency in Hz.
-        fmax (`float`, *optional*, defaults to `None`):
+        fmax (`float`, *optional*):
             Maximum mel frequency in Hz.
-        mel_floor (`float`, *optional*, defaults to 1e-9):
+        mel_floor (`float`, *optional*, defaults to 1e-09):
             Minimum value of mel frequency banks.
-        center (`bool`, *optional*, default to `False`):
+        center (`bool`, *optional*, defaults to `False`):
             Whether to pad the waveform so that frame `t` is centered around time `t * hop_length`. If `False`, frame
             `t` will start at time `t * hop_length`.
         compression_factor (`float`, *optional*, defaults to 1.0):
             The multiplicative compression factor for dynamic range compression during spectral normalization.
-        compression_clip_val (`float`, *optional*, defaults to 1e-5):
+        compression_clip_val (`float`, *optional*, defaults to 1e-05):
             The clip value applied to the waveform before applying dynamic range compression during spectral
             normalization.
         normalize_min (`float`, *optional*, defaults to -11.512925148010254):
