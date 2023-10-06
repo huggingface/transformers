@@ -47,10 +47,9 @@ if is_torch_available():
         PatchTSMixerModel,
     )
     from transformers.models.patchtsmixer.modeling_patchtsmixer import (
-        PatchTSMixerClassificationHead,
+        ForecastHead,
+        LinearHead,
         PatchTSMixerEncoder,
-        PatchTSMixerForecastHead,
-        PatchTSMixerRegressionHead,
         PretrainHead,
     )
 
@@ -555,7 +554,16 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_forecast_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = PatchTSMixerForecastHead(config)
+        head = ForecastHead(
+            num_patches=config.num_patches,
+            in_channels=config.input_size,
+            patch_size=config.patch_len,
+            num_features=config.num_features,
+            forecast_len=config.forecast_len,
+            head_dropout=config.head_dropout,
+            mode=config.mode,
+            forecast_channel_indices=config.forecast_channel_indices,
+        )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
         output = head(self.__class__.enc_output)
 
@@ -786,7 +794,16 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_classification_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = PatchTSMixerClassificationHead(config)
+        head = LinearHead(
+            num_patches=config.num_patches,
+            in_channels=config.input_size,
+            num_features=config.num_features,
+            head_dropout=config.head_dropout,
+            output_dim=config.n_classes,
+            output_range=config.output_range,
+            head_agg=config.head_agg,
+            mode=config.mode,
+        )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
         output = head(self.__class__.enc_output)
 
@@ -806,7 +823,16 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_regression_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = PatchTSMixerRegressionHead(config)
+        head = LinearHead(
+            num_patches=config.num_patches,
+            in_channels=config.input_size,
+            num_features=config.num_features,
+            head_dropout=config.head_dropout,
+            output_dim=config.n_targets,
+            output_range=config.output_range,
+            head_agg=config.head_agg,
+            mode=config.mode,
+        )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
         output = head(self.__class__.enc_output)
         # print(output.shape)

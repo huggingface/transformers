@@ -799,42 +799,6 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
         )
 
 
-class PatchTSMixerForecastHead(nn.Module):
-    def __init__(self, config: PatchTSMixerConfig):
-        super().__init__()
-        self.head = ForecastHead(
-            num_patches=config.num_patches,
-            in_channels=config.input_size,
-            patch_size=config.patch_len,
-            num_features=config.num_features,
-            forecast_len=config.forecast_len,
-            head_dropout=config.head_dropout,
-            mode=config.mode,
-            forecast_channel_indices=config.forecast_channel_indices,
-        )
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-        hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
-            Backbone embedding.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers.
-
-        Returns:
-            `torch.FloatTensor` of shape `(batch_size, forecast_len, input_size)` or `(batch_size, forecast_len,
-            forecast_channels)`:
-        Forecast output. If forecast_channel_indices is not None, then only the channel indices to be forecasted will
-        be returned.
-        """
-
-        # x: [bs x input_size x num_patches x num_features]
-        # return: [bs x forecast_len x input_size]
-
-        return self.head(hidden_state, y=None)
-
-
 @dataclass
 class PatchTSMixerForForecastOutput(ModelOutput):
     """
@@ -873,7 +837,16 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         super().__init__(config)
 
         self.model = PatchTSMixerModel(config)
-        self.head = PatchTSMixerForecastHead(config)
+        self.head = ForecastHead(
+            num_patches=config.num_patches,
+            in_channels=config.input_size,
+            patch_size=config.patch_len,
+            num_features=config.num_features,
+            forecast_len=config.forecast_len,
+            head_dropout=config.head_dropout,
+            mode=config.mode,
+            forecast_channel_indices=config.forecast_channel_indices,
+        )
         self.loss = torch.nn.MSELoss(reduction="mean")
 
         # Initialize weights and apply final processing
@@ -909,7 +882,10 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         if target_values is not None and return_loss is True:
             if self.config.forecast_channel_indices is not None:
-                y_hat_unscaled = y_hat * model_output.scale[..., self.config.forecast_channel_indices] + model_output.loc[..., self.config.forecast_channel_indices]
+                y_hat_unscaled = (
+                    y_hat * model_output.scale[..., self.config.forecast_channel_indices]
+                    + model_output.loc[..., self.config.forecast_channel_indices]
+                )
                 loss_val = self.loss(y_hat_unscaled, target_values[..., self.config.forecast_channel_indices])
             else:
                 y_hat_unscaled = y_hat * model_output.scale + model_output.loc
@@ -993,7 +969,16 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         super().__init__(config)
 
         self.model = PatchTSMixerModel(config)
-        self.head = PatchTSMixerClassificationHead(config)
+        self.head = LinearHead(
+            num_patches=config.num_patches,
+            in_channels=config.input_size,
+            num_features=config.num_features,
+            head_dropout=config.head_dropout,
+            output_dim=config.n_classes,
+            output_range=config.output_range,
+            head_agg=config.head_agg,
+            mode=config.mode,
+        )
         self.loss = torch.nn.CrossEntropyLoss()
 
         if config.scaling in ["std", "mean", True]:
@@ -1049,36 +1034,6 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         )
 
 
-class PatchTSMixerRegressionHead(nn.Module):
-    def __init__(self, config: PatchTSMixerConfig):
-        super().__init__()
-
-        self.head = LinearHead(
-            num_patches=config.num_patches,
-            in_channels=config.input_size,
-            num_features=config.num_features,
-            head_dropout=config.head_dropout,
-            output_dim=config.n_targets,
-            output_range=config.output_range,
-            head_agg=config.head_agg,
-            mode=config.mode,
-        )
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-        hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
-            Refers the embedding output from the backbone.
-
-        Returns: `torch.FloatTensor` of shape `(batch_size, n_targets)`
-
-        """
-
-        # hidden_state: [bs x input_size x num_patches x num_features]
-        # return: [bs x n_targets]
-        return self.head(hidden_state, y=None)
-
-
 @dataclass
 class PatchTSMixerForRegressionOutput(ModelOutput):
     """
@@ -1117,7 +1072,16 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         super().__init__(config)
 
         self.model = PatchTSMixerModel(config)
-        self.head = PatchTSMixerRegressionHead(config)
+        self.head = LinearHead(
+            num_patches=config.num_patches,
+            in_channels=config.input_size,
+            num_features=config.num_features,
+            head_dropout=config.head_dropout,
+            output_dim=config.n_targets,
+            output_range=config.output_range,
+            head_agg=config.head_agg,
+            mode=config.mode,
+        )
         self.loss = torch.nn.MSELoss(reduction="mean")
 
         if config.scaling in ["std", "mean", True]:
