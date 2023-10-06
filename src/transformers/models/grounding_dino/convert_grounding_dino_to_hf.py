@@ -374,7 +374,7 @@ def text_processor(text: str, config):
 
         return attention_mask, position_ids.to(torch.long)
 
-    tokenizer = AutoTokenizer.from_pretrained(config.text_backbone_config._name_or_path)
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased") # Using just for now since I didn't finish the tokenizer
     special_tokens = tokenizer.convert_tokens_to_ids(["[CLS]", "[SEP]", ".", "?"])
     text = preprocess_caption(text)
     tokenized = tokenizer([text], padding="longest", return_tensors="pt")
@@ -401,11 +401,20 @@ def text_processor(text: str, config):
 
 
 @torch.no_grad()
-def convert_grounding_dino_checkpoint(
-    model_name: str, checkpoint_path: str, pytorch_dump_folder_path: str = None, push_to_hub: bool = False
-):
+def convert_grounding_dino_checkpoint(args):
+
+    model_name = args.model_name
+    pytorch_dump_folder_path = args.pytorch_dump_folder_path
+    push_to_hub = args.push_to_hub
+
+    checkpoint_mapping = {
+        "grounding-dino-tiny": "/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_tiny_clean.pth",
+        "grounding-dino-base": "/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_base_clean.pth",
+    }
     # Define default GroundingDINO configuation
     config = get_grounding_dino_config(model_name)
+
+    checkpoint_path = checkpoint_mapping[model_name]
 
     # Load original checkpoint
     original_state_dict = torch.load(checkpoint_path, map_location="cpu")
@@ -432,7 +441,7 @@ def convert_grounding_dino_checkpoint(
     text_inputs, text_token_mask = text_processor(text, config)
 
     # Running forward
-    model(
+    output = model(
         pixel_values=image_inputs.unsqueeze(0),
         input_ids=text_inputs["input_ids"],
         attention_mask=text_inputs["attention_mask"],
@@ -451,8 +460,11 @@ def convert_grounding_dino_checkpoint(
 
     if push_to_hub:
         print(f"Pushing model and image processor for {model_name} to hub")
-        model.push_to_hub(f"microsoft/{model_name}")
-        image_processor.push_to_hub(f"microsoft/{model_name}")
+        model.push_to_hub(f"EduardoPacheco/{model_name}")
+        #TODO push image processor to hub
+        # image_processor.push_to_hub(f"microsoft/{model_name}")
+        #TODO push tokenizer to hub
+        #TODO push processor to hub
 
 
 if __name__ == "__main__":
@@ -460,17 +472,17 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="grounding-dino-tiny",
+        default="grounding-dino-base",
         type=str,
         choices=["grounding-dino-tiny", "grounding-dino-base"],
         help="Name of the GroundingDINO model you'd like to convert.",
     )
-    parser.add_argument(
-        "--checkpoint_path",
-        default="/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_tiny_clean.pth",
-        type=str,
-        help="Path to the original PyTorch checkpoint (.pth file).",
-    )
+    # parser.add_argument(
+    #     "--checkpoint_path",
+    #     default="/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_base_clean.pth",
+    #     type=str,
+    #     help="Path to the original PyTorch checkpoint (.pth file).",
+    # )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
@@ -479,6 +491,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_grounding_dino_checkpoint(
-        args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
-    )
+    convert_grounding_dino_checkpoint(args)
