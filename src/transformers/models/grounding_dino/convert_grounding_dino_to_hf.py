@@ -347,7 +347,6 @@ def text_processor(text: str, config):
         # generate attention mask and positional ids
         attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(bs, 1, 1)
         position_ids = torch.zeros((bs, num_token), device=input_ids.device)
-        cate_to_token_mask_list = [[] for _ in range(bs)]
         previous_col = 0
         for i in range(idxs.shape[0]):
             row, col = idxs[i]
@@ -359,18 +358,8 @@ def text_processor(text: str, config):
                 position_ids[row, previous_col + 1 : col + 1] = torch.arange(
                     0, col - previous_col, device=input_ids.device
                 )
-                c2t_maski = torch.zeros((num_token), device=input_ids.device).bool()
-                c2t_maski[previous_col + 1 : col] = True
-                cate_to_token_mask_list[row].append(c2t_maski)
+
             previous_col = col
-
-        cate_to_token_mask_list = [
-            torch.stack(cate_to_token_mask_listi, dim=0) for cate_to_token_mask_listi in cate_to_token_mask_list
-        ]
-
-        # # padding mask
-        # padding_mask = tokenized['attention_mask']
-        # attention_mask = attention_mask & padding_mask.unsqueeze(1).bool() & padding_mask.unsqueeze(2).bool()
 
         return attention_mask, position_ids.to(torch.long)
 
@@ -383,7 +372,6 @@ def text_processor(text: str, config):
     )
 
     max_text_len = config.max_text_len
-    sub_sentence_present = config.sub_sentence_present
     if text_self_attention_masks.shape[1] > max_text_len:
         text_self_attention_masks = text_self_attention_masks[:, :max_text_len, :max_text_len]
         position_ids = position_ids[:, :max_text_len]
@@ -392,10 +380,9 @@ def text_processor(text: str, config):
         tokenized["token_type_ids"] = tokenized["token_type_ids"][:, :max_text_len]
 
     # extract text embeddings
-    if sub_sentence_present:
-        tokenized_for_encoder = {k: v for k, v in tokenized.items() if k != "attention_mask"}
-        tokenized_for_encoder["attention_mask"] = text_self_attention_masks
-        tokenized_for_encoder["position_ids"] = position_ids
+    tokenized_for_encoder = {k: v for k, v in tokenized.items() if k != "attention_mask"}
+    tokenized_for_encoder["attention_mask"] = text_self_attention_masks
+    tokenized_for_encoder["position_ids"] = position_ids
 
     return tokenized_for_encoder, tokenized.attention_mask.bool()
 
