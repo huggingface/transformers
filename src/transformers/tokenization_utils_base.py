@@ -1176,23 +1176,26 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
+        if self._additional_special_tokens is not None:
+            updated_tokens = []
+            for token in self._additional_special_tokens:
+                if (token not in value or str(token) not in value) and str(token) not in self.special_tokens_map.values():
+                    token.special = False
+                    updated_tokens.append(token)
+            self.add_tokens(updated_tokens)
+        updated_tokens = []
         self._additional_special_tokens = [] if value is not None else None
         # 1. we are resetting the tokens that should not be special
-        updated_tokens = []
-        for token in self._additional_special_tokens:
-            if token not in value or str(token) not in value:
-                token.special = False
-                updated_tokens.append(token)
-
         # 2. The new additional special tokens should also be updated
         if value is not None:
             for token in value:
-                if str(value) not in self.special_tokens_map.values():
+                if str(token) not in self.special_tokens_map.values() and self.is_fast:
                     self._additional_special_tokens.append(token)
+                else:
+                    updated_tokens.append(token)
 
         # 3. Add everything to the tokenizer to overwrite
-        updated_tokens += self._additional_special_tokens
-        self.add_tokens(updated_tokens, special_tokens = True)
+        self.add_tokens(updated_tokens, True)
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -1352,7 +1355,7 @@ class SpecialTokensMixin:
         Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
         special tokens are tokenized.
         """
-        return [tok for tok in self.added_tokens_decoder if tok.special]
+        return [tok for tok in self.added_tokens_decoder.values() if tok.special]
 
     @property
     def all_special_tokens(self) -> List[str]:
@@ -1361,7 +1364,7 @@ class SpecialTokensMixin:
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
-        all_toks = [str(tok) for tok in self.added_tokens_decoder if tok.special]
+        all_toks = [str(tok) for tok in self.added_tokens_decoder.values() if tok.special]
         return all_toks
 
     @property
