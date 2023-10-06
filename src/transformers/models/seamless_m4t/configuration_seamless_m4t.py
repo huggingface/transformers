@@ -47,13 +47,12 @@ class SeamlessM4TConfig(PretrainedConfig):
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4TModel`],
             [`~SeamlessM4TForSpeechToSpeech`] or [`~SeamlessM4TForTextToSpeech`].
 
-        > Parameters shared across sub-models
 
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the "intermediate" layers in the architecture.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
@@ -80,7 +79,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         scale_embedding (`bool`, *optional*, defaults to `True`):
             Scale embeddings by diving by sqrt(d_model).
 
-        > Text encoder and text decoder specific parameters
 
         encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer text encoder.
@@ -106,7 +104,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 3):
             The id of the _end-of-stream_ text token. Only applied to the text-decoder model.
 
-        > Speech encoder specific parameters
 
         speech_encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer speech encoder.
@@ -150,11 +147,10 @@ class SeamlessM4TConfig(PretrainedConfig):
         max_source_positions (`int`, *optional*, defaults to 4096):
             if `"relative"` position embeddings are used, defines the maximum source input positions. Only applied to
             the speech encoder.
-        conv_depthwise_kernel_size (`int`, defaults to 31):
+        conv_depthwise_kernel_size (`int`, defaults to 31, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
 
 
-        > Text-To-Unit (t2u) model specific parameters
 
         t2u_bos_token_id (`int`, *optional*, defaults to 0):
             The id of the _beginning-of-stream_ unit token. Only applied to the text-to-unit seq2seq model.
@@ -165,7 +161,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_decoder_start_token_id (`int`, *optional*, defaults to 2):
             If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token. Only
             applied to the text-to-unit seq2seq model.
-        t2u_max_new_tokens (`int`, *optional*, defaults to 256):
+        t2u_max_new_tokens (`int`, *optional*, defaults to 1024):
             The maximum numbers of unit tokens to generate, ignoring the number of tokens in the prompt. Only applied
             to the text-to-unit seq2seq model.
         t2u_encoder_layers (`int`, *optional*, defaults to 6):
@@ -184,13 +180,12 @@ class SeamlessM4TConfig(PretrainedConfig):
             The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
 
-        > Hifi-Gan Vocoder specific parameters
 
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
         upsample_initial_channel (`int`, *optional*, defaults to 512):
             The number of input channels into the hifi-gan upsampling network. Applies to the vocoder only.
-        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[5, 4, 4, 4, 2]`):
+        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[5, 4, 4, 2, 2]`):
             A tuple of integers defining the stride of each 1D convolutional layer in the vocoder upsampling network.
             The length of *upsample_rates* defines the number of convolutional layers and has to match the length of
             *upsample_kernel_sizes*. Applies to the vocoder only.
@@ -227,7 +222,6 @@ class SeamlessM4TConfig(PretrainedConfig):
             The dropout probabilitiy of the duration predictor. Applies to the vocoder only.
         vocoder_offset (`int`, *optional*, defaults to 4):
             Offset the unit token ids by this number to account for symbol tokens. Applies to the vocoder only.
-        Example:
 
     ```python
     >>> from transformers import SeamlessM4TModel, SeamlessM4TConfig

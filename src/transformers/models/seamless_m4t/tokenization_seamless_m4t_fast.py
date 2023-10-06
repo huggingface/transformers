@@ -74,12 +74,14 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     ```
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             Path to the vocabulary file.
         language_code (`List[str]`, *optional*):
             List of languages that will be supported by the tokenizer. If non-specified, it will defaults to the
             languages supported by the [large version of Meta's
             seamless-M4T](https://huggingface.co/facebook/seamless-m4t-large).
+        tokenizer_file (`str`, *optional*):
+            The path to a tokenizer file to use instead of the vocab file.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -112,8 +114,6 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        tokenizer_file (`str`, *optional*):
-            The path to a tokenizer file to use instead of the vocab file.
         src_lang (`str`, *optional*, defaults to `"eng"`):
             The language to use as source language for translation.
         tgt_lang (`str`, *optional*, defaults to `"fra"`):
