@@ -841,17 +841,14 @@ class Blip2TextModelWithProjectionTester:
             vision_kwargs = {}
         if qformer_kwargs is None:
             qformer_kwargs = {"qformer_text_input": True}
-        text_kwargs = {}
 
         self.parent = parent
         self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
-        self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
-        # _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
@@ -869,7 +866,6 @@ class Blip2TextModelWithProjectionTester:
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            # "pixel_values": pixel_values,
         }
         return config, inputs_dict
 
@@ -887,7 +883,7 @@ class Blip2TextModelWithProjectionTester:
         self.parent.assertEqual(
             result.text_embeds.shape,
             (
-                self.text_model_tester.batch_size,
+                self.vision_model_tester.batch_size,
                 input_ids.shape[1],
                 config.image_text_hidden_size,
             ),
@@ -993,12 +989,10 @@ class Blip2VisionModelWithProjectionTester:
             vision_kwargs = {}
         if qformer_kwargs is None:
             qformer_kwargs = {"qformer_text_input": True}
-        text_kwargs = {}
 
         self.parent = parent
         self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
-        self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -1040,7 +1034,7 @@ class Blip2VisionModelWithProjectionTester:
         self.parent.assertEqual(
             result.image_embeds.shape,
             (
-                self.text_model_tester.batch_size,
+                self.vision_model_tester.batch_size,
                 config.vision_config.hidden_size,
                 config.image_text_hidden_size,
             ),
@@ -1143,12 +1137,10 @@ class Blip2TextRetrievalModelTester:
             vision_kwargs = {}
         if qformer_kwargs is None:
             qformer_kwargs = {"qformer_text_input": True}
-        text_kwargs = {}
 
         self.parent = parent
         self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
         self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
-        self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -1185,7 +1177,7 @@ class Blip2TextRetrievalModelTester:
         self.parent.assertEqual(
             result.question_embeds.shape,
             (
-                self.text_model_tester.batch_size,
+                self.vision_model_tester.batch_size,
                 self.vision_model_tester.hidden_size + input_ids.shape[1],
                 self.qformer_model_tester.hidden_size,
             ),
