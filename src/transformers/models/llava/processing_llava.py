@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Processor class for LlavaLlama..
+Processor class for LlavaModel
 """
 
 from typing import List, Optional, Union

@@ -22,7 +22,7 @@ from typing import Optional, Union
 import requests
 from PIL import Image
 
-from transformers import LlamaConfig, LlavaVisionConfig, LlavaConfig, is_torch_available
+from transformers import LlamaConfig, LlavaConfig, LlavaVisionConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -148,7 +148,7 @@ class LlamaModelTester:
         return config, input_ids
 
 
-class LlavaModelTester:
+class LlavaVisionTester:
     def __init__(
         self,
         parent,
@@ -250,7 +250,7 @@ class LlavaModelTester:
         self.parent = parent
         self.batch_size = 13
         self.llama_model_tester = LlamaModelTester(parent, **llama_kwargs)
-        self.llava_model_tester = LlavaModelTester(parent, **llava_kwargs)
+        self.llava_vision_tester = LlavaVisionTester(parent, **llava_kwargs)
 
     def prepare_config_and_inputs(self):
         (
@@ -262,7 +262,7 @@ class LlavaModelTester:
             token_labels,
             choice_labels,
         ) = self.llama_model_tester.prepare_config_and_inputs()
-        _, pixel_values = self.llava_model_tester.prepare_config_and_inputs()
+        _, pixel_values = self.llava_vision_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
@@ -278,9 +278,9 @@ class LlavaModelTester:
         )
 
     def get_config(self):
-        return LlavaConfig.from_llava_llama_configs(
+        return LlavaConfig.from_llava_configs(
             llama_config=self.llama_model_tester.get_config(),
-            llava_vision_config=self.llava_model_tester.get_config(),
+            llava_vision_config=self.llava_vision_tester.get_config(),
         )
 
     def create_and_check_model(

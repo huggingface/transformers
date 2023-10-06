@@ -962,9 +962,13 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.model = LlamaModel(config.llama_config)
-        self.model.mm_projector = nn.Linear(config.llava_config.mm_hidden_size, config.llava_config.hidden_size)
+        self.model.mm_projector = nn.Linear(
+            config.llava_vision_config.mm_hidden_size, config.llava_vision_config.hidden_size
+        )
 
-        self.lm_head = nn.Linear(config.llava_config.hidden_size, config.llava_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.llava_vision_config.hidden_size, config.llava_vision_config.vocab_size, bias=False
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1002,7 +1006,7 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
                 cur_input_embeds = self.get_model().embed_tokens(cur_input_ids)
                 dummy_feature = torch.zeros(
                     1,
-                    self.config.llava_config.mm_hidden_size,
+                    self.config.llava_vision_config.mm_hidden_size,
                     device=image_features.device,
                     dtype=image_features.dtype,
                 )
@@ -1024,8 +1028,8 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
             while image_token_indices.numel() > 0:
                 cur_image_features = image_features[cur_image_idx]
                 image_token_start = image_token_indices[0]
-                if getattr(self.config.llava_config, "tune_mm_mlp_adapter", False) and getattr(
-                    self.config.llava_config, "mm_use_im_start_end", False
+                if getattr(self.config.llava_vision_config, "tune_mm_mlp_adapter", False) and getattr(
+                    self.config.llava_vision_config, "mm_use_im_start_end", False
                 ):
                     cur_new_input_embeds.append(
                         self.get_model().embed_tokens(cur_input_ids[: image_token_start - 1]).detach()
@@ -1058,16 +1062,16 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
                         )
                         cur_labels = cur_labels[image_token_start + 1 :]
                 cur_image_idx += 1
-                if getattr(self.config.llava_config, "tune_mm_mlp_adapter", False) and getattr(
-                    self.config.llava_config, "mm_use_im_start_end", False
+                if getattr(self.config.llava_vision_config, "tune_mm_mlp_adapter", False) and getattr(
+                    self.config.llava_vision_config, "mm_use_im_start_end", False
                 ):
                     cur_input_ids = cur_input_ids[image_token_start + 2 :]
                 else:
                     cur_input_ids = cur_input_ids[image_token_start + 1 :]
                 image_token_indices = torch.where(cur_input_ids == IMAGE_TOKEN_INDEX)[0]
             if cur_input_ids.numel() > 0:
-                if getattr(self.config.llava_config, "tune_mm_mlp_adapter", False) and getattr(
-                    self.config.llava_config, "mm_use_im_start_end", False
+                if getattr(self.config.llava_vision_config, "tune_mm_mlp_adapter", False) and getattr(
+                    self.config.llava_vision_config, "mm_use_im_start_end", False
                 ):
                     cur_new_input_embeds.append(self.get_model().embed_tokens(cur_input_ids).detach())
                 else:
@@ -1207,12 +1211,14 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
         "The photograph shows a wooden dock floating on the water, with mountains in the background. It is an idyllic scene that captures both nature and human-made structures at their finest moments of beauty or tranquility depending upon one's perspective as they gaze into it"
         ```"""
         output_attentions = (
-            output_attentions if output_attentions is not None else self.config.llava_config.output_attentions
+            output_attentions if output_attentions is not None else self.config.llava_vision_config.output_attentions
         )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.llava_config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.llava_vision_config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.llava_config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.llava_vision_config.use_return_dict
         input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(
             input_ids, attention_mask, past_key_values, labels, pixel_values
         )
@@ -1239,7 +1245,7 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.llava_config.vocab_size)
+            shift_logits = shift_logits.view(-1, self.config.llava_vision_config.vocab_size)
             shift_labels = shift_labels.view(-1)
             # Enable model/pipeline parallelism
             shift_labels = shift_labels.to(shift_logits.device)

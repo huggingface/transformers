@@ -37,7 +37,7 @@ Note that executing the script requires enough CPU RAM to host the whole model i
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 13B model, it's thus 26GB of RAM needed.
 
 ```python
->>> from transformers import LlavaProcessor, LlavaLlamaForCausalLM
+>>> from transformers import LlavaProcessor, LlavaForCausalLM
 >>> from PIL import Image
 
 >>> import requests
@@ -45,7 +45,7 @@ come in several checkpoints they each contain a part of each weight of the model
 
 >>> PATH_TO_CONVERTED_WEIGHTS = "shauray/Llava-Llama-2-7B-hf"
 
->>> model = LlavaLlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+>>> model = LlavaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
 >>> processor = LlavaProcessor.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
 
 >>> url = "https://llava-vl.github.io/static/images/view.jpg"
@@ -67,22 +67,22 @@ come in several checkpoints they each contain a part of each weight of the model
 This model was contributed by [Shauray Singh](https://huggingface.co/shauray) The original code of the authors can be found [here](https://github.com/haotian-liu/LLaVA).
 
 
-## LlavaLlamaConfig
-
-[[autodoc]] LlavaLlamaConfig
-    - from_llava_llama_configs
-
 ## LlavaConfig
 
 [[autodoc]] LlavaConfig
+    - from_llava_configs
+
+## LlavaVisionConfig
+
+[[autodoc]] LlavaVisionConfig
 
 ## LlamaConfig
 
 [[autodoc]] LlamaConfig
 
-## LlavaLlamaForCausalLM
+## LlavaForCausalLM
 
-[[autodoc]] LlavaLlamaForCausalLM
+[[autodoc]] LlavaForCausalLM
     - forward
     - generate
 

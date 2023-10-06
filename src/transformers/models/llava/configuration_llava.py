@@ -264,9 +264,9 @@ class LlavaVisionConfig(PretrainedConfig):
 
 class LlavaConfig(PretrainedConfig):
     r"""
-    [`LlavaConfig`] is the configuration class to store the configuration of a [`LlavaForCausalLM`]. It is
-    used to instantiate a Llava model according to the specified arguments, defining the llama model and a llava
-    model configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    [`LlavaConfig`] is the configuration class to store the configuration of a [`LlavaForCausalLM`]. It is used to
+    instantiate a Llava model according to the specified arguments, defining the llama model and a llava model configs.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
     [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture. objects
     inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
     [`PretrainedConfig`] for more information.
