@@ -429,6 +429,7 @@ class BertModelTester:
 
 @require_torch
 class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    a = 1
     all_model_classes = (
         (
             BertModel,
