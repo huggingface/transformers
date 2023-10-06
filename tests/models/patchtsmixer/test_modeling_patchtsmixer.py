@@ -172,6 +172,7 @@ class PatchTSMixerModelTester:
             output_range=self.output_range,
             head_agg=self.head_agg,
             post_init=self.post_init,
+            seed_number=self.seed_number,
         )
         self.num_patches = config_.num_patches
         return config_

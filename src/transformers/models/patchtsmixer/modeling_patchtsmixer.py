@@ -27,6 +27,7 @@ import torch.utils.checkpoint
 from torch.nn.modules.activation import MultiheadAttention
 
 from transformers.modeling_utils import PreTrainedModel
+from transformers.trainer_utils import set_seed
 from transformers.utils import ModelOutput
 
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -92,12 +93,6 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
 """
 
 
-def set_seed(x=42):
-    random.seed(x)
-    np.random.seed(x)
-    torch.manual_seed(x)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(x)
 
 
 class GatedAttention(nn.Module):
@@ -1087,6 +1082,7 @@ def forecast_masking(
     mix_ratio: list = None,
     unmasked_channel_indices: list = None,
     mask_value: int = 0,
+    seed_number: Optional[int] = None,
 ):
     """forecast_masking Mask last K patches where K is from the patch_lengths list.
     For every batch, distribute the patch lengths based on mix_ratio Ignore masks for column indices mentioned in
@@ -1107,6 +1103,9 @@ def forecast_masking(
         Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [bs x c x n] or [bs x tsg1 x
         tsg2 x c x n]
     """
+    if seed_number:
+        set_seed(seed_number)
+
     if mix_ratio is None:
         mix_ratio = [1 for t in patch_lengths]
 
@@ -1230,8 +1229,6 @@ class PatchMasking(nn.Module):
         mask_value=0,
         seed_number: Optional[int] = None,
     ):
-        # if seed_number:
-        #     set_seed(seed_number)
         self.mask_ratio = mask_ratio
         self.channel_consistent_masking = channel_consistent_masking
         self.mask_type = mask_type
@@ -1273,6 +1270,7 @@ class PatchMasking(nn.Module):
                 mix_ratio=self.mask_patch_ratios,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 mask_value=self.mask_value,
+                seed_number=self.seed_number,
             )
         else:
             raise ValueError("Invalid mask type")
@@ -1543,8 +1541,6 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig, mask_input: bool = False):
         super().__init__(config)
 
-        set_seed(config.seed_number)
-
         self.encoder = PatchTSMixerEncoder(config)
         self.patching = Patchify(config.seq_len, patch_length=config.patch_len, stride=config.stride)
 
@@ -1556,6 +1552,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
                 mask_patch_ratios=config.mask_patch_ratios,
                 channel_consistent_masking=config.channel_consistent_masking,
                 mask_value=config.mask_value,
+                seed_number=config.seed_number,
             )
         else:
             self.masking = None

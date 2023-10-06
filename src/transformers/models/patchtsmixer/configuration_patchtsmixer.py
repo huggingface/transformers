@@ -128,8 +128,8 @@ class PatchTSMixerConfig(PretrainedConfig):
             "max_pool", "avg_pool".
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
-        seed_number (`int`, *optional*, defaults to 42):
-            Random seed.
+        seed_number (`int`, *optional*, defaults to None):
+            Random seed for masking.
         post_init (`bool`, *optional*, defaults to `False`):
             Whether to use custom weight initialization from `transformers` library, or the default initialization in
             `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
@@ -188,7 +188,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         output_range: list = None,
         head_agg: str = "max_pool",
         init_std: float = 0.02,
-        seed_number: int = 42,
+        seed_number: Optional[int] = None,
         post_init: bool = False,
         **kwargs,
     ):
