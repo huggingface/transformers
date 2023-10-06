@@ -178,7 +178,6 @@ OBJECTS_TO_IGNORE = [
     "DistilBertConfig",
     "DistilBertTokenizerFast",
     "DocumentQuestionAnsweringPipeline",
-    "DonutImageProcessor",
     "DonutSwinModel",
     "EarlyStoppingCallback",
     "EfficientFormerConfig",
