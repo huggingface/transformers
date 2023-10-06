@@ -42,7 +42,6 @@ from transformers import logging as transformers_logging
 
 from .integrations import (
     is_clearml_available,
-    is_fairscale_available,
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
@@ -869,13 +868,6 @@ def require_deepspeed(test_case):
     Decorator marking a test that requires deepspeed
     """
     return unittest.skipUnless(is_deepspeed_available(), "test requires deepspeed")(test_case)
-
-
-def require_fairscale(test_case):
-    """
-    Decorator marking a test that requires fairscale
-    """
-    return unittest.skipUnless(is_fairscale_available(), "test requires fairscale")(test_case)
 
 
 def require_apex(test_case):
