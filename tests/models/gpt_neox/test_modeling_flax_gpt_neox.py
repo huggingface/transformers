@@ -17,9 +17,9 @@ import unittest
 from parameterized import parameterized
 import numpy as np
 
+import transformers
 from transformers import AutoTokenizer, GPTNeoXConfig, is_flax_available, is_torch_available
-from transformers.testing_utils import require_flax, slow
-
+from transformers.testing_utils import require_flax, slow, is_pt_flax_cross_test, require_flax, torch_device
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -29,6 +29,12 @@ if is_flax_available():
     import jax.numpy as jnp
 
     from transformers.models.gpt_neox.modeling_flax_gpt_neox import FlaxGPTNeoXForCausalLM, FlaxGPTNeoXModel
+    from transformers.modeling_flax_pytorch_utils import (
+        load_flax_weights_in_pytorch_model,
+    )
+
+if is_torch_available():
+    import torch
 
 
 class FlaxGPTNeoXModelTester:
@@ -219,19 +225,21 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
-
     @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        # config.max_position_embeddings = int(config.max_position_embeddings * 1.5)
-        
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        original_max_position_embeddings = config.max_position_embeddings
+        scaled_max_position_embeddings = int(config.max_position_embeddings * 1.5)
 
+        short_input = ids_tensor([1, 10], config.vocab_size)
+        long_input = ids_tensor([1, scaled_max_position_embeddings], config.vocab_size)
+
+        config.max_position_embeddings = scaled_max_position_embeddings
         original_model = FlaxGPTNeoXModel(config, seed=42)
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
+        config.max_position_embeddings = original_max_position_embeddings
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = FlaxGPTNeoXModel(config, seed=42)
         scaled_short_output = scaled_model(short_input).last_hidden_state
@@ -246,6 +254,51 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
 
         # The output should be different for long inputs
         self.assertFalse(np.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
+    @is_pt_flax_cross_test
+    @parameterized.expand([("linear",), ("dynamic",)])
+    def test_equivalence_rope_scaling(self, scaling_type):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # Output all for aggressive testing
+                config.output_hidden_states = True
+                config.output_attentions = self.has_attentions
+
+                # prepare inputs
+                prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                pt_inputs = {k: torch.tensor(v.tolist(), device=torch_device) for k, v in prepared_inputs_dict.items()}
+
+                # load corresponding PyTorch class
+                pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
+                pt_model_class = getattr(transformers, pt_model_class_name)
+
+                pt_model = pt_model_class(config).eval()
+                # Flax models don't use the `use_cache` option and cache is not returned as a default.
+                # So we disable `use_cache` here for PyTorch model.
+                pt_model.config.use_cache = False
+                fx_model = model_class(config, dtype=jnp.float32)
+
+                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
+
+                # make sure weights are tied in PyTorch
+                pt_model.tie_weights()
+
+                # send pytorch model to the correct device
+                pt_model.to(torch_device)
+
+                with torch.no_grad():
+                    pt_outputs = pt_model(**pt_inputs)
+                fx_outputs = fx_model(**prepared_inputs_dict)
+
+                fx_keys = tuple([k for k, v in fx_outputs.items() if v is not None])
+                pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+
+                self.assertEqual(fx_keys, pt_keys)
+                self.check_pt_flax_outputs(fx_outputs, pt_outputs, model_class)
+
 
 @require_flax
 class FlaxGPTNeoXLanguageGenerationTest(unittest.TestCase):

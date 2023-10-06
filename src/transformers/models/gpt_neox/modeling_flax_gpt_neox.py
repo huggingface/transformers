@@ -105,20 +105,6 @@ GPTNeoX_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.gptj.modeling_flax_gptj.create_sinusoidal_positions
-def create_sinusoidal_positions(num_pos, dim):
-    inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
-    sinusoid_inp = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
-    sin, cos = np.sin(sinusoid_inp), np.cos(sinusoid_inp)
-
-    sentinel = dim // 2 + dim % 2
-    out = np.zeros((num_pos, dim))
-    out[:, 0:sentinel] = sin
-    out[:, sentinel:] = cos
-
-    return jnp.array(out)
-
-
 def rotate_half(hidden_states):
     first_half = hidden_states[..., : hidden_states.shape[-1] // 2]
     second_half = hidden_states[..., hidden_states.shape[-1] // 2 :]
@@ -133,57 +119,63 @@ class FlaxGPTNeoXRotaryEmbedding(nn.Module):
 
     def setup(self):
         self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(self.dtype) / self.dim))
-        self._set_cos_sin_cache(self.max_position_embeddings)
+        self.cos_cached, self.sin_cached = self._compute_cos_sin(self.max_position_embeddings)
 
-    def _set_cos_sin_cache(self, seq_len: int):
-        self.max_seq_len_cached = seq_len
+    def _get_cos_sin_cache(self, seq_len):
+        if seq_len > self.max_position_embeddings:
+            return self._compute_cos_sin(seq_len)
+        else:
+            return self.cos_cached, self.sin_cached
+
+    def _compute_cos_sin(self, seq_len):
         t = jnp.arange(seq_len, dtype=self.inv_freq.dtype)
         freqs = jnp.outer(t, self.inv_freq)
         emb = jnp.concatenate((freqs, freqs), axis=-1)
-        self.cos_cached = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
-        self.sin_cached = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
+        cos = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
+        sin = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
+        return cos, sin
 
     def __call__(self, seq_len=None):
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len)
-
-        return self.cos_cached[:seq_len, ...], self.sin_cached[:seq_len, ...]
+        cos_cached, sin_cached = self._get_cos_sin_cache(seq_len)
+        return cos_cached[:seq_len, ...], sin_cached[:seq_len, ...]
 
 
 class FlaxGPTNeoXLinearScalingRotaryEmbedding(FlaxGPTNeoXRotaryEmbedding):
     """FlaxGPTNeoXRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+
     scaling_factor: float = 1.0
 
-    def _set_cos_sin_cache(self, seq_len):
-        self.max_seq_len_cached = seq_len
-        t = jnp.arange(seq_len, dtype=self.dtype)
+    def _compute_cos_sin(self, seq_len):
+        t = jnp.arange(seq_len, dtype=self.inv_freq.dtype)
         t = t / self.scaling_factor
-
         freqs = jnp.outer(t, self.inv_freq)
         emb = jnp.concatenate((freqs, freqs), axis=-1)
-        self.cos_cached = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
-        self.sin_cached = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
+        cos = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
+        sin = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
+        return cos, sin
 
 
 class FlaxGPTNeoXDynamicNTKScalingRotaryEmbedding(FlaxGPTNeoXRotaryEmbedding):
     """FlaxGPTNeoXRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+
     scaling_factor: float = 1.0
 
-    def _set_cos_sin_cache(self, seq_len):
-        self.max_seq_len_cached = seq_len
-
+    def _compute_cos_sin(self, seq_len):
         if seq_len > self.max_position_embeddings:
             base = self.base * (
                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
-            self.inv_freq = 1.0 / (base ** (jnp.arange(0, self.dim, 2, dtype=self.dtype) / self.dim))
-        
+            inv_freq = 1.0 / (base ** (jnp.arange(0, self.dim, 2, dtype=self.dtype) / self.dim))
+        else:
+            inv_freq = self.inv_freq
+
         t = jnp.arange(seq_len, dtype=self.dtype)
 
-        freqs = jnp.outer(t, self.inv_freq)
+        freqs = jnp.outer(t, inv_freq)
         emb = jnp.concatenate((freqs, freqs), axis=-1)
-        self.cos_cached = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
-        self.sin_cached = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
+        cos = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
+        sin = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
+        return cos, sin
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
@@ -207,7 +199,6 @@ class FlaxGPTNeoXAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.head_size = self.hidden_size // self.num_attention_heads
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
-        self.embed_positions = create_sinusoidal_positions(config.max_position_embeddings, self.rotary_ndims)
         self.norm_factor = jnp.sqrt(self.head_size)
         self.query_key_value = nn.Dense(
             3 * config.hidden_size,
@@ -220,7 +211,12 @@ class FlaxGPTNeoXAttention(nn.Module):
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
-        self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
+        if config.rope_scaling is None:
+            max_seq_length = config.max_position_embeddings
+        else:
+            max_seq_length = int(config.max_position_embeddings * config.rope_scaling["factor"])
+
+        self.causal_mask = make_causal_mask(jnp.ones((1, max_seq_length), dtype="bool"), dtype="bool")
         self._init_rope()
 
     def _init_rope(self):
@@ -249,7 +245,6 @@ class FlaxGPTNeoXAttention(nn.Module):
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
-    @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
