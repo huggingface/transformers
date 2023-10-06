@@ -53,7 +53,9 @@ if is_torch_available():
         Blip2ForImageTextRetrieval,
         Blip2Model,
         Blip2ModelWithProjection,
+        Blip2TextModelWithProjection,
         Blip2VisionModel,
+        Blip2VisionModelWithProjection,
     )
     from transformers.models.blip_2.modeling_blip_2 import BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -484,7 +486,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, unittest.Te
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_load_vision_qformer_text_config(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Save Blip2Config and check if we can load Blip2VisionConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -745,7 +747,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_load_vision_qformer_text_config(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Save Blip2Config and check if we can load Blip2VisionConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -831,6 +833,310 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+
+class Blip2TextModelWithProjectionTester:
+    def __init__(self, parent, vision_kwargs=None, qformer_kwargs=None, is_training=True):
+        if vision_kwargs is None:
+            vision_kwargs = {}
+        if qformer_kwargs is None:
+            qformer_kwargs = {"qformer_text_input": True}
+        text_kwargs = {}
+
+        self.parent = parent
+        self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
+        self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
+        self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
+        self.is_training = is_training
+
+    def prepare_config_and_inputs(self):
+        _, input_ids, attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
+        # _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+
+        config = self.get_config()
+
+        return config, input_ids, attention_mask
+
+    def get_config(self):
+        return Blip2Config.from_vision_qformer_text_configs(
+            vision_config=self.vision_model_tester.get_config(),
+            qformer_config=self.qformer_model_tester.get_config(),
+            text_config=self.text_model_tester.get_config(),
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            # "pixel_values": pixel_values,
+        }
+        return config, inputs_dict
+
+    def create_and_check_model(self, config, input_ids, attention_mask):
+        model = Blip2TextModelWithProjection(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=attention_mask, output_attentions=True, output_hidden_states=True)
+
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.vision_model_tester.batch_size, input_ids.shape[1], self.qformer_model_tester.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.text_embeds.shape,
+            (
+                self.text_model_tester.batch_size,
+                input_ids.shape[1],
+                config.image_text_hidden_size,
+            ),
+        )
+
+        with torch.no_grad():
+            result2 = model(
+                input_ids,
+                attention_mask=attention_mask,
+                return_dict=not config.use_return_dict,
+                output_attentions=True,
+                output_hidden_states=True,
+            )
+
+        self.parent.assertTrue(torch.allclose(result.text_embeds, result2[0]))
+        self.parent.assertTrue(torch.allclose(result.last_hidden_state, result2[1]))
+        self.parent.assertTrue(torch.allclose(result.hidden_states[0], result2[2][0]))
+        self.parent.assertTrue(torch.allclose(result.hidden_states[1], result2[2][1]))
+        self.parent.assertTrue(torch.allclose(result.attentions[0], result2[3][0]))
+        self.parent.assertTrue(torch.allclose(result.attentions[1], result2[3][1]))
+
+
+@require_torch
+class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Blip2TextModelWithProjection,) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_head_masking = False
+
+    test_resize_embeddings = False
+    test_attention_outputs = False
+    test_torchscript = False
+
+    def setUp(self):
+        self.model_tester = Blip2TextModelWithProjectionTester(self)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="Hidden_states is tested in individual model tests")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Blip2TextModelWithProjection does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="Blip2TextModelWithProjection does not have input/output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="Blip2TextModelWithProjection has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="Blip2TextModelWithProjection has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "input_ids",
+                    "attention_mask",
+                    "position_ids",
+                ]
+
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            else:
+                # TODO
+                raise NotImplementedError
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in ["jpizarrom/blip2-itm-vit-g"]:
+            model = Blip2TextModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "text_proj"))
+
+
+class Blip2VisionModelWithProjectionTester:
+    def __init__(self, parent, vision_kwargs=None, qformer_kwargs=None, is_training=True):
+        if vision_kwargs is None:
+            vision_kwargs = {}
+        if qformer_kwargs is None:
+            qformer_kwargs = {"qformer_text_input": True}
+        text_kwargs = {}
+
+        self.parent = parent
+        self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
+        self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
+        self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
+        self.is_training = is_training
+
+    def prepare_config_and_inputs(self):
+        _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+
+        config = self.get_config()
+
+        return config, pixel_values
+
+    def get_config(self):
+        return Blip2Config.from_vision_qformer_text_configs(
+            vision_config=self.vision_model_tester.get_config(),
+            qformer_config=self.qformer_model_tester.get_config(),
+            text_config=self.text_model_tester.get_config(),
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {
+            "pixel_values": pixel_values,
+        }
+        return config, inputs_dict
+
+    def create_and_check_model(self, config, pixel_values):
+        model = Blip2VisionModelWithProjection(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values, output_attentions=True, output_hidden_states=True)
+
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (
+                self.vision_model_tester.batch_size,
+                self.vision_model_tester.seq_length,
+                self.qformer_model_tester.hidden_size,
+            ),
+        )
+        self.parent.assertEqual(
+            result.image_embeds.shape,
+            (
+                self.text_model_tester.batch_size,
+                config.vision_config.hidden_size,
+                config.image_text_hidden_size,
+            ),
+        )
+
+        with torch.no_grad():
+            result2 = model(
+                pixel_values,
+                return_dict=not config.use_return_dict,
+                output_attentions=True,
+                output_hidden_states=True,
+            )
+
+        self.parent.assertTrue(torch.allclose(result.image_embeds, result2[0]))
+        self.parent.assertTrue(torch.allclose(result.last_hidden_state, result2[1]))
+        self.parent.assertTrue(torch.allclose(result.hidden_states[0], result2[2][0]))
+        self.parent.assertTrue(torch.allclose(result.hidden_states[1], result2[2][1]))
+        self.parent.assertTrue(torch.allclose(result.attentions[0], result2[3][0]))
+        self.parent.assertTrue(torch.allclose(result.attentions[1], result2[3][1]))
+
+
+@require_torch
+class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Blip2VisionModelWithProjection,) if is_torch_available() else ()
+    fx_compatible = False
+    test_pruning = False
+    test_head_masking = False
+
+    test_resize_embeddings = False
+    test_attention_outputs = False
+    test_torchscript = False
+
+    def setUp(self):
+        self.model_tester = Blip2VisionModelWithProjectionTester(self)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="Hidden_states is tested in individual model tests")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Blip2TextModelWithProjection does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(reason="Blip2TextModelWithProjection does not have input/output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="Blip2TextModelWithProjection has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="Blip2TextModelWithProjection has no base class and is not available in MODEL_MAPPING")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "pixel_values",
+                ]
+
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            else:
+                # TODO
+                raise NotImplementedError
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in ["jpizarrom/blip2-itm-vit-g"]:
+            model = Blip2VisionModelWithProjection.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "vision_proj"))
 
 
 class Blip2TextRetrievalModelTester:

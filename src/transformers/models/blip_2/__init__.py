@@ -36,11 +36,13 @@ else:
         "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Blip2Model",
         "Blip2ModelWithProjection",
+        "Blip2VisionModelWithProjection",
         "Blip2QFormerModel",
         "Blip2PreTrainedModel",
         "Blip2ForConditionalGeneration",
         "Blip2ForImageTextRetrieval",
         "Blip2VisionModel",
+        "Blip2TextModelWithProjection",
     ]
 
 if TYPE_CHECKING:
@@ -66,7 +68,9 @@ if TYPE_CHECKING:
             Blip2ModelWithProjection,
             Blip2PreTrainedModel,
             Blip2QFormerModel,
+            Blip2TextModelWithProjection,
             Blip2VisionModel,
+            Blip2VisionModelWithProjection,
         )
 
 else:

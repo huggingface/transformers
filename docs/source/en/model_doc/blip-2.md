@@ -97,3 +97,11 @@ If you're interested in submitting a resource to be included here, please feel f
 ## Blip2ModelWithProjection
 
 [[autodoc]] Blip2ModelWithProjection
+
+## Blip2TextModelWithProjection
+
+[[autodoc]] Blip2TextModelWithProjection
+
+## Blip2VisionModelWithProjection
+
+[[autodoc]] Blip2VisionModelWithProjection
