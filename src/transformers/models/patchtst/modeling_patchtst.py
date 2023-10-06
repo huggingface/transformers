@@ -707,7 +707,7 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     config_class = PatchTSTConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
 
     def _init_weights(self, module):
         """Initialize weights"""
@@ -1405,8 +1405,8 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        past_observed_mask: Optional[bool] = None,
         labels: torch.Tensor = None,
+        past_observed_mask: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PatchTSTForClassificationOutput]:
@@ -1854,7 +1854,7 @@ class RegressionHead(nn.Module):
         # projection
         y = self.projection(x)  # y: bs x output_dim or a tuple of this shape for distribution head
         #
-        if (self.distribution_output is None) & self.y_range:  # linear head
+        if (self.distribution_output is None) & (self.y_range is not None):  # linear head
             y = torch.sigmoid(y) * (self.y_range[1] - self.y_range[0]) + self.y_range[0]
 
         return y
@@ -1899,6 +1899,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
         model_output = self.model(
             past_values, past_observed_mask=past_observed_mask, output_hidden_states=output_hidden_states
         )

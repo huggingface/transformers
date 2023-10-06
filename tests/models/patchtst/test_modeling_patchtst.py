@@ -276,7 +276,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
             ):
                 expected_arg_names.remove("future_values")
+                expected_arg_names.remove("past_observed_mask")
                 expected_arg_names.append("labels")
+                expected_arg_names.append("past_observed_mask")
             expected_arg_names.extend(
                 [
                     "output_hidden_states",
