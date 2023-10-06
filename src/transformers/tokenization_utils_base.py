@@ -2301,6 +2301,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             obj = obj.__getstate__()
             if add_type_field:
                 obj["__type"] = "AddedToken"
+            else:
+                # Don't save "special" for previous tokenizers
+                obj.pop("special")
+
             return obj
         elif isinstance(obj, (list, tuple)):
             return [cls.convert_added_tokens(o, save=save, add_type_field=add_type_field) for o in obj]
@@ -2396,12 +2400,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
 
-        # Process added_tokens_decoder seperatly because typefields should not be added
-        added_tokens = {}
-        for key, value in self.added_tokens_decoder.items():
-            added_tokens[key] = value.__getstate__()
-        tokenizer_config["added_tokens_decoder"] = added_tokens
-
         if self.chat_template is not None:
             tokenizer_config["chat_template"] = self.chat_template
 
@@ -2413,6 +2411,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # no typefields, this way old fast and slow can load it
         tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True)
 
+        # Process added tokens seperatly: allows previous versions to ignore it!
+        added_tokens = {}
+        for key, value in self.added_tokens_decoder.items():
+            added_tokens[key] = value.__getstate__()
+        tokenizer_config["added_tokens_decoder"] = added_tokens
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
@@ -2442,7 +2445,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Sanitize AddedTokens in special_tokens_map
 
-        # kept for forward compatibility, will be removed in transoformers 5. Typefields are required
+        # kept for forward compatibility, will be removed in transoformers 5. Typefields are not saved for FC, special should not be save either
         write_dict = self.convert_added_tokens(self.special_tokens_map_extended, save = True, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
