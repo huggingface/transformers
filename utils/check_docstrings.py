@@ -831,7 +831,6 @@ OBJECTS_TO_IGNORE = [
     "ZeroShotAudioClassificationPipeline",
     "ZeroShotClassificationPipeline",
     "ZeroShotImageClassificationPipeline",
-    "ZeroShotObjectDetectionPipeline",
 ]
 
 # Supported math operations when interpreting the value of defaults.
