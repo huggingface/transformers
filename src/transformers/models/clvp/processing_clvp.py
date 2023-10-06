@@ -67,6 +67,10 @@ class ClvpProcessor(ProcessorMixin):
         else:
             inputs["input_ids"] = encodings["input_ids"]
             inputs["attention_mask"] = encodings["attention_mask"]
+            if kwargs.get("return_input_ids_with_special_tokens", False):
+                inputs["input_ids_with_special_tokens"] = encodings["input_ids_with_special_tokens"]
+                inputs["attention_mask_with_special_tokens"] = encodings["attention_mask_with_special_tokens"]
+
             return inputs
 
     # Copied from transformers.models.whisper.processing_whisper.WhisperProcessor.batch_decode with Whisper->Clvp

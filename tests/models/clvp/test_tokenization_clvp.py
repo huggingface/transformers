@@ -140,11 +140,6 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-    def test_pretokenized_inputs(self, *args, **kwargs):
-        # It's very difficult to mix/test pretokenization with byte-level
-        # And get both Clvp and Roberta to work at the same time (mostly an issue of adding a space before the string)
-        pass
-
     def test_padding(self, max_length=15):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -240,9 +235,16 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(pad_token_id in out_p2["input_ids"][1])
         self.assertTrue(0 in out_p2["attention_mask"][1])
 
-    # tokenizer has no padding token
-    def test_padding_different_model_input_name(self):
-        pass
+    def test_token_type_ids(self):
+        tokenizer = self.get_tokenizer()
+        seq_0 = "Test this method."
+
+        # We want to have sequence 0 and sequence 1 are tagged
+        # respectively with 0 and 1 token_ids
+        # (regardless of whether the model use token type ids)
+        # We use this assumption in the QA pipeline among other place
+        output = tokenizer(seq_0, return_token_type_ids=True, add_special_tokens=True)
+        self.assertIn(0, output["token_type_ids"])
 
     def test_special_tokens_mask_input_pairs_and_bos_token(self):
         # TODO: change to self.get_tokenizers() when the fast version is implemented
@@ -282,7 +284,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                            ]
         # fmt: on
 
-        self.assertListEqual(tokenizer.encode(text), EXPECTED_OUTPUT)
+        self.assertListEqual(tokenizer.encode(text, add_special_tokens=False), EXPECTED_OUTPUT)
 
     @slow
     def test_tokenizer_integration(self):

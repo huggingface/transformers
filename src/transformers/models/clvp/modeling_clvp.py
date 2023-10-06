@@ -632,17 +632,8 @@ class ClvpConditioningEncoder(nn.Module):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            # We add bos and eos input_ids in the modeling file instead of the tokenizer file(same as the original repo)
-            # This logic is specific to ClvpConditioningEncoder and not used by other modules.
-            input_ids = torch.nn.functional.pad(input_ids, (1, 0), value=self.text_start_token_id)
-            input_ids = torch.nn.functional.pad(input_ids, (0, 1), value=self.text_end_token_id)
             batch_size, seq_length = input_ids.size()
             inputs_embeds = self.text_token_embedding(input_ids)
-            # check if we need to update attention mask, if yes then pad it too
-            if attention_mask is not None and attention_mask.shape[1] != seq_length:
-                attention_mask = torch.nn.functional.pad(attention_mask, (1, 0), value=1)
-                attention_mask = torch.nn.functional.pad(attention_mask, (0, 1), value=1)
-
         elif inputs_embeds is not None:
             batch_size, seq_length = inputs_embeds.size()[:-1]
         else:
@@ -652,10 +643,12 @@ class ClvpConditioningEncoder(nn.Module):
         if attention_mask is None:
             attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=inputs_embeds.device)
 
-        position_ids = torch.cumsum(attention_mask, dim=1).type_as(attention_mask)
-        # since position_ids start from 0 for conditional encoder, we must subtract 1.
-        # We must clip the values to 0 for left padding
-        position_ids = (position_ids - 1).clip(min=0)
+        # position_ids = torch.cumsum(attention_mask, dim=1).type_as(attention_mask)
+        # # since position_ids start from 0 for conditional encoder, we must subtract 1.
+        # # We must clip the values to 0 for left padding
+        # position_ids = (position_ids - 1).clip(min=0)
+
+        position_ids = attention_mask.cumsum(-1) - 1
         position_embeds = self.text_position_embedding(position_ids)
         text_embeds = inputs_embeds + position_embeds
 
@@ -752,6 +745,9 @@ CLVP_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
+        input_ids_with_special_tokens (`torch.LongTensor` of shape `(batch_size, num_speech_ids)`, *optional*):
+            Input text Tokens but with added special_tokens. This is used by `ClvpConditioningEncoder` instead of
+            `input_ids`. If not given, `input_ids` will be used instead.
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`):
             Indicates log mel-spectrogram representations for audio returned by [`ClvpFeatureExtractor`].
         conditioning_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
@@ -765,6 +761,9 @@ CLVP_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
+        attention_mask_with_special_tokens (`torch.LongTensor` of shape `(batch_size, num_speech_ids)`, *optional*)
+            Attention mask of `input_ids_with_special_tokens`. This is used by `ClvpConditioningEncoder` instead of
+            `attention_mask`. If not given, `attention_mask` will be used instead.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -1638,9 +1637,11 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         self,
         speech_ids: Optional[torch.LongTensor] = None,
         input_ids: Optional[torch.LongTensor] = None,
+        input_ids_with_special_tokens: Optional[torch.LongTensor] = None,
         input_features: Optional[torch.FloatTensor] = None,
         conditioning_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        attention_mask_with_special_tokens: Optional[torch.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         **kwargs,
     ) -> torch.FloatTensor:
@@ -1650,25 +1651,30 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         decoder model will be used to first generate the speech_ids and then applying the speech model.
 
         Args:
-            speech_ids (`torch.FloatTensor` of shape `(batch_size, num_speech_ids)`, *optional*):
+            speech_ids (`torch.LongTensor` of shape `(batch_size, num_speech_ids)`, *optional*):
                 Speech Tokens. Padding will be ignored by default should you provide it. If speech_ids are provided
                 then input_ids and input_features will be automatically ignored.
-            input_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Input text Tokens. Processed from the [`ClvpTokenizer`]. If speech_ids is not provided, then input_ids
                 and input_features will be used.
+            input_ids_with_special_tokens (`torch.LongTensor` of shape `(batch_size, num_speech_ids)`, *optional*):
+                Input text Tokens but with added special_tokens. This is used by [`ClvpConditioningEncoder`] instead of
+                `input_ids`. If not given, `input_ids` will be used instead.
             input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`, *optional*):
                 Indicates log-melspectrogram representations for audio returned by [`ClvpFeatureExtractor`]. If
                 speech_ids is not provided, then input_ids and input_features will be used.
+            attention_mask_with_special_tokens (`torch.LongTensor` of shape `(batch_size, num_speech_ids)`, *optional*):
+                Attention mask of `input_ids_with_special_tokens`. This is used by [`ClvpConditioningEncoder`] instead
+                of `attention_mask`. If not given, `attention_mask` will be used instead.
             conditioning_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
                 inputs_embeds for `ClvpConditioningEncoder`. Can be used in place of `input_ids`.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding speech token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-
             generation_config (`GenerationConfig`, *optional*):
                 generation config to control the generation of speech_ids if they are not provided.
 
@@ -1713,9 +1719,11 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
             conditioning_embeds = self.conditioning_encoder(
                 input_features=input_features,
-                input_ids=input_ids,
+                input_ids=input_ids_with_special_tokens if input_ids_with_special_tokens is not None else input_ids,
                 inputs_embeds=conditioning_encoder_inputs_embeds,
-                attention_mask=attention_mask,
+                attention_mask=attention_mask_with_special_tokens
+                if attention_mask_with_special_tokens is not None
+                else attention_mask,
             )
 
             speech_ids = self.speech_decoder_model.generate(
@@ -1735,10 +1743,12 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
+        input_ids_with_special_tokens: Optional[torch.LongTensor] = None,
         input_features: torch.FloatTensor = None,
         conditioning_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        attention_mask_with_special_tokens: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1783,9 +1793,11 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         conditioning_embeds = self.conditioning_encoder(
             input_features=input_features,
-            input_ids=input_ids,
+            input_ids=input_ids_with_special_tokens if input_ids_with_special_tokens is not None else input_ids,
             inputs_embeds=conditioning_encoder_inputs_embeds,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask_with_special_tokens
+            if attention_mask_with_special_tokens is not None
+            else attention_mask,
         )
 
         speech_ids = self.speech_decoder_model(
@@ -1860,7 +1872,10 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
     def generate(
         self,
         input_ids: torch.LongTensor = None,
+        input_ids_with_special_tokens: Optional[torch.LongTensor] = None,
         input_features: torch.FloatTensor = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        attention_mask_with_special_tokens: Optional[torch.LongTensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         **kwargs,
     ):
@@ -1872,8 +1887,21 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         Args:
             input_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Input text Tokens. Processed from the [`ClvpTokenizer`].
+            input_ids_with_special_tokens (`torch.LongTensor` of shape `(batch_size, num_speech_ids)`, *optional*):
+                Input text Tokens but with added special_tokens. This is used by `ClvpConditioningEncoder` instead of
+                `input_ids`. If not given, `input_ids` will be used instead.
             input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`, *optional*):
                 Indicates log-melspectrogram representations for audio returned by [`ClvpFeatureExtractor`].
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding text token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            attention_mask_with_special_tokens (`torch.LongTensor` of shape `(batch_size, num_speech_ids)`, *optional*):
+                Attention mask of `input_ids_with_special_tokens`. This is used by `ClvpConditioningEncoder` instead of
+                `attention_mask`. If not given, `attention_mask` will be used instead.
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -1891,7 +1919,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             generation_config = self.generation_config
         generation_config.update(**kwargs)
 
-        conditioning_embeds = self.conditioning_encoder(input_features=input_features, input_ids=input_ids)
+        conditioning_embeds = self.conditioning_encoder(
+            input_features=input_features,
+            input_ids=input_ids_with_special_tokens if input_ids_with_special_tokens is not None else input_ids,
+            attention_mask=attention_mask_with_special_tokens
+            if attention_mask_with_special_tokens is not None
+            else attention_mask,
+        )
 
         speech_ids = self.speech_decoder_model.generate(
             conditioning_embeds=conditioning_embeds,
@@ -1906,6 +1940,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         )
         text_outputs = self.text_encoder_model(
             input_ids=input_ids,
+            attention_mask=attention_mask,
         )
 
         speech_embeds = speech_outputs[0]

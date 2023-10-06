@@ -64,8 +64,8 @@ Example :
 >>> model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
 
 >>> # Generate processor output and model output 
->>> processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt")
->>> generated_output = model.generate(input_ids=processor_output["input_ids"], input_features=processor_output["input_features"])
+>>> processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt", return_input_ids_with_special_tokens=True)
+>>> generated_output = model.generate(**processor_output)
 ```
 
 
