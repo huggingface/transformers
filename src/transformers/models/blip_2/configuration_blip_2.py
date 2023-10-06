@@ -268,8 +268,6 @@ class Blip2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize any [`PretrainedConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
-        image_text_hidden_size (`int`, *optional*, defaults to 256):
-            Dimentionality of the hidden state of the image-text fusion layer.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -305,15 +303,7 @@ class Blip2Config(PretrainedConfig):
 
     model_type = "blip-2"
 
-    def __init__(
-        self,
-        vision_config=None,
-        qformer_config=None,
-        text_config=None,
-        num_query_tokens=32,
-        image_text_hidden_size=256,
-        **kwargs,
-    ):
+    def __init__(self, vision_config=None, qformer_config=None, text_config=None, num_query_tokens=32, **kwargs):
         super().__init__(**kwargs)
 
         if vision_config is None:
@@ -337,7 +327,6 @@ class Blip2Config(PretrainedConfig):
         self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
-        self.image_text_hidden_size = image_text_hidden_size
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
