@@ -2161,6 +2161,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
+    _keep_in_fp32_modules = []
 
     def __init__(self, config: Blip2VisionConfig):
         super().__init__(config)
@@ -2196,13 +2197,18 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Blip2VisionModelWithProjection
 
-        >>> model = Blip2VisionModelWithProjection.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
         >>> processor = AutoProcessor.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        >>> model = Blip2VisionModelWithProjection.from_pretrained(
+        ...     "jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16
+        ... )
+        >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, return_tensors="pt").to(device, torch.float16)
 
         >>> outputs = model(**inputs)
         >>> image_embeds = outputs.image_embeds
