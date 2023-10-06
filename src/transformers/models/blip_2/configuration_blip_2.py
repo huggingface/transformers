@@ -117,7 +117,7 @@ class Blip2VisionConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from Blip2Config
-        if config_dict.get("model_type") == "blip-2":
+        if config_dict.get("model_type") in ["blip-2", "blip-2-without-lm"]:
             config_dict = config_dict["vision_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -237,7 +237,7 @@ class Blip2QFormerConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the qformer config dict if we are loading from Blip2Config
-        if config_dict.get("model_type") == "blip-2":
+        if config_dict.get("model_type") in ["blip-2", "blip-2-without-lm"]:
             config_dict = config_dict["qformer_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -362,5 +362,109 @@ class Blip2Config(PretrainedConfig):
             vision_config=vision_config.to_dict(),
             qformer_config=qformer_config.to_dict(),
             text_config=text_config.to_dict(),
+            **kwargs,
+        )
+
+
+class Blip2ModelWithoutLMConfig(PretrainedConfig):
+    r"""
+    [`Blip2ModelWithoutLMConfig`] is the configuration class to store the configuration of a
+    [`Blip2ForImageTextRetrieval`, `Blip2ModelWithoutLM`]. It is used to instantiate a BLIP-2 model according to the
+    specified arguments, defining the vision model and Q-Former model. Instantiating a configuration with the defaults
+    will yield a similar configuration to that of the BLIP-2
+    [jpizarrom/blip2-itm-vit-g](https://huggingface.co/jpizarrom/blip2-itm-vit-g) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`Blip2VisionConfig`].
+        qformer_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
+        num_query_tokens (`int`, *optional*, defaults to 32):
+            The number of query tokens passed through the Transformer.
+
+        kwargs (*optional*):
+            Dictionary of keyword arguments.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     Blip2VisionConfig,
+    ...     Blip2QFormerConfig,
+    ...     Blip2ModelWithoutLMConfig,
+    ...     Blip2ForImageTextRetrieval,
+    ... )
+
+    >>> # Initializing a Blip2ModelWithoutLMConfig with jpizarrom/blip2-itm-vit-g style configuration
+    >>> configuration = Blip2ModelWithoutLMConfig()
+
+    >>> # Initializing a Blip2ForImageTextRetrieval (with random weights) from the jpizarrom/blip2-itm-vit-g style configuration
+    >>> model = Blip2ForImageTextRetrieval(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a Blip2Config from a Blip2VisionConfig, Blip2QFormerConfig and any PretrainedConfig
+
+    >>> # Initializing BLIP-2 vision and BLIP-2 Q-Former model configurations
+    >>> vision_config = Blip2VisionConfig()
+    >>> qformer_config = Blip2QFormerConfig()
+
+    >>> config = Blip2ModelWithoutLMConfig.from_vision_qformer_text_configs(vision_config, qformer_config)
+    ```"""
+
+    model_type = "blip-2-without-lm"
+
+    def __init__(
+        self,
+        vision_config=None,
+        qformer_config=None,
+        num_query_tokens=32,
+        image_text_hidden_size=256,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        if vision_config is None:
+            vision_config = {}
+            logger.info("vision_config is None. initializing the Blip2VisionConfig with default values.")
+
+        if qformer_config is None:
+            qformer_config = {}
+            logger.info("qformer_config is None. Initializing the Blip2QFormerConfig with default values.")
+
+        self.vision_config = Blip2VisionConfig(**vision_config)
+        self.qformer_config = Blip2QFormerConfig(**qformer_config)
+
+        self.is_encoder_decoder = self.qformer_config.is_encoder_decoder
+
+        self.num_query_tokens = num_query_tokens
+        self.image_text_hidden_size = image_text_hidden_size
+        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
+        # self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+        self.initializer_factor = 1.0
+        self.initializer_range = 0.02
+
+    @classmethod
+    def from_vision_qformer_text_configs(
+        cls,
+        vision_config: Blip2VisionConfig,
+        qformer_config: Blip2QFormerConfig,
+        **kwargs,
+    ):
+        r"""
+        Instantiate a [`Blip2Config`] (or a derived class) from a BLIP-2 vision model, Q-Former and language model
+        configurations.
+
+        Returns:
+            [`Blip2Config`]: An instance of a configuration object
+        """
+
+        return cls(
+            vision_config=vision_config.to_dict(),
+            qformer_config=qformer_config.to_dict(),
             **kwargs,
         )

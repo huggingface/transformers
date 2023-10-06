@@ -61,6 +61,10 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] Blip2QFormerConfig
 
+## Blip2ModelWithoutLMConfig
+
+[[autodoc]] Blip2ModelWithoutLMConfig
+
 ## Blip2Processor
 
 [[autodoc]] Blip2Processor
@@ -94,9 +98,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] Blip2ForImageTextRetrieval
     - forward
 
-## Blip2ModelWithProjection
+## Blip2ModelWithoutLM
 
-[[autodoc]] Blip2ModelWithProjection
+[[autodoc]] Blip2ModelWithoutLM
 
 ## Blip2TextModelWithProjection
 

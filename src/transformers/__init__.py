@@ -209,6 +209,7 @@ _import_structure = {
     "models.blip_2": [
         "BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Blip2Config",
+        "Blip2ModelWithoutLMConfig",
         "Blip2Processor",
         "Blip2QFormerConfig",
         "Blip2VisionConfig",
@@ -1340,7 +1341,7 @@ else:
             "Blip2ForConditionalGeneration",
             "Blip2ForImageTextRetrieval",
             "Blip2Model",
-            "Blip2ModelWithProjection",
+            "Blip2ModelWithoutLM",
             "Blip2PreTrainedModel",
             "Blip2QFormerModel",
             "Blip2TextModelWithProjection",
@@ -4347,6 +4348,7 @@ if TYPE_CHECKING:
     from .models.blip_2 import (
         BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Blip2Config,
+        Blip2ModelWithoutLMConfig,
         Blip2Processor,
         Blip2QFormerConfig,
         Blip2VisionConfig,
@@ -5363,7 +5365,7 @@ if TYPE_CHECKING:
             Blip2ForConditionalGeneration,
             Blip2ForImageTextRetrieval,
             Blip2Model,
-            Blip2ModelWithProjection,
+            Blip2ModelWithoutLM,
             Blip2PreTrainedModel,
             Blip2QFormerModel,
             Blip2TextModelWithProjection,

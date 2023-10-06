@@ -22,7 +22,7 @@ import unittest
 import numpy as np
 import requests
 
-from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
+from transformers import CONFIG_MAPPING, Blip2Config, Blip2ModelWithoutLMConfig, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
@@ -52,7 +52,7 @@ if is_torch_available():
         Blip2ForConditionalGeneration,
         Blip2ForImageTextRetrieval,
         Blip2Model,
-        Blip2ModelWithProjection,
+        Blip2ModelWithoutLM,
         Blip2TextModelWithProjection,
         Blip2VisionModel,
         Blip2VisionModelWithProjection,
@@ -858,10 +858,9 @@ class Blip2TextModelWithProjectionTester:
         return config, input_ids, attention_mask
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2ModelWithoutLMConfig.from_vision_qformer_text_configs(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
-            text_config=self.text_model_tester.get_config(),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -969,6 +968,9 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
+                # TODO
+                raise NotImplementedError
+            else:
                 expected_arg_names = [
                     "input_ids",
                     "attention_mask",
@@ -976,9 +978,6 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
                 ]
 
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            else:
-                # TODO
-                raise NotImplementedError
 
     @slow
     def test_model_from_pretrained(self):
@@ -1010,10 +1009,9 @@ class Blip2VisionModelWithProjectionTester:
         return config, pixel_values
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2ModelWithoutLMConfig.from_vision_qformer_text_configs(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
-            text_config=self.text_model_tester.get_config(),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -1122,14 +1120,14 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
+                # TODO
+                raise NotImplementedError
+            else:
                 expected_arg_names = [
                     "pixel_values",
                 ]
 
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            else:
-                # TODO
-                raise NotImplementedError
 
     @slow
     def test_model_from_pretrained(self):
@@ -1162,10 +1160,9 @@ class Blip2TextRetrievalModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return Blip2Config.from_vision_qformer_text_configs(
+        return Blip2ModelWithoutLMConfig.from_vision_qformer_text_configs(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
-            text_config=self.text_model_tester.get_config(),
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -1210,7 +1207,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Blip2ForImageTextRetrieval,
-            Blip2ModelWithProjection,
+            Blip2ModelWithoutLM,
         )
         if is_torch_available()
         else ()
@@ -1255,6 +1252,9 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             if model.config.is_encoder_decoder:
+                # TODO
+                raise NotImplementedError
+            else:
                 expected_arg_names = [
                     "pixel_values",
                     "input_ids",
@@ -1263,9 +1263,6 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
                 expected_arg_names.extend(["use_itm_head"] if "use_itm_head" in arg_names else [])
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            else:
-                # TODO
-                raise NotImplementedError
 
     def test_load_vision_qformer_text_config(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1297,7 +1294,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             "attention_mask": torch.LongTensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).to(torch_device),
         }
 
-        model = Blip2ModelWithProjection(config).to(torch_device)
+        model = Blip2ModelWithoutLM(config).to(torch_device)
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
         self.assertEqual(text_features[0].shape, (10, config.image_text_hidden_size))
@@ -1310,7 +1307,7 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         for key in keys_to_pop:
             inputs_dict.pop(key)
 
-        model = Blip2ModelWithProjection(config).to(torch_device)
+        model = Blip2ModelWithoutLM(config).to(torch_device)
         model.eval()
         image_features = model.get_image_features(**inputs_dict)
         self.assertEqual(
@@ -1539,7 +1536,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_inference_itm_features(self):
         processor = Blip2Processor.from_pretrained("jpizarrom/blip2-itm-vit-g")
-        model = Blip2ModelWithProjection.from_pretrained(
+        model = Blip2ModelWithoutLM.from_pretrained(
             "jpizarrom/blip2-itm-vit-g",
         ).to(torch_device)
 
@@ -1584,7 +1581,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_inference_itm_features_fp16(self):
         processor = Blip2Processor.from_pretrained("jpizarrom/blip2-itm-vit-g")
-        model = Blip2ModelWithProjection.from_pretrained("jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16).to(
+        model = Blip2ModelWithoutLM.from_pretrained("jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16).to(
             torch_device
         )
 

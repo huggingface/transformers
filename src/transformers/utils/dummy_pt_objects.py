@@ -1517,7 +1517,7 @@ class Blip2Model(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Blip2ModelWithProjection(metaclass=DummyObject):
+class Blip2ModelWithoutLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
