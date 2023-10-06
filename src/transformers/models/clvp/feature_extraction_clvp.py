@@ -61,6 +61,10 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
         mel_norms (`list` of length `feature_size`, *optional*):
             If `mel_norms` is provided then it will be used to normalize the log-mel spectrograms along each
             mel-filter.
+        return_attention_mask (`bool`, *optional*, defaults to `False`):
+            Whether to return the attention mask. If left to the default, it will return the attention mask.
+
+            [What are attention masks?](../glossary#attention-mask)
     """
 
     model_input_names = ["input_features", "attention_mask"]

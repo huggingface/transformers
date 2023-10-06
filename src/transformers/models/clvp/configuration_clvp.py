@@ -61,7 +61,7 @@ class ClvpEncoderConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
@@ -111,12 +111,9 @@ class ClvpEncoderConfig(PretrainedConfig):
         use_attention_bias=False,
         summary_type="mean",
         initializer_factor=1.0,
-        pad_token_id=0,
-        bos_token_id=255,
-        eos_token_id=0,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -200,7 +197,7 @@ class ClvpDecoderConfig(PretrainedConfig):
             The dropout ratio for the embeddings.
         attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -224,6 +221,11 @@ class ClvpDecoderConfig(PretrainedConfig):
             The dropout ratio to be used after the projection and activation.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        bos_token_id (`int`, *optional*, defaults to 8192):
+            Beginning of sequence token id, used at the start of the generation.
+        eos_token_id (`int`, *optional*, defaults to 8193):
+            End of sequence token id, used in the method
+            [`ClvpModelForConditionalGeneration.fix_speech_decoder_output()`] to correct decoder outputs.
         feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted mel features. This value is used in [`ClvpConditioningEncoder`].
         use_attention_bias (`bool`, *optional*, defaults to `True`):

@@ -135,16 +135,22 @@ class ClvpTokenizer(PreTrainedTokenizer):
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `"[STOP]"`):
             The end of sequence token.
+        pad_token (`str`, *optional*, defaults to `"[STOP]"`):
+            The pad token of the sequence.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CLVP tokenizer detect beginning of words by the preceding space).
+        add_bos_token (`bool`, *optional*, defaults to `False`):
+            Whether to add `bos_token` in front of the sequence when add_special_tokens=True.
+        add_eos_token (`bool`, *optional*, defaults to `False`):
+            Whether to add `eos_token` in end of the sequence when add_special_tokens=True.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

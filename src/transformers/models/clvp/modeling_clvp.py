@@ -549,10 +549,6 @@ class ClvpConditioningEncoder(nn.Module):
         text_config = config.text_config
         decoder_config = config.decoder_config
 
-        self.text_start_token_id = text_config.bos_token_id
-        self.text_end_token_id = text_config.eos_token_id
-        self.text_pad_token_id = text_config.pad_token_id
-
         self.text_token_embedding = nn.Embedding(text_config.vocab_size, decoder_config.n_embd)
         self.text_position_embedding = nn.Embedding(decoder_config.max_text_tokens, decoder_config.n_embd)
 
@@ -642,11 +638,6 @@ class ClvpConditioningEncoder(nn.Module):
         # construct attention mask if not given
         if attention_mask is None:
             attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=inputs_embeds.device)
-
-        # position_ids = torch.cumsum(attention_mask, dim=1).type_as(attention_mask)
-        # # since position_ids start from 0 for conditional encoder, we must subtract 1.
-        # # We must clip the values to 0 for left padding
-        # position_ids = (position_ids - 1).clip(min=0)
 
         position_ids = attention_mask.cumsum(-1) - 1
         position_embeds = self.text_position_embedding(position_ids)
