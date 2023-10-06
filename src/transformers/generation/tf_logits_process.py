@@ -122,7 +122,7 @@ class TFTopKLogitsWarper(TFLogitsWarper):
     Args:
         top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -151,7 +151,7 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         top_p (`float`):
             If set to < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or
             higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.

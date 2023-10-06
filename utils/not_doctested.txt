@@ -530,7 +530,6 @@ src/transformers/models/electra/convert_electra_original_tf_checkpoint_to_pytorc
 src/transformers/models/electra/modeling_flax_electra.py
 src/transformers/models/encodec/configuration_encodec.py
 src/transformers/models/encodec/convert_encodec_checkpoint_to_pytorch.py
-src/transformers/models/encoder_decoder/configuration_encoder_decoder.py
 src/transformers/models/encoder_decoder/modeling_encoder_decoder.py
 src/transformers/models/encoder_decoder/modeling_flax_encoder_decoder.py
 src/transformers/models/encoder_decoder/modeling_tf_encoder_decoder.py

@@ -693,7 +693,9 @@ def _load_state_dict_into_meta_model(
         if dtype is not None and torch.is_floating_point(param):
             if (
                 keep_in_fp32_modules is not None
-                and any(module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                and any(
+                    module_to_keep_in_fp32 in param_name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
+                )
                 and dtype == torch.float16
             ):
                 param = param.to(torch.float32)
@@ -1933,15 +1935,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if token is not None:
             kwargs["token"] = token
 
+        _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
+
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
-            warnings.warn(
+        if (
+            getattr(self, "is_loaded_in_8bit", False)
+            and not getattr(self, "is_8bit_serializable", False)
+            and not _hf_peft_config_loaded
+        ):
+            raise ValueError(
                 "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed.",
-                UserWarning,
+                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
             )
 
-        if getattr(self, "is_loaded_in_4bit", False):
+        # If the model has adapters attached, you can save the adapters
+        if getattr(self, "is_loaded_in_4bit", False) and not _hf_peft_config_loaded:
             raise NotImplementedError(
                 "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
             )
@@ -1981,8 +1989,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # loaded from the Hub.
         if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
-
-        _hf_peft_config_loaded = getattr(model_to_save, "_hf_peft_config_loaded", False)
 
         # Save the config
         if is_main_process:
@@ -3530,7 +3536,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if (
                     keep_in_fp32_modules is not None
                     and dtype == torch.float16
-                    and any(module_to_keep_in_fp32 in key for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                    and any(
+                        module_to_keep_in_fp32 in key.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
+                    )
                 ):
                     target_dtype = torch.float32
 
@@ -3557,7 +3565,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Set some modules to fp32 if any
         if keep_in_fp32_modules is not None:
             for name, param in model.named_parameters():
-                if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                if any(module_to_keep_in_fp32 in name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 

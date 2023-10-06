@@ -53,7 +53,7 @@ class VitDetConfig(BackboneConfigMixin, PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
@@ -67,9 +67,9 @@ class VitDetConfig(BackboneConfigMixin, PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
-        window_block_indices (`List[int]`, *optional*):
+        window_block_indices (`List[int]`, *optional*, defaults to `[]`):
             List of indices of blocks that should have window attention instead of regular global self-attention.
-        residual_block_indices (`List[int]`, *optional*):
+        residual_block_indices (`List[int]`, *optional*, defaults to `[]`):
             List of indices of blocks that should have an extra residual block after the MLP.
         use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to add absolute position embeddings to the patch embeddings.

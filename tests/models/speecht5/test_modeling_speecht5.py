@@ -578,6 +578,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 uniform_init_parms = [
                     "conv.weight",
+                    "conv.parametrizations.weight",
                     "masked_spec_embed",
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
@@ -1354,6 +1355,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 uniform_init_parms = [
                     "conv.weight",
+                    "conv.parametrizations.weight",
                     "masked_spec_embed",
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",

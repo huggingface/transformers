@@ -445,9 +445,9 @@ class PipelineDataFormat:
     pipelines keyword arguments through the `dataset_kwarg_1=dataset_column_1` format.
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -550,9 +550,9 @@ class CsvPipelineDataFormat(PipelineDataFormat):
     Support for pipelines using CSV data format.
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -594,9 +594,9 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     Support for pipelines using JSON file format.
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -638,9 +638,9 @@ class PipedPipelineDataFormat(PipelineDataFormat):
     If columns are provided, then the output will be a dictionary with {column_x: value_x}
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
