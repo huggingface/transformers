@@ -5,6 +5,7 @@
     "train_split_name": "validation",
     "eval_split_name": "validation",
     "dataset_config_name": "clean",
+    "speaker_id_column_name": "speaker_id",
 
     "model_name_or_path": "/home/yoach/tmp/vits_generator",
     "discriminator_model_name_or_path": "/home/yoach/tmp/vits_discriminator",
@@ -12,7 +13,7 @@
 
     "overwrite_output_dir": true,
     "output_dir": "/home/yoach/tmp/tentative_vits_finetuning",
-    "report_to": ["wandb", "tensorboard"],
+    "report_to": ["tensorboard", "wandb"],
 
     "preprocessing_num_workers": 1,
 
@@ -20,13 +21,15 @@
     "num_train_epochs": 50,
     "gradient_accumulation_steps": 1,
     "per_device_train_batch_size": 2,
-    "learning_rate": 2e-4,
+    "learning_rate": 2e-5,
     "adam_beta1": 0.8,
     "adam_beta2": 0.99,
     "lr_scheduler_type": "cosine_with_restarts",
-    "warmup_ratio": 0.01,
+    "warmup_ratio": 0.05,
 
     "do_eval": true, 
     "eval_steps": 50,
     "per_device_eval_batch_size": 4
+
+
 }

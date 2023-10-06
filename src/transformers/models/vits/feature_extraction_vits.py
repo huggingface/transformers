@@ -241,7 +241,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
 
         if self.max_wav_value is not None:
             raw_speech = [
-                speech if self.max_wav_value is not None else speech / self.max_wav_value for speech in raw_speech
+                speech if self.max_wav_value is None else speech / self.max_wav_value for speech in raw_speech
             ]
 
         batched_speech = BatchFeature({"input_features": raw_speech})

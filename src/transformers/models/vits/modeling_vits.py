@@ -1595,10 +1595,16 @@ class VitsModel(VitsPreTrainedModel):
             input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
 
         if self.config.num_speakers > 1 and speaker_id is not None:
-            if not 0 <= speaker_id < self.config.num_speakers:
-                raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
             if isinstance(speaker_id, int):
                 speaker_id = torch.full(size=(1,), fill_value=speaker_id, device=self.device)
+            elif isinstance(speaker_id, list) or isinstance(speaker_id, np.ndarray):
+                speaker_id = torch.tensor(speaker_id, device=self.device)
+                                
+            if not ((0 <= speaker_id).all() and (speaker_id<self.config.num_speakers).all()).item():
+                raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
+            if not (len(speaker_id) == 1 or len(speaker_id == len(input_ids))):
+                raise ValueError(f"You passed {len(speaker_id)} `speaker_id` but you should either pass one speaker id or `batch_size` `speaker_id`.")
+            
             speaker_embeddings = self.embed_speaker(speaker_id).unsqueeze(-1)
         else:
             speaker_embeddings = None
@@ -1808,6 +1814,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation. TODO: is the time steps things True here ?
 
+        # TODO: change speaker id docstrings, and throughout the file, now it can take multiple spekaer id as well
         Returns:
 
         Example:
@@ -1841,10 +1848,16 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
 
         if self.config.num_speakers > 1 and speaker_id is not None:
-            if not 0 <= speaker_id < self.config.num_speakers:
-                raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
             if isinstance(speaker_id, int):
                 speaker_id = torch.full(size=(1,), fill_value=speaker_id, device=self.device)
+            elif isinstance(speaker_id, list) or isinstance(speaker_id, np.ndarray):
+                speaker_id = torch.tensor(speaker_id, device=self.device)
+                                
+            if not ((0 <= speaker_id).all() and (speaker_id<self.config.num_speakers).all()).item():
+                raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
+            if not (len(speaker_id) == 1 or len(speaker_id == len(input_ids))):
+                raise ValueError(f"You passed {len(speaker_id)} `speaker_id` but you should either pass one speaker id or `batch_size` `speaker_id`.")
+            
             speaker_embeddings = self.embed_speaker(speaker_id).unsqueeze(-1)
         else:
             speaker_embeddings = None
