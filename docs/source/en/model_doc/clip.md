@@ -85,6 +85,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - A blog post on [How to fine-tune CLIP on 10,000 image-text pairs](https://huggingface.co/blog/fine-tune-clip-rsicd).
 - CLIP is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text).
+- A [notebook](https://colab.research.google.com/drive/1zip3zmrbuKerAfC1d2uS1mqQS-QykXnl?usp=sharing) on how to fine-tune the CLIP model with Korean multimodal dataset. 🌎🇰🇷
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
 The resource should ideally demonstrate something new instead of duplicating an existing resource.

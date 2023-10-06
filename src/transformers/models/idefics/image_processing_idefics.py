@@ -53,10 +53,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
     Constructs a Idefics image processor.
 
     Args:
-        image_size (`int`, *optional*, defaults to `224`):
+        image_size (`int`, *optional*, defaults to 224):
             Resize to image size
-        image_num_channels (`int`, *optional*, defaults to `3`):
-            Number of image channels.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
@@ -65,6 +63,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
+        image_num_channels (`int`, *optional*, defaults to 3):
+            Number of image channels.
     """
 
     model_input_names = ["pixel_values"]

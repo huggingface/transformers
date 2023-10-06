@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
+import warnings
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..utils import (
@@ -158,6 +159,10 @@ class PeftAdapterMixin:
                 "You passed a `revision` argument both in `adapter_kwargs` and as a standalone argument. "
                 "The one in `adapter_kwargs` will be used."
             )
+
+        # Override token with adapter_kwargs' token
+        if "token" in adapter_kwargs:
+            token = adapter_kwargs.pop("token")
 
         if peft_config is None:
             adapter_config_file = find_adapter_config_file(
@@ -381,8 +386,8 @@ class PeftAdapterMixin:
         return active_adapters
 
     def active_adapter(self) -> str:
-        logger.warning(
-            "The `active_adapter` method is deprecated and will be removed in a future version. ", FutureWarning
+        warnings.warn(
+            "The `active_adapter` method is deprecated and will be removed in a future version.", FutureWarning
         )
 
         return self.active_adapters()[0]

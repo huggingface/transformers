@@ -303,7 +303,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
     def encode_plus(self, text, text_pair=None, suffix_first=False, add_special_tokens=True, **kwargs):
         # hack to make sure the input is pre-process but outside rust
         text_pair = kwargs.pop("suffix", text_pair)
-        if self.fill_token in text and text_pair is None:
+        if self.fill_token is not None and self.fill_token in text and text_pair is None:
             text, text_pair = text.split(self.fill_token)
 
         if text_pair is None or len(text_pair) < 1:

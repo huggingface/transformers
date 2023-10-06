@@ -15,7 +15,7 @@
 """
 Utility that checks whether the copies defined in the library match the original or not. This includes:
 - All code commented with `# Copied from` comments,
-- The list of models in the main README.md matches the ones in the localized READMEs and in the index.md,
+- The list of models in the main README.md matches the ones in the localized READMEs,
 - Files that are registered as full copies of one another in the `FULL_COPIES` constant of this script.
 
 This also checks the list of models in the README is complete (has all models) and add a line to complete if there is
@@ -350,7 +350,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
 def check_copies(overwrite: bool = False):
     """
     Check every file is copy-consistent with the original. Also check the model list in the main README and other
-    READMEs/index.md are consistent.
+    READMEs are consistent.
 
     Args:
         overwrite (`bool`, *optional*, defaults to `False`):
@@ -517,21 +517,6 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
     return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
 
 
-def convert_readme_to_index(model_list: str) -> str:
-    """
-    Converts the model list of the README to the index.md format (adapting links to the doc to relative links).
-
-    Args:
-        model_list (`str`): The model list of the main README.
-
-    Returns:
-        `str`: The model list in the format for the index.
-    """
-    # We need to replce both link to the main doc and stable doc (the order of the next two instructions is important).
-    model_list = model_list.replace("https://huggingface.co/docs/transformers/main/", "")
-    return model_list.replace("https://huggingface.co/docs/transformers/", "")
-
-
 def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> Tuple[str, int, int, List[str]]:
     """
     Find the text in a file between two prompts.
@@ -591,19 +576,13 @@ def check_model_list_copy(overwrite: bool = False):
                 "automatically fix them."
             )
 
-    # If the introduction or the conclusion of the list change, the prompts may need to be updated.
-    index_list, start_index, end_index, lines = _find_text_in_file(
-        filename=os.path.join(PATH_TO_DOCS, "index.md"),
-        start_prompt="<!--This list is updated automatically from the README",
-        end_prompt="### Supported frameworks",
-    )
     md_list = get_model_list(
         filename="README.md",
         start_prompt=LOCALIZED_READMES["README.md"]["start_prompt"],
         end_prompt=LOCALIZED_READMES["README.md"]["end_prompt"],
     )
 
-    # Buld the converted Markdown.
+    # Build the converted Markdown.
     converted_md_lists = []
     for filename, value in LOCALIZED_READMES.items():
         _start_prompt = value["start_prompt"]
@@ -614,18 +593,6 @@ def check_model_list_copy(overwrite: bool = False):
         readmes_match, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
 
         converted_md_lists.append((filename, readmes_match, converted_md_list, _start_prompt, _end_prompt))
-
-    # Build the converted index and compare it.
-    converted_md_list = convert_readme_to_index(md_list)
-    if converted_md_list != index_list:
-        if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.md"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [converted_md_list] + lines[end_index:])
-        else:
-            raise ValueError(
-                "The model list in the README changed and the list in `index.md` has not been updated. Run "
-                "`make fix-copies` to fix this."
-            )
 
     # Compare the converted Markdowns
     for converted_md_list in converted_md_lists:
