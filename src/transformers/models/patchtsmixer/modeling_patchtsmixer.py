@@ -27,7 +27,6 @@ from transformers.utils import ModelOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_patchtsmixer import PatchTSMixerConfig
 from .layers import (
-    Patch,
     PatchMasking,
     PatchTSMixer,
     set_seed,
@@ -352,6 +351,65 @@ class PretrainHead(nn.Module):
             return forecast
 
 
+# Copied from transformers.models.patchtst.modeling_patchtst.compute_num_patches
+def compute_num_patches(sequence_length, patch_length, stride):
+    return (max(sequence_length, patch_length) - patch_length) // stride + 1
+
+
+# Copied from transformers.models.patchtst.modeling_patchtst.Patchify
+class Patchify(nn.Module):
+    """
+    Parameters:
+    A class to patchify the time series sequence into different patches
+        sequence_length (int, required): input sequence length.
+        patch_length (int, required): patch length.
+        stride (int, required): stride between patches.
+    Returns:
+        z: output tensor data [bs x num_input_channels x num_patches x patch_length]
+    """
+
+    def __init__(
+        self,
+        sequence_length: int,
+        patch_length: int,
+        stride: int,
+        padding: bool = False,  # TODO: use this to set whether we want to pad zeros to the sequence
+    ):
+        super().__init__()
+
+        assert (
+            sequence_length > patch_length
+        ), f"Sequence length ({sequence_length}) has to be greater than the patch length ({patch_length})"
+
+        self.sequence_length = sequence_length
+        self.patch_length = patch_length
+        self.stride = stride
+
+        # get the number of patches
+        self.num_patches = compute_num_patches(sequence_length, patch_length, stride)
+        new_sequence_length = patch_length + stride * (self.num_patches - 1)
+        self.s_begin = sequence_length - new_sequence_length
+
+    def forward(self, past_values: torch.Tensor):
+        """
+        Parameters:
+            past_values (torch.Tensor, required): Input of shape [bs x sequence_length x num_input_channels]
+        Returns:
+            x: output tensor data [bs x num_input_channels x num_patches x patch_length]
+        """
+        sequence_length = past_values.shape[-2]
+        assert (
+            sequence_length == self.sequence_length
+        ), f"Input sequence length ({sequence_length}) doesn't match model configuration ({self.sequence_length})."
+
+        x = past_values[:, self.s_begin :, :]  # x: [bs x new_sequence_length x nvars]
+        x = x.unfold(
+            dimension=-2, size=self.patch_length, step=self.stride
+        )  # x: [bs x num_patches x num_input_channels x patch_length]
+        x = x.transpose(-2, -3).contiguous()  # xb: [bs x num_input_channels x num_patches x patch_length]
+        return x
+
+
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->PatchTSMixer
 class PatchTSMixerStdScaler(nn.Module):
     """
@@ -616,7 +674,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         set_seed(config.seed_number)
 
         self.encoder = PatchTSMixerEncoder(config)
-        self.patching = Patch(config.seq_len, patch_len=config.patch_len, stride=config.stride)
+        self.patching = Patchify(config.seq_len, patch_length=config.patch_len, stride=config.stride)
 
         if mask_input is True:
             self.masking = PatchMasking(
