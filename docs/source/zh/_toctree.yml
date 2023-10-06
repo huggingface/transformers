@@ -3,4 +3,6 @@
     title: 🤗 Transformers简介
   - local: quicktour
     title: 快速上手
+  - local: installation
+    title: 安装
   title: 开始使用

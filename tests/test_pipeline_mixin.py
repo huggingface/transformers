@@ -40,6 +40,7 @@ from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipeli
 from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
+from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
 from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
 from .pipelines.test_pipelines_object_detection import ObjectDetectionPipelineTests
@@ -70,6 +71,7 @@ pipeline_test_mapping = {
     "fill-mask": {"test": FillMaskPipelineTests},
     "image-classification": {"test": ImageClassificationPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
+    "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
@@ -500,8 +502,12 @@ def validate_test_components(test_case, task, model, tokenizer, processor):
     if tokenizer is not None:
         config_vocab_size = getattr(model.config, "vocab_size", None)
         # For CLIP-like models
-        if config_vocab_size is None and hasattr(model.config, "text_config"):
-            config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
+        if config_vocab_size is None:
+            if hasattr(model.config, "text_config"):
+                config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
+            elif hasattr(model.config, "text_encoder"):
+                config_vocab_size = getattr(model.config.text_encoder, "vocab_size", None)
+
         if config_vocab_size is None and model.config.__class__.__name__ not in CONFIG_WITHOUT_VOCAB_SIZE:
             raise ValueError(
                 "Could not determine `vocab_size` from model configuration while `tokenizer` is not `None`."
