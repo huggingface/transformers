@@ -14,24 +14,25 @@
 """ Testing suite for the Flax GPTNeoX model. """
 
 import unittest
-from parameterized import parameterized
+
 import numpy as np
+from parameterized import parameterized
 
 import transformers
 from transformers import AutoTokenizer, GPTNeoXConfig, is_flax_available, is_torch_available
-from transformers.testing_utils import require_flax, slow, is_pt_flax_cross_test, require_flax, torch_device
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow, torch_device
+
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
 if is_flax_available():
-    import jax
     import jax.numpy as jnp
 
-    from transformers.models.gpt_neox.modeling_flax_gpt_neox import FlaxGPTNeoXForCausalLM, FlaxGPTNeoXModel
     from transformers.modeling_flax_pytorch_utils import (
         load_flax_weights_in_pytorch_model,
     )
+    from transformers.models.gpt_neox.modeling_flax_gpt_neox import FlaxGPTNeoXForCausalLM, FlaxGPTNeoXModel
 
 if is_torch_available():
     import torch
@@ -199,9 +200,10 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
     @slow
     def test_batch_generation(self):
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-410m-deduped")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
         inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
 
-        model = FlaxGPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped")
+        model = FlaxGPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped", from_pt=True)
         model.do_sample = False
         model.config.pad_token_id = model.config.eos_token_id
 
@@ -212,8 +214,8 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
 
         expected_string = [
-            "Hello this is a long string of text.\n\nI'm trying to get the text of the",
-            "Hey, I'm a little late to the party. I'm going to",
+            "Hello this is a long string of characters.\n\nI'm trying to get the first character of",
+            "Heyon, I'm not sure if you're aware of this, but",
         ]
 
         self.assertListEqual(output_string, expected_string)
@@ -221,7 +223,7 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("EleutherAI/pythia-410m-deduped")
+            model = model_class_name.from_pretrained("EleutherAI/pythia-410m-deduped", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
@@ -302,17 +304,16 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
 
 @require_flax
 class FlaxGPTNeoXLanguageGenerationTest(unittest.TestCase):
-    @slow
     def test_lm_generate_gptneox(self):
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-410m-deduped")
-        model = FlaxGPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped")
-        inputs = tokenizer("My favorite food is", return_tensors="np")
+        model = FlaxGPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped", from_pt=True)
+        inputs = tokenizer(["My favorite food is"], return_tensors="np")
 
         # The hub repo. is updated on 2023-04-04, resulting in poor outputs.
         # See: https://github.com/huggingface/transformers/pull/24193
         expected_output = "My favorite food is a good old-fashioned, old-fashioned, old-fashioned.\n\nI'm not sure"
 
-        output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+        output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20).sequences
         output_str = tokenizer.batch_decode(output_ids)[0]
 
         self.assertEqual(output_str, expected_output)
