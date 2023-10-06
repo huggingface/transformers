@@ -907,15 +907,12 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             model_output.last_hidden_state,
         )  # tensor [bs x forecast_len x input_size]
 
-        # if self.revin is not None:
-        #     self.revin.set_statistics(mean=model_output.revin_mean, stdev=model_output.revin_stdev)
-        #     y_hat = self.revin(y_hat, mode="denorm")
-        y_hat_unscaled = y_hat * model_output.scale - model_output.loc
-
         if target_values is not None and return_loss is True:
             if self.config.forecast_channel_indices is not None:
+                y_hat_unscaled = y_hat * model_output.scale[..., self.config.forecast_channel_indices] + model_output.loc[..., self.config.forecast_channel_indices]
                 loss_val = self.loss(y_hat_unscaled, target_values[..., self.config.forecast_channel_indices])
             else:
+                y_hat_unscaled = y_hat * model_output.scale + model_output.loc
                 loss_val = self.loss(y_hat_unscaled, target_values)
         else:
             loss_val = None
@@ -1165,7 +1162,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             )  # x: [bs x nvars x num_patch x num_features]
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_targets]
-        y_hat_scaled = y_hat * model_output.scale - model_output.loc
+        y_hat_scaled = y_hat * model_output.scale + model_output.loc
 
         if target_values is not None and return_loss is True:
             loss_val = self.loss(y_hat_scaled, target_values)
