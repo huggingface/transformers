@@ -710,8 +710,8 @@ def training_loop(
             eval_steps = args.eval_steps if args.eval_steps else 1
             do_eval = args.do_eval and (global_step % eval_steps == 0)
             
-            if accelerator.is_main_process:
-                if do_eval:
+            if do_eval:
+                if accelerator.is_main_process:
                     logger.info("Running validation... ")                    
                     model.eval()
                     audios = []
@@ -758,6 +758,7 @@ def training_loop(
                             
                     logger.info("Validation finished... ")
                     model.train()
+                accelerator.wait_for_everyone()
         
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
