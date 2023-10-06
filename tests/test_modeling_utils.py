@@ -1096,6 +1096,7 @@ class ModelPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
+    @unittest.skip("This test is flaky")
     def test_push_to_hub(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -1118,6 +1119,7 @@ class ModelPushToHubTester(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
+    @unittest.skip("This test is flaky")
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37

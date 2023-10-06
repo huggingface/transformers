@@ -60,24 +60,29 @@ class MistralConfig(PretrainedConfig):
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 4096*32):
+        max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
             The maximum sequence length that this model might ever be used with. Mistral's sliding window attention
             allows sequence of up to 4096*32 tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-12):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+        pad_token_id (`int`, *optional*):
+            The id of the padding token.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            The id of the "beginning-of-sequence" token.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The id of the "end-of-sequence" token.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention window size. If not specified, will default to `4096`.
 
-        Example:
 
     ```python
     >>> from transformers import MistralModel, MistralConfig

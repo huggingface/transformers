@@ -416,7 +416,7 @@ class CTRLModel(CTRLPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+            position_ids = position_ids.unsqueeze(0)
 
         # Attention mask.
         if attention_mask is not None:
@@ -447,7 +447,6 @@ class CTRLModel(CTRLPreTrainedModel):
             token_type_embeds *= np.sqrt(self.d_model_size)
         else:
             token_type_embeds = 0
-        position_ids = position_ids.view(-1, input_shape[-1])
 
         if inputs_embeds is None:
             inputs_embeds = self.w(input_ids)
