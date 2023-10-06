@@ -580,7 +580,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
 
         self.head_size = config.hidden_size // config.speech_encoder_attention_heads
         self.num_heads = config.speech_encoder_attention_heads
-        if use_position_embeddings:
+        self.position_embeddings_type = position_embeddings_type if position_embeddings_type is not None else config.position_embeddings_type
             self.position_embeddings_type = config.position_embeddings_type
         else:
             self.position_embeddings_type = None

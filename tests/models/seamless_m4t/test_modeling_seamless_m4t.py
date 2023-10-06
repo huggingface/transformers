@@ -717,7 +717,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
                 attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
                 self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
-    @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
+    @unittest.skip(reason="SeamlessM4TModel can take input_ids or input_features")
     def test_forward_signature(self):
         pass
 

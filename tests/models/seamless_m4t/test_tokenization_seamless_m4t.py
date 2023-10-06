@@ -210,7 +210,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Overflowing tokens
                 stride = 2
 
-                # modify padding because by activated default in seamlessM4T
+                # modify padding because it's activated by default in seamlessM4T
                 information = tokenizer(
                     seq_0,
                     max_length=total_length - 2,
