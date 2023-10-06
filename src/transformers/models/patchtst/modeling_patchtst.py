@@ -1057,13 +1057,13 @@ class SamplePatchTSTPredictionOutput(ModelOutput):
 @dataclass
 class SamplePatchTSTForecastOutput(ModelOutput):
     """
-        Base class for time series model's predictions outputs that contains the sampled values from the chosen
-        distribution.
+    Base class for time series model's predictions outputs that contains the sampled values from the chosen
+    distribution.
 
-        Parameters:
-            sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length)` or `(batch_size,
-            num_samples, prediction_length, number_channels)`):
-                    Sampled values from the chosen distribution.
+    Parameters:
+        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length)` or `(batch_size,
+        num_samples, prediction_length, number_channels)`):
+                Sampled values from the chosen distribution.
     """
 
     sequences: torch.FloatTensor = None
