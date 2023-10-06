@@ -255,8 +255,8 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
         # The output should be different for long inputs
         self.assertFalse(np.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    @is_pt_flax_cross_test
     @parameterized.expand([("linear",), ("dynamic",)])
+    @is_pt_flax_cross_test
     def test_equivalence_rope_scaling(self, scaling_type):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
