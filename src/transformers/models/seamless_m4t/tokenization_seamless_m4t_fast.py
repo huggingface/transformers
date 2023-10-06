@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for SeamlessM4T."""
+"""Fast Tokenization class for SeamlessM4T."""
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple, Union
@@ -295,6 +295,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
 
         if self.cur_lang_code == self.unk_token_id:
+            raise ValueError(f"`tgt_lang={src_lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id.")
             logger.warning_once(
                 f"`tgt_lang={src_lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
             )

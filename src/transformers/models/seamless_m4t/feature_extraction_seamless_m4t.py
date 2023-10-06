@@ -244,7 +244,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
 
         if do_normalize_per_mel_bins:
-            # contrarily to torch, from which the original code follow the implementation, numpy use ddof=0 by default.
+            # torch defaults to ddof=1, and numpy defaults to ddof=0
             features = [
                 (x - np.expand_dims(x.mean(0), 0)) / np.sqrt(np.expand_dims(x.var(0, ddof=1), 0) + 1e-7)
                 for x in features

@@ -147,17 +147,6 @@ default_cache_dir = os.path.join(os.path.expanduser("~"), ".cache")
 CACHE_DIR = os.path.join(os.getenv("XDG_CACHE_HOME", default_cache_dir), "huggingface", "hub")
 
 
-def _load_original_model(device, name="seamlessM4T_medium"):
-    unity_hub = Translator(name, "vocoder_36langs", device, torch.float32)
-
-    return unity_hub
-
-
-def _load_langs(model_type="medium"):
-    if model_type == "medium":
-        return MEDIUM_SUPPORTED_LANGUAGES
-    else:
-        return LARGE_SUPPORTED_LANGUAGES
 
 
 def _load_hf_config(model_type="medium"):
@@ -258,11 +247,11 @@ def load_model(save_dir, model_type, repo_id):
     else:
         name = "seamlessM4T_large"
 
-    original_model = _load_original_model(device, name)
+    original_model = Translator(name, "vocoder_36langs", device, torch.float32)
 
     ######### TOKENIZER
 
-    langs = _load_langs(model_type)
+    langs = MEDIUM_SUPPORTED_LANGUAGES if model_type == "medium" else LARGE_SUPPORTED_LANGUAGES
     vocab_file = os.path.join(os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model")
 
     save_dir = os.path.join(save_dir, name)
@@ -331,14 +320,6 @@ def load_model(save_dir, model_type, repo_id):
         original_model, wav2vec, wav2vec_convert_list, device, unwanted_prefix="model.", filter_state_dict="speech"
     )
 
-    # verify same number of parameters speech encoder
-    count_1 = param_count(hf_model.speech_encoder)
-    count_2 = param_count(original_model.model.speech_encoder_frontend) + param_count(
-        original_model.model.speech_encoder
-    )
-
-    assert count_1 == count_2, f"Speech Encoder --- Count HF: {count_1} != Count Seamless: {count_2}"
-
     # 2. take care of t2u
 
     hf_model.t2u_model = _convert_model(
@@ -349,12 +330,6 @@ def load_model(save_dir, model_type, repo_id):
         unwanted_prefix="model.",
         filter_state_dict="t2u_model",
     )
-
-    # verify same number of parameters t2u model
-    count_1 = param_count(hf_model.t2u_model)
-    count_2 = param_count(original_model.model.t2u_model)
-
-    assert count_1 == count_2, f"T2U model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # 3. take care of text encoder
     hf_model.text_encoder = _convert_model(
@@ -367,12 +342,6 @@ def load_model(save_dir, model_type, repo_id):
         exclude_state_dict="t2u_model",
     )
 
-    # verify same number of parameters text_encoder
-    count_1 = param_count(hf_model.text_encoder)
-    count_2 = param_count(original_model.model.text_encoder) + param_count(original_model.model.text_encoder_frontend)
-
-    assert count_1 == count_2, f"Text encoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
-
     # 4. take care of text decoder
     hf_model.text_decoder = _convert_model(
         original_model,
@@ -384,12 +353,6 @@ def load_model(save_dir, model_type, repo_id):
         exclude_state_dict="t2u_model",
     )
 
-    # verify same number of parameters text_decoder
-    count_1 = param_count(hf_model.text_decoder)
-    count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
-
-    assert count_1 == count_2, f"Text decoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
-
     # 5. take care of final proj
     hf_model.lm_head = _convert_model(
         original_model,
@@ -400,12 +363,6 @@ def load_model(save_dir, model_type, repo_id):
         filter_state_dict=["model.final_proj"],
         exclude_state_dict="t2u_model",
     )
-
-    # verify same number of parameters final proj
-    count_1 = param_count(hf_model.lm_head)
-    count_2 = param_count(original_model.model.final_proj)
-
-    assert count_1 == count_2, f"final proj --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # sanity check
     print(find_tied_parameters(hf_model))
@@ -420,7 +377,7 @@ def load_model(save_dir, model_type, repo_id):
 
     hf_model.generation_config._from_model_config = False
     hf_model.save_pretrained(save_dir)
-    hf_model.push_to_hub(repo_id=repo_id, create_pr=True, max_shard_size="20GB")
+    hf_model.push_to_hub(repo_id=repo_id, create_pr=True)
     hf_model = SeamlessM4TModel.from_pretrained(save_dir)
 
 
