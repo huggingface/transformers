@@ -1061,12 +1061,8 @@ class SamplePatchTSTForecastOutput(ModelOutput):
         distribution.
 
         Parameters:
-    <<<<<<< Updated upstream
             sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length)` or `(batch_size,
             num_samples, prediction_length, number_channels)`):
-    =======
-            sequences `(batch_size, num_samples, prediction_length, number_channels)`):
-    >>>>>>> Stashed changes
                     Sampled values from the chosen distribution.
     """
 
