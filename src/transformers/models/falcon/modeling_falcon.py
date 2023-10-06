@@ -1128,9 +1128,7 @@ class FalconModel(FalconPreTrainedModel):
                 position_ids = torch.arange(
                     past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
                 )
-                position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
-            else:
-                position_ids = position_ids.view(-1, seq_length).long()
+                position_ids = position_ids.unsqueeze(0)
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
