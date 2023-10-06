@@ -115,8 +115,8 @@ class FalconRotaryEmbedding(nn.Module):
         if dtype in [torch.float16, torch.bfloat16]:
             emb = emb.float()
 
-        self.cos_cached = emb.cos()[None, :, :]
-        self.sin_cached = emb.sin()[None, :, :]
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
@@ -133,8 +133,8 @@ class FalconRotaryEmbedding(nn.Module):
         self.sin_cached = self.sin_cached.to(device)
 
         # Gather cos, sin at the designated position ids
-        cos = self.cos_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
-        sin = self.sin_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
+        cos = self.cos_cached[position_ids]  # [bs, seq_len, dim]
+        sin = self.sin_cached[position_ids]  # [bs, seq_len, dim]
         return cos, sin
 
     def forward(self, query, key, past_key_values_length, position_ids):
@@ -181,8 +181,8 @@ class FalconLinearScalingRotaryEmbedding(FalconRotaryEmbedding):
         if dtype in [torch.float16, torch.bfloat16]:
             emb = emb.float()
 
-        self.cos_cached = emb.cos()[None, :, :]
-        self.sin_cached = emb.sin()[None, :, :]
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
@@ -215,8 +215,8 @@ class FalconDynamicNTKScalingRotaryEmbedding(FalconRotaryEmbedding):
         if dtype in [torch.float16, torch.bfloat16]:
             emb = emb.float()
 
-        self.cos_cached = emb.cos()[None, :, :]
-        self.sin_cached = emb.sin()[None, :, :]
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
