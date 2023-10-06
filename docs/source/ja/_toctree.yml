@@ -43,8 +43,6 @@
     title: カスタムモデルを共有する
   - local: chat_templating
     title: チャットモデルのテンプレート
-  - local: sagemaker
-    title: Amazon SageMaker でトレーニングを実行する
   - local: serialization
     title: ONNX へのエクスポート
   - local: tflite
@@ -53,8 +51,6 @@
     title: トーチスクリプトへのエクスポート
   - local: benchmarks
     title: ベンチマーク
-  - local: notebooks
-    title: 例を含むノートブック
   - local: community
     title: コミュニティリソース
   - local: custom_tools
@@ -97,22 +93,16 @@
     title: 推論の最適化
   - local: big_models
     title: 大きなモデルのインスタンス化
-  - local: debugging
-    title: トラブルシューティング
   - local: tf_xla
     title: TensorFlowモデルのXLA統合
   - local: perf_torch_compile
     title: torch.compile()を使用した推論の最適化
   title: パフォーマンスとスケーラビリティ
 - sections:
-  - local: contributing
-    title: 🤗 Transformersへの貢献方法
   - local: add_new_model
     title: 🤗 Transformersにモデルを追加する方法
   - local: add_tensorflow_model
     title: 🤗 TransformersモデルをTensorFlowに変換する方法
-  - local: add_new_pipeline
-    title: 🤗 Transformersにパイプラインを追加する方法
   - local: testing
     title: テスト
   - local: pr_checks
