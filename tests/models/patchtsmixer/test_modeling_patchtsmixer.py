@@ -340,6 +340,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
             expected_arg_names = [
                 "context_values",
+                "observed_mask",
                 "target_values",
             ]
             # if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or \
