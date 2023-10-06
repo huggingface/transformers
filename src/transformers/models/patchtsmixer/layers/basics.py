@@ -19,9 +19,6 @@ class Transpose(nn.Module):
             return x.transpose(*self.dims)
 
 
-
-
-
 class LinBnDrop(nn.Sequential):
     "Module grouping `BatchNorm1d`, `Dropout` and `Linear` layers"
 

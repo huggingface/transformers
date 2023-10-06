@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PatchTSMixer model configuration"""
 
+from typing import Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -106,8 +107,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         channel_consistent_masking (`bool`, *optional*, defaults to `True`):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels.
-        revin (`bool`, *optional*, defaults to `True`):
-            Whether to apply [Reversible Instance Normalization](https://openreview.net/pdf?id=cGDAkQo1C0p).
+        scaling (`string` or `bool`, *optional* defaults to `"std"`):
+            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
+            scaler is set to "mean".
         head_dropout (`float`, *optional*, defaults to 0.2):
             The dropout probability the `PatchTSMixer` head.
         forecast_len (`int`, *optional*, defaults to 16):
@@ -177,7 +179,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         mask_value=0,
         masked_loss: bool = True,
         channel_consistent_masking: bool = True,
-        revin: bool = True,
+        scaling: Optional[Union[str, bool]] = "std",
         head_dropout: float = 0.2,
         forecast_len: int = 16,
         forecast_channel_indices: list = None,
@@ -204,7 +206,7 @@ class PatchTSMixerConfig(PretrainedConfig):
 
         self.norm_mlp = norm_mlp
 
-        self.revin = revin
+        self.scaling = scaling
 
         self.head_dropout = head_dropout
 

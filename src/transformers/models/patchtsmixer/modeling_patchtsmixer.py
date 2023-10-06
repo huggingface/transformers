@@ -27,11 +27,9 @@ from transformers.utils import ModelOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_patchtsmixer import PatchTSMixerConfig
 from .layers import (
-    InjectRevinStatistics4D,
     Patch,
     PatchMasking,
     PatchTSMixer,
-    RevIN,
     set_seed,
 )
 
@@ -354,6 +352,159 @@ class PretrainHead(nn.Module):
             return forecast
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->PatchTSMixer
+class PatchTSMixerStdScaler(nn.Module):
+    """
+    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
+    by subtracting from the mean and dividing by the standard deviation.
+
+    Args:
+        dim (`int`):
+            Dimension along which to calculate the mean and standard deviation.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-5):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-5):
+        super().__init__()
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
+        self.dim = dim
+        self.keepdim = keepdim
+        self.minimum_scale = minimum_scale
+
+    @torch.no_grad()
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        denominator = weights.sum(self.dim, keepdim=self.keepdim)
+        denominator = denominator.clamp_min(1.0)
+        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
+
+        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        scale = torch.sqrt(variance + self.minimum_scale)
+        return (data - loc) / scale, loc, scale
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeries->PatchTSMixer
+class PatchTSMixerMeanScaler(nn.Module):
+    """
+    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    accordingly.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        default_scale (`float`, *optional*, defaults to `None`):
+            Default scale that is used for elements that are constantly zero. If `None`, we use the scale of the batch.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default minimum possible scale that is used for any item.
+    """
+
+    def __init__(
+        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
+    ):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+        self.minimum_scale = minimum_scale
+        self.default_scale = default_scale
+
+    @torch.no_grad()
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # shape: (N, [C], T=1)
+        ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
+        num_observed = observed_indicator.sum(self.dim, keepdim=True)
+
+        scale = ts_sum / torch.clamp(num_observed, min=1)
+
+        # If `default_scale` is provided, we use it, otherwise we use the scale
+        # of the batch.
+        if self.default_scale is None:
+            batch_sum = ts_sum.sum(dim=0)
+            batch_observations = torch.clamp(num_observed.sum(0), min=1)
+            default_scale = torch.squeeze(batch_sum / batch_observations)
+        else:
+            default_scale = self.default_scale * torch.ones_like(scale)
+
+        # apply default scale where there are no observations
+        scale = torch.where(num_observed > 0, scale, default_scale)
+
+        # ensure the scale is at least `self.minimum_scale`
+        scale = torch.clamp(scale, min=self.minimum_scale)
+        scaled_data = data / scale
+
+        if not self.keepdim:
+            scale = scale.squeeze(dim=self.dim)
+
+        return scaled_data, torch.zeros_like(scale), scale
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeries->PatchTSMixer
+class PatchTSMixerNOPScaler(nn.Module):
+    """
+    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        return data, loc, scale
+
+
+class InjectScalerStatistics4D(nn.Module):
+    def __init__(self, num_features, num_patches, expansion=2):
+        super().__init__()
+        self.inverse_transform = nn.Sequential(
+            nn.Linear(num_features + 2, expansion * num_features),
+            nn.Linear(expansion * num_features, num_features),
+        )
+
+        self.map_scale = nn.Sequential(nn.Linear(2, 2 * expansion), nn.Linear(2 * expansion, 2))
+        self.num_patches = num_patches
+
+    def forward(self, z, loc, scale):
+        """
+        # revin_mean,revin_stddev: [bs x 1 x n_channels] z: [bs x in_channels x num_patch x num_features]
+
+        output: [bs x in_channels x num_patch x num_features]
+        """
+
+        mean = loc.transpose(-1, -2)  # [bs x n_channels x 1 ]
+        mean = mean.unsqueeze(-2)  # [bs x n_channels x 1 x 1]
+        mean = mean.repeat(1, 1, self.num_patches, 1)  # [bs x n_channels x num_patch x 1]
+
+        stdev = scale.transpose(-1, -2)  # [bs x n_channels x 1 ]
+        stdev = stdev.unsqueeze(-2)  # [bs x n_channels x 1 x 1]
+        stdev = stdev.repeat(1, 1, self.num_patches, 1)  # [bs x n_channels x num_patch x 1]
+
+        concat_stats = torch.cat([mean, stdev], dim=-1)  # [bs x n_channels x num_patch x 2]
+
+        concat_stats = self.map_scale(concat_stats)  # [bs x n_channels x num_patch x 2]
+
+        z = torch.cat([z, concat_stats], dim=-1)  # [bs x channels x num_patch x num_features+2]
+        z = self.inverse_transform(z)  # [bs x channels x num_patch x num_features]
+
+        return z
+
+
 @dataclass
 class PatchTSMixerEncoderOutput(ModelOutput):
     """
@@ -438,10 +589,10 @@ class PatchTSMixerModelOutput(ModelOutput):
             Patched input data to the model.
         mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`,*optional*):
             Bool Tensor indicating True in masked patches and False otherwise.
-        revin_mean: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
+        loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
             Gives the mean of the context window per channel. Used for revin denorm outside the model, if revin
             enabled.
-        revin_std_dev: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
+        scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
             Gives the std dev of the context window per channel. Used for revin denorm outside the model, if revin
             enabled.
     """
@@ -450,8 +601,8 @@ class PatchTSMixerModelOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     patched_input: torch.FloatTensor = None
     mask: Optional[torch.FloatTensor] = None
-    revin_mean: Optional[torch.FloatTensor] = None
-    revin_stdev: Optional[torch.FloatTensor] = None
+    loc: Optional[torch.FloatTensor] = None
+    scale: Optional[torch.FloatTensor] = None
 
 
 @add_start_docstrings(
@@ -481,10 +632,12 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         else:
             self.masking = None
 
-        if config.revin is True:
-            self.revin = RevIN()
+        if config.scaling == "mean" or config.scaling is True:
+            self.scaler = PatchTSMixerMeanScaler(dim=1, keepdim=True)
+        elif config.scaling == "std":
+            self.scaler = PatchTSMixerStdScaler(dim=1, keepdim=True)
         else:
-            self.revin = None
+            self.scaler = PatchTSMixerNOPScaler(dim=1, keepdim=True)
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -494,6 +647,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     def forward(
         self,
         context_values: torch.Tensor,
+        observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSMixerModelOutput]:
@@ -514,19 +668,14 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 
         """
 
-        revin_mean = None
-        revin_stdev = None
         mask = None
+        if observed_mask is None:
+            observed_mask = torch.ones_like(context_values)
+        scaled_context_values, loc, scale = self.scaler(context_values, observed_mask)
 
-        if self.revin is not None:
-            context_values = self.revin(context_values, mode="norm")  # x: tensor [bs x seq_len x input_size]
-            revin_mean = self.revin.mean
-            revin_stdev = self.revin.stdev
-
-        patched_x = self.patching(context_values)  # [bs x input_size x num_patch x patch_len]
+        patched_x = self.patching(scaled_context_values)  # [bs x input_size x num_patch x patch_len
 
         enc_input = patched_x
-
         if self.masking is not None:
             enc_input, mask = self.masking(patched_x)
             # enc_input: [bs x input_size x num_patch x patch_len]
@@ -539,37 +688,9 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
             hidden_states=encoder_output.hidden_states,
             patched_input=patched_x,
             mask=mask,
-            revin_mean=revin_mean,
-            revin_stdev=revin_stdev,
+            loc=loc,
+            scale=scale,
         )
-
-
-class PatchTSMixerMaskedPretrainHead(nn.Module):
-    def __init__(self, config: PatchTSMixerConfig):
-        super().__init__()
-        self.head = PretrainHead(
-            num_patches=config.num_patches,
-            num_features=config.num_features,
-            input_size=config.input_size,
-            patch_size=config.patch_len,
-            head_dropout=config.head_dropout,
-            mode=config.mode,
-        )
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-        hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
-            Refers the embedding output from the backbone
-
-        Returns: `torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`
-
-        """
-
-        # context_values: [bs x n_vars x num_patches x num_features]
-        # return: [bs x n_vars x num_patches x patch_len]
-
-        return self.head(hidden_state)
 
 
 @dataclass
@@ -609,17 +730,19 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
         self.model = PatchTSMixerModel(config, mask_input=True)
-        self.head = PatchTSMixerMaskedPretrainHead(config)
+        self.head = PretrainHead(
+            num_patches=config.num_patches,
+            num_features=config.num_features,
+            input_size=config.input_size,
+            patch_size=config.patch_len,
+            head_dropout=config.head_dropout,
+            mode=config.mode,
+        )
         self.masked_loss = config.masked_loss
         if config.masked_loss is True:
             self.loss = torch.nn.MSELoss(reduction="none")
         else:
             self.loss = torch.nn.MSELoss(reduction="mean")
-
-        if config.revin is True:
-            self.revin = RevIN()
-        else:
-            self.revin = None
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -628,7 +751,11 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
     # @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PatchTSMixerForMaskPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False, return_loss: bool = True
+        self,
+        context_values: torch.Tensor,
+        observed_mask: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = False,
+        return_loss: bool = True,
     ) -> PatchTSMixerForMaskPreTrainingOutput:
         r"""
         Args:
@@ -651,7 +778,7 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
 
         # context_values: tensor [bs x seq_len x input_size]
         model_output = self.model(
-            context_values, output_hidden_states=output_hidden_states
+            context_values, observed_mask=observed_mask, output_hidden_states=output_hidden_states
         )  # x.last_hidden_state: [bs x nvars x num_patch x num_features]
         x_hat = self.head(model_output.last_hidden_state)  # tensor [bs x nvars x num_patch x patch_len]
 
@@ -748,10 +875,6 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         self.model = PatchTSMixerModel(config)
         self.head = PatchTSMixerForecastHead(config)
         self.loss = torch.nn.MSELoss(reduction="mean")
-        if config.revin is True:
-            self.revin = RevIN(denorm_channels=config.forecast_channel_indices)
-        else:
-            self.revin = None
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -762,7 +885,8 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
     def forward(
         self,
         context_values: torch.Tensor,
-        target_values: torch.Tensor = None,
+        observed_mask: Optional[torch.Tensor] = None,
+        target_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
     ) -> PatchTSMixerForForecastOutput:
@@ -775,6 +899,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         # context_values: tensor [bs x seq_len x input_size]
         model_output = self.model(
             context_values,
+            observed_mask=observed_mask,
             output_hidden_states=output_hidden_states,
         )  # model_output: [bs x nvars x num_patch x num_features]
 
@@ -782,20 +907,21 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             model_output.last_hidden_state,
         )  # tensor [bs x forecast_len x input_size]
 
-        if self.revin is not None:
-            self.revin.set_statistics(mean=model_output.revin_mean, stdev=model_output.revin_stdev)
-            y_hat = self.revin(y_hat, mode="denorm")
+        # if self.revin is not None:
+        #     self.revin.set_statistics(mean=model_output.revin_mean, stdev=model_output.revin_stdev)
+        #     y_hat = self.revin(y_hat, mode="denorm")
+        y_hat_unscaled = y_hat * model_output.scale - model_output.loc
 
         if target_values is not None and return_loss is True:
             if self.config.forecast_channel_indices is not None:
-                loss_val = self.loss(y_hat, target_values[..., self.config.forecast_channel_indices])
+                loss_val = self.loss(y_hat_unscaled, target_values[..., self.config.forecast_channel_indices])
             else:
-                loss_val = self.loss(y_hat, target_values)
+                loss_val = self.loss(y_hat_unscaled, target_values)
         else:
             loss_val = None
 
         return PatchTSMixerForForecastOutput(
-            prediction_logits=y_hat,  # tensor [bs x forecast_len x input_size]
+            prediction_logits=y_hat_unscaled,  # tensor [bs x forecast_len x input_size]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
@@ -873,15 +999,14 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         self.head = PatchTSMixerClassificationHead(config)
         self.loss = torch.nn.CrossEntropyLoss()
 
-        if config.revin is True:
+        if config.scaling in ["std", "mean", True]:
             if config.mode == "flatten":
-                raise Exception("revin is not enabled for classification task when mode == flatten")
-            self.inject_revin = InjectRevinStatistics4D(
+                raise ValueError("Scaling is not supported for classification task when mode == flatten")
+            self.inject_scale = InjectScalerStatistics4D(
                 num_features=config.num_features, num_patches=config.num_patches
             )
-
         else:
-            self.inject_revin = None
+            self.inject_scale = None
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -907,13 +1032,9 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             output_hidden_states=output_hidden_states,
         )  # x: [bs x nvars x num_patch x num_features]
 
-        if self.inject_revin is not None:
-            revin_statistics = (
-                model_output.revin_mean,
-                model_output.revin_stdev,
-            )  # revin_mean,revin_stddev: [bs x 1 x n_channels]
-            model_output.last_hidden_state = self.inject_revin(
-                model_output.last_hidden_state, revin_statistics
+        if self.inject_scale is not None:
+            model_output.last_hidden_state = self.inject_scale(
+                model_output.last_hidden_state, loc=model_output.loc, scale=model_output.scale
             )  # x: [bs x nvars x num_patch x num_features]
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_labels]
@@ -1002,14 +1123,14 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         self.head = PatchTSMixerRegressionHead(config)
         self.loss = torch.nn.MSELoss(reduction="mean")
 
-        if config.revin is True:
+        if config.scaling in ["std", "mean", True]:
             if config.mode == "flatten":
-                raise Exception("revin is not enabled for regression task when mode == flatten")
-            self.inject_revin = InjectRevinStatistics4D(
+                raise Exception("Scaling is not supported for classification task when mode == flatten")
+            self.inject_scale = InjectScalerStatistics4D(
                 num_features=config.num_features, num_patches=config.num_patches
             )
         else:
-            self.inject_revin = None
+            self.inject_scale = None
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -1038,24 +1159,21 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             output_hidden_states=output_hidden_states,
         )  # model_output: [bs x nvars x num_patch x num_features]
 
-        if self.inject_revin is not None:
-            revin_statistics = (
-                model_output.revin_mean,
-                model_output.revin_stdev,
-            )  # revin_mean,revin_stddev: [bs x 1 x n_channels]
-            model_output.last_hidden_state = self.inject_revin(
-                model_output.last_hidden_state, revin_statistics
+        if self.inject_scale is not None:
+            model_output.last_hidden_state = self.inject_scale(
+                model_output.last_hidden_state, loc=model_output.loc, scale=model_output.scale
             )  # x: [bs x nvars x num_patch x num_features]
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_targets]
+        y_hat_scaled = y_hat * model_output.scale - model_output.loc
 
         if target_values is not None and return_loss is True:
-            loss_val = self.loss(y_hat, target_values)
+            loss_val = self.loss(y_hat_scaled, target_values)
         else:
             loss_val = None
 
         return PatchTSMixerForRegressionOutput(
-            prediction_logits=y_hat,  # tensor [bs x n_targets]
+            prediction_logits=y_hat_scaled,  # tensor [bs x n_targets]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,

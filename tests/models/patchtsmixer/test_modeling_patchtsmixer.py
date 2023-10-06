@@ -18,6 +18,7 @@ import inspect
 import random
 import tempfile
 import unittest
+from typing import Optional, Union
 
 from huggingface_hub import hf_hub_download
 
@@ -49,8 +50,8 @@ if is_torch_available():
         PatchTSMixerClassificationHead,
         PatchTSMixerEncoder,
         PatchTSMixerForecastHead,
-        PatchTSMixerMaskedPretrainHead,
         PatchTSMixerRegressionHead,
+        PretrainHead,
     )
 
 
@@ -81,7 +82,7 @@ class PatchTSMixerModelTester:
         masked_loss: bool = False,
         mask_mode: str = "mask_before_encoder",
         channel_consistent_masking: bool = True,
-        revin: bool = True,
+        scaling: Optional[Union[str, bool]] = "std",
         # Head related
         head_dropout: float = 0.2,
         # forecast related
@@ -112,7 +113,7 @@ class PatchTSMixerModelTester:
         self.gated_attn = gated_attn
         self.norm_mlp = norm_mlp
         self.swin_hier = swin_hier
-        self.revin = revin
+        self.scaling = scaling
         self.head_dropout = head_dropout
         # masking related
         self.mask_type = mask_type
@@ -155,7 +156,7 @@ class PatchTSMixerModelTester:
             gated_attn=self.gated_attn,
             norm_mlp=self.norm_mlp,
             swin_hier=self.swin_hier,
-            revin=self.revin,
+            scaling=self.scaling,
             head_dropout=self.head_dropout,
             mask_type=self.mask_type,
             mask_ratio=self.mask_ratio,
@@ -446,7 +447,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             n_targets=3,
             output_range=None,
             head_agg=None,
-            revin=True,
+            scaling="std",
             use_pe=False,
             pe="sincos",
             learn_pe=True,
@@ -530,7 +531,14 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_pretrainhead(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        head = PatchTSMixerMaskedPretrainHead(config)
+        head = PretrainHead(
+            num_patches=config.num_patches,
+            num_features=config.num_features,
+            input_size=config.input_size,
+            patch_size=config.patch_len,
+            head_dropout=config.head_dropout,
+            mode=config.mode,
+        )
         output = head(self.__class__.enc_output)
 
         self.assertEqual(output.shape, self.__class__.correct_pretrain_output.shape)
@@ -608,14 +616,14 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_forecast(self):
         for mode in ["flatten", "common_channel", "mix_channel"]:
             for self_attn in [True, False]:
-                for revin in [True, False]:
+                for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
                         for forecast_channel_indices in [None, [0, 2]]:
                             params = self.__class__.params.copy()
                             params.update(
                                 mode=mode,
                                 self_attn=self_attn,
-                                revin=revin,
+                                scaling=scaling,
                                 forecast_channel_indices=forecast_channel_indices,
                                 gated_attn=gated_attn,
                             )
@@ -625,14 +633,18 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_classification(self):
         for mode in ["common_channel", "mix_channel", "flatten"]:
             for self_attn in [True, False]:
-                for revin in [True, False]:
+                for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
                         for head_agg in ["max_pool", "avg_pool"]:
-                            if mode == "flatten" and revin is True:
+                            if mode == "flatten" and scaling in ["mean", "std", True]:
                                 continue
                             params = self.__class__.params.copy()
                             params.update(
-                                mode=mode, self_attn=self_attn, revin=revin, head_agg=head_agg, gated_attn=gated_attn
+                                mode=mode,
+                                self_attn=self_attn,
+                                scaling=scaling,
+                                head_agg=head_agg,
+                                gated_attn=gated_attn,
                             )
                             # print(mode,self_attn,revin,gated_attn,head_agg)
 
@@ -641,14 +653,18 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_regression(self):
         for mode in ["common_channel", "mix_channel", "flatten"]:
             for self_attn in [True, False]:
-                for revin in [True, False]:
+                for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
                         for head_agg in ["max_pool", "avg_pool"]:
-                            if mode == "flatten" and revin is True:
+                            if mode == "flatten" and scaling in ["mean", "std", True]:
                                 continue
                             params = self.__class__.params.copy()
                             params.update(
-                                mode=mode, self_attn=self_attn, revin=revin, head_agg=head_agg, gated_attn=gated_attn
+                                mode=mode,
+                                self_attn=self_attn,
+                                scaling=scaling,
+                                head_agg=head_agg,
+                                gated_attn=gated_attn,
                             )
                             # print(mode,self_attn,revin,gated_attn,head_agg)
 
@@ -657,7 +673,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_pretrain(self):
         for mode in ["common_channel", "mix_channel", "flatten"]:
             for self_attn in [True, False]:
-                for revin in [True, False]:
+                for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
                         for mask_type in ["random", "forecast"]:
                             for masked_loss in [True, False]:
@@ -666,7 +682,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                                     params.update(
                                         mode=mode,
                                         self_attn=self_attn,
-                                        revin=revin,
+                                        scaling=scaling,
                                         gated_attn=gated_attn,
                                         mask_type=mask_type,
                                         masked_loss=masked_loss,
