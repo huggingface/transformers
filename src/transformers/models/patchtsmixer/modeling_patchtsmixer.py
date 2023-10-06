@@ -1162,15 +1162,14 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             )  # x: [bs x nvars x num_patch x num_features]
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_targets]
-        y_hat_scaled = y_hat * model_output.scale.squeeze(1) + model_output.loc.squeeze(1)
 
         if target_values is not None and return_loss is True:
-            loss_val = self.loss(y_hat_scaled, target_values)
+            loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
         return PatchTSMixerForRegressionOutput(
-            prediction_logits=y_hat_scaled,  # tensor [bs x n_targets]
+            prediction_logits=y_hat,  # tensor [bs x n_targets]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
