@@ -65,7 +65,7 @@ class ViTMAEConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        decoder_num_attention_heads (`int`, *optional*, defaults to 12):
+        decoder_num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the decoder.
         decoder_hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the decoder.

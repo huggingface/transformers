@@ -106,8 +106,9 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     has_attentions = False
 
     def setUp(self):
+        self.config_class = PretrainedConfig
         self.model_tester = TimmBackboneModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PretrainedConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(self, config_class=self.config_class, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
