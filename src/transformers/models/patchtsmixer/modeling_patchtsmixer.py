@@ -901,36 +901,6 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         )
 
 
-class PatchTSMixerClassificationHead(nn.Module):
-    def __init__(self, config: PatchTSMixerConfig):
-        super().__init__()
-        self.head = LinearHead(
-            num_patches=config.num_patches,
-            in_channels=config.input_size,
-            num_features=config.num_features,
-            head_dropout=config.head_dropout,
-            output_dim=config.n_classes,
-            output_range=config.output_range,
-            head_agg=config.head_agg,
-            mode=config.mode,
-        )
-
-    def forward(self, hidden_state) -> torch.Tensor:
-        """
-        Args:
-        hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
-            Refers the embedding output from the backbone.
-
-        Returns: `torch.FloatTensor` of shape `(batch_size, no_classes)`
-
-        """
-
-        # x: [bs x nvars x num_patch x num_features]
-        # output: [bs x n_classes]
-
-        return self.head(hidden_state, y=None)
-
-
 @dataclass
 class PatchTSMixerForClassificationOutput(ModelOutput):
     """
