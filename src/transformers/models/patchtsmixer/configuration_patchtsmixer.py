@@ -241,7 +241,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         # other params
         self.self_attn = self_attn
         self.self_attn_heads = self_attn_heads
-        self.d_size = "4D"
         self.init_std = init_std
         self.seed_number = seed_number
         self.post_init = post_init
