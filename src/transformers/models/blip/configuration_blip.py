@@ -295,6 +295,8 @@ class BlipConfig(PretrainedConfig):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original BLIP implementation.
+        image_text_hidden_size (`int`, *optional*, defaults to 256):
+            Dimentionality of the hidden state of the image-text fusion layer.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -329,6 +331,7 @@ class BlipConfig(PretrainedConfig):
         vision_config=None,
         projection_dim=512,
         logit_scale_init_value=2.6592,
+        image_text_hidden_size=256,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -350,6 +353,7 @@ class BlipConfig(PretrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
+        self.image_text_hidden_size = image_text_hidden_size
 
     @classmethod
     def from_text_vision_configs(cls, text_config: BlipTextConfig, vision_config: BlipVisionConfig, **kwargs):
