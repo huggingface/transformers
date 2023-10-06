@@ -1,4 +1,4 @@
-__all__ = ["Transpose", "LinBnDrop", "SigmoidRange", "sigmoid_range", "get_activation_fn"]
+__all__ = ["Transpose", "LinBnDrop", "sigmoid_range", "get_activation_fn"]
 
 
 import math
@@ -19,15 +19,7 @@ class Transpose(nn.Module):
             return x.transpose(*self.dims)
 
 
-class SigmoidRange(nn.Module):
-    def __init__(self, low, high):
-        super().__init__()
-        self.low, self.high = low, high
-        # self.low, self.high = ranges
 
-    def forward(self, x):
-        # return sigmoid_range(x, self.low, self.high)
-        return torch.sigmoid(x) * (self.high - self.low) + self.low
 
 
 class LinBnDrop(nn.Sequential):
