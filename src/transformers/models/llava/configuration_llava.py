@@ -324,7 +324,7 @@ class LlavaConfig(PretrainedConfig):
         self.initializer_range = 0.02
 
     @classmethod
-    def from_llava_llama_configs(
+    def from_llava_configs(
         cls,
         llama_config: LlamaConfig,
         llava_vision_config: LlavaVisionConfig,
@@ -342,3 +342,4 @@ class LlavaConfig(PretrainedConfig):
             llava_vision_config=llava_vision_config.to_dict(),
             **kwargs,
         )
+

@@ -1168,7 +1168,6 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1176,17 +1175,17 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape (batch_size, sequence_length)):
                 The sequence used as a prompt for the generation.
-            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width), *optional* ):
-                Input images to be processed.
             attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
                 Mask to avoid performing attention on padding token indices.
-
+            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width), *optional* ):
+                Input images to be processed.
         Returns:
             captions (list): A list of strings of length batch_size * num_captions.
 
@@ -1284,3 +1283,4 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
+
