@@ -268,7 +268,8 @@ class Blip2Config(PretrainedConfig):
             Dictionary of configuration options used to initialize any [`PretrainedConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
-
+        image_text_hidden_size (`int`, *optional*, defaults to 256):
+            Dimentionality of the hidden state of the image-text fusion layer.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -384,7 +385,8 @@ class Blip2ModelWithoutLMConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
-
+        image_text_hidden_size (`int`, *optional*, defaults to 256):
+            Dimentionality of the hidden state of the image-text fusion layer.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
