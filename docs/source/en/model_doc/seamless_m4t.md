@@ -113,13 +113,27 @@ Feel free to try out [`SeamlessM4TForSpeechToText`] and [`SeamlessM4TForTextToSp
 
 You have the possibility to change the speaker used for speech synthesis with the `spkr_id` argument. Some `spkr_id` works better than other for some languages!
 
-#### 3. Change the speaker identity
+#### 3. Change the generation strategy
 
 You can use different [generation strategies](./generation_strategies) for speech and text generation, e.g `.generate(input_ids=input_ids, text_num_beams=4, speech_do_sample=True)` which will successively perform beam-search decoding on the text model, and multinomial sampling on the speech model.
 
 #### 4. Generate speech and text at the same time
 
 Use `return_intermediate_token_ids=True` with [`SeamlessM4TModel`] to return both speech and text !
+
+## Model architecture
+
+
+SeamlessM4T features a versatile architecture that smoothly handles the sequential generation of text and speech. This setup comprises two sequence-to-sequence (seq2seq) models. The first model translates the input modality into translated text, while the second model generates speech tokens, known as "unit tokens," from the translated text.
+
+Each modality has its own dedicated encoder with a unique architecture. Additionally, for speech output, a vocoder inspired by the [HiFi-GAN](https://arxiv.org/abs/2010.05646) architecture is placed on top of the second seq2seq model.
+
+Here's how the generation process works:
+
+- Input text or speech is processed through its specific encoder.
+- A decoder creates text tokens in the desired language.
+- If speech generation is required, the second seq2seq model, following a standard encoder-decoder structure, generates unit tokens.
+- These unit tokens are then passed through the final vocoder to produce the actual speech.
 
 
 This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/seamless_communication).
@@ -183,24 +197,4 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 [[autodoc]] SeamlessM4TProcessor
     - __call__
-
-## SeamlessM4TCodeHifiGan
-
-[[autodoc]] SeamlessM4TCodeHifiGan
-
-
-## SeamlessM4THifiGan
-
-[[autodoc]] SeamlessM4THifiGan
-
-
-## SeamlessM4TTextToUnitForConditionalGeneration
-
-[[autodoc]] SeamlessM4TTextToUnitForConditionalGeneration
-
-
-## SeamlessM4TTextToUnitModel
-
-[[autodoc]] SeamlessM4TTextToUnitModel
-
 
