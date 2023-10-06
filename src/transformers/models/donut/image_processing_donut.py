@@ -76,8 +76,7 @@ class DonutImageProcessor(BaseImageProcessor):
             the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
-            method.
-            Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
+            method. Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
