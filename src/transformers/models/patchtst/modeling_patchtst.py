@@ -15,11 +15,9 @@
 """ PyTorch PatchTST model."""
 
 import math
-import random
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
-import numpy as np
 import torch
 from torch import nn
 
@@ -27,6 +25,7 @@ from ...activations import ACT2CLS
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
+from ...trainer_utils import set_seed
 from ...utils import ModelOutput, add_start_docstrings, logging
 from .configuration_patchtst import PatchTSTConfig
 
@@ -239,14 +238,6 @@ def positional_encoding(pe, learn_pe, q_len, d_model):
     return nn.Parameter(w_pos, requires_grad=learn_pe)
 
 
-def set_seed(x=42):
-    random.seed(x)
-    np.random.seed(x)
-    torch.manual_seed(x)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(x)
-
-
 def random_masking(
     xb: torch.Tensor,
     mask_ratio: float,
@@ -306,6 +297,7 @@ def forecast_masking(
     mix_ratio: list = None,
     unmasked_channel_indices: list = None,
     mask_value: int = 0,
+    seed_number: Optional[int] = None,
 ):
     """forecast_masking Mask last K patches where K is from the patch_lengths list.
     For every batch, distribute the patch lengths based on mix_ratio Ignore masks for column indices mentioned in
@@ -321,11 +313,15 @@ def forecast_masking(
         unmasked_channel_indices (list, optional):
             Control Variable channel indices. These channels will not be masked. Defaults to None.
         mask_value (int, optional): Value to use for masking. Defaults to 0.
+        seed_number (int, optional): Value to set for the random seed.
 
     Returns:
         Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [bs x c x n] or [bs x tsg1 x
         tsg2 x c x n]
     """
+    if seed_number:
+        set_seed(seed_number)
+
     if mix_ratio is None:
         mix_ratio = [1 for t in patch_lengths]
 
@@ -564,6 +560,7 @@ class PatchMasking(nn.Module):
                 mix_ratio=self.mask_patch_ratios,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 mask_value=self.mask_value,
+                seed_number=self.seed_number,
             )
         else:
             raise Exception("Invalid mask type")
@@ -1900,7 +1897,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         model_output = self.model(
             past_values, past_observed_mask=past_observed_mask, output_hidden_states=output_hidden_states
         )

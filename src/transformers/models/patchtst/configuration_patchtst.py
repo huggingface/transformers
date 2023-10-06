@@ -178,7 +178,7 @@ class PatchTSTConfig(PretrainedConfig):
         use_cls_token: bool = False,
         init_std: float = 0.02,
         shared_projection: bool = True,
-        seed_number: int = None,
+        seed_number: Optional[int] = None,
         scaling: Optional[Union[str, bool]] = "mean",
         # mask pretraining
         mask_input: Optional[bool] = None,
