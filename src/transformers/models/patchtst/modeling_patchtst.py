@@ -300,6 +300,73 @@ def random_masking(
     return xb_mask, mask[..., 0]
 
 
+def forecast_masking(
+    xb: torch.Tensor,
+    patch_lengths: list,
+    mix_ratio: list = None,
+    unmasked_channel_indices: list = None,
+    mask_value: int = 0,
+):
+    """forecast_masking Mask last K patches where K is from the patch_lengths list.
+    For every batch, distribute the patch lengths based on mix_ratio Ignore masks for column indices mentioned in
+    cv_channel_indices
+
+    Args:
+        xb (Tensor):
+            Input to mask [ bs x nvars x num_patch x patch_len] or [ bs x tsg1 x tag2 x nvars x num_patch x patch_len]
+        patch_lengths (list): List of patch lengths to mask in the end of the data.
+        mix_ratio (list, optional): List of weights to use for each patch length. For Ex.
+            if patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to
+            None.
+        unmasked_channel_indices (list, optional):
+            Control Variable channel indices. These channels will not be masked. Defaults to None.
+        mask_value (int, optional): Value to use for masking. Defaults to 0.
+
+    Returns:
+        Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [bs x c x n] or [bs x tsg1 x
+        tsg2 x c x n]
+    """
+    if mix_ratio is None:
+        mix_ratio = [1 for t in patch_lengths]
+
+    bs, nvars, L, D = xb.shape
+    mask = torch.zeros(bs, nvars, L, device=xb.device)
+
+    t_list = []
+    total_length = 0
+    total_ratio = sum(mix_ratio)
+
+    for i, j in zip(patch_lengths, mix_ratio):
+        if i <= 0 or i >= L:
+            raise Exception("masked_patch_len should be greater than 0 and less than total patches.")
+        temp_len = int(bs * j / total_ratio)
+        t_list.append([i, j, temp_len])
+        total_length += temp_len
+
+    t_list = sorted(t_list, key=lambda x: x[2])
+
+    if total_length < bs:
+        t_list[0][2] = t_list[0][2] + (bs - total_length)
+    elif total_length > bs:
+        t_list[-1][2] = t_list[-1][2] + (total_length - bs)
+
+    b1 = 0
+    for p, r, l in t_list:
+        b2 = b1 + l
+        mask[b1:b2, :, -p:] = 1
+        b1 = b2
+
+    perm = torch.randperm(mask.shape[0])
+    mask = mask[perm]
+
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [bs x nvars x num_patch x patch_len]
+    if unmasked_channel_indices is not None:
+        mask[:, unmasked_channel_indices, :, :] = 0
+
+    xb_mask = xb.masked_fill(mask.bool(), mask_value)
+    return xb_mask, mask[..., 0]
+
+
 def compute_num_patches(sequence_length, patch_length, stride):
     return (max(sequence_length, patch_length) - patch_length) // stride + 1
 
@@ -490,7 +557,14 @@ class PatchMasking(nn.Module):
                 mask_value=self.mask_value,
                 seed_number=self.seed_number,
             )
-
+        elif self.mask_type == "forecast":
+            x_mask, mask = forecast_masking(
+                xb=x,
+                patch_lengths=self.mask_patches,
+                mix_ratio=self.mask_patch_ratios,
+                unmasked_channel_indices=self.unmasked_channel_indices,
+                mask_value=self.mask_value,
+            )
         else:
             raise Exception("Invalid mask type")
 
