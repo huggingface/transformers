@@ -342,4 +342,3 @@ class LlavaConfig(PretrainedConfig):
             llava_vision_config=llava_vision_config.to_dict(),
             **kwargs,
         )
-

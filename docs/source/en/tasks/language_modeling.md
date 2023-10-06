@@ -41,7 +41,6 @@ Choose one of the following architectures:
 
 
 
-
 <!--End of the generated tip-->
 
 </Tip>

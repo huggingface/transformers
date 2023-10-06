@@ -1283,4 +1283,3 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
-
