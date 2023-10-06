@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch PatchTSMixer model."""
 
+import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -349,6 +350,38 @@ class PretrainHead(nn.Module):
         elif self.mode in ["common_channel", "mix_channel"]:
             forecast = self.base_pt_block(x)  # [bs x n_vars x num_patch x patch_size]
             return forecast
+
+
+# Copied from transformers.models.patchtst.modeling_patchtst.positional_encoding
+def positional_encoding(pe, learn_pe, q_len, d_model):
+    # Positional encoding
+    if pe is None:
+        w_pos = torch.empty((q_len, d_model))  # pe = None and learn_pe = False can be used to measure impact of pe
+        nn.init.uniform_(w_pos, -0.02, 0.02)
+        learn_pe = False
+    elif pe == "zeros":
+        w_pos = torch.empty((q_len, d_model))
+        nn.init.uniform_(w_pos, -0.02, 0.02)
+    elif pe == "normal":
+        w_pos = torch.zeros((q_len, 1))
+        torch.nn.init.normal_(w_pos, mean=0.0, std=0.1)
+    elif pe == "uniform":
+        w_pos = torch.zeros((q_len, 1))
+        nn.init.uniform_(w_pos, a=0.0, b=0.1)
+    elif pe == "sincos":
+        pos_enc = torch.zeros(q_len, d_model)
+        position = torch.arange(0, q_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
+        pos_enc[:, 0::2] = torch.sin(position * div_term)
+        pos_enc[:, 1::2] = torch.cos(position * div_term)
+        pos_enc = pos_enc - pos_enc.mean()
+        pos_enc = pos_enc / (pos_enc.std() * 10)
+        w_pos = pos_enc
+    else:
+        raise ValueError(
+            f"{pe} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
+        )
+    return nn.Parameter(w_pos, requires_grad=learn_pe)
 
 
 # Copied from transformers.models.patchtst.modeling_patchtst.compute_num_patches
