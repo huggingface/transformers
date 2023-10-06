@@ -71,12 +71,17 @@ def quick_gelu(x):
     return x * jax.nn.sigmoid(1.702 * x)
 
 
+def gelu_fast(x):
+    return 0.5 * x * (1.0 + jnp.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x)))
+
+
 ACT2FN = {
     "gelu": partial(nn.gelu, approximate=False),
     "relu": nn.relu,
     "silu": nn.swish,
     "swish": nn.swish,
     "gelu_new": partial(nn.gelu, approximate=True),
+    "gelu_fast": gelu_fast,
     "quick_gelu": quick_gelu,
 }
 
