@@ -177,7 +177,7 @@ class LlamaConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the qformer config dict if we are loading from InstructBlipConfig
-        if config_dict.get("model_type") == "llavallama":
+        if config_dict.get("model_type") == "llava":
             config_dict = config_dict["llama_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -189,7 +189,7 @@ class LlamaConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class LlavaConfig(PretrainedConfig):
+class LlavaVisionConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -199,29 +199,27 @@ class LlavaConfig(PretrainedConfig):
 
 
     Args:
-        mm_hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations for vision model.
-        d_model (`int`, *optional*, defaults to 2048):
+        d_model (`int`, *optional*, defaults to 4096):
             Dimensionality of the embeddings and hidden states.
-        n_heads (`int`, *optional*, defaults to 16):
+        mm_hidden_size (`int`, *optional*, defaults to 1024):
+            Dimension of the hidden representations for vision model.
+        n_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_layers (`int`, *optional*, defaults to 24):
+        n_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
-        max_seq_len (`int`, *optional*, defaults to 2048):
-            The maximum sequence length of the model.
-        vocab_size (`int`, *optional*, defaults to 50368):
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+        vocab_size (`int`, *optional*, defaults to 50282):
             Vocabulary size of the Mpt model. Defines the maximum number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`MptModel`]. Check [this
             discussion](https://huggingface.co/bigscience/mpt/discussions/120#633d28389addb8530b406c2a) on how the
             `vocab_size` has been defined.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
 
     Example:
 
     """
 
-    model_type = "llava"
+    model_type = "llavavision"
     attribute_map = {
         "num_attention_heads": "n_heads",
         "hidden_size": "d_model",
@@ -252,8 +250,8 @@ class LlavaConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the qformer config dict if we are loading from InstructBlipConfig
-        if config_dict.get("model_type") == "llavallama":
-            config_dict = config_dict["llava_config"]
+        if config_dict.get("model_type") == "llava":
+            config_dict = config_dict["llava_vision_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
@@ -264,10 +262,10 @@ class LlavaConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class LlavaLlamaConfig(PretrainedConfig):
+class LlavaConfig(PretrainedConfig):
     r"""
-    [`LlavaLlamaConfig`] is the configuration class to store the configuration of a [`LlavaLlamaForCausalLM`]. It is
-    used to instantiate a LlavaLlama model according to the specified arguments, defining the llama model and a llava
+    [`LlavaConfig`] is the configuration class to store the configuration of a [`LlavaForCausalLM`]. It is
+    used to instantiate a Llava model according to the specified arguments, defining the llama model and a llava
     model configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture. objects
     inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
@@ -276,8 +274,8 @@ class LlavaLlamaConfig(PretrainedConfig):
     Args:
         llama_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`LlamaConfig`].
-        llava_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`LlavaConfig`].
+        llava_vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`LlavaVisionConfig`].
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -285,42 +283,42 @@ class LlavaLlamaConfig(PretrainedConfig):
 
     ```python
     >>> from transformers.models.llava.configuration_llava import LlamaConfig
-    >>> from transformers import LlavaConfig, LlavaLlamaConfig, LlavaLlamaForCausalLM
+    >>> from transformers import LlavaVisionConfig, LlavaConfig, LlavaForCausalLM
 
-    >>> # Initializing a LlavaLlamaConfig with shauray/Llava-Llama-2-7B-hf style configuration
-    >>> configuration = LlavaLlamaConfig()
+    >>> # Initializing a LlavaConfig with shauray/Llava-Llama-2-7B-hf style configuration
+    >>> configuration = LlavaConfig()
 
-    >>> # Initializing a LlavaLlamaForCausalLM (with random weights) from the shauray/Llava-Llama-2-7B-hf style configuration
-    >>> model = LlavaLlamaForCausalLM(configuration)
+    >>> # Initializing a LlavaForCausalLM (with random weights) from the shauray/Llava-Llama-2-7B-hf style configuration
+    >>> model = LlavaForCausalLM(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
     >>> # Initializing Llava, Llama configurations
     >>> llama_config = LlamaConfig()
-    >>> llava_config = LlavaConfig()
+    >>> llava_vision_config = LlavaVisionConfig()
 
-    >>> config = LlavaLlamaConfig.from_llava_llama_configs(
-    ...     llava_config,
+    >>> config = LlavaConfig.from_llava_llama_configs(
+    ...     llava_vision_config,
     ...     llama_config,
     ... )
     ```"""
 
-    model_type = "llavallama"
+    model_type = "llava"
 
-    def __init__(self, llama_config=None, llava_config=None, **kwargs):
+    def __init__(self, llama_config=None, llava_vision_config=None, **kwargs):
         super().__init__(**kwargs)
 
         if llama_config is None:
             llama_config = {}
             logger.info("llama_config is None. initializing the LlamaConfig with default values.")
 
-        if llava_config is None:
-            llava_config = {}
-            logger.info("llava_config is None. Initializing the LlavaConfig with default values.")
+        if llava_vision_config is None:
+            llava_vision_config = {}
+            logger.info("llava_vision_config is None. Initializing the LlavaVisionConfig with default values.")
 
         self.llama_config = LlamaConfig(**llama_config)
-        self.llava_config = LlavaConfig(**llava_config)
+        self.llava_vision_config = LlavaVisionConfig(**llava_vision_config)
 
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
@@ -329,18 +327,18 @@ class LlavaLlamaConfig(PretrainedConfig):
     def from_llava_llama_configs(
         cls,
         llama_config: LlamaConfig,
-        llava_config: LlavaConfig,
+        llava_vision_config: LlavaVisionConfig,
         **kwargs,
     ):
         r"""
-        Instantiate a [`LlavaLlamaConfig`] (or a derived class) from a Llama and a Llava model,
+        Instantiate a [`LlavaConfig`] (or a derived class) from a Llama and a Llava model,
 
         Returns:
-            [`LlavaLlamaConfig`]: An instance of a configuration object
+            [`LlavaConfig`]: An instance of a configuration object
         """
 
         return cls(
             llama_config=llama_config.to_dict(),
-            llava_config=llava_config.to_dict(),
+            llava_vision_config=llava_vision_config.to_dict(),
             **kwargs,
         )

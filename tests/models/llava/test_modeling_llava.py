@@ -22,7 +22,7 @@ from typing import Optional, Union
 import requests
 from PIL import Image
 
-from transformers import LlamaConfig, LlavaConfig, LlavaLlamaConfig, is_torch_available
+from transformers import LlamaConfig, LlavaVisionConfig, LlavaConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -41,7 +41,7 @@ if is_torch_available():
 
     from transformers import (
         LlamaModel,
-        LlavaLlamaForCausalLM,
+        LlavaForCausalLM,
         LlavaProcessor,
     )
 
@@ -213,7 +213,7 @@ class LlavaModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return LlavaConfig(
+        return LlavaVisionConfig(
             vocab_size=self.vocab_size,
             image_size=self.image_size,
             batch_size=self.batch_size,
@@ -231,7 +231,7 @@ class LlavaModelTester:
         return config, pixel_values
 
 
-class LlavaLlamaModelTester:
+class LlavaModelTester:
     def __init__(
         self,
         parent,
@@ -278,9 +278,9 @@ class LlavaLlamaModelTester:
         )
 
     def get_config(self):
-        return LlavaLlamaConfig.from_llava_llama_configs(
+        return LlavaConfig.from_llava_llama_configs(
             llama_config=self.llama_model_tester.get_config(),
-            llava_config=self.llava_model_tester.get_config(),
+            llava_vision_config=self.llava_model_tester.get_config(),
         )
 
     def create_and_check_model(
@@ -296,7 +296,7 @@ class LlavaLlamaModelTester:
     def create_and_check_for_causal_lm(
         self, config, input_ids, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = LlavaLlamaForCausalLM(config=config)
+        model = LlavaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids)
@@ -342,11 +342,11 @@ class LlavaLlamaModelTester:
 
 
 @require_torch
-class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LlavaLlamaForCausalLM,) if is_torch_available() else ()
+class LlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (LlavaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-generation": LlavaLlamaForCausalLM,
+            "text-generation": LlavaForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -376,8 +376,8 @@ class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         pass
 
     def setUp(self):
-        self.model_tester = LlavaLlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaLlamaConfig)
+        self.model_tester = LlavaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=LlavaConfig)
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -401,7 +401,7 @@ class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             "input_ids": torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]).to(torch_device),
             "attention_mask": torch.LongTensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).to(torch_device),
         }
-        model = LlavaLlamaForCausalLM(config).to(torch_device)
+        model = LlavaForCausalLM(config).to(torch_device)
         model.eval()
         text_features = model(**inputs_dict)
         self.assertEqual(text_features[0].shape, (1, 10, self.model_tester.llama_model_tester.vocab_size))
@@ -409,7 +409,7 @@ class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     # won't work without input ids
     def test_get_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = LlavaLlamaForCausalLM(config).to(torch_device)
+        model = LlavaForCausalLM(config).to(torch_device)
         model.eval()
         image_features = model.generate(**inputs_dict)
         self.assertEqual(image_features.shape, (self.model_tester.llama_model_tester.batch_size, 20))
@@ -418,7 +418,7 @@ class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
-        for key in ["llama_config", "llava_config"]:
+        for key in ["llama_config", "llava_vision_config"]:
             setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
@@ -436,14 +436,14 @@ class LlavaLlamaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
 
 @require_torch
-class LlavaLlamaIntegrationTest(unittest.TestCase):
+class LlavaIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         prompt = "What is unusual about this image?"
 
-        model = LlavaLlamaForCausalLM.from_pretrained(
+        model = LlavaForCausalLM.from_pretrained(
             "shauray/Llava-Llama-2-7B-hf",
             torch_dtype=torch.float16,
             device_map=torch_device,

@@ -32,7 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_llava import LlamaConfig, LlavaLlamaConfig
+from .configuration_llava import LlamaConfig, LlavaConfig
 
 
 if is_flash_attn_available():
@@ -42,18 +42,18 @@ if is_flash_attn_available():
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "LlavaLlamaConfig"
+_CONFIG_FOR_DOC = "LlavaConfig"
 
 
 def _get_unpad_data(padding_mask):
     seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(padding_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    max_seq_batch_length = seqlens_in_batch.max().item()
+    pad_seq_length = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
     return (
         indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
+        pad_seq_length,
+        max_seq_batch_length,
     )
 
 
@@ -956,8 +956,8 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
 
-class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
-    config_class = LlavaLlamaConfig
+class LlavaForCausalLM(LlamaPreTrainedModel):
+    config_class = LlavaConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -1164,6 +1164,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1171,7 +1172,6 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
@@ -1189,10 +1189,10 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import LlavaProcessor, LlavaLlamaForCausalLM
+        >>> from transformers import LlavaProcessor, LlavaForCausalLM
 
         >>> PATH_TO_CONVERTED_WEIGHTS = "shauray/Llava-Llama-2-7B-hf"
-        >>> model = LlavaLlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = LlavaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> processor = LlavaProcessor.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> url = "https://llava-vl.github.io/static/images/view.jpg"
