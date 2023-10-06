@@ -26,93 +26,23 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {
+    "mlm_vocab_file": "mlm_vocab.txt",
+}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "helboukkouri/character-bert-base-uncased": "https://huggingface.co/helboukkouri/character-bert-base-uncased/resolve/main/vocab.txt",
-        "character_bert-large-uncased": "https://huggingface.co/character_bert-large-uncased/resolve/main/vocab.txt",
-        "character_bert-base-cased": "https://huggingface.co/character_bert-base-cased/resolve/main/vocab.txt",
-        "character_bert-large-cased": "https://huggingface.co/character_bert-large-cased/resolve/main/vocab.txt",
-        "character_bert-base-multilingual-uncased": (
-            "https://huggingface.co/character_bert-base-multilingual-uncased/resolve/main/vocab.txt"
-        ),
-        "character_bert-base-multilingual-cased": "https://huggingface.co/character_bert-base-multilingual-cased/resolve/main/vocab.txt",
-        "character_bert-base-chinese": "https://huggingface.co/character_bert-base-chinese/resolve/main/vocab.txt",
-        "character_bert-base-german-cased": "https://huggingface.co/character_bert-base-german-cased/resolve/main/vocab.txt",
-        "character_bert-large-uncased-whole-word-masking": (
-            "https://huggingface.co/character_bert-large-uncased-whole-word-masking/resolve/main/vocab.txt"
-        ),
-        "character_bert-large-cased-whole-word-masking": (
-            "https://huggingface.co/character_bert-large-cased-whole-word-masking/resolve/main/vocab.txt"
-        ),
-        "character_bert-large-uncased-whole-word-masking-finetuned-squad": (
-            "https://huggingface.co/character_bert-large-uncased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
-        ),
-        "character_bert-large-cased-whole-word-masking-finetuned-squad": (
-            "https://huggingface.co/character_bert-large-cased-whole-word-masking-finetuned-squad/resolve/main/vocab.txt"
-        ),
-        "character_bert-base-cased-finetuned-mrpc": (
-            "https://huggingface.co/character_bert-base-cased-finetuned-mrpc/resolve/main/vocab.txt"
-        ),
-        "character_bert-base-german-dbmdz-cased": "https://huggingface.co/character_bert-base-german-dbmdz-cased/resolve/main/vocab.txt",
-        "character_bert-base-german-dbmdz-uncased": (
-            "https://huggingface.co/character_bert-base-german-dbmdz-uncased/resolve/main/vocab.txt"
-        ),
-        "TurkuNLP/character_bert-base-finnish-cased-v1": (
-            "https://huggingface.co/TurkuNLP/character_bert-base-finnish-cased-v1/resolve/main/vocab.txt"
-        ),
-        "TurkuNLP/character_bert-base-finnish-uncased-v1": (
-            "https://huggingface.co/TurkuNLP/character_bert-base-finnish-uncased-v1/resolve/main/vocab.txt"
-        ),
-        "wietsedv/character_bert-base-dutch-cased": (
-            "https://huggingface.co/wietsedv/character_bert-base-dutch-cased/resolve/main/vocab.txt"
-        ),
+    "mlm_vocab_file": {
+        "helboukkouri/character-bert-base-uncased": "https://huggingface.co/helboukkouri/character-bert-base-uncased/resolve/main/mlm_vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "helboukkouri/character-bert-base-uncased": 512,
-    "character_bert-large-uncased": 512,
-    "character_bert-base-cased": 512,
-    "character_bert-large-cased": 512,
-    "character_bert-base-multilingual-uncased": 512,
-    "character_bert-base-multilingual-cased": 512,
-    "character_bert-base-chinese": 512,
-    "character_bert-base-german-cased": 512,
-    "character_bert-large-uncased-whole-word-masking": 512,
-    "character_bert-large-cased-whole-word-masking": 512,
-    "character_bert-large-uncased-whole-word-masking-finetuned-squad": 512,
-    "character_bert-large-cased-whole-word-masking-finetuned-squad": 512,
-    "character_bert-base-cased-finetuned-mrpc": 512,
-    "character_bert-base-german-dbmdz-cased": 512,
-    "character_bert-base-german-dbmdz-uncased": 512,
-    "TurkuNLP/character_bert-base-finnish-cased-v1": 512,
-    "TurkuNLP/character_bert-base-finnish-uncased-v1": 512,
-    "wietsedv/character_bert-base-dutch-cased": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "helboukkouri/character-bert-base-uncased": {"do_lower_case": True},
-    "character_bert-large-uncased": {"do_lower_case": True},
-    "character_bert-base-cased": {"do_lower_case": False},
-    "character_bert-large-cased": {"do_lower_case": False},
-    "character_bert-base-multilingual-uncased": {"do_lower_case": True},
-    "character_bert-base-multilingual-cased": {"do_lower_case": False},
-    "character_bert-base-chinese": {"do_lower_case": False},
-    "character_bert-base-german-cased": {"do_lower_case": False},
-    "character_bert-large-uncased-whole-word-masking": {"do_lower_case": True},
-    "character_bert-large-cased-whole-word-masking": {"do_lower_case": False},
-    "character_bert-large-uncased-whole-word-masking-finetuned-squad": {"do_lower_case": True},
-    "character_bert-large-cased-whole-word-masking-finetuned-squad": {"do_lower_case": False},
-    "character_bert-base-cased-finetuned-mrpc": {"do_lower_case": False},
-    "character_bert-base-german-dbmdz-cased": {"do_lower_case": False},
-    "character_bert-base-german-dbmdz-uncased": {"do_lower_case": True},
-    "TurkuNLP/character_bert-base-finnish-cased-v1": {"do_lower_case": False},
-    "TurkuNLP/character_bert-base-finnish-uncased-v1": {"do_lower_case": True},
-    "wietsedv/character_bert-base-dutch-cased": {"do_lower_case": False},
+    "helboukkouri/character-bert-base-uncased": {"max_word_length": 50, "do_lower_case": True},
 }
-
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -133,6 +63,23 @@ def whitespace_tokenize(text):
     tokens = text.split()
     return tokens
 
+def special_token_character_ids(
+    index,
+    bow_character_id,
+    eow_character_id,
+    pad_character_id,
+    max_word_length
+):
+    """Generates the character id sequence for a special token with a given index."""
+    assert index > 255, "index range 0-255 is reserved for actual characters"
+    character_ids = [pad_character_id] * max_word_length
+    character_ids[0] = bow_character_id
+    character_ids[1] = index
+    character_ids[2] = eow_character_id
+    # NOTE: we shift everything so that the PAD token
+    #       can be assigned the all zeros vector
+    character_ids = [(index + 1) for index in character_ids] 
+    return character_ids
 
 class CharacterBertTokenizer(PreTrainedTokenizer):
     r"""
@@ -142,8 +89,11 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
-            File containing the vocabulary.
+        mlm_vocab_file (`str`, *optional*, defaults to `None`):
+            File containing the vocabulary for Masked Language Modeling.
+        max_word_length (`int`, *optional*, defaults to `50`):
+            The maximum token length in characters (or bytes since any non-ascii characters 
+            are eventually converted into a sequence of UTF-8 bytes).
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
         do_basic_tokenize (`bool`, *optional*, defaults to `True`):
@@ -183,7 +133,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab_file,
+        mlm_vocab_file=None,
+        max_word_length=50,
         do_lower_case=True,
         do_basic_tokenize=True,
         never_split=None,
@@ -196,13 +147,17 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
-        if not os.path.isfile(vocab_file):
-            raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
-            )
-        self.vocab = load_vocab(vocab_file)
-        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+        if mlm_vocab_file:
+            if not os.path.isfile(mlm_vocab_file):
+                raise ValueError(
+                    f"Can't find a vocabulary file at path '{mlm_vocab_file}'. To load the vocabulary from a Google pretrained"
+                    " model use `tokenizer = CharacterBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                )
+            self.mlm_vocab = load_vocab(mlm_vocab_file)
+        else:
+            self.mlm_vocab = dict()
+
+        self.mlm_ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.mlm_vocab.items()])
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(
@@ -211,8 +166,6 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 tokenize_chinese_chars=tokenize_chinese_chars,
                 strip_accents=strip_accents,
             )
-
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -228,16 +181,66 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        # NOTE: this is to force the use of our custom character ids for
+        # CLS/SEP/MASK/PAD instead of the default ones
+        self._added_tokens_encoder = dict()
+
+        # Maximum number of characters (utf-8 bytes) per word
+        if max_word_length < 3:
+            raise ValueError("maximum word length has to be at least 3")
+        self.max_word_length = max_word_length
+
+        # Character delimiting the BEGINNING of a TOKEN
+        self.bow_character_id = 258
+        # Character delimiting the END of a TOKEN
+        self.eow_character_id = 259
+        # Pads a TOKEN up to the maximum character length
+        self.pad_character_id = 260
+        
+        # Token delimiting the BEGINNING of a TEXT
+        self.cls_character_ids = special_token_character_ids(
+            index=256,
+            bow_character_id=self.bow_character_id,
+            eow_character_id=self.eow_character_id,
+            pad_character_id=self.pad_character_id,
+            max_word_length=max_word_length
+        )
+        # Token delimiting the END of a TEXT
+        self.sep_character_ids = special_token_character_ids(
+            index=257,
+            bow_character_id=self.bow_character_id,
+            eow_character_id=self.eow_character_id,
+            pad_character_id=self.pad_character_id,
+            max_word_length=max_word_length
+        )
+        # Masks a subset of TOKENS for Maked Language Modeling
+        self.mask_character_ids = special_token_character_ids(
+            index=261,
+            bow_character_id=self.bow_character_id,
+            eow_character_id=self.eow_character_id,
+            pad_character_id=self.pad_character_id,
+            max_word_length=max_word_length
+        )
+
+        # Pads a sequence of TOKENS up to a desired length
+        # NOTE: since this is zero, actual characters' ids are assigned
+        # the range 1-256 instead of 0-255. This means that all character
+        # ids are eventually shifted by a +1 so that 0 can be kept for padding.
+        self.pad_character_ids = [0] * max_word_length
+
     @property
     def do_lower_case(self):
         return self.basic_tokenizer.do_lower_case
 
     @property
-    def vocab_size(self):
-        return len(self.vocab)
+    def mlm_vocab_size(self):
+        return len(self.mlm_vocab)
 
     def get_vocab(self):
-        return dict(self.vocab, **self.added_tokens_encoder)
+        return dict()
+
+    def get_mlm_vocab(self):
+        return self.mlm_vocab
 
     def _tokenize(self, text, split_special_tokens=False):
         split_tokens = []
@@ -245,31 +248,82 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             for token in self.basic_tokenizer.tokenize(
                 text, never_split=self.all_special_tokens if not split_special_tokens else None
             ):
-                # If the token is part of the never_split set
-                if token in self.basic_tokenizer.never_split:
-                    split_tokens.append(token)
-                else:
-                    split_tokens += self.wordpiece_tokenizer.tokenize(token)
+                split_tokens.append(token)
         else:
-            split_tokens = self.wordpiece_tokenizer.tokenize(text)
+            split_tokens = whitespace_tokenize(text)
         return split_tokens
 
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
-        return self.vocab.get(token, self.vocab.get(self.unk_token))
+    def _convert_mlm_token_to_id(self, token):
+        """Converts a token (str) into an id using the MLM vocab."""
+        return self.mlm_vocab.get(token, self.mlm_vocab.get(self.unk_token))
 
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.ids_to_tokens.get(index, self.unk_token)
+    def _convert_mlm_id_to_token(self, index):
+        """Converts an index (integer) into a token (str) using the MLM vocab."""
+        return self.mlm_ids_to_tokens.get(index, self.unk_token)
+
+    def _convert_token_to_id(self, token):
+        """Converts a token (str) into a list of character ids (integer)."""
+        if token == self.cls_token:
+            character_ids = self.cls_character_ids
+        elif token == self.sep_token:
+            character_ids = self.sep_character_ids
+        elif token == self.mask_token:
+            character_ids = self.mask_character_ids
+        elif token == self.pad_token:
+            character_ids = self.pad_character_ids
+        else:
+            token_bytes = token.encode("utf-8", "ignore")[
+                : (self.max_word_length - 2)
+            ]
+            character_ids = [self.pad_character_id] * self.max_word_length
+            character_ids[0] = self.bow_character_id
+            for k, index in enumerate(token_bytes, start=1):
+                character_ids[k] = index
+            character_ids[len(token_bytes) + 1] = self.eow_character_id
+            # NOTE: we shift everything so that the PAD token
+            #       can be assigned the all zeros vector
+            character_ids = [(index + 1) for index in character_ids]
+        return character_ids
+
+    def _convert_id_to_token(self, character_ids):
+        """Converts a list of character ids (integer) intp a token (str)."""
+        assert len(character_ids) != self.max_word_length, (
+            f"Got a character sequence of length {len(character_ids)} while "
+            f"`max_word_length={self.max_word_length}`"
+        )
+
+        character_ids_ = [(index - 1) for index in character_ids]
+        if character_ids_ == self.cls_character_ids:
+            return self.cls_token
+        elif character_ids_ == self.sep_character_ids:
+            return self.sep_token
+        elif character_ids_ == self.mask_character_ids:
+            return self.mask_token
+        elif character_ids_ == self.pad_character_ids:
+            return self.pad_token
+        else:
+            utf8_codes = list(
+                filter(
+                    lambda x: (
+                        (x != self.pad_character_id) and
+                        (x != self.bow_character_id) and
+                        (x != self.eow_character_id)
+                    ),
+                    character_ids_,
+                )
+            )
+            return bytes(utf8_codes).decode("utf-8")
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
+
+    #TODO: check the methods below
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+            self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None
+        ) -> List[List[int]]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CHARACTER_BERT sequence has the following format:
@@ -293,7 +347,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -529,60 +583,3 @@ class BasicTokenizer(object):
             else:
                 output.append(char)
         return "".join(output)
-
-
-class WordpieceTokenizer(object):
-    """Runs WordPiece tokenization."""
-
-    def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
-        self.vocab = vocab
-        self.unk_token = unk_token
-        self.max_input_chars_per_word = max_input_chars_per_word
-
-    def tokenize(self, text):
-        """
-        Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
-        tokenization using the given vocabulary.
-
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
-
-        Args:
-            text: A single token or whitespace separated tokens. This should have
-                already been passed through *BasicTokenizer*.
-
-        Returns:
-            A list of wordpiece tokens.
-        """
-
-        output_tokens = []
-        for token in whitespace_tokenize(text):
-            chars = list(token)
-            if len(chars) > self.max_input_chars_per_word:
-                output_tokens.append(self.unk_token)
-                continue
-
-            is_bad = False
-            start = 0
-            sub_tokens = []
-            while start < len(chars):
-                end = len(chars)
-                cur_substr = None
-                while start < end:
-                    substr = "".join(chars[start:end])
-                    if start > 0:
-                        substr = "##" + substr
-                    if substr in self.vocab:
-                        cur_substr = substr
-                        break
-                    end -= 1
-                if cur_substr is None:
-                    is_bad = True
-                    break
-                sub_tokens.append(cur_substr)
-                start = end
-
-            if is_bad:
-                output_tokens.append(self.unk_token)
-            else:
-                output_tokens.extend(sub_tokens)
-        return output_tokens
