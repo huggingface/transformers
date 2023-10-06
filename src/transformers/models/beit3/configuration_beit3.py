@@ -36,7 +36,7 @@ class Beit3Config(PretrainedConfig):
             Dimensionality of the Embedding.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the encoder layers and the pooler layer.
         layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
@@ -57,7 +57,7 @@ class Beit3Config(PretrainedConfig):
             Whether to apply sub layer norm
         max_source_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length of text.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         vocab_size (`int`, *optional*, defaults to 64010):
             Vocabulary size of the BEiT3 model. Defines the number of different image tokens that can be used during
@@ -73,7 +73,7 @@ class Beit3Config(PretrainedConfig):
         label_smoothing (`float`, *optional*, defaults to 0.1):
             Only relevant if `return_loss` is set to `True`. Controls the `epsilon` parameter value for label smoothing
             in the loss calculation. If set to 0, no label smoothing is performed.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
+        logit_scale_init_value (`float`, *optional*, defaults to 2.66):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLIP implementation.
 
     Example:
