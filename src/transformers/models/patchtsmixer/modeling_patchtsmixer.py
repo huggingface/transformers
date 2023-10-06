@@ -15,11 +15,9 @@
 """ PyTorch PatchTSMixer model."""
 
 import math
-import random
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -91,8 +89,6 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
         return_loss (`bool`,  *optional*):
             Whether to return the loss in the `forward` call.
 """
-
-
 
 
 class GatedAttention(nn.Module):
