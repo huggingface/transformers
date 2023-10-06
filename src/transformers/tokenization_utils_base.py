@@ -832,15 +832,15 @@ class SpecialTokensMixin:
     ]
 
     def __init__(self, verbose=True, **kwargs):
-        self._bos_token = None
-        self._eos_token = None
-        self._unk_token = None
-        self._sep_token = None
-        self._pad_token = None
-        self._cls_token = None
-        self._mask_token = None
+        self._bos_token: AddedToken = None
+        self._eos_token: AddedToken = None
+        self._unk_token: AddedToken = None
+        self._sep_token: AddedToken = None
+        self._pad_token: AddedToken = None
+        self._cls_token: AddedToken = None
+        self._mask_token: AddedToken = None
         self._pad_token_type_id = 0
-        self._additional_special_tokens = []
+        self._additional_special_tokens: List[AddedToken] = []
         self.verbose = verbose
 
         # We directly set the hidden value to allow initialization with special tokens
@@ -1176,24 +1176,23 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        if value is None:
-            self._additional_special_tokens = value
-            return
-
         self._additional_special_tokens = [] if value is not None else None
-        # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
+        # 1. we are resetting the tokens that should not be special
+        updated_tokens = []
+        for token in self._additional_special_token:
+            if token not in value or str(token) not in value:
+                token.special = False
+                updated_tokens.append(token)
+
+        # 2. The new additional special tokens should also be updated
         if value is not None:
             for token in value:
-                if isinstance(token, str) and token != "":
-                    if hasattr(self, "_added_tokens_decoder") and str(token) in self._added_tokens_encoder:
-                        self._added_tokens_decoder[self._added_tokens_encoder[token]].special = True
-                        token = self._added_tokens_decoder[self._added_tokens_encoder[token]]
-                    else:
-                        # legacy behaviour
-                        token = AddedToken(token, normalized=False, rstrip=True, lstrip=True, special=True)
-                elif not isinstance(token, AddedToken):
-                    raise ValueError(f"Cannot add instance of type {type(value)} to additional_special_tokens!")
-                self._additional_special_tokens.append(token)
+                if str(value) not in self.special_tokens_map.values()
+                    self._additional_special_token.appemd(token)
+
+        # 3. Add everything to the tokenizer to overwrite
+        updated_tokens += self._additional_special_token
+        self.add_tokens(updated_tokens, special_tokens = True)
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -1353,16 +1352,7 @@ class SpecialTokensMixin:
         Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
         special tokens are tokenized.
         """
-        all_tokens = []
-        seen = set()
-        for value in self.special_tokens_map_extended.values():
-            if isinstance(value, (list, tuple)):
-                tokens_to_add = [token for token in value if str(token) not in seen]
-            else:
-                tokens_to_add = [value] if str(value) not in seen else []
-            seen.update(map(str, tokens_to_add))
-            all_tokens.extend(tokens_to_add)
-        return all_tokens
+        return [tok for tok in self.added_tokens_decoder if tok.special]
 
     @property
     def all_special_tokens(self) -> List[str]:
@@ -1371,7 +1361,7 @@ class SpecialTokensMixin:
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
-        all_toks = [str(s) for s in self.all_special_tokens_extended]
+        all_toks = [str(tok) for tok in self.added_tokens_decoder if tok.special]
         return all_toks
 
     @property
