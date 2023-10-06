@@ -493,8 +493,8 @@ class UnivNetGan(PreTrainedModel):
                 deterministic.
 
         Returns:
-            `torch.FloatTensor`: Tensor containing the speech waveform. IF the input spectrogram is batched, wil be of
-            shape `(batch_size, num_frames)`. If un-batched, will be of shape `(num_frames,)`.
+            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
+            shape `(batch_size, num_frames)`. If unbatched, will be of shape `(num_frames,)`.
 
         Example:
 
