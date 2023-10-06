@@ -16,20 +16,20 @@ rendered properly in your Markdown viewer.
 
 # 🤗 Transformers简介
 
-为[PyTorch](https://pytorch.org/), [TensorFlow](https://www.tensorflow.org/)和[JAX](https://jax.readthedocs.io/en/latest/)打造的先进的机器学习工具.
+为 [PyTorch](https://pytorch.org/)、[TensorFlow](https://www.tensorflow.org/) 和 [JAX](https://jax.readthedocs.io/en/latest/) 打造的先进的机器学习工具.
 
-🤗 Transformers 提供了可以轻松地下载并且训练先进的预训练模型的API和工具. 使用预训练模型可以减少计算消耗和碳排放, 并且节省从头训练所需要的时间和资源. 这些模型支持不同模态中的常见任务，比如:
+🤗 Transformers 提供了可以轻松地下载并且训练先进的预训练模型的 API 和工具。使用预训练模型可以减少计算消耗和碳排放，并且节省从头训练所需要的时间和资源。这些模型支持不同模态中的常见任务，比如：
 
-📝 **自然语言处理**: 文本分类, 命名实体识别, 问答, 语言建模, 摘要, 翻译, 多项选择和文本生成.<br>
-🖼️ **机器视觉**: 图像分类, 目标检测和语义分割.<br>
-🗣️ **音频**: 自动语音识别和音频分类.<br>
-🐙 **多模态**: 表格问答, 光学字符识别, 从扫描文档提取信息, 视频分类和视觉问答.
+📝 **自然语言处理**：文本分类、命名实体识别、问答、语言建模、摘要、翻译、多项选择和文本生成。<br>
+🖼️ **机器视觉**：图像分类、目标检测和语义分割。<br>
+🗣️ **音频**：自动语音识别和音频分类。<br>
+🐙 **多模态**：表格问答、光学字符识别、从扫描文档提取信息、视频分类和视觉问答。
 
-🤗 Transformers支持在PyTorch, TensorFlow和JAX上的互操作性. 这给在模型的每个阶段使用不同的框架带来了灵活性; 在一个框架中使用几行代码训练一个模型, 然后在另一个框架中加载它并进行推理. 模型也可以被导出为ONNX和TorchScript格式, 用于在生产环境中部署.
+🤗 Transformers 支持在 PyTorch、TensorFlow 和 JAX 上的互操作性. 这给在模型的每个阶段使用不同的框架带来了灵活性；在一个框架中使用几行代码训练一个模型，然后在另一个框架中加载它并进行推理。模型也可以被导出为 ONNX 和 TorchScript 格式，用于在生产环境中部署。
 
-马上加入在[Hub](https://huggingface.co/models), [forum](https://discuss.huggingface.co/), 或者[Discord](https://discord.com/invite/JfAtkvEtRb)上正在快速发展的社区吧!
+马上加入在 [Hub](https://huggingface.co/models)、[论坛](https://discuss.huggingface.co/) 或者 [Discord](https://discord.com/invite/JfAtkvEtRb) 上正在快速发展的社区吧！
 
-## 如果你需要来自Hugging Face团队的个性化支持
+## 如果你需要来自 Hugging Face 团队的个性化支持
 
 <a target="_blank" href="https://huggingface.co/support">
     <img alt="HuggingFace Expert Acceleration Program" src="https://cdn-media.huggingface.co/marketing/transformers/new-support-improved.png" style="width: 100%; max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
@@ -39,15 +39,15 @@ rendered properly in your Markdown viewer.
 
 这篇文档被组织为以下5个章节:
 
-- **开始使用** 包含了库的快速上手和安装说明, 便于配置和运行.
-- **教程** 是一个初学者开始的好地方. 本章节将帮助你获得你会用到的使用这个库的基本技能.
-- **操作指南** 向你展示如何实现一个特定目标, 比如为语言建模微调一个预训练模型或者如何创造并分享个性化模型.
-- **概念指南** 对🤗 Transformers的模型, 任务和设计理念背后的基本概念和思想做了更多的讨论和解释.
-- **API介绍** 描述了所有的类和函数:
+- **开始使用** 包含了库的快速上手和安装说明，便于配置和运行。
+- **教程** 是一个初学者开始的好地方。本章节将帮助你获得你会用到的使用这个库的基本技能。
+- **操作指南** 向你展示如何实现一个特定目标，比如为语言建模微调一个预训练模型或者如何创造并分享个性化模型。
+- **概念指南** 对 🤗 Transformers 的模型，任务和设计理念背后的基本概念和思想做了更多的讨论和解释。
+- **API 介绍** 描述了所有的类和函数：
 
-  - **MAIN CLASSES** 详述了配置(configuration)、模型(model)、分词器(tokenizer)和流水线(pipeline)这几个最重要的类.
-  - **MODELS** 详述了在这个库中和每个模型实现有关的类和函数.
-  - **INTERNAL HELPERS** 详述了内部使用的工具类和函数.
+  - **MAIN CLASSES** 详述了配置（configuration）、模型（model）、分词器（tokenizer）和流水线（pipeline）这几个最重要的类。
+  - **MODELS** 详述了在这个库中和每个模型实现有关的类和函数。
+  - **INTERNAL HELPERS** 详述了内部使用的工具类和函数。
 
 ### 支持的模型
 
@@ -229,8 +229,8 @@ rendered properly in your Markdown viewer.
 
 ### 支持的框架
 
-下表展示了库中对每个模型的支持情况, 是否具有Python分词器 (表中的"Tokenizer slow"). 是否具有由🤗 Tokenizers库支持的快速分词器(表中的"Tokenizer fast"), 是否支持Jax (通过
-Flax), PyTorch, 和/或者 TensorFlow.
+下表展示了库中对每个模型的支持情况，如是否具有 Python 分词器（表中的“Tokenizer slow”）、是否具有由 🤗 Tokenizers 库支持的快速分词器（表中的“Tokenizer fast”）、是否支持 Jax（通过
+Flax）、PyTorch 与 TensorFlow。
 
 <!--This table is updated automatically from the auto modules with _make fix-copies_. Do not update manually!-->
 
