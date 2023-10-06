@@ -311,7 +311,7 @@ torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=8,
+    pytest_num_workers=6,
 )
 
 
@@ -347,6 +347,7 @@ pipelines_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     marker="is_pipeline_test",
+    pytest_num_workers=6,
 )
 
 
@@ -536,15 +537,15 @@ doc_test_job = CircleCIJob(
 )
 
 REGULAR_TESTS = [
-    torch_and_tf_job,
-    torch_and_flax_job,
+    # torch_and_tf_job,
+    # torch_and_flax_job,
     torch_job,
-    tf_job,
-    flax_job,
-    custom_tokenizers_job,
-    hub_job,
-    onnx_job,
-    exotic_models_job,
+    # tf_job,
+    # flax_job,
+    # custom_tokenizers_job,
+    # hub_job,
+    # onnx_job,
+    # exotic_models_job,
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
@@ -580,8 +581,8 @@ def create_circleci_config(folder=None):
             test_list = f.read()
     else:
         test_list = []
-    # if len(test_list) > 0:
-    #     jobs.extend(REGULAR_TESTS)
+    if len(test_list) > 0:
+        jobs.extend(REGULAR_TESTS)
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
