@@ -95,28 +95,26 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             Path to the vocabulary file.
-        merges_file (`str`):
+        merges_file (`str`, *optional*):
             Path to the merges file.
-        normalizer_file (`str`, *optional*, defaults to `None`):
+        normalizer_file (`str`, *optional*):
             Path to the normalizer_file file.
-        errors (`str`, *optional*, defaults to `"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See
-            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        tokenizer_file (`str`, *optional*):
+            Path to [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The beginning of sequence token. The `decoder_start_token_id` is used to set the first token as
             `"<|startoftranscript|>"` when generating.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (Whisper tokenizer detect beginning of words by the preceding space).
-        trim_offsets (`bool`, *optional*, defaults to `True`):
-            Whether or not the post-processing step should trim offsets to avoid including whitespaces.
         language (`str`, *optional*):
             The language of the transcription text. The corresponding language id token is appended to the start of the
             sequence for multilingual speech recognition and speech translation tasks, e.g. for Spanish the token
