@@ -73,9 +73,9 @@ Hugging Faceチームのメンバーがサポートを提供するので、一�
 [`~PreTrainedModel.save_pretrained`]です。
 これらはシリアライゼーションとデシリアライゼーションに使用されます。
 `BrandNewBertModel.forward`などの他の重要な機能は、新しい「modeling_brand_new_bert.py」スクリプトで完全に定義されるべきです。
-次に、特定のヘッドレイヤーを持つモデル（たとえば「BrandNewBertForMaskedLM」）が「BrandNewBertModel」を継承するのではなく、
-抽象化のレベルを低く保つために、そのフォワードパスで「BrandNewBertModel」を呼び出すコンポーネントとして使用されるようにしたいと考えています。
-新しいモデルには常に「BrandNewBertConfig」という設定クラスが必要です。この設定は常に[`PreTrainedModel`]の属性として保存され、
+次に、特定のヘッドレイヤーを持つモデル（たとえば `BrandNewBertForMaskedLM` ）が `BrandNewBertModel` を継承するのではなく、
+抽象化のレベルを低く保つために、そのフォワードパスで `BrandNewBertModel` を呼び出すコンポーネントとして使用されるようにしたいと考えています。
+新しいモデルには常に `BrandNewBertConfig` という設定クラスが必要です。この設定は常に[`PreTrainedModel`]の属性として保存され、
 したがって、`BrandNewBertPreTrainedModel`から継承するすべてのクラスで`config`属性を介してアクセスできます。
 
 ```python
