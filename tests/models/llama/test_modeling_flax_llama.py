@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import LlamaConfig, is_flax_available
+from transformers import LlamaConfig, is_flax_available, is_tokenizers_available
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -27,8 +27,11 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 if is_flax_available():
     import jax.numpy as jnp
 
-    from transformers import LlamaTokenizerFast
     from transformers.models.llama.modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel
+
+
+if is_tokenizers_available():
+    from transformers import LlamaTokenizerFast
 
 
 class FlaxLlamaModelTester:
@@ -45,7 +48,6 @@ class FlaxLlamaModelTester:
         hidden_size=16,
         num_hidden_layers=2,
         num_attention_heads=2,
-        attention_types=[[["global", "local"], 2]],
         intermediate_size=64,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -65,7 +67,6 @@ class FlaxLlamaModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.attention_types = attention_types
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob

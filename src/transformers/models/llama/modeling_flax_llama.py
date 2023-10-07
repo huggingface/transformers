@@ -140,14 +140,10 @@ def rotate_half(tensor):
     rotate_half_tensor = jnp.concatenate(
         (-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1
     )
-    rotate_half_tensor = jnp.concatenate(
-        (-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1
-    )
     return rotate_half_tensor
 
 
-def apply_rotary_pos_emb(tensor, sincos):
-    sin_pos, cos_pos = sincos
+def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
 
@@ -179,10 +175,10 @@ class FlaxLlamaRotaryEmbedding(nn.Module):
 
     def __call__(self, key, query, position_ids):
         sincos = self.sincos[position_ids]
-        sincos = jnp.split(sincos, 2, axis=-1)
+        sin_pos, cos_pos = jnp.split(sincos, 2, axis=-1)
 
-        key = apply_rotary_pos_emb(key, sincos)
-        query = apply_rotary_pos_emb(query, sincos)
+        key = apply_rotary_pos_emb(key, sin_pos, cos_pos)
+        query = apply_rotary_pos_emb(query, sin_pos, cos_pos)
 
         key = jnp.asarray(key, dtype=self.dtype)
         query = jnp.asarray(query, dtype=self.dtype)
@@ -578,7 +574,7 @@ class FlaxLlamaModule(nn.Module):
             dtype=self.dtype,
         )
         self.layers = FlaxLlamaLayerCollection(self.config, dtype=self.dtype)
-        self.norm = FlaxLlamaRMSNorm(self.config)
+        self.norm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
 
     def __call__(
         self,
