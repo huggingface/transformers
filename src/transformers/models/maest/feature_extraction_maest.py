@@ -125,7 +125,7 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
             waveform,
             window=np.array(self.window),
             frame_length=self.n_fft,
-            hop_length=self.n_fft // 2,
+            hop_length=self.hop_length,
             power=2,
             mel_filters=np.array(self.mel_fb),
             min_value=1e-30,
