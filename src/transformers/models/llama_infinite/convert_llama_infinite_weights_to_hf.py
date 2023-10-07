@@ -20,7 +20,7 @@ import warnings
 
 import torch
 
-from transformers import LlamaInfiniteConfig, LlamaInfiniteForCausalLM, LlamaInfiniteTokenizer
+from transformers import LlamaInfiniteConfig, LlamaInfiniteForCausalLM, LlamaTokenizer
 
 
 try:
@@ -43,10 +43,10 @@ python src/transformers/models/llama_infinite/convert_llama_infinite_weights_to_
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import LlamaInfiniteForCausalLM, LlamaInfiniteTokenizer
+from transformers import LlamaInfiniteForCausalLM, LlamaTokenizer
 
 model = LlamaInfiniteForCausalLM.from_pretrained("/output/path")
-tokenizer = LlamaInfiniteTokenizer.from_pretrained("/output/path")
+tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 ```
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
@@ -103,7 +103,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
     else:
         max_position_embeddings = 2048
 
-    tokenizer_class = LlamaInfiniteTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
     if tokenizer_path is not None:
         tokenizer = tokenizer_class(tokenizer_path)
         tokenizer.save_pretrained(model_path)
@@ -280,7 +280,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
 
 def write_tokenizer(tokenizer_path, input_tokenizer_path):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = LlamaInfiniteTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
     print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(tokenizer_path)

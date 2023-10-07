@@ -4953,7 +4953,6 @@ if TYPE_CHECKING:
         from .models.layoutxlm import LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.llama import LlamaTokenizerFast
-        from .models.llama_infinite import LlamaTokenizerInfiniteFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
         from .models.markuplm import MarkupLMTokenizerFast
