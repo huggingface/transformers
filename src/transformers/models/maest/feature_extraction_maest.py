@@ -118,7 +118,7 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
         max_length: int,
     ) -> np.ndarray:
         """
-        Get mel-spectrogram features using Librosa.
+        Get mel-spectrogram features using audio_utils.
         """
 
         melspec = spectrogram(
