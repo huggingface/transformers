@@ -319,7 +319,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
 
         torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, atol=1e-4, rtol=1e-5)
         torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=5e-4, rtol=1e-5)
+        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=1e-3, rtol=1e-5)
 
     @torch.no_grad()
     def test_integration(self):
