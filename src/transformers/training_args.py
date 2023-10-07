@@ -1378,7 +1378,7 @@ class TrainingArguments:
             if self.half_precision_backend == "apex":
                 raise ValueError(
                     " `--half_precision_backend apex`: GPU bf16 is not supported by apex. Use"
-                    " `--half_precision_backend cuda_amp` instead"
+                    " `--half_precision_backend auto` instead"
                 )
 
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
