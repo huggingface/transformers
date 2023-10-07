@@ -169,7 +169,8 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         vocab_file (`str`, *optional*):
             File containing the vocabulary.
         tokenizer_file (`str`, *optional*):
-            Path to a pre-trained tokenizer file. This file should contain the pre-trained tokenizer configuration in JSON and is used to initialize the tokenizer. If not provided, the tokenizer will be initialized from scratch.
+            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):

@@ -104,7 +104,8 @@ class BartTokenizerFast(PreTrainedTokenizerFast):
         merges_file (`str`, *optional*):
             Path to the merges file.
         tokenizer_file (`str`, *optional*):
-            Path to a pre-trained tokenizer file. This file should contain the pre-trained tokenizer configuration in JSON and is used to initialize the tokenizer. If not provided, the tokenizer will be initialized from scratch.
+            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.

@@ -101,7 +101,6 @@ OBJECTS_TO_IGNORE = [
     "BitImageProcessor",
     "BlenderbotConfig",
     "BlenderbotSmallConfig",
-    "BlenderbotTokenizerFast",
     "Blip2QFormerConfig",
     "Blip2VisionConfig",
     "BlipTextConfig",

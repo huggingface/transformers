@@ -77,7 +77,8 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
         tokenizer_file (`str`, *optional*):
-            Path to a pre-trained tokenizer file. This file should contain the pre-trained tokenizer configuration in JSON and is used to initialize the tokenizer. If not provided, the tokenizer will be initialized from scratch.
+            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.

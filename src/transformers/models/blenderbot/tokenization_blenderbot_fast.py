@@ -76,10 +76,13 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             Path to the vocabulary file.
-        merges_file (`str`):
+        merges_file (`str`, *optional*):
             Path to the merges file.
+        tokenizer_file (`str`, *optional*):
+            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.

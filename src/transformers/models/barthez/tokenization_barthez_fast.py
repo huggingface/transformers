@@ -72,7 +72,8 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
         tokenizer_file (`str`, *optional*):
-            Path to a pre-trained tokenizer file. This file should contain the pre-trained tokenizer configuration in JSON and is used to initialize the tokenizer. If not provided, the tokenizer will be initialized from scratch.
+            [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
+            contains everything needed to load the tokenizer.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
