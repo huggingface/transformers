@@ -364,6 +364,8 @@
         title: LLaMA
       - local: model_doc/llama2
         title: Llama2
+      - local: model_doc/llama_infinite
+        title: LlamaInfinite
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5

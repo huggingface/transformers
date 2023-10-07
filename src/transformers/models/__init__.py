@@ -116,6 +116,7 @@ from . import (
     levit,
     lilt,
     llama,
+    llama_infinite,
     longformer,
     longt5,
     luke,
