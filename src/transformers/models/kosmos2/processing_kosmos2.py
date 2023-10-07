@@ -231,14 +231,18 @@ class Kosmos2Processor(ProcessorMixin):
                 if min_len_not_padded != max_len_padded:
                     if self.tokenizer.padding_side == "right":
                         input_ids = [x + [self.tokenizer.pad_token_id] * (max_len_padded - len(x)) for x in input_ids]
-                        image_embeds_position_mask = [x + [0] * (max_len_padded - len(x)) for x in image_embeds_position_mask]
+                        image_embeds_position_mask = [
+                            x + [0] * (max_len_padded - len(x)) for x in image_embeds_position_mask
+                        ]
                         if "attention_mask" in encoding:
                             encoding["attention_mask"] = [
                                 x + [0] * (max_len_padded - len(x)) for x in encoding["attention_mask"]
                             ]
                     elif self.tokenizer.padding_side == "left":
                         input_ids = [[self.tokenizer.pad_token_id] * (max_len_padded - len(x)) + x for x in input_ids]
-                        image_embeds_position_mask = [[0] * (max_len_padded - len(x)) + x for x in image_embeds_position_mask]
+                        image_embeds_position_mask = [
+                            [0] * (max_len_padded - len(x)) + x for x in image_embeds_position_mask
+                        ]
                         if "attention_mask" in encoding:
                             encoding["attention_mask"] = [
                                 [0] * (max_len_padded - len(x)) + x for x in encoding["attention_mask"]

@@ -296,8 +296,8 @@ class Kosmos2ModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
+            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+            the weighted average in the self-attention heads.
         vision_model_output(`BaseModelOutputWithPooling`, *optional*):
             The output of the [`Kosmos2VisionModel`].
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -353,8 +353,8 @@ class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute the
-            weighted average in the self-attention heads.
+            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+            the weighted average in the self-attention heads.
         vision_model_output(`BaseModelOutputWithPooling`, *optional*):
             The output of the [`Kosmos2VisionModel`].
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
