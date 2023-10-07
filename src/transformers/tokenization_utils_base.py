@@ -2262,6 +2262,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # uses the information stored in `added_tokens_decoder`.
         if init_kwargs.get("slow_to_fast", False):
             tokenizer.add_tokens([token for _, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])])
+            # TODO I should be able to only add once :) for faster conversion
             # finally we add all the special_tokens to make sure eveything is initialized
             tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
 
@@ -2425,6 +2426,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if "name_or_path" in tokenizer_config:
             tokenizer_config.pop("name_or_path")
             tokenizer_config.pop("special_tokens_map_file", None)
+            tokenizer_config.pop("tokenizer_file", None)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
