@@ -2400,7 +2400,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.pop(file_id, None)
 
         # no typefields, this way old fast and slow can load it
-        tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True)
+        tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True, save = True)
 
         # Process added tokens seperatly: allows previous versions to ignore it!
         added_tokens = {}
