@@ -492,7 +492,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    ...     return tokenizer(dataset["text"])
    ```
 
-    その後、[~datasets.Dataset.map]を使用してデータセット全体に適用します：
+    その後、[`~datasets.Dataset.map`]を使用してデータセット全体に適用します：
 
     ```python
     >>> dataset = dataset.map(tokenize_dataset, batched=True)
