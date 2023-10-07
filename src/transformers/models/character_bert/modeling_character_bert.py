@@ -20,7 +20,7 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Callable
 
 import torch
 import torch.utils.checkpoint
@@ -50,6 +50,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_character_bert import CharacterBertConfig
+from .tokenization_character_bert import PAD_CHARACTER_ID
 
 
 logger = logging.get_logger(__name__)
@@ -158,13 +159,175 @@ def load_tf_weights_in_character_bert(model, config, tf_checkpoint_path):
     return model
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->CharacterBert
+# NOTE: the following class is taken from:
+# https://github.com/allenai/allennlp/blob/main/allennlp/modules/highway.py
+class Highway(torch.nn.Module):
+    """
+    A `Highway layer <https://arxiv.org/abs/1505.00387)>`__ does a gated combination of a linear transformation and a
+    non-linear transformation of its input. :math:`y = g * x + (1 - g) * f(A(x))`, where :math:`A` is a linear
+    transformation, :math:`f` is an element-wise non-linearity, and :math:`g` is an element-wise gate, computed as
+    :math:`sigmoid(B(x))`.
+    This module will apply a fixed number of highway layers to its input, returning the final result.
+    # Parameters
+    input_dim : `int`, required The dimensionality of :math:`x`. We assume the input has shape `(batch_size, ...,
+    input_dim)`. num_layers : `int`, optional (default=`1`) The number of highway layers to apply to the input.
+    activation : `Callable[[torch.Tensor], torch.Tensor]`, optional (default=`torch.nn.functional.relu`) The
+    non-linearity to use in the highway layers.
+    """
+
+    def __init__(
+        self,
+        input_dim: int,
+        num_layers: int = 1,
+        activation: Callable[[torch.Tensor], torch.Tensor] = torch.nn.functional.relu,
+    ) -> None:
+        super().__init__()
+        self._input_dim = input_dim
+        self._layers = torch.nn.ModuleList([torch.nn.Linear(input_dim, input_dim * 2) for _ in range(num_layers)])
+        self._activation = activation
+        for layer in self._layers:
+            # We should bias the highway layer to just carry its input forward.  We do that by
+            # setting the bias on `B(x)` to be positive, because that means `g` will be biased to
+            # be high, so we will carry the input forward.  The bias on `B(x)` is the second half
+            # of the bias vector in each Linear layer.
+            layer.bias[input_dim:].data.fill_(1)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        current_input = inputs
+        for layer in self._layers:
+            projected_input = layer(current_input)
+            linear_part = current_input
+            # NOTE: if you modify this, think about whether you should modify the initialization
+            # above, too.
+            nonlinear_part, gate = projected_input.chunk(2, dim=-1)
+            nonlinear_part = self._activation(nonlinear_part)
+            gate = torch.sigmoid(gate)
+            current_input = gate * linear_part + (1 - gate) * nonlinear_part
+        return current_input
+
+
+# NOTE: The CharacterCnn was adapted from `_ElmoCharacterEncoder`:
+# https://github.com/allenai/allennlp/blob/main/allennlp/modules/elmo.py#L254
+class CharacterCnn(torch.nn.Module):
+    """
+    Computes context insensitive token representation using multiple CNNs. This embedder has input character ids of
+    size (batch_size, sequence_length, 50) and returns (batch_size, sequence_length, hidden_size), where hidden_size is
+    typically 768.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.character_embeddings_dim = config.character_embeddings_dim
+        self.cnn_activation = config.cnn_activation
+        self.cnn_filters = config.cnn_filters
+        self.num_highway_layers = config.num_highway_layers
+        self.max_word_length = config.max_word_length
+        self.hidden_size = config.hidden_size
+        # NOTE: this is the 256 possible utf-8 bytes + special slots for the
+        # [CLS]/[SEP]/[PAD]/[MASK] characters as well as beginning/end of
+        # word symbols and character padding for short words -> total of 263
+        self.character_vocab_size = 263
+        self._init_weights()
+
+    def get_output_dim(self):
+        return self.hidden_size
+
+    def _init_weights(self):
+        self._init_char_embedding()
+        self._init_cnn_weights()
+        self._init_highway()
+        self._init_projection()
+
+    def _init_char_embedding(self):
+        weights = torch.empty((self.character_vocab_size, self.character_embeddings_dim))
+        nn.init.normal_(weights)
+        weights[0].fill_(0.0)  # the all zeros token is used for padding token sequences
+        weights[PAD_CHARACTER_ID + 1].fill_(0.0)  # this character id is used for padding character sequences
+        self._char_embedding_weights = torch.nn.Parameter(torch.FloatTensor(weights), requires_grad=True)
+
+    def _init_cnn_weights(self):
+        convolutions = []
+        for i, (width, num) in enumerate(self.cnn_filters):
+            conv = torch.nn.Conv1d(
+                in_channels=self.character_embeddings_dim, out_channels=num, kernel_size=width, bias=True
+            )
+            conv.weight.requires_grad = True
+            conv.bias.requires_grad = True
+            convolutions.append(conv)
+            self.add_module(f"char_conv_{i}", conv)
+        self._convolutions = convolutions
+
+    def _init_highway(self):
+        # the highway layers have same dimensionality as the number of cnn filters
+        n_filters = sum(f[1] for f in self.cnn_filters)
+        self._highways = Highway(n_filters, self.num_highway_layers, activation=nn.functional.relu)
+        for k in range(self.num_highway_layers):
+            # The AllenNLP highway is one matrix multplication with concatenation of
+            # transform and carry weights.
+            self._highways._layers[k].weight.requires_grad = True
+            self._highways._layers[k].bias.requires_grad = True
+
+    def _init_projection(self):
+        n_filters = sum(f[1] for f in self.cnn_filters)
+        self._projection = torch.nn.Linear(n_filters, self.hidden_size, bias=True)
+        self._projection.weight.requires_grad = True
+        self._projection.bias.requires_grad = True
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        """
+        Compute context insensitive token embeddings from characters. # Parameters inputs : `torch.Tensor` Shape
+        `(batch_size, sequence_length, 50)` of character ids representing the current batch. # Returns output:
+        `torch.Tensor` Shape `(batch_size, sequence_length, embedding_dim)` tensor with context insensitive token
+        representations.
+        """
+
+        # character embeddings
+        # (batch_size * sequence_length, max_word_length, embed_dim)
+        character_embedding = torch.nn.functional.embedding(
+            inputs.view(-1, self.max_word_length), self._char_embedding_weights
+        )
+
+        # CNN representations
+        if self.cnn_activation == "tanh":
+            activation = torch.tanh
+        elif self.cnn_activation == "relu":
+            activation = torch.nn.functional.relu
+        else:
+            raise Exception("ConfigurationError: Unknown activation")
+
+        # (batch_size * sequence_length, embed_dim, max_word_length)
+        character_embedding = torch.transpose(character_embedding, 1, 2)
+        convs = []
+        for i in range(len(self._convolutions)):
+            conv = getattr(self, "char_conv_{}".format(i))
+            convolved = conv(character_embedding)
+            # (batch_size * sequence_length, n_filters for this width)
+            convolved, _ = torch.max(convolved, dim=-1)
+            convolved = activation(convolved)
+            convs.append(convolved)
+
+        # (batch_size * sequence_length, n_filters)
+        token_embedding = torch.cat(convs, dim=-1)
+
+        # apply the highway layers (batch_size * sequence_length, n_filters)
+        token_embedding = self._highways(token_embedding)
+
+        # final projection  (batch_size * sequence_length, embedding_dim)
+        token_embedding = self._projection(token_embedding)
+
+        # reshape to (batch_size, sequence_length, embedding_dim)
+        batch_size, sequence_length, _ = inputs.size()
+        output = token_embedding.view(batch_size, sequence_length, -1)
+
+        return output
+
+
 class CharacterBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = CharacterCnn(config)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
@@ -190,7 +353,7 @@ class CharacterBertEmbeddings(nn.Module):
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
-            input_shape = input_ids.size()
+            input_shape = input_ids[:, :, 0].size()
         else:
             input_shape = inputs_embeds.size()[:-1]
 
@@ -674,7 +837,6 @@ class CharacterBertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->CharacterBert
 class CharacterBertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -682,9 +844,9 @@ class CharacterBertLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.mlm_vocab_size, bias=False)
 
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+        self.bias = nn.Parameter(torch.zeros(config.mlm_vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
@@ -730,7 +892,6 @@ class CharacterBertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->CharacterBert,bert->character_bert
 class CharacterBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -738,13 +899,21 @@ class CharacterBertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = CharacterBertConfig
-    load_tf_weights = load_tf_weights_in_character_bert
+    load_tf_weights = None
     base_model_prefix = "character_bert"
     supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        if isinstance(module, CharacterCnn):
+            # We need to handle the case of these parameters since it is not an actual module
+            module._char_embedding_weights.data.normal_()
+            # token padding
+            module._char_embedding_weights.data[0].fill_(0.0)
+            # character padding
+            module._char_embedding_weights.data[PAD_CHARACTER_ID + 1].fill_(0.0)
+        elif isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -868,7 +1037,6 @@ CHARACTER_BERT_INPUTS_DOCSTRING = r"""
     "The bare CharacterBert Model transformer outputting raw hidden-states without any specific head on top.",
     CHARACTER_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertModel with BERT->CHARACTER_BERT,Bert->CharacterBert
 class CharacterBertModel(CharacterBertPreTrainedModel):
     """
 
@@ -965,7 +1133,7 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
+            input_shape = input_ids.size()[:-1]
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
@@ -1052,7 +1220,6 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
     """,
     CHARACTER_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForPreTraining with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert,bert-base-uncased->helboukkouri/character-bert-base-uncased
 class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1139,7 +1306,7 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
         total_loss = None
         if labels is not None and next_sentence_label is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.mlm_vocab_size), labels.view(-1))
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
 
@@ -1159,7 +1326,6 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
 @add_start_docstrings(
     """CharacterBert Model with a `language modeling` head on top for CLM fine-tuning.""", CHARACTER_BERT_START_DOCSTRING
 )
-# Copied from transformers.models.bert.modeling_bert.BertLMHeadModel with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert
 class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1257,7 +1423,7 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.mlm_vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -1301,7 +1467,6 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings("""CharacterBert Model with a `language modeling` head on top.""", CHARACTER_BERT_START_DOCSTRING)
-# Copied from transformers.models.bert.modeling_bert.BertForMaskedLM with BERT->CHARACTER_BERT,Bert->CharacterBert,bert->character_bert
 class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1378,7 +1543,7 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.mlm_vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
