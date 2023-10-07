@@ -266,7 +266,7 @@ pip install pytesseract
 
 ## Using `pipeline` on large models with 🤗 `accelerate`:
 
-まず、「accelerate」を「pip install accelerate」でインストールしていることを確認してください。
+まず、`accelerate` を`pip install accelerate` でインストールしていることを確認してください。
 
 次に、「device_map="auto"」を使用してモデルをロードします。この例では「facebook/opt-1.3b」を使用します。
 
