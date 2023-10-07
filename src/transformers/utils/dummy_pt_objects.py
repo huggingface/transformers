@@ -7732,7 +7732,7 @@ class UniSpeechSatPreTrainedModel(metaclass=DummyObject):
 UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class UnivNetGan(metaclass=DummyObject):
+class UnivNetModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
