@@ -277,7 +277,6 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
 
         return inputs
 
-    @torch.no_grad()
     def test_model_inference_batched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetModel.from_pretrained("dg845/univnet-dev")
@@ -286,7 +285,10 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         # Get batched noise and spectrogram inputs.
         input_speech = self.get_inputs(torch_device, num_samples=3)
 
-        waveform = model(**input_speech).detach().cpu()
+        with torch.no_grad():
+            waveform = model(**input_speech)
+        waveform = waveform.cpu()
+
         waveform_mean = torch.mean(waveform)
         waveform_stddev = torch.std(waveform)
         waveform_slice = waveform[-1, -9:].flatten()
@@ -299,7 +301,6 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, atol=1e-4, rtol=1e-5)
         torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=5e-4, rtol=1e-5)
 
-    @torch.no_grad()
     def test_model_inference_unbatched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetModel.from_pretrained("dg845/univnet-dev")
@@ -308,7 +309,10 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         # Get unbatched noise and spectrogram inputs.
         input_speech = self.get_inputs(torch_device, num_samples=1)
 
-        waveform = model(**input_speech).detach().cpu()
+        with torch.no_grad():
+            waveform = model(**input_speech)
+        waveform = waveform.cpu()
+
         waveform_mean = torch.mean(waveform)
         waveform_stddev = torch.std(waveform)
         waveform_slice = waveform[-9:].flatten()
@@ -321,7 +325,6 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, atol=1e-4, rtol=1e-5)
         torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=1e-3, rtol=1e-5)
 
-    @torch.no_grad()
     def test_integration(self):
         feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
         model = UnivNetModel.from_pretrained("dg845/univnet-dev")
@@ -335,7 +338,10 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         input_speech = self.get_inputs(torch_device, num_samples=1, noise_length=input_features.shape[1])
         input_speech["input_features"] = input_features
 
-        waveform = model(**input_speech).detach().cpu()
+        with torch.no_grad():
+            waveform = model(**input_speech)
+        waveform = waveform.cpu()
+
         waveform_mean = torch.mean(waveform)
         waveform_stddev = torch.std(waveform)
         waveform_slice = waveform[-9:].flatten()
