@@ -96,11 +96,11 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSSNorm
-class LlamaInfiniteRMSNorm(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm
+class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        LlamaInfiniteRMSNorm is equivalent to T5LayerNorm
+        LlamaRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -114,10 +114,6 @@ class LlamaInfiniteRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-ALL_LAYERNORM_LAYERS.append(LlamaInfiniteRMSNorm)
-
-
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding
 class LlamaRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -154,7 +150,6 @@ class LlamaRotaryEmbedding(nn.Module):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
@@ -174,7 +169,6 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
@@ -268,7 +262,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention
 class LlamaInfiniteAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -436,7 +429,6 @@ class LlamaInfiniteAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer
 class LlamaInfiniteDecoderLayer(nn.Module):
     def __init__(self, config: LlamaInfiniteConfig):
         super().__init__()
@@ -446,8 +438,8 @@ class LlamaInfiniteDecoderLayer(nn.Module):
         ), "LM-Infinite has its own attention kernel, conflicting with flash attention"
         self.self_attn = LlamaInfiniteAttention(config=config)
         self.mlp = LlamaInfiniteMLP(config)
-        self.input_layernorm = LlamaInfiniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LlamaInfiniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -615,7 +607,6 @@ LLAMA_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaModel
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
@@ -635,7 +626,7 @@ class LlamaInfiniteModel(LlamaInfinitePreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([LlamaInfiniteDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = LlamaInfiniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -804,7 +795,6 @@ class LlamaInfiniteModel(LlamaInfinitePreTrainedModel):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM
 class LlamaInfiniteForCausalLM(LlamaInfinitePreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 

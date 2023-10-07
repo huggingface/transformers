@@ -550,7 +550,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
-        ("llama_infinite", "LlamaInfiniteInfinite"),
+        ("llama_infinite", "LlamaInfinite"),
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
         ("luke", "LUKE"),
