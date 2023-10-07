@@ -4054,9 +4054,8 @@ class TokenizerTesterMixin:
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
-                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token = new_eos)
+                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
                 self.asserEquals(tokenizer._eos_token, new_eos)
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
                 # make sure the exact added token made it to the added tokens decoder
@@ -4089,8 +4088,6 @@ class TokenizerTesterMixin:
                         # New format, additional_special_tokens
                         tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_2)
                         self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
-
-
 
                 # Make sure the additional special tokens does not include any special attribute token
                 self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)

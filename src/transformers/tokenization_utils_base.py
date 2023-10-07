@@ -2222,7 +2222,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             init_kwargs[key] = value
             all_special_strings = [str(token) for token in additional_special_tokens]
             # also add the other special tokens
-            all_special_strings += [str(init_kwargs.get(key,"")) for key in cls.SPECIAL_TOKENS_ATTRIBUTES if init_kwargs.get(key,"") not in all_special_strings]
+            all_special_strings += [
+                str(init_kwargs.get(key, ""))
+                for key in cls.SPECIAL_TOKENS_ATTRIBUTES
+                if init_kwargs.get(key, "") not in all_special_strings
+            ]
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
             if added_tokens_file is not None:
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
@@ -2244,7 +2248,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
 
         # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
-        init_kwargs = cls.convert_added_tokens(init_kwargs, save = False)
+        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -2294,7 +2298,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return max_model_length
 
     @classmethod
-    def convert_added_tokens(cls, obj: Union[AddedToken, Any], save = False, add_type_field=True):
+    def convert_added_tokens(cls, obj: Union[AddedToken, Any], save=False, add_type_field=True):
         if isinstance(obj, dict) and "__type" in obj and obj["__type"] == "AddedToken":
             obj.pop("__type")
             return AddedToken(**obj)
@@ -2410,7 +2414,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.pop(file_id, None)
 
         # no typefields, this way old fast and slow can load it
-        tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True, save = True)
+        tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True, save=True)
 
         # Process added tokens seperatly: allows previous versions to ignore it!
         added_tokens = {}
@@ -2448,7 +2452,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Sanitize AddedTokens in special_tokens_map
 
         # kept for forward compatibility, will be removed in transoformers 5. Typefields are not saved for FC, special should not be save either
-        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, save = True, add_type_field=False)
+        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, save=True, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
