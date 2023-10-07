@@ -294,7 +294,6 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 
 * 因果的：モデルの目標は、シーケンス内の次のトークンを予測することであり、将来のトークンはマスクされます。
 
-
     ```py
     >>> from transformers import pipeline
 
