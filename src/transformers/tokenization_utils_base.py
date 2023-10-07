@@ -2171,6 +2171,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for args_name, file_path in resolved_vocab_files.items():
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
+        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
 
         if slow_tokenizer is not None:
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
@@ -2243,9 +2244,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
         # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
-        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
         if legacy_saved and "Fast" not in cls.__name__ and added_tokens_file is None and tokenizer_file is not None:
-            all_special_strings = [str(token) for token in additional_special_tokens]
+            all_special_strings = [str(token) for token in tokenizer.all_special_tokens]
             tokens_to_add_from_fast = []
             with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
                 tokenizer_file_handle = json.load(tokenizer_file_handle)
