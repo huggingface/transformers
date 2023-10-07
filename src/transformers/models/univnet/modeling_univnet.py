@@ -327,7 +327,8 @@ class UnivNetLVCBlock(nn.Module):
     Implementation of the location variable convolution (LVC) residual block of the UnivNet residual block. Includes a
     `UnivNetKernelPredictor` inside to predict the kernels and biases of the LVC layers.
 
-    Based on LVCBlock in [maum-ai/univnet](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/model/lvcnet.py#L98)
+    Based on LVCBlock in
+    [maum-ai/univnet](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/model/lvcnet.py#L98)
 
     Parameters:
         config: (`UnivNetConfig`):
