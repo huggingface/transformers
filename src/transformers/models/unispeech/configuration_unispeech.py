@@ -161,10 +161,15 @@ class UniSpeechConfig(PretrainedConfig):
             instance of [`UniSpeechForSequenceClassification`].
         classifier_proj_size (`int`, *optional*, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
-        num_ctc_classes (`<fill_type>`, *optional*, defaults to 80): <fill_docstring>
-        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        bos_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        eos_token_id (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        num_ctc_classes (`int`, *optional*, defaults to 80):
+            Specifies the number of classes (phoneme tokens and blank token) for phoneme-level CTC loss. Only relevant
+            when using an instance of [`UniSpeechForPreTraining`].
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The id of the padding token.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            The id of the "beginning-of-sequence" token.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The id of the "end-of-sequence" token.
         replace_prob (`float`, *optional*, defaults to 0.5):
             Propability that transformer feature is replaced by quantized feature for pretraining.
 
