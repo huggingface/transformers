@@ -44,15 +44,12 @@ logger = logging.get_logger(__name__)
 
 
 def get_owlv2_config(model_name):
-    add_objectness_head = False
-
     if "patch16" in model_name:
         patch_size = 16
         image_size = 768
 
     if "v2" in model_name:
         image_size = 960
-        add_objectness_head = True
 
     vision_config = Owlv2VisionConfig(patch_size=patch_size, image_size=image_size)
     text_config = Owlv2TextConfig()
@@ -60,7 +57,6 @@ def get_owlv2_config(model_name):
     config = Owlv2Config(
         text_config=text_config.to_dict(),
         vision_config=vision_config.to_dict(),
-        add_objectness_head=add_objectness_head,
     )
 
     return config
