@@ -71,7 +71,6 @@ OBJECTS_TO_IGNORE = [
     # "PretrainedConfig", #ignored but could be fixed
     # "GenerationConfig", #ignored but could be fixed
     "TFSequenceSummary",
-    "TFBertTokenizer",
     "TFGPT2Tokenizer",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
