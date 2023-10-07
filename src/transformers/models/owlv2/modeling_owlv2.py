@@ -81,7 +81,6 @@ def owlv2_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
-# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTOutput with OwlViT->Owlv2
 class Owlv2Output(ModelOutput):
     """
     Args:
@@ -202,6 +201,9 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
             A dictionary containing the individual losses. Useful for logging.
         logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
             Classification logits (including no-object) for all queries.
+        objectness_logits (`torch.FloatTensor` of shape `(batch_size, num_patches, 1)`):
+            The objectness logits of all image patches. OWL-ViT represents images as a set of image patches where the
+            total number of patches is (image_size / patch_size)**2.
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
@@ -224,6 +226,7 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
+    objectness_logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
@@ -1263,14 +1266,14 @@ class Owlv2Model(Owlv2PreTrainedModel):
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTBoxPredictionHead with OwlViT->Owlv2
 class Owlv2BoxPredictionHead(nn.Module):
-    def __init__(self, config: Owlv2Config):
+    def __init__(self, config: Owlv2Config, out_dim: int = 4):
         super().__init__()
 
         width = config.vision_config.hidden_size
         self.dense0 = nn.Linear(width, width)
         self.dense1 = nn.Linear(width, width)
         self.gelu = nn.GELU()
-        self.dense2 = nn.Linear(width, 4)
+        self.dense2 = nn.Linear(width, out_dim)
 
     def forward(self, image_features: torch.Tensor) -> torch.FloatTensor:
         output = self.dense0(image_features)
@@ -1331,7 +1334,6 @@ class Owlv2ClassPredictionHead(nn.Module):
         return (pred_logits, image_class_embeds)
 
 
-# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection with OWLVIT->OWLV2,OwlViT->Owlv2,owlvit->owlv2,google/owlvit-base-patch32->google/owlv2-base-patch16
 class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     config_class = Owlv2Config
 
@@ -1341,10 +1343,12 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         self.owlv2 = Owlv2Model(config)
         self.class_head = Owlv2ClassPredictionHead(config)
         self.box_head = Owlv2BoxPredictionHead(config)
+        self.objectness_head = Owlv2BoxPredictionHead(config, out_dim=1)
 
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.normalize_grid_corner_coordinates
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
         # Computes normalized xy corner coordinates from feature_map.
         if not feature_map.ndim == 4:
@@ -1365,7 +1369,23 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         box_coordinates = torch.from_numpy(box_coordinates).to(device)
 
         return box_coordinates
+    
+    def objectness_predictor(self, image_features: torch.FloatTensor) -> torch.FloatTensor:
+        """Predicts the probability that each image feature token is an object.
+        Args:
+            image_features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_dim)`)):
+                Features extracted from the image.
+        Returns:
+            Objectness scores.
+        """
+        # TODO support training mode
+        # if self.objectness_head_configs.stop_gradient:
+        #     image_features = jax.lax.stop_gradient(image_features)
+        objectness_logits = self.objectness_head(image_features)
+        objectness_logits = objectness_logits[..., 0]
+        return objectness_logits
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.compute_box_bias
     def compute_box_bias(self, feature_map: torch.FloatTensor) -> torch.FloatTensor:
         # The box center is biased to its position on the feature grid
         box_coordinates = self.normalize_grid_corner_coordinates(feature_map)
@@ -1382,6 +1402,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         box_bias = torch.cat([box_coord_bias, box_size_bias], dim=-1)
         return box_bias
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.box_predictor
     def box_predictor(
         self,
         image_feats: torch.FloatTensor,
@@ -1405,6 +1426,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.class_predictor
     def class_predictor(
         self,
         image_feats: torch.FloatTensor,
@@ -1424,6 +1446,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         return (pred_logits, image_class_embeds)
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_text_embedder
     def image_text_embedder(
         self,
         input_ids: torch.Tensor,
@@ -1466,6 +1489,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         return (text_embeds, image_embeds, outputs)
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_embedder
     def image_embedder(
         self,
         pixel_values: torch.FloatTensor,
@@ -1498,6 +1522,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         return (image_embeds, vision_outputs)
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.embed_image_query
     def embed_image_query(
         self, query_image_features: torch.FloatTensor, query_feature_map: torch.FloatTensor
     ) -> torch.FloatTensor:
@@ -1541,6 +1566,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OWLV2_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Owlv2ImageGuidedObjectDetectionOutput, config_class=Owlv2Config)
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_guided_detection
     def image_guided_detection(
         self,
         pixel_values: torch.FloatTensor,
@@ -1714,12 +1740,16 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         # Predict object classes [batch_size, num_patches, num_queries+1]
         (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
 
+        # Predict objectness
+        objectness_logits = self.objectness_predictor(image_feats)
+
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
 
         if not return_dict:
             output = (
                 pred_logits,
+                objectness_logits,
                 pred_boxes,
                 query_embeds,
                 feature_map,
@@ -1735,6 +1765,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             text_embeds=query_embeds,
             pred_boxes=pred_boxes,
             logits=pred_logits,
+            objectness_logits=objectness_logits,
             class_embeds=class_embeds,
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,

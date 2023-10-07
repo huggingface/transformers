@@ -1250,14 +1250,14 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
 
 class OwlViTBoxPredictionHead(nn.Module):
-    def __init__(self, config: OwlViTConfig):
+    def __init__(self, config: OwlViTConfig, out_dim: int = 4):
         super().__init__()
 
         width = config.vision_config.hidden_size
         self.dense0 = nn.Linear(width, width)
         self.dense1 = nn.Linear(width, width)
         self.gelu = nn.GELU()
-        self.dense2 = nn.Linear(width, 4)
+        self.dense2 = nn.Linear(width, out_dim)
 
     def forward(self, image_features: torch.Tensor) -> torch.FloatTensor:
         output = self.dense0(image_features)

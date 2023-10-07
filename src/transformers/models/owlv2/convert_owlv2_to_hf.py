@@ -30,11 +30,11 @@ from huggingface_hub import hf_hub_download
 from transformers import (
     CLIPTokenizer,
     Owlv2ImageProcessor,
-    OwlViTConfig,
-    OwlViTForObjectDetection,
-    OwlViTProcessor,
-    OwlViTTextConfig,
-    OwlViTVisionConfig,
+    Owlv2Config,
+    Owlv2ForObjectDetection,
+    Owlv2Processor,
+    Owlv2TextConfig,
+    Owlv2VisionConfig,
 )
 from transformers.utils import logging
 
@@ -43,7 +43,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_owlvit_config(model_name):
+def get_owlv2_config(model_name):
     add_objectness_head = False
 
     if "patch16" in model_name:
@@ -54,10 +54,10 @@ def get_owlvit_config(model_name):
         image_size = 960
         add_objectness_head = True
 
-    vision_config = OwlViTVisionConfig(patch_size=patch_size, image_size=image_size)
-    text_config = OwlViTTextConfig()
+    vision_config = Owlv2VisionConfig(patch_size=patch_size, image_size=image_size)
+    text_config = Owlv2TextConfig()
 
-    config = OwlViTConfig(
+    config = Owlv2Config(
         text_config=text_config.to_dict(),
         vision_config=vision_config.to_dict(),
         add_objectness_head=add_objectness_head,
@@ -85,75 +85,75 @@ def create_rename_keys(config, model_name):
 
     # fmt: off
     # CLIP vision encoder
-    rename_keys.append(("backbone/clip/visual/class_embedding", "owlvit.vision_model.embeddings.class_embedding"))
-    rename_keys.append(("backbone/clip/visual/conv1/kernel", "owlvit.vision_model.embeddings.patch_embedding.weight"))
-    rename_keys.append(("backbone/clip/visual/positional_embedding", "owlvit.vision_model.embeddings.position_embedding.weight"))
-    rename_keys.append(("backbone/clip/visual/ln_pre/scale", "owlvit.vision_model.pre_layernorm.weight"))
-    rename_keys.append(("backbone/clip/visual/ln_pre/bias", "owlvit.vision_model.pre_layernorm.bias"))
+    rename_keys.append(("backbone/clip/visual/class_embedding", "owlv2.vision_model.embeddings.class_embedding"))
+    rename_keys.append(("backbone/clip/visual/conv1/kernel", "owlv2.vision_model.embeddings.patch_embedding.weight"))
+    rename_keys.append(("backbone/clip/visual/positional_embedding", "owlv2.vision_model.embeddings.position_embedding.weight"))
+    rename_keys.append(("backbone/clip/visual/ln_pre/scale", "owlv2.vision_model.pre_layernorm.weight"))
+    rename_keys.append(("backbone/clip/visual/ln_pre/bias", "owlv2.vision_model.pre_layernorm.bias"))
 
     for i in range(config.vision_config.num_hidden_layers):
         if "v2" in model_name:
-            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_0/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.weight"))
-            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_0/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.bias"))
-            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.weight"))
-            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.bias"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_0/scale", f"owlv2.vision_model.encoder.layers.{i}.layer_norm1.weight"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_0/bias", f"owlv2.vision_model.encoder.layers.{i}.layer_norm1.bias"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/scale", f"owlv2.vision_model.encoder.layers.{i}.layer_norm2.weight"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/bias", f"owlv2.vision_model.encoder.layers.{i}.layer_norm2.bias"))
         else:
-            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.weight"))
-            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm1.bias"))
-            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/scale", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.weight"))
-            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/bias", f"owlvit.vision_model.encoder.layers.{i}.layer_norm2.bias"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_fc/kernel", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc1.weight"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_fc/bias", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc1.bias"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_proj/kernel", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc2.weight"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_proj/bias", f"owlvit.vision_model.encoder.layers.{i}.mlp.fc2.bias"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/query/kernel", f"owlvit.vision_model.encoder.layers.{i}.self_attn.q_proj.weight"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/query/bias", f"owlvit.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/key/kernel", f"owlvit.vision_model.encoder.layers.{i}.self_attn.k_proj.weight"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/key/bias", f"owlvit.vision_model.encoder.layers.{i}.self_attn.k_proj.bias"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/value/kernel", f"owlvit.vision_model.encoder.layers.{i}.self_attn.v_proj.weight"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/value/bias", f"owlvit.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/out/kernel", f"owlvit.vision_model.encoder.layers.{i}.self_attn.out_proj.weight"))
-        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/out/bias", f"owlvit.vision_model.encoder.layers.{i}.self_attn.out_proj.bias"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/scale", f"owlv2.vision_model.encoder.layers.{i}.layer_norm1.weight"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_1/bias", f"owlv2.vision_model.encoder.layers.{i}.layer_norm1.bias"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/scale", f"owlv2.vision_model.encoder.layers.{i}.layer_norm2.weight"))
+            rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/ln_2/bias", f"owlv2.vision_model.encoder.layers.{i}.layer_norm2.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_fc/kernel", f"owlv2.vision_model.encoder.layers.{i}.mlp.fc1.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_fc/bias", f"owlv2.vision_model.encoder.layers.{i}.mlp.fc1.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_proj/kernel", f"owlv2.vision_model.encoder.layers.{i}.mlp.fc2.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/mlp/c_proj/bias", f"owlv2.vision_model.encoder.layers.{i}.mlp.fc2.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/query/kernel", f"owlv2.vision_model.encoder.layers.{i}.self_attn.q_proj.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/query/bias", f"owlv2.vision_model.encoder.layers.{i}.self_attn.q_proj.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/key/kernel", f"owlv2.vision_model.encoder.layers.{i}.self_attn.k_proj.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/key/bias", f"owlv2.vision_model.encoder.layers.{i}.self_attn.k_proj.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/value/kernel", f"owlv2.vision_model.encoder.layers.{i}.self_attn.v_proj.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/value/bias", f"owlv2.vision_model.encoder.layers.{i}.self_attn.v_proj.bias"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/out/kernel", f"owlv2.vision_model.encoder.layers.{i}.self_attn.out_proj.weight"))
+        rename_keys.append((f"backbone/clip/visual/transformer/resblocks.{i}/attn/out/bias", f"owlv2.vision_model.encoder.layers.{i}.self_attn.out_proj.bias"))
 
-    rename_keys.append(("backbone/clip/visual/ln_post/scale", "owlvit.vision_model.post_layernorm.weight"))
-    rename_keys.append(("backbone/clip/visual/ln_post/bias", "owlvit.vision_model.post_layernorm.bias"))
+    rename_keys.append(("backbone/clip/visual/ln_post/scale", "owlv2.vision_model.post_layernorm.weight"))
+    rename_keys.append(("backbone/clip/visual/ln_post/bias", "owlv2.vision_model.post_layernorm.bias"))
 
     # CLIP text encoder
-    rename_keys.append(("backbone/clip/text/token_embedding/embedding", "owlvit.text_model.embeddings.token_embedding.weight"))
-    rename_keys.append(("backbone/clip/text/positional_embedding", "owlvit.text_model.embeddings.position_embedding.weight"))
+    rename_keys.append(("backbone/clip/text/token_embedding/embedding", "owlv2.text_model.embeddings.token_embedding.weight"))
+    rename_keys.append(("backbone/clip/text/positional_embedding", "owlv2.text_model.embeddings.position_embedding.weight"))
 
     for i in range(config.text_config.num_hidden_layers):
         if "v2" in model_name:
-            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_0/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.weight"))
-            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_0/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.bias"))
-            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.weight"))
-            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.bias"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_0/scale", f"owlv2.text_model.encoder.layers.{i}.layer_norm1.weight"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_0/bias", f"owlv2.text_model.encoder.layers.{i}.layer_norm1.bias"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/scale", f"owlv2.text_model.encoder.layers.{i}.layer_norm2.weight"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/bias", f"owlv2.text_model.encoder.layers.{i}.layer_norm2.bias"))
         else:
-            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.weight"))
-            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm1.bias"))
-            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/scale", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.weight"))
-            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/bias", f"owlvit.text_model.encoder.layers.{i}.layer_norm2.bias"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_fc/kernel", f"owlvit.text_model.encoder.layers.{i}.mlp.fc1.weight"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_fc/bias", f"owlvit.text_model.encoder.layers.{i}.mlp.fc1.bias"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_proj/kernel", f"owlvit.text_model.encoder.layers.{i}.mlp.fc2.weight"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_proj/bias", f"owlvit.text_model.encoder.layers.{i}.mlp.fc2.bias"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/query/kernel", f"owlvit.text_model.encoder.layers.{i}.self_attn.q_proj.weight"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/query/bias", f"owlvit.text_model.encoder.layers.{i}.self_attn.q_proj.bias"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/key/kernel", f"owlvit.text_model.encoder.layers.{i}.self_attn.k_proj.weight"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/key/bias", f"owlvit.text_model.encoder.layers.{i}.self_attn.k_proj.bias"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/value/kernel", f"owlvit.text_model.encoder.layers.{i}.self_attn.v_proj.weight"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/value/bias", f"owlvit.text_model.encoder.layers.{i}.self_attn.v_proj.bias"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/out/kernel", f"owlvit.text_model.encoder.layers.{i}.self_attn.out_proj.weight"))
-        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/out/bias", f"owlvit.text_model.encoder.layers.{i}.self_attn.out_proj.bias"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/scale", f"owlv2.text_model.encoder.layers.{i}.layer_norm1.weight"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_1/bias", f"owlv2.text_model.encoder.layers.{i}.layer_norm1.bias"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/scale", f"owlv2.text_model.encoder.layers.{i}.layer_norm2.weight"))
+            rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/ln_2/bias", f"owlv2.text_model.encoder.layers.{i}.layer_norm2.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_fc/kernel", f"owlv2.text_model.encoder.layers.{i}.mlp.fc1.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_fc/bias", f"owlv2.text_model.encoder.layers.{i}.mlp.fc1.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_proj/kernel", f"owlv2.text_model.encoder.layers.{i}.mlp.fc2.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/mlp/c_proj/bias", f"owlv2.text_model.encoder.layers.{i}.mlp.fc2.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/query/kernel", f"owlv2.text_model.encoder.layers.{i}.self_attn.q_proj.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/query/bias", f"owlv2.text_model.encoder.layers.{i}.self_attn.q_proj.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/key/kernel", f"owlv2.text_model.encoder.layers.{i}.self_attn.k_proj.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/key/bias", f"owlv2.text_model.encoder.layers.{i}.self_attn.k_proj.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/value/kernel", f"owlv2.text_model.encoder.layers.{i}.self_attn.v_proj.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/value/bias", f"owlv2.text_model.encoder.layers.{i}.self_attn.v_proj.bias"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/out/kernel", f"owlv2.text_model.encoder.layers.{i}.self_attn.out_proj.weight"))
+        rename_keys.append((f"backbone/clip/text/transformer/resblocks.{i}/attn/out/bias", f"owlv2.text_model.encoder.layers.{i}.self_attn.out_proj.bias"))
 
-    rename_keys.append(("backbone/clip/text/ln_final/scale", "owlvit.text_model.final_layer_norm.weight"))
-    rename_keys.append(("backbone/clip/text/ln_final/bias", "owlvit.text_model.final_layer_norm.bias"))
+    rename_keys.append(("backbone/clip/text/ln_final/scale", "owlv2.text_model.final_layer_norm.weight"))
+    rename_keys.append(("backbone/clip/text/ln_final/bias", "owlv2.text_model.final_layer_norm.bias"))
 
     # logit scale
-    rename_keys.append(("backbone/clip/logit_scale", "owlvit.logit_scale"))
+    rename_keys.append(("backbone/clip/logit_scale", "owlv2.logit_scale"))
 
     # projection heads
-    rename_keys.append(("backbone/clip/text/text_projection/kernel", "owlvit.text_projection.weight"))
+    rename_keys.append(("backbone/clip/text/text_projection/kernel", "owlv2.text_projection.weight"))
 
     # class and box heads
     rename_keys.append(("backbone/merged_class_token/scale", "layer_norm.weight"))
@@ -206,11 +206,11 @@ def rename_and_reshape_key(dct, old, new, config):
 
 
 @torch.no_grad()
-def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
+def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our OWL-ViT structure.
     """
-    config = get_owlvit_config(model_name)
+    config = get_owlv2_config(model_name)
 
     # Load original state dict based on model name
     model_name_to_checkpoint_path = {
@@ -233,11 +233,11 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
         rename_and_reshape_key(state_dict, src, dest, config)
 
     # load HuggingFace model
-    model = OwlViTForObjectDetection(config)
+    model = Owlv2ForObjectDetection(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
-    assert missing_keys == ["owlvit.visual_projection.weight"]
+    assert missing_keys == ["owlv2.visual_projection.weight"]
     assert unexpected_keys == [] if "v2" in model_name else ["class_head/padding", "class_head/padding_bias"]
     model.eval()
 
@@ -251,7 +251,7 @@ def convert_owlvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub)
     tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token="!", model_max_length=16)
 
     # Initialize processor
-    processor = OwlViTProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = Owlv2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
     filename = "owlvit_pixel_values_960.pt" if "v2" in model_name else "owlvit_pixel_values.pt"
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
@@ -317,8 +317,8 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="owlvit-base-patch16",
-        choices=["owlvit-base-patch16", "owlv2-base-patch16", "owlv2-base-patch16-ensemble"],
+        default="owlv2-base-patch16",
+        choices=["owlv2-base-patch16", "owlv2-base-patch16-ensemble"],
         type=str,
         help="Name of the OWL-ViT model you'd like to convert from FLAX to PyTorch.",
     )
@@ -332,4 +332,4 @@ if __name__ == "__main__":
     parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
 
     args = parser.parse_args()
-    convert_owlvit_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_owlv2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
