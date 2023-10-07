@@ -19,10 +19,9 @@ Feature extractor class for Music Audio Efficient Spectrogram Transformer.
 
 import numpy as np
 import torch
-from librosa.feature import melspectrogram
 
 from ...utils import logging
-from ..audio_spectrogram_transformer import ASTFeatureExtractor
+from ...audio_utils import spectrogram, mel_filter_bank, window_function
 
 
 logger = logging.get_logger(__name__)
@@ -104,6 +103,21 @@ class MAESTFeatureExtractor(ASTFeatureExtractor):
         self.std = std
         self.return_attention_mask = return_attention_mask
 
+        self.window = window_function(
+            window_length=self.n_fft,
+            name='hann',
+        )
+
+        self.mel_fb = mel_filter_bank(
+            num_frequency_bins=self.n_fft // 2 + 1,
+            num_mel_filters=self._num_mel_bins,
+            min_frequency=0,
+            max_frequency=self.sampling_rate / 2,
+            sampling_rate=self.sampling_rate,
+            norm="slaney",
+            mel_scale="slaney",
+        )
+
     def _extract_fbank_features(
         self,
         waveform: np.ndarray,
@@ -113,13 +127,17 @@ class MAESTFeatureExtractor(ASTFeatureExtractor):
         Get mel-spectrogram features using Librosa.
         """
 
-        melspec = melspectrogram(
-            y=waveform,
-            sr=self.sampling_rate,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            n_mels=self.num_mel_bins,
-        ).T
+        melspec = spectrogram(
+            waveform,
+            window=self.window,
+            frame_length=self.n_fft,
+            hop_length=self.n_fft // 2,
+            power=2,
+            mel_filters=self.mel_fb,
+            min_value=1e-30,
+            mel_floor=1e-30,
+            pad_mode="constant",
+        )
 
         if not self.log_compression:
             pass
