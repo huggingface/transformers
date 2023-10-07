@@ -2249,7 +2249,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer.add_tokens(tokens_to_add_from_fast)
 
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
-        # uses the information stored in `added_tokens_decoder`. Checks after addition that we have the same ids
+        # uses the information stored in `added_tokens_decoder`.
         if init_kwargs.get("slow_to_fast", False):
             tokenizer.add_tokens([token for _, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])])
             # finally we add all the special_tokens to make sure eveything is initialized
