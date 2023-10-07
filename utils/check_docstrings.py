@@ -765,8 +765,6 @@ OBJECTS_TO_IGNORE = [
     "TranslationPipeline",
     "TvltImageProcessor",
     "UMT5Config",
-    "UniSpeechSatConfig",
-    "UniSpeechSatForCTC",
     "UperNetConfig",
     "UperNetForSemanticSegmentation",
     "ViTHybridImageProcessor",
