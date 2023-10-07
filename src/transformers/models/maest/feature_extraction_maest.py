@@ -17,17 +17,21 @@ Feature extractor class for Music Audio Efficient Spectrogram Transformer.
 """
 
 
+from typing import List, Optional, Union
+
 import numpy as np
 import torch
 
-from ...utils import logging
-from ...audio_utils import spectrogram, mel_filter_bank, window_function
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ...feature_extraction_utils import BatchFeature
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MAESTFeatureExtractor():
+class MAESTFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Music Audio Efficient Spectrogram Transformer (MAEST) feature extractor.
 
@@ -81,18 +85,8 @@ class MAESTFeatureExtractor():
         log_compression="logC",
         **kwargs,
     ):
-        super().__init__(
-            feature_size=feature_size,
-            sampling_rate=sampling_rate,
-            num_mel_bins=num_mel_bins,
-            max_length=max_length,
-            padding_value=padding_value,
-            do_normalize=True,
-            mean=mean,
-            std=std,
-            **kwargs,
-        )
-
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        self.sampling_rate = sampling_rate
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.log_compression = log_compression
@@ -164,3 +158,83 @@ class MAESTFeatureExtractor():
                 melspec = melspec[0:max_length, :]
 
         return melspec.numpy()
+
+    def normalize(self, input_values: np.ndarray) -> np.ndarray:
+        return (input_values - (self.mean)) / (self.std * 2)
+
+    def __call__(
+        self,
+        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        sampling_rate: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Main method to featurize and prepare for the model one or several sequence(s).
+
+        Args:
+            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
+                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
+                stereo, i.e. single float per timestep.
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+        """
+
+        if sampling_rate is not None:
+            if sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
+                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
+                    f" {self.sampling_rate} and not {sampling_rate}."
+                )
+        else:
+            logger.warning(
+                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                "Failing to do so can result in silent errors that might be hard to debug."
+            )
+
+        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        if is_batched_numpy and len(raw_speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+        )
+
+        if is_batched:
+            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
+        elif not is_batched and not isinstance(raw_speech, np.ndarray):
+            raw_speech = np.asarray(raw_speech, dtype=np.float32)
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+            raw_speech = raw_speech.astype(np.float32)
+
+        # always return batch
+        if not is_batched:
+            raw_speech = [raw_speech]
+
+        # extract fbank features and pad/truncate to max_length
+        features = [self._extract_fbank_features(waveform, max_length=self.max_length) for waveform in raw_speech]
+
+        # convert into BatchFeature
+        padded_inputs = BatchFeature({"input_values": features})
+
+        # make sure list is in array format
+        input_values = padded_inputs.get("input_values")
+        if isinstance(input_values[0], list):
+            padded_inputs["input_values"] = [np.asarray(feature, dtype=np.float32) for feature in input_values]
+
+        # normalization
+        if self.do_normalize:
+            padded_inputs["input_values"] = [self.normalize(feature) for feature in input_values]
+
+        if return_tensors is not None:
+            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+
+        return padded_inputs
