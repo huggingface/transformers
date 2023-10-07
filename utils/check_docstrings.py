@@ -93,7 +93,6 @@ OBJECTS_TO_IGNORE = [
     "BartTokenizerFast",
     "BarthezTokenizerFast",
     "BeitModel",
-    "BertConfig",
     "BertGenerationConfig",
     "BertGenerationTokenizer",
     "BertJapaneseTokenizer",
