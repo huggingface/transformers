@@ -60,11 +60,6 @@ class LlamaInfiniteConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
-        pretraining_tp (`int`, *optional*, defaults to `1`):
-            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
-            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-            issue](https://github.com/pytorch/pytorch/issues/76232).
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
@@ -72,13 +67,21 @@ class LlamaInfiniteConfig(PretrainedConfig):
             tokens, LlamaInfinite 2 up to 4096, CodeLlamaInfinite up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-12):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        pad_token_id (`<fill_type>`, *optional*): <fill_docstring>
+        bos_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        eos_token_id (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        pretraining_tp (`int`, *optional*, defaults to 1):
+            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
+            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
+            issue](https://github.com/pytorch/pytorch/issues/76232).
+        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
@@ -89,10 +92,9 @@ class LlamaInfiniteConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLlamaInfinite/comments/14mrgpr/dynamically_scaled_rope_further_increases/.
             This is an experimental feature, subject to breaking API changes in future versions.
-        attention_bias (`bool`, defaults to `False`):
+        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
 
-        Example:
 
     ```python
     >>> from transformers import LlamaInfiniteModel, LlamaInfiniteConfig
