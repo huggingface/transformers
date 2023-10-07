@@ -70,7 +70,6 @@ class LlamaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-            Whether to tie weight embeddings
         pad_token_id (`int`, *optional*): 
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1): 
