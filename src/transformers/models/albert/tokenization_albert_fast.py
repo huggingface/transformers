@@ -77,9 +77,11 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
     this superclass for more information regarding those methods
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
+        tokenizer_file (`str`, *optional*):
+            Path to a pre-trained tokenizer file. This file should contain the pre-trained tokenizer configuration in JSON and is used to initialize the tokenizer. If not provided, the tokenizer will be initialized from scratch.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
         remove_space (`bool`, *optional*, defaults to `True`):

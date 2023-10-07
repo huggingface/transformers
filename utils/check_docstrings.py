@@ -75,7 +75,6 @@ OBJECTS_TO_IGNORE = [
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertModel",
-    "AlbertTokenizerFast",
     "AlignTextModel",
     "AlignVisionConfig",
     "AltCLIPTextConfig",
