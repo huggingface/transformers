@@ -58,7 +58,7 @@ class LlamaConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
-        pretraining_tp (`int`, *optional*, defaults to `1`):
+        pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
             document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
             necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
@@ -70,7 +70,7 @@ class LlamaConfig(PretrainedConfig):
             Llama 2 up to 4096, CodeLlama up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-12):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
