@@ -89,7 +89,7 @@ class UnivNetKernelPredictor(nn.Module):
     convolutional layers (LVCs) in each UnivNet LVCBlock.
 
     Based on the KernelPredictor implementation in
-    [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L7).
+    [maum-ai/univnet](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/model/lvcnet.py#L7).
 
     Parameters:
         config: (`UnivNetConfig`):
@@ -249,7 +249,7 @@ class UnivNetLVCResidualBlock(nn.Module):
 
         return hidden_states
 
-    # Based on https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L171
+    # Based on https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/model/lvcnet.py#L171
     def location_variable_convolution(
         self,
         hidden_states: torch.FloatTensor,
@@ -327,7 +327,7 @@ class UnivNetLVCBlock(nn.Module):
     Implementation of the location variable convolution (LVC) residual block of the UnivNet residual block. Includes a
     `UnivNetKernelPredictor` inside to predict the kernels and biases of the LVC layers.
 
-    Based on LVCBlock in [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L98)
+    Based on LVCBlock in [maum-ai/univnet](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/model/lvcnet.py#L98)
 
     Parameters:
         config: (`UnivNetConfig`):

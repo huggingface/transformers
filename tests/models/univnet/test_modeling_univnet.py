@@ -144,23 +144,23 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
             ]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip(reason="UnivNetGan does not output hidden_states.")
+    @unittest.skip(reason="UnivNetModel does not output hidden_states.")
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="UnivNetGan.forward does not accept an inputs_embeds argument.")
+    @unittest.skip(reason="UnivNetModel.forward does not accept an inputs_embeds argument.")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="UnivNetGan does not use input embeddings and thus has no get_input_embeddings method.")
+    @unittest.skip(reason="UnivNetModel does not use input embeddings and thus has no get_input_embeddings method.")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="UnivNetGan does not support all arguments tested, such as output_hidden_states.")
+    @unittest.skip(reason="UnivNetModel does not support all arguments tested, such as output_hidden_states.")
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="UnivNetGan does not output hidden_states.")
+    @unittest.skip(reason="UnivNetModel does not output hidden_states.")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 

@@ -50,7 +50,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             performance for some models.
         num_mel_bins (`int`, *optional*, defaults to 100):
             The number of mel-frequency bins in the extracted spectrogram features. This should match
-            `UnivNetGan.config.num_mel_bins`.
+            `UnivNetModel.config.num_mel_bins`.
         hop_length (`int`, *optional*, defaults to 256):
             The direct number of samples between sliding windows. Otherwise referred to as "shift" in many papers. Note
             that this is different from other audio feature extractors such as [`SpeechT5FeatureExtractor`] which take
@@ -87,7 +87,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             Tacotron 2 implementation.
         model_in_channels (`int`, *optional*, defaults to 64):
             The number of input channels to the [`UnivNetModel`] model. This should match
-            `UnivNetGan.config.model_in_channels`.
+            `UnivNetModel.config.model_in_channels`.
         pad_end_length (`int`, *optional*, defaults to 10):
             If padding the end of the spectrograms, the number of frames to append to the end of each spectrogram.
     """
@@ -188,7 +188,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         Returns:
             `numpy.ndarray` containing a spectrogram of shape `(num_frames, num_mel_bins)`.
         """
-        # Do custom padding
+        # Do custom padding based on the official MelGAN and Hifi-GAN implementations
         # See https://github.com/maum-ai/univnet/blob/master/utils/stft.py#L84
         waveform = np.pad(
             waveform,

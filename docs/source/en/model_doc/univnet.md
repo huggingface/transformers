@@ -33,6 +33,7 @@ Tips:
 Usage Example:
 
 ```python
+import torch
 from scipy.io.wavfile import write
 from datasets import Audio, load_dataset
 
@@ -56,7 +57,7 @@ with torch.no_grad():
 # Remove the extra padding at the end of the output.
 audio = audio[:-(feature_extractor.pad_end_length * feature_extractor.hop_length)]
 # Convert to wav file
-audio = audio.cpu().detach().numpy()
+audio = audio.cpu().numpy()
 write("sample_audio.wav", feature_extractor.sampling_rate, audio)
 ```
 
