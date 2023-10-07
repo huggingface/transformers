@@ -118,7 +118,7 @@ class UniSpeechConfig(PretrainedConfig):
             actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
         mask_time_length (`int`, *optional*, defaults to 10):
             Length of vector span along the time axis.
-        mask_time_min_masks (`int`, *optional*, defaults to 2),:
+        mask_time_min_masks (`int`, *optional*, defaults to 2):
             The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
             irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
             mask_time_min_masks''
@@ -131,7 +131,7 @@ class UniSpeechConfig(PretrainedConfig):
             True`.
         mask_feature_length (`int`, *optional*, defaults to 10):
             Length of vector span along the feature axis.
-        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
+        mask_feature_min_masks (`int`, *optional*, defaults to 0):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
