@@ -370,6 +370,7 @@ OBJECTS_TO_IGNORE = [
     "LiltConfig",
     "LiltModel",
     "LlamaConfig",
+    "LlamaInfiniteConfig",
     "LlamaTokenizer",
     "LlamaTokenizerFast",
     "LongT5Config",

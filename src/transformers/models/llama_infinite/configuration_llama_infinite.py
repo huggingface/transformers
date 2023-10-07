@@ -25,9 +25,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-LLAMAINFINITE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "glaciohound/llama-infinite": "https://huggingface.co/glaciohound/llama-infinite/resolve/main/config.json",
-}
+LLAMAINFINITE_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class LlamaInfiniteConfig(PretrainedConfig):
@@ -72,6 +70,7 @@ class LlamaInfiniteConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         pretraining_tp (`int`, *optional*, defaults to 1):
             Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
