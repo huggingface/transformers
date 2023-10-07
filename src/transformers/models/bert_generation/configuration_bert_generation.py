@@ -38,7 +38,7 @@ class BertGenerationConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often called feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -54,14 +54,18 @@ class BertGenerationConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 2):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 1):
+            End of stream token id.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
             positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
