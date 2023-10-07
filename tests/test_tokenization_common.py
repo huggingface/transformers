@@ -3209,19 +3209,27 @@ class TokenizerTesterMixin:
                 # output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
                 # self.assertEqual(output_p, output_r)
 
-                # Input tokens id
-                input_simple = tokenizer_p.encode("This is a sample input", add_special_tokens=False)
-                input_pair = tokenizer_p.encode("This is a sample pair", add_special_tokens=False)
+                input_pairs = [
+                    ("", ""),
+                    ("", "This is a sample pair"),
+                    ("This is a sample input", ""),
+                    ("This is a sample input", "This is a sample pair"),
+                ]
 
-                # Generate output
-                output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
-                output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
-                self.assertEqual(output_p, output_r)
+                for sample_input, sample_pair in input_pairs:
+                    # Input tokens id
+                    input_simple = tokenizer_p.encode(sample_input, add_special_tokens=False)
+                    input_pair = tokenizer_p.encode(sample_pair, add_special_tokens=False)
 
-                # Generate pair output
-                output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
-                output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
-                self.assertEqual(output_p, output_r)
+                    # Generate output
+                    output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
+                    output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
+                    self.assertEqual(output_p, output_r)
+
+                    # Generate pair output
+                    output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
+                    output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
+                    self.assertEqual(output_p, output_r)
 
     def test_padding(self, max_length=50):
         if not self.test_slow_tokenizer:

@@ -4151,7 +4151,7 @@
         ],
         "processor_classes": [],
         "model_classes": [],
-        "sha": "37e9ae5dafb601daa8364e9ac17da31cd82b274b"
+        "sha": "f67d387eaaa7c71ddf88af95eda4bf14ace08d49"
     },
     "MusicgenForConditionalGeneration": {
         "tokenizer_classes": [
@@ -4161,7 +4161,7 @@
         "model_classes": [
             "MusicgenForConditionalGeneration"
         ],
-        "sha": "b71611b88832e53370e676da53b65042f7fc78ee"
+        "sha": "16102cdf580e70cf0b4e0e2cda5bc75b934da92c"
     },
     "MvpForCausalLM": {
         "tokenizer_classes": [

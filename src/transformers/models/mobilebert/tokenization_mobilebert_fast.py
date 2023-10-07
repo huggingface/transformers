@@ -150,7 +150,7 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
         """
         output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
 
-        if token_ids_1:
+        if token_ids_1 is not None:
             output += token_ids_1 + [self.sep_token_id]
 
         return output

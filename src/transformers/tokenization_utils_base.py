@@ -183,7 +183,7 @@ class BatchEncoding(UserDict):
     utility methods to map from word/character space to token space.
 
     Args:
-        data (`dict`):
+        data (`dict`, *optional*):
             Dictionary of lists/arrays/tensors returned by the `__call__`/`encode_plus`/`batch_encode_plus` methods
             ('input_ids', 'attention_mask', etc.).
         encoding (`tokenizers.Encoding` or `Sequence[tokenizers.Encoding]`, *optional*):
@@ -1702,6 +1702,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self,
         conversation: Union[List[Dict[str, str]], "Conversation"],
         chat_template: Optional[str] = None,
+        add_generation_prompt: bool = False,
         tokenize: bool = True,
         padding: bool = False,
         truncation: bool = False,
@@ -1720,6 +1721,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.
+            add_generation_prompt (bool, *optional*): Whether to end the prompt with the token(s) that indicate
+                the start of an assistant message. This is useful when you want to generate a response from the model.
+                Note that this argument will be passed to the chat template, and so it must be supported in the
+                template for this argument to have any effect.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             padding (`bool`, defaults to `False`):
@@ -1757,7 +1762,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # Compilation function uses a cache to avoid recompiling the same template
         compiled_template = self._compile_jinja_template(chat_template)
 
-        rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
+        rendered = compiled_template.render(
+            messages=conversation, add_generation_prompt=add_generation_prompt, **self.special_tokens_map
+        )
 
         if padding is True:
             padding = "max_length"  # There's only one sequence here, so "longest" makes no sense
@@ -1799,6 +1806,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "{% for message in messages %}"
             "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
             "{% endfor %}"
+            "{% if add_generation_prompt %}"
+            "{{ '<|im_start|>assistant\n' }}"
+            "{% endif %}"
         )
 
     @classmethod

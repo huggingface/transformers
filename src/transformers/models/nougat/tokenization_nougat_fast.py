@@ -383,10 +383,10 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
     methods for postprocessing the generated text.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        tokenizer_file (`str`):
+        tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
 
@@ -394,15 +394,15 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
             Wether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
             spaces.
 
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
 
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
