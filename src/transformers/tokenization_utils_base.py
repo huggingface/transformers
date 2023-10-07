@@ -2212,7 +2212,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             init_kwargs[key] = value
             all_special_strings = [str(token) for token in additional_special_tokens]
             # also add the other special tokens
-            all_special_strings += [str(init_kwargs[key]) for key in cls.SPECIAL_TOKENS_ATTRIBUTES if str(init_kwargs[key]) not in all_special_strings]
+            all_special_strings += [str(init_kwargs.get(key,"")) for key in cls.SPECIAL_TOKENS_ATTRIBUTES if init_kwargs.get(key,"") not in all_special_strings]
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
             if added_tokens_file is not None:
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
