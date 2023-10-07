@@ -42,9 +42,22 @@ class CharacterBertConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the CHARACTER_BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`CharacterBertModel`] or [`TFCharacterBertModel`].
+        character_embeddings_dim (`int`, *optional*, defaults to `16`):
+            The size of the character embeddings.
+        cnn_activation (`str`, *optional*, defaults to `"relu"`):
+            The activation function to apply to the cnn representations.
+        cnn_filters (:
+            obj:*list(list(int))*, *optional*, defaults to `[[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]`): The list of CNN filters to use in the CharacterCNN module.
+        num_highway_layers (`int`, *optional*, defaults to `2`):
+            The number of Highway layers to apply to the CNNs output.
+        max_word_length (`int`, *optional*, defaults to `50`):
+            The maximum token length in characters (actually, in bytes as any non-ascii characters will be converted to
+            a sequence of utf-8 bytes).
+        mlm_vocab_size (`int`, *optional*, defaults to 100000):
+            Size of the output vocabulary for MLM.
+        vocab_size (`int`, *optional*, defaults to None):
+            Vocabulary size of the CHARACTER_BERT model. This is not relevant here since CharacterBERT does not
+            rely on WordPieces and can support any input token.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -101,7 +114,13 @@ class CharacterBertConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30522,
+        character_embeddings_dim=16,
+        cnn_activation="relu",
+        cnn_filters=None,
+        num_highway_layers=2,
+        max_word_length=50,
+        mlm_vocab_size=100000,
+        vocab_size=None,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -117,10 +136,32 @@ class CharacterBertConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
+        if tie_word_embeddings:
+            raise ValueError(
+                "Cannot tie word embeddings in CharacterBERT. "
+                "Please set `config.tie_word_embeddings=False`."
+            )
+        self.tie_word_embeddings = tie_word_embeddings
+
+        self.character_embeddings_dim = character_embeddings_dim
+        self.cnn_activation = cnn_activation
+        self.cnn_filters = cnn_filters or [
+            [1, 32],
+            [2, 32],
+            [3, 64],
+            [4, 128],
+            [5, 256],
+            [6, 512],
+            [7, 1024]
+        ]
+        self.num_highway_layers = num_highway_layers
+        self.max_word_length = max_word_length
+        self.mlm_vocab_size = mlm_vocab_size
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
