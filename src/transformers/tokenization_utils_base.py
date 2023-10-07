@@ -1176,7 +1176,8 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        # just sets the easy to acces list of strings. Should only be used at init time
+        # just sets the easy to acces list of strings. Should only be used at init time. Expected to not update the
+        # added_tokens_decoder.
         self._additional_special_tokens = [] if value is not None else None
         if value is not None:
             for token in value:
@@ -1340,7 +1341,16 @@ class SpecialTokensMixin:
         Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
         special tokens are tokenized.
         """
-        return [tok for tok in self.added_tokens_decoder.values() if tok.special]
+        all_tokens = []
+        seen = set()
+        for value in self.special_tokens_map_extended.values():
+            if isinstance(value, (list, tuple)):
+                tokens_to_add = [token for token in value if str(token) not in seen]
+            else:
+                tokens_to_add = [value] if str(value) not in seen else []
+            seen.update(map(str, tokens_to_add))
+            all_tokens.extend(tokens_to_add)
+        return all_tokens
 
     @property
     def all_special_tokens(self) -> List[str]:
@@ -1349,7 +1359,7 @@ class SpecialTokensMixin:
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
-        all_toks = [str(tok) for tok in self.added_tokens_decoder.values() if tok.special]
+        all_toks = [str(s) for s in self.all_special_tokens_extended]
         return all_toks
 
     @property
