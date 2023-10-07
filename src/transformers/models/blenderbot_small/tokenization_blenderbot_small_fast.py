@@ -54,8 +54,21 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" BlenderbotSmall tokenizer (backed by HuggingFace's *tokenizers* library).
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             Path to the vocabulary file.
+        merges_file (`str`, *optional*):
+            Path to the merges file containing token merge information.
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The beginning of sequence token.
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The end of sequence token.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
+        trim_offsets (`bool`, *optional*, defaults to `True`):
+            Whether or not the post-processing step should trim offsets to avoid including whitespaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
