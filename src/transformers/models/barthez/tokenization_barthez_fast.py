@@ -68,9 +68,11 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
+        tokenizer_file (`str`, *optional*):
+            Path to a pre-trained tokenizer file. This file should contain the pre-trained tokenizer configuration in JSON and is used to initialize the tokenizer. If not provided, the tokenizer will be initialized from scratch.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -106,8 +108,6 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
-            Additional special tokens used by the tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

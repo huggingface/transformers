@@ -90,7 +90,6 @@ OBJECTS_TO_IGNORE = [
     "BarkFineConfig",
     "BarkSemanticConfig",
     "BartConfig",
-    "BarthezTokenizerFast",
     "BeitModel",
     "BertConfig",
     "BertGenerationConfig",
