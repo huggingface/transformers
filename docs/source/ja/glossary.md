@@ -196,7 +196,7 @@ The encoded versions have different lengths:
 >>> sequence = "A Titan RTX has 24GB of VRAM"
 ```
 
-The tokenizer takes care of splitting the sequence into tokens available in the tokenizer vocabulary.
+トークナイザーは、シーケンスをトークナイザー語彙で使用可能なトークンに分割します。
 
 ```python
 >>> tokenized_sequence = tokenizer.tokenize(sequence)
