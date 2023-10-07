@@ -104,7 +104,7 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
 
         self.mel_fb = mel_filter_bank(
             num_frequency_bins=self.n_fft // 2 + 1,
-            num_mel_filters=self._num_mel_bins,
+            num_mel_filters=self.num_mel_bins,
             min_frequency=0,
             max_frequency=self.sampling_rate / 2,
             sampling_rate=self.sampling_rate,
