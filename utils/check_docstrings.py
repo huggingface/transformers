@@ -155,7 +155,6 @@ OBJECTS_TO_IGNORE = [
     "DPRConfig",
     "DPRReaderTokenizer",
     "DPRReaderTokenizerFast",
-    "DPTModel",
     "Data2VecAudioConfig",
     "Data2VecTextConfig",
     "Data2VecTextModel",
