@@ -18,7 +18,7 @@
 import collections
 import os
 import unicodedata
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
@@ -43,6 +43,9 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 PRETRAINED_INIT_CONFIGURATION = {
     "helboukkouri/character-bert-base-uncased": {"max_word_length": 50, "do_lower_case": True},
 }
+
+PAD_CHARACTER_ID = 260
+
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -196,7 +199,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         # Character delimiting the END of a TOKEN
         self.eow_character_id = 259
         # Pads a TOKEN up to the maximum character length
-        self.pad_character_id = 260
+        self.pad_character_id = PAD_CHARACTER_ID
         
         # Token delimiting the BEGINNING of a TEXT
         self.cls_character_ids = special_token_character_ids(
@@ -412,18 +415,24 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        logger.warning("CharacterBERT does not have a token vocabulary. Skipping saving `vocab.txt`.")
+        return ()
+
+    def save_mlm_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        # NOTE: CharacterBERT has no token vocabulary, this is just to allow
+        # saving tokenizer configuration via CharacterBertTokenizer.save_pretrained
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["mlm_vocab_file"]
             )
         else:
             vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
         with open(vocab_file, "w", encoding="utf-8") as writer:
-            for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
+            for token, token_index in sorted(self.mlm_vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
-                        f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
+                        f"Saving MLM vocabulary to {vocab_file}: vocabulary indices are not consecutive."
                         " Please check that the vocabulary is not corrupted!"
                     )
                     index = token_index
@@ -431,6 +440,22 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 index += 1
         return (vocab_file,)
 
+    def _save_pretrained(
+        self,
+        save_directory: Union[str, os.PathLike],
+        file_names: Tuple[str],
+        legacy_format: Optional[bool] = None,
+        filename_prefix: Optional[str] = None,
+    ):
+        file_names = super()._save_pretrained(
+            save_directory=save_directory,
+            file_names=file_names,
+            legacy_format=legacy_format,
+            filename_prefix=filename_prefix
+        )
+
+        mlm_vocab_files = self.save_mlm_vocabulary(save_directory, filename_prefix=filename_prefix)
+        return file_names + mlm_vocab_files
 
 class BasicTokenizer(object):
     """
