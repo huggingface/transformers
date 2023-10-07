@@ -65,8 +65,7 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
-            Whether to add an initial space to the input. This allows to treat the leading word just as any
-            other word.
+            Whether to add an initial space to the input. This allows to treat the leading word just as any other word.
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether or not the post-processing step should trim offsets to avoid including whitespaces.
     """
