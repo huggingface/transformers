@@ -1,228 +1,13 @@
 import math
 from collections import OrderedDict
 
+import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import time
-import cv2
 
-class DiceLoss(nn.Module):
-    def __init__(self, loss_weight=1.0):
-        super(DiceLoss, self).__init__()
-        self.loss_weight = loss_weight
-
-    def forward(self, input, target, mask, reduce=True):
-        batch_size = input.size(0)
-        input = torch.sigmoid(input)
-
-        input = input.contiguous().view(batch_size, -1)
-        target = target.contiguous().view(batch_size, -1).float()
-        mask = mask.contiguous().view(batch_size, -1).float()
-
-        input = input * mask
-        target = target * mask
-
-        a = torch.sum(input * target, dim=1)
-        b = torch.sum(input * input, dim=1) + 0.001
-        c = torch.sum(target * target, dim=1) + 0.001
-        d = (2 * a) / (b + c)
-        loss = 1 - d
-
-        loss = self.loss_weight * loss
-
-        if reduce:
-            loss = torch.mean(loss)
-
-        return loss
-
-
-class EmbLoss_v1(nn.Module):
-    def __init__(self, feature_dim=4, loss_weight=1.0):
-        super(EmbLoss_v1, self).__init__()
-        self.feature_dim = feature_dim
-        self.loss_weight = loss_weight
-        self.delta_v = 0.5
-        self.delta_d = 1.5
-        self.weights = (1.0, 1.0)
-
-    def forward_single(self, emb, instance, kernel, training_mask):
-        training_mask = (training_mask > 0.5).long()
-        kernel = (kernel > 0.5).long()
-        instance = instance * training_mask
-        instance_kernel = (instance * kernel).view(-1)
-        instance = instance.view(-1)
-        emb = emb.view(self.feature_dim, -1)
-
-        unique_labels, unique_ids = torch.unique(instance_kernel, sorted=True, return_inverse=True)
-        num_instance = unique_labels.size(0)
-        if num_instance <= 1:
-            return 0
-
-        emb_mean = emb.new_zeros((self.feature_dim, num_instance), dtype=torch.float32)
-        for i, lb in enumerate(unique_labels):
-            if lb == 0:
-                continue
-            ind_k = instance_kernel == lb
-            emb_mean[:, i] = torch.mean(emb[:, ind_k], dim=1)
-
-        l_agg = emb.new_zeros(num_instance, dtype=torch.float32)  # bug
-        for i, lb in enumerate(unique_labels):
-            if lb == 0:
-                continue
-            ind = instance == lb
-            emb_ = emb[:, ind]
-            dist = (emb_ - emb_mean[:, i:i + 1]).norm(p=2, dim=0)
-            dist = F.relu(dist - self.delta_v) ** 2
-            l_agg[i] = torch.mean(torch.log(dist + 1.0))
-        l_agg = torch.mean(l_agg[1:])
-
-        if num_instance > 2:
-            emb_interleave = emb_mean.permute(1, 0).repeat(num_instance, 1)
-            emb_band = emb_mean.permute(1, 0).repeat(1, num_instance).view(-1, self.feature_dim)
-            # print(seg_band)
-
-            mask = (1 - torch.eye(num_instance, dtype=torch.int8)).view(-1, 1).repeat(1, self.feature_dim)
-            mask = mask.view(num_instance, num_instance, -1)
-            mask[0, :, :] = 0
-            mask[:, 0, :] = 0
-            mask = mask.view(num_instance * num_instance, -1)
-            # print(mask)
-
-            dist = emb_interleave - emb_band
-            dist = dist[mask > 0].view(-1, self.feature_dim).norm(p=2, dim=1)
-            dist = F.relu(2 * self.delta_d - dist) ** 2
-            l_dis = torch.mean(torch.log(dist + 1.0))
-        else:
-            l_dis = 0
-
-        l_agg = self.weights[0] * l_agg
-        l_dis = self.weights[1] * l_dis
-        l_reg = torch.mean(torch.log(torch.norm(emb_mean, 2, 0) + 1.0)) * 0.001
-        loss = l_agg + l_dis + l_reg
-        return loss
-
-    def forward(self, emb, instance, kernel, training_mask, reduce=True):
-        loss_batch = emb.new_zeros((emb.size(0)), dtype=torch.float32)
-
-        for i in range(loss_batch.size(0)):
-            loss_batch[i] = self.forward_single(emb[i], instance[i], kernel[i], training_mask[i])
-
-        loss_batch = self.loss_weight * loss_batch
-
-        if reduce:
-            loss_batch = torch.mean(loss_batch)
-
-        return loss_batch
-
-
-class EmbLoss_v2(nn.Module):
-    def __init__(self, feature_dim=4, loss_weight=1.0):
-        super(EmbLoss_v2, self).__init__()
-        self.feature_dim = feature_dim
-        self.loss_weight = loss_weight
-        self.delta_v = 0.5
-        self.delta_d = 1.5
-        self.weights = (1.0, 1.0)
-
-    def forward_single(self, emb, instance, kernel, training_mask):
-        training_mask = (training_mask > 0.5).long()
-        kernel = (kernel > 0.5).long()
-        instance = instance * training_mask
-        instance_kernel = (instance * kernel).view(-1)
-        instance = instance.view(-1)
-        emb = emb.view(self.feature_dim, -1)
-
-        unique_labels, unique_ids = torch.unique(instance_kernel, sorted=True, return_inverse=True)
-        num_instance = unique_labels.size(0)
-        if num_instance <= 1:
-            return 0
-
-        emb_mean = emb.new_zeros((self.feature_dim, num_instance), dtype=torch.float32)
-        for i, lb in enumerate(unique_labels):
-            if lb == 0:
-                continue
-            ind_k = instance_kernel == lb
-            emb_mean[:, i] = torch.mean(emb[:, ind_k], dim=1)
-
-        l_agg = emb.new_zeros(num_instance, dtype=torch.float32)  # bug
-        for i, lb in enumerate(unique_labels):
-            if lb == 0:
-                continue
-            ind = instance == lb
-            emb_ = emb[:, ind]
-            dist = (emb_ - emb_mean[:, i:i + 1]).norm(p=2, dim=0)
-            dist = F.relu(dist - self.delta_v) ** 2
-            l_agg[i] = torch.mean(torch.log(dist + 1.0))
-        l_agg = torch.mean(l_agg[1:])
-
-        if num_instance > 2:
-            emb_interleave = emb_mean.permute(1, 0).repeat(num_instance, 1)
-            emb_band = emb_mean.permute(1, 0).repeat(1, num_instance).view(-1, self.feature_dim)
-            # print(seg_band)
-
-            mask = (1 - torch.eye(num_instance, dtype=torch.int8)).view(-1, 1).repeat(1, self.feature_dim)
-            mask = mask.view(num_instance, num_instance, -1)
-            mask[0, :, :] = 0
-            mask[:, 0, :] = 0
-            mask = mask.view(num_instance * num_instance, -1)
-            # print(mask)
-
-            dist = emb_interleave - emb_band
-            dist = dist[mask > 0].view(-1, self.feature_dim).norm(p=2, dim=1)
-            dist = F.relu(2 * self.delta_d - dist) ** 2
-            # l_dis = torch.mean(torch.log(dist + 1.0))
-
-            l_dis = [torch.log(dist + 1.0)]
-            emb_bg = emb[:, instance == 0].view(self.feature_dim, -1)
-            if emb_bg.size(1) > 100:
-                rand_ind = np.random.permutation(emb_bg.size(1))[:100]
-                emb_bg = emb_bg[:, rand_ind]
-            if emb_bg.size(1) > 0:
-                for i, lb in enumerate(unique_labels):
-                    if lb == 0:
-                        continue
-                    dist = (emb_bg - emb_mean[:, i:i + 1]).norm(p=2, dim=0)
-                    dist = F.relu(2 * self.delta_d - dist) ** 2
-                    l_dis_bg = torch.mean(torch.log(dist + 1.0), 0, keepdim=True)
-                    l_dis.append(l_dis_bg)
-            l_dis = torch.mean(torch.cat(l_dis))
-        else:
-            l_dis = 0
-
-        l_agg = self.weights[0] * l_agg
-        l_dis = self.weights[1] * l_dis
-        l_reg = torch.mean(torch.log(torch.norm(emb_mean, 2, 0) + 1.0)) * 0.001
-        loss = l_agg + l_dis + l_reg
-        return loss
-
-    def forward(self, emb, instance, kernel, training_mask, reduce=True):
-        loss_batch = emb.new_zeros((emb.size(0)), dtype=torch.float32)
-
-        for i in range(loss_batch.size(0)):
-            loss_batch[i] = self.forward_single(emb[i], instance[i], kernel[i], training_mask[i])
-
-        loss_batch = self.loss_weight * loss_batch
-
-        if reduce:
-            loss_batch = torch.mean(loss_batch)
-
-        return loss_batch
-
-
-def set_layer_from_config(layer_config):
-    if layer_config is None:
-        return None
-
-    name2layer = {
-        ConvLayer.__name__: ConvLayer,
-        RepConvLayer.__name__: RepConvLayer
-    }
-
-    layer_name = layer_config.pop('name')
-    layer = name2layer[layer_name]
-    return layer.build_from_config(layer_config)
+from transformers import PreTrainedModel
 
 
 def get_same_padding(kernel_size):
@@ -234,6 +19,21 @@ def get_same_padding(kernel_size):
     assert isinstance(kernel_size, int), 'kernel size should be either `int` or `tuple`'
     assert kernel_size % 2 > 0, 'kernel size should be odd number'
     return kernel_size // 2
+
+
+def build_activation(act_func, inplace=True):
+    if act_func == 'relu':
+        return nn.ReLU(inplace=inplace)
+    elif act_func == 'relu6':
+        return nn.ReLU6(inplace=inplace)
+    elif act_func == 'tanh':
+        return nn.Tanh()
+    elif act_func == 'sigmoid':
+        return nn.Sigmoid()
+    elif act_func is None:
+        return None
+    else:
+        raise ValueError('do not support: %s' % act_func)
 
 
 class My2DLayer(nn.Module):
@@ -365,6 +165,10 @@ def generate_bbox(keys, label, score, scales, cfg):
     return bboxes, scores
 
 
+class FalsePreTrainedModel(PreTrainedModel):
+    pass
+
+
 class ConvLayer(My2DLayer):
 
     def __init__(self, in_channels, out_channels,
@@ -394,10 +198,6 @@ class ConvLayer(My2DLayer):
         )
 
         return weight_dict
-
-    @staticmethod
-    def build_from_config(config):
-        return ConvLayer(**config)
 
 
 class RepConvLayer(nn.Module):
@@ -534,77 +334,104 @@ class RepConvLayer(nn.Module):
         return torch.nn.functional.pad(kernel, [pad_left_right, pad_left_right,
                                                 pad_top_down, pad_top_down])
 
-    def switch_to_deploy(self):
-        if hasattr(self, 'fused_conv'):
-            return
-        kernel, bias = self.get_equivalent_kernel_bias()
-        self.fused_conv = nn.Conv2d(in_channels=self.main_conv.in_channels,
-                                    out_channels=self.main_conv.out_channels,
-                                    kernel_size=self.main_conv.kernel_size, stride=self.main_conv.stride,
-                                    padding=self.main_conv.padding, dilation=self.main_conv.dilation,
-                                    groups=self.main_conv.groups, bias=True)
-        self.fused_conv.weight.data = kernel
-        self.fused_conv.bias.data = bias
-        self.deploy = True
-        for para in self.parameters():
-            para.detach_()
-        for attr in ['main_conv', 'main_bn', 'ver_conv', 'ver_bn', 'hor_conv', 'hor_bn']:
-            if hasattr(self, attr):
-                self.__delattr__(attr)
+    # def switch_to_deploy(self):
+    #     if hasattr(self, 'fused_conv'):
+    #         return
+    #     kernel, bias = self.get_equivalent_kernel_bias()
+    #     self.fused_conv = nn.Conv2d(in_channels=self.main_conv.in_channels,
+    #                                 out_channels=self.main_conv.out_channels,
+    #                                 kernel_size=self.main_conv.kernel_size, stride=self.main_conv.stride,
+    #                                 padding=self.main_conv.padding, dilation=self.main_conv.dilation,
+    #                                 groups=self.main_conv.groups, bias=True)
+    #     self.fused_conv.weight.data = kernel
+    #     self.fused_conv.bias.data = bias
+    #     self.deploy = True
+    #     for para in self.parameters():
+    #         para.detach_()
+    #     for attr in ['main_conv', 'main_bn', 'ver_conv', 'ver_bn', 'hor_conv', 'hor_bn']:
+    #         if hasattr(self, attr):
+    #             self.__delattr__(attr)
+    #
+    #     if hasattr(self, 'rbr_identity'):
+    #         self.__delattr__('rbr_identity')
 
-        if hasattr(self, 'rbr_identity'):
-            self.__delattr__('rbr_identity')
+    # def switch_to_test(self):
+    #     kernel, bias = self.get_equivalent_kernel_bias()
+    #     self.fused_conv = nn.Conv2d(in_channels=self.main_conv.in_channels,
+    #                                 out_channels=self.main_conv.out_channels,
+    #                                 kernel_size=self.main_conv.kernel_size, stride=self.main_conv.stride,
+    #                                 padding=self.main_conv.padding, dilation=self.main_conv.dilation,
+    #                                 groups=self.main_conv.groups, bias=True)
+    #     self.fused_conv.weight.data = kernel
+    #     self.fused_conv.bias.data = bias
+    #     for para in self.fused_conv.parameters():
+    #         para.detach_()
+    #     self.deploy = True
 
-    def switch_to_test(self):
-        kernel, bias = self.get_equivalent_kernel_bias()
-        self.fused_conv = nn.Conv2d(in_channels=self.main_conv.in_channels,
-                                    out_channels=self.main_conv.out_channels,
-                                    kernel_size=self.main_conv.kernel_size, stride=self.main_conv.stride,
-                                    padding=self.main_conv.padding, dilation=self.main_conv.dilation,
-                                    groups=self.main_conv.groups, bias=True)
-        self.fused_conv.weight.data = kernel
-        self.fused_conv.bias.data = bias
-        for para in self.fused_conv.parameters():
-            para.detach_()
-        self.deploy = True
+    # def switch_to_train(self):
+    #     if hasattr(self, 'fused_conv'):
+    #         self.__delattr__('fused_conv')
+    #     self.deploy = False
 
-    def switch_to_train(self):
-        if hasattr(self, 'fused_conv'):
-            self.__delattr__('fused_conv')
-        self.deploy = False
+    # @staticmethod
+    # def is_zero_layer():
+    #     return False
 
-    @staticmethod
-    def is_zero_layer():
-        return False
+    # @property
+    # def module_str(self):
+    #     return 'Rep_%dx%d' % (self.kernel_size[0], self.kernel_size[1])
 
-    @property
-    def module_str(self):
-        return 'Rep_%dx%d' % (self.kernel_size[0], self.kernel_size[1])
+    # @property
+    # def config(self):
+    #     return {'name': RepConvLayer.__name__,
+    #             'in_channels': self.in_channels,
+    #             'out_channels': self.out_channels,
+    #             'kernel_size': self.kernel_size,
+    #             'stride': self.stride,
+    #             'dilation': self.dilation,
+    #             'groups': self.groups}
 
-    @property
-    def config(self):
-        return {'name': RepConvLayer.__name__,
-                'in_channels': self.in_channels,
-                'out_channels': self.out_channels,
-                'kernel_size': self.kernel_size,
-                'stride': self.stride,
-                'dilation': self.dilation,
-                'groups': self.groups}
-
-    @staticmethod
-    def build_from_config(config):
-        return RepConvLayer(**config)
+    # @staticmethod
+    # def build_from_config(config):
+    #     return RepConvLayer(**config)
 
 
-class TextNet(nn.Module):
+class TextNet(PreTrainedModel):
 
-    def __init__(self, first_conv, stage1, stage2, stage3, stage4):
-        super(TextNet, self).__init__()
+    def __init__(self, config):
+        super().__init__(config)
+        self.first_conv = ConvLayer(config.backbone_in_channels, config.backbone_out_channels,
+                                    config.backbone_kernel_size, config.backbone_stride, config.backbone_dilation,
+                                    config.backbone_groups, config.backbone_bias, config.backbone_has_shuffle,
+                                    config.backbone_use_bn, config.backbone_act_func, config.backbone_dropout_rate,
+                                    config.backbone_ops_order)
 
-        self.first_conv = first_conv
+        stage1 = []
+        for stage_config in zip(config.backbone_stage1_in_channels, config.backbone_stage1_out_channels,
+                                config.backbone_stage1_kernel_size[0], config.backbone_stage1_stride[0],
+                                config.backbone_stage1_dilation[0], config.backbone_stage1_groups[0]):
+            stage1.append(RepConvLayer(*stage_config))
         self.stage1 = nn.ModuleList(stage1)
+
+        stage2 = []
+        for stage_config in zip(config.backbone_stage2_in_channels, config.backbone_stage2_out_channels,
+                                config.backbone_stage2_kernel_size[0], config.backbone_stage2_stride[0],
+                                config.backbone_stage2_dilation[0], config.backbone_stage2_groups[0]):
+            stage2.append(RepConvLayer(*stage_config))
         self.stage2 = nn.ModuleList(stage2)
+
+        stage3 = []
+        for stage_config in zip(config.backbone_stage3_in_channels, config.backbone_stage3_out_channels,
+                                config.backbone_stage3_kernel_size[0], config.backbone_stage3_stride[0],
+                                config.backbone_stage3_dilation[0], config.backbone_stage3_groups[0]):
+            stage3.append(RepConvLayer(*stage_config))
         self.stage3 = nn.ModuleList(stage3)
+
+        stage4 = []
+        for stage_config in zip(config.backbone_stage4_in_channels, config.backbone_stage4_out_channels,
+                                config.backbone_stage4_kernel_size[0], config.backbone_stage4_stride[0],
+                                config.backbone_stage4_dilation[0], config.backbone_stage4_groups[0]):
+            stage4.append(RepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
 
         self._initialize_weights()
@@ -639,31 +466,18 @@ class TextNet(nn.Module):
 
         return output
 
-    @staticmethod
-    def build_from_config(config):
-        first_conv = set_layer_from_config(config['first_conv'])
-        stage1, stage2, stage3, stage4 = [], [], [], []
-        for block_config in config['stage1']:
-            stage1.append(set_layer_from_config(block_config))
-        for block_config in config['stage2']:
-            stage2.append(set_layer_from_config(block_config))
-        for block_config in config['stage3']:
-            stage3.append(set_layer_from_config(block_config))
-        for block_config in config['stage4']:
-            stage4.append(set_layer_from_config(block_config))
 
-        net = TextNet(first_conv, stage1, stage2, stage3, stage4)
+class FASTNeck(PreTrainedModel):
 
-        return net
+    def __init__(self, config):
+        super().__init__(config)
+        reduce_layer_configs = list(zip(config.neck_in_channels[0], config.neck_out_channels[0], config.neck_kernel_size[0],
+                          config.neck_stride[0], config.neck_dilation[0], config.neck_groups[0]))
 
-
-class FASTNeck(nn.Module):
-    def __init__(self, reduce_layer1, reduce_layer2, reduce_layer3, reduce_layer4):
-        super(FASTNeck, self).__init__()
-        self.reduce_layer1 = reduce_layer1
-        self.reduce_layer2 = reduce_layer2
-        self.reduce_layer3 = reduce_layer3
-        self.reduce_layer4 = reduce_layer4
+        self.reduce_layer1 = RepConvLayer(*reduce_layer_configs[0])
+        self.reduce_layer2 = RepConvLayer(*reduce_layer_configs[1])
+        self.reduce_layer3 = RepConvLayer(*reduce_layer_configs[2])
+        self.reduce_layer4 = RepConvLayer(*reduce_layer_configs[3])
 
         self._initialize_weights()
 
@@ -692,39 +506,30 @@ class FASTNeck(nn.Module):
         f = torch.cat((f1, f2, f3, f4), 1)
         return f
 
-    @staticmethod
-    def build_from_config(config):
-        reduce_layer1 = set_layer_from_config(config['reduce_layer1'])
-        reduce_layer2 = set_layer_from_config(config['reduce_layer2'])
-        reduce_layer3 = set_layer_from_config(config['reduce_layer3'])
-        reduce_layer4 = set_layer_from_config(config['reduce_layer4'])
-        return FASTNeck(reduce_layer1, reduce_layer2, reduce_layer3, reduce_layer4)
-
 
 class FASTHead(nn.Module):
-    def __init__(self, conv, blocks, final, pooling_size,
-                 loss_text, loss_kernel, loss_emb, dropout_ratio=0):
+
+    def __init__(self, config):
         super(FASTHead, self).__init__()
-        self.conv = conv
-        if blocks is not None:
-            self.blocks = nn.ModuleList(blocks)
-        else:
-            self.blocks = None
-        self.final = final
+        self.conv = RepConvLayer(config.head_conv_in_channels, config.head_conv_out_channels,
+                                 config.head_conv_kernel_size, config.head_conv_stride, config.head_conv_dilation,
+                                 config.head_conv_groups)
 
-        # self.text_loss = build_loss(loss_text)
-        # self.kernel_loss = build_loss(loss_kernel)
-        # self.emb_loss = build_loss(loss_emb)
+        self.final = ConvLayer(config.head_final_in_channels[0], config.head_final_out_channels[0],
+                               config.head_final_kernel_size[0], config.head_final_stride[0], config.head_final_dilation[0],
+                               config.head_final_groups[0], config.head_final_bias[0], config.head_final_has_shuffle[0],
+                               config.head_final_use_bn[0], config.head_final_act_func[0], config.head_final_dropout_rate[0],
+                               config.head_final_ops_order)
 
-        self.pooling_size = pooling_size
+        self.pooling_size = config.head_pooling_size[0]
 
         self.pooling_1s = nn.MaxPool2d(kernel_size=self.pooling_size, stride=1,
                                        padding=(self.pooling_size - 1) // 2)
         self.pooling_2s = nn.MaxPool2d(kernel_size=self.pooling_size // 2 + 1, stride=1,
                                        padding=(self.pooling_size // 2) // 2)
 
-        if dropout_ratio > 0:
-            self.dropout = nn.Dropout2d(dropout_ratio)
+        if config.head_dropout_ratio[0] > 0:
+            self.dropout = nn.Dropout2d(config.head_dropout_ratio[0])
         else:
             self.dropout = None
 
@@ -740,19 +545,12 @@ class FASTHead(nn.Module):
 
     def forward(self, x):
         x = self.conv(x)
-        if self.blocks is not None:
-            for block in self.blocks:
-                x = block(x)
         if self.dropout is not None:
             x = self.dropout(x)
         x = self.final(x)
         return x
 
     def get_results(self, out, img_meta, cfg, scale=2):
-
-        if not self.training:
-            torch.cuda.synchronize()
-            start = time.time()
 
         org_img_size = img_meta['org_img_size'][0]
         img_size = img_meta['img_size'][0]  # 640*640
@@ -767,15 +565,12 @@ class FASTHead(nn.Module):
         score_maps = score_maps.squeeze(1)  # B*640*640
 
         kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
-        if kernels.is_cuda:
-            labels_ = ccl_cuda.ccl_batch(kernels)  # B*160*160
-        else:
-            labels_ = []
-            for kernel in kernels.numpy():
-                ret, label_ = cv2.connectedComponents(kernel)
-                labels_.append(label_)
-            labels_ = np.array(labels_)
-            labels_ = torch.from_numpy(labels_)
+        labels_ = []
+        for kernel in kernels.numpy():
+            ret, label_ = cv2.connectedComponents(kernel)
+            labels_.append(label_)
+        labels_ = np.array(labels_)
+        labels_ = torch.from_numpy(labels_)
         labels = labels_.unsqueeze(1).to(torch.float32)  # B*1*160*160
         labels = F.interpolate(labels, size=(img_size[0] // scale, img_size[1] // scale), mode='nearest')  # B*1*320*320
         labels = self._max_pooling(labels, scale=scale)
@@ -783,12 +578,6 @@ class FASTHead(nn.Module):
         labels = labels.squeeze(1).to(torch.int32)  # B*640*640
 
         keys = [torch.unique(labels_[i], sorted=True) for i in range(batch_size)]
-
-        if not self.training:
-            torch.cuda.synchronize()
-            outputs.update(dict(
-                post_time=time.time() - start
-            ))
 
         outputs.update(dict(kernels=kernels.data.cpu()))
 
@@ -813,107 +602,29 @@ class FASTHead(nn.Module):
             x = self.pooling_2s(x)
         return x
 
-    # def loss(self, out, gt_texts, gt_kernels, training_masks, gt_instances):
-    #     # output
-    #     kernels = out[:, 0, :, :]  # 4*640*640
-    #     texts = self._max_pooling(kernels, scale=1)  # 4*640*640
-    #     embs = out[:, 1:, :, :]  # 4*4*640*640
-    #
-    #     # text loss
-    #     selected_masks = ohem_batch(texts, gt_texts, training_masks)
-    #     loss_text = self.text_loss(texts, gt_texts, selected_masks, reduce=False)
-    #     iou_text = iou((texts > 0).long(), gt_texts, training_masks, reduce=False)
-    #     losses = dict(
-    #         loss_text=loss_text,
-    #         iou_text=iou_text
-    #     )
-    #
-    #     # kernel loss
-    #     selected_masks = gt_texts * training_masks
-    #     loss_kernel = self.kernel_loss(kernels, gt_kernels, selected_masks, reduce=False)
-    #     loss_kernel = torch.mean(loss_kernel, dim=0)
-    #     iou_kernel = iou((kernels > 0).long(), gt_kernels, selected_masks, reduce=False)
-    #     losses.update(dict(
-    #         loss_kernels=loss_kernel,
-    #         iou_kernel=iou_kernel
-    #     ))
-    #
-    #     # auxiliary loss
-    #     loss_emb = self.emb_loss(embs, gt_instances, gt_kernels, training_masks, reduce=False)
-    #     losses.update(dict(
-    #         loss_emb=loss_emb
-    #     ))
-    #
-    #     return losses
 
-    @staticmethod
-    def build_from_config(config, **kwargs):
-        conv = set_layer_from_config(config['conv'])
-        final = set_layer_from_config(config['final'])
-        try:
-            blocks = []
-            for block_config in config['blocks']:
-                blocks.append(set_layer_from_config(block_config))
-            return FASTHead(conv, blocks, final, **kwargs)
-        except:
-            return FASTHead(conv, None, final, **kwargs)
-
-
-class FAST(nn.Module):
-    def __init__(self, backbone, neck, detection_head):
-        super(FAST, self).__init__()
-        self.backbone = TextNet.build_from_config(backbone)
-        self.neck = FASTNeck.build_from_config(neck)
-        self.det_head = FASTHead.build_from_config(detection_head)
+class FASTForImageCaptioning(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.backbone = TextNet(config=config)
+        self.neck = FASTNeck(config=config)
+        self.det_head = FASTHead(config=config)
 
     def _upsample(self, x, size, scale=1):
         _, _, H, W = size
         return F.interpolate(x, size=(H // scale, W // scale), mode='bilinear')
 
-    def forward(self, imgs, gt_texts=None, gt_kernels=None, training_masks=None,
-                gt_instances=None, img_metas=None, cfg=None):
+    def forward(self, imgs, img_metas=None, cfg=None):
         outputs = dict()
 
-        if not self.training:
-            torch.cuda.synchronize()
-            start = time.time()
-
-        # backbone
         f = self.backbone(imgs)
 
-        if not self.training:
-            torch.cuda.synchronize()
-            outputs.update(dict(
-                backbone_time=time.time() - start
-            ))
-            start = time.time()
-
-        # reduce channel
         f = self.neck(f)
 
-        if not self.training:
-            torch.cuda.synchronize()
-            outputs.update(dict(
-                neck_time=time.time() - start
-            ))
-            start = time.time()
-
-        # detection
         det_out = self.det_head(f)
 
-        if not self.training:
-            torch.cuda.synchronize()
-            outputs.update(dict(
-                det_head_time=time.time() - start
-            ))
-
-        if self.training:
-            det_out = self._upsample(det_out, imgs.size(), scale=1)
-            det_loss = self.det_head.loss(det_out, gt_texts, gt_kernels, training_masks, gt_instances)
-            outputs.update(det_loss)
-        else:
-            det_out = self._upsample(det_out, imgs.size(), scale=4)
-            det_res = self.det_head.get_results(det_out, img_metas, cfg, scale=2)
-            outputs.update(det_res)
+        det_out = self._upsample(det_out, imgs.size(), scale=4)
+        det_res = self.det_head.get_results(det_out, img_metas, cfg, scale=2)
+        outputs.update(det_res)
 
         return outputs
