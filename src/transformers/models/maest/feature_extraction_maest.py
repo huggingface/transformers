@@ -27,7 +27,7 @@ from ...audio_utils import spectrogram, mel_filter_bank, window_function
 logger = logging.get_logger(__name__)
 
 
-class MAESTFeatureExtractor(ASTFeatureExtractor):
+class MAESTFeatureExtractor():
     r"""
     Constructs a Music Audio Efficient Spectrogram Transformer (MAEST) feature extractor.
 
