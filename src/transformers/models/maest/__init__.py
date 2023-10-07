@@ -18,13 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_speech_avai
 
 _import_structure = {"configuration_maest": ["MAEST_PRETRAINED_CONFIG_ARCHIVE_MAP"]}
 
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_maest"] = ["MAEST_PRETRAINED_MODEL_ARCHIVE_LIST"]
 
 try:
     if not is_speech_available():
@@ -36,16 +29,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_maest import MAEST_PRETRAINED_CONFIG_ARCHIVE_MAP
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_maest import (
-            MAEST_PRETRAINED_MODEL_ARCHIVE_LIST,
-        )
 
     try:
         if not is_speech_available():

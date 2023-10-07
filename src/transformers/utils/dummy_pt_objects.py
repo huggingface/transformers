@@ -4739,9 +4739,6 @@ class M2M100PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-MAEST_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class MarianForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 

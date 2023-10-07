@@ -2150,11 +2150,6 @@ else:
             "M2M100PreTrainedModel",
         ]
     )
-    _import_structure["models.maest"].extend(
-        [
-            "MAEST_PRETRAINED_MODEL_ARCHIVE_LIST",
-        ]
-    )
     _import_structure["models.marian"].extend(["MarianForCausalLM", "MarianModel", "MarianMTModel"])
     _import_structure["models.markuplm"].extend(
         [
@@ -6017,9 +6012,6 @@ if TYPE_CHECKING:
             M2M100ForConditionalGeneration,
             M2M100Model,
             M2M100PreTrainedModel,
-        )
-        from .models.maest import (
-            MAEST_PRETRAINED_MODEL_ARCHIVE_LIST,
         )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (

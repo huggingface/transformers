@@ -32,10 +32,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ASTForAudioClassification, ASTModel
-    from transformers.models.maest.modeling_maest import (
-        MAEST_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
 
 if is_torchaudio_available():
     import torchaudio
@@ -194,12 +190,6 @@ class MAESTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in MAEST_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ASTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
 
 
 # We will verify our results on some audio from AudioSet
