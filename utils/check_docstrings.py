@@ -325,7 +325,6 @@ OBJECTS_TO_IGNORE = [
     "FlavaTextModel",
     "FocalNetModel",
     "FunnelTokenizerFast",
-    "GPT2Config",
     "GPT2Tokenizer",
     "GPT2TokenizerFast",
     "GPTBigCodeConfig",
