@@ -99,8 +99,8 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
 
         self.window = window_function(
             window_length=self.n_fft,
-            name='hann',
-        )
+            name="hann",
+        ).tolist()
 
         self.mel_fb = mel_filter_bank(
             num_frequency_bins=self.n_fft // 2 + 1,
@@ -110,7 +110,7 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate=self.sampling_rate,
             norm="slaney",
             mel_scale="slaney",
-        )
+        ).tolist()
 
     def _extract_fbank_features(
         self,
@@ -123,11 +123,11 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
 
         melspec = spectrogram(
             waveform,
-            window=self.window,
+            window=np.array(self.window),
             frame_length=self.n_fft,
             hop_length=self.n_fft // 2,
             power=2,
-            mel_filters=self.mel_fb,
+            mel_filters=np.array(self.mel_fb),
             min_value=1e-30,
             mel_floor=1e-30,
             pad_mode="constant",
