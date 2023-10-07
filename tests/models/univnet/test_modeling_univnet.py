@@ -19,7 +19,7 @@ import unittest
 
 from datasets import Audio, load_dataset
 
-from transformers import UnivNetGanConfig, UnivNetGanFeatureExtractor
+from transformers import UnivNetConfig, UnivNetFeatureExtractor
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -38,10 +38,10 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import UnivNetGan
+    from transformers import UnivNetModel
 
 
-class UnivNetGanTester:
+class UnivNetModelTester:
     def __init__(
         self,
         parent,
@@ -79,7 +79,7 @@ class UnivNetGanTester:
         return config, spectrogram, noise_sequence
 
     def get_config(self):
-        return UnivNetGanConfig(
+        return UnivNetConfig(
             model_in_channels=self.in_channels,
             model_hidden_channels=self.hidden_channels,
             num_mel_bins=self.num_mel_bins,
@@ -87,7 +87,7 @@ class UnivNetGanTester:
         )
 
     def create_and_check_model(self, config, spectrogram, noise_sequence):
-        model = UnivNetGan(config=config).to(torch_device).eval()
+        model = UnivNetModel(config=config).to(torch_device).eval()
         result = model(spectrogram, noise_sequence)
         self.parent.assertEqual(result.shape, (self.seq_length * 256,))
 
@@ -98,8 +98,8 @@ class UnivNetGanTester:
 
 
 @require_torch
-class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (UnivNetGan,) if is_torch_available() else ()
+class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (UnivNetModel,) if is_torch_available() else ()
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = False
@@ -114,8 +114,8 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
     input_name = "input_features"
 
     def setUp(self):
-        self.model_tester = UnivNetGanTester(self)
-        self.config_tester = ConfigTester(self, config_class=UnivNetGanConfig)
+        self.model_tester = UnivNetModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=UnivNetConfig)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -227,7 +227,7 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch_gpu
 @slow
-class UnivNetGanIntegrationTests(unittest.TestCase):
+class UnivNetModelIntegrationTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         gc.collect()
@@ -280,7 +280,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
     @torch.no_grad()
     def test_model_inference_batched(self):
         # Load sample checkpoint from Tortoise TTS
-        model = UnivNetGan.from_pretrained("dg845/univnet-dev")
+        model = UnivNetModel.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
 
         # Get batched noise and spectrogram inputs.
@@ -302,7 +302,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
     @torch.no_grad()
     def test_model_inference_unbatched(self):
         # Load sample checkpoint from Tortoise TTS
-        model = UnivNetGan.from_pretrained("dg845/univnet-dev")
+        model = UnivNetModel.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
 
         # Get unbatched noise and spectrogram inputs.
@@ -323,8 +323,8 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
     @torch.no_grad()
     def test_integration(self):
-        feature_extractor = UnivNetGanFeatureExtractor.from_pretrained("dg845/univnet-dev")
-        model = UnivNetGan.from_pretrained("dg845/univnet-dev")
+        feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
+        model = UnivNetModel.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
 
         audio, sr = self._load_datasamples(1, sampling_rate=feature_extractor.sampling_rate)

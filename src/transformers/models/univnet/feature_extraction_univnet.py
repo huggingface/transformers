@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for UnivNetGan."""
+"""Feature extractor class for UnivNetModel."""
 
 from typing import Any, Dict, List, Optional, Union
 
@@ -26,7 +26,7 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
+class UnivNetFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a UnivNet feature extractor.
 
@@ -43,7 +43,7 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value to pad with when applying the padding strategy defined by the `padding` argument to
-            [`UnivNetGanFeatureExtractor.__call__`]. Note that this is used to pad the raw input waveforms; if
+            [`UnivNetFeatureExtractor.__call__`]. Note that this is used to pad the raw input waveforms; if
             `pad_end` is specified, we will pad the output spectrograms using `self.spectrogram_zero`.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly improve the
@@ -86,7 +86,7 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
             The max value used for Tacotron 2-style linear normalization. The default is the original value from the
             Tacotron 2 implementation.
         model_in_channels (`int`, *optional*, defaults to 64):
-            The number of input channels to the [`UnivNetGan`] model. This should match
+            The number of input channels to the [`UnivNetModel`] model. This should match
             `UnivNetGan.config.model_in_channels`.
         pad_end_length (`int`, *optional*, defaults to 10):
             If padding the end of the spectrograms, the number of frames to append to the end of each spectrogram.
@@ -231,7 +231,7 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
     ) -> np.ndarray:
         """
         Generates a random noise sequence of standard Gaussian noise for use in the `noise_sequence` argument of
-        [`UnivNetGan.forward`].
+        [`UnivNetModel.forward`].
 
         Args:
             spectrogram_length (`int`):
@@ -339,7 +339,7 @@ class UnivNetGanFeatureExtractor(SequenceFeatureExtractor):
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_noise (`bool`, *optional*, defaults to `True`):
-                Whether to generate and return a noise waveform for use in [`UnivNetGan.forward`].
+                Whether to generate and return a noise waveform for use in [`UnivNetModel.forward`].
             generator (`numpy.random.Generator`, *optional*, defaults to `None`):
                 An optional `numpy.random.Generator` random number generator to use when generating noise.
             pad_end (`bool`, *optional*, defaults to `False`):

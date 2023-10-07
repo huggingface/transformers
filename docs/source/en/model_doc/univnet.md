@@ -27,8 +27,8 @@ The abstract from the paper is the following:
 
 Tips:
 
-- The `noise_sequence` argument for [`UnivNetGan.forward`] should be standard Gaussian noise (such as from `torch.randn`) of shape `([batch_size], noise_length, model.config.model_in_channels)`, where `noise_length` should match the length dimension (dimension 1) of the `input_features`. If not supplied, it will be randomly generated; a `torch.Generator` can be supplied to the `generator` argument so that the forward pass can be reproduced. (Note that [`UnivNetGanFeatureExtractor`] will return generated noise by default, so it shouldn't be necessary to generate `noise_sequence` manually.)
-- Padding the end of `input_features` with spectrogram silence can be used to reduce artifacts at the end of the generated audio sample. This can be done by supplying `pad_end = True` to [`UnivNetGanFeatureExtractor.__call__`]; the part of the output corresponding to the padding should then be removed (see the usage example below). See [this issue](https://github.com/seungwonpark/melgan/issues/8) for more details.
+- The `noise_sequence` argument for [`UnivNetModel.forward`] should be standard Gaussian noise (such as from `torch.randn`) of shape `([batch_size], noise_length, model.config.model_in_channels)`, where `noise_length` should match the length dimension (dimension 1) of the `input_features`. If not supplied, it will be randomly generated; a `torch.Generator` can be supplied to the `generator` argument so that the forward pass can be reproduced. (Note that [`UnivNetFeatureExtractor`] will return generated noise by default, so it shouldn't be necessary to generate `noise_sequence` manually.)
+- Padding the end of `input_features` with spectrogram silence can be used to reduce artifacts at the end of the generated audio sample. This can be done by supplying `pad_end = True` to [`UnivNetFeatureExtractor.__call__`]; the part of the output corresponding to the padding should then be removed (see the usage example below). See [this issue](https://github.com/seungwonpark/melgan/issues/8) for more details.
 
 Usage Example:
 
@@ -36,11 +36,11 @@ Usage Example:
 from scipy.io.wavfile import write
 from datasets import Audio, load_dataset
 
-from transformers import UnivNetGanFeatureExtractor, UnivNetGan
+from transformers import UnivNetFeatureExtractor, UnivNetModel
 
 model_id_or_path = "dg845/univnet-dev"
-model = UnivNetGan.from_pretrained(model_id_or_path)
-feature_extractor = UnivNetGanFeatureExtractor.from_pretrained(model_id_or_path)
+model = UnivNetModel.from_pretrained(model_id_or_path)
+feature_extractor = UnivNetFeatureExtractor.from_pretrained(model_id_or_path)
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 # Resample the audio to the model and feature extractor's sampling rate.
@@ -64,16 +64,16 @@ This model was contributed by [dg845](https://huggingface.co/dg845).
 To the best of my knowledge, there is no official code release, but an unofficial implementation can be found at [maum-ai/univnet](https://github.com/maum-ai/univnet) with pretrained checkpoints [here](https://github.com/maum-ai/univnet#pre-trained-model).
 
 
-## UnivNetGanConfig
+## UnivNetConfig
 
-[[autodoc]] UnivNetGanConfig
+[[autodoc]] UnivNetConfig
 
-## UnivNetGanFeatureExtractor
+## UnivNetFeatureExtractor
 
-[[autodoc]] UnivNetGanFeatureExtractor
+[[autodoc]] UnivNetFeatureExtractor
     - __call__
 
-## UnivNetGan
+## UnivNetModel
 
-[[autodoc]] UnivNetGan
+[[autodoc]] UnivNetModel
     - forward

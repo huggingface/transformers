@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 from datasets import Audio, load_dataset
 
-from transformers import UnivNetGanFeatureExtractor
+from transformers import UnivNetFeatureExtractor
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, slow
 from transformers.utils.import_utils import is_torch_available
 
@@ -50,7 +50,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class UnivNetGanFeatureExtractionTester(unittest.TestCase):
+class UnivNetFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -148,11 +148,11 @@ class UnivNetGanFeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
-class UnivNetGanFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = UnivNetGanFeatureExtractor
+class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+    feature_extraction_class = UnivNetFeatureExtractor
 
     def setUp(self):
-        self.feat_extract_tester = UnivNetGanFeatureExtractionTester(self)
+        self.feat_extract_tester = UnivNetFeatureExtractionTester(self)
 
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
@@ -330,7 +330,7 @@ class UnivNetGanFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitte
 
         input_speech, sr = self._load_datasamples(1)
 
-        feature_extractor = UnivNetGanFeatureExtractor()
+        feature_extractor = UnivNetFeatureExtractor()
         input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
         self.assertEqual(input_features.shape, (1, 548, 100))
 

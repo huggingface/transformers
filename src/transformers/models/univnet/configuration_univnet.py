@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" UnivNetGan model configuration"""
+""" UnivNetModel model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -25,9 +25,9 @@ UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class UnivNetGanConfig(PretrainedConfig):
+class UnivNetConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`UnivNetGan`]. It is used to instantiate a UnivNet
+    This is the configuration class to store the configuration of a [`UnivNetModel`]. It is used to instantiate a UnivNet
     vocoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the UnivNet
     [dg845/univnet-dev](https://huggingface.co/dg845/univnet-dev) architecture, which corresponds to the 'c32'
@@ -75,13 +75,13 @@ class UnivNetGanConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import UnivNetGan, UnivNetGanConfig
+    >>> from transformers import UnivNetModel, UnivNetConfig
 
     >>> # Initializing a Tortoise TTS style configuration
-    >>> configuration = UnivNetGanConfig()
+    >>> configuration = UnivNetConfig()
 
     >>> # Initializing a model (with random weights) from the Tortoise TTS style configuration
-    >>> model = UnivNetGan(configuration)
+    >>> model = UnivNetModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

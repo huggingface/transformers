@@ -16,14 +16,14 @@ import argparse
 
 import torch
 
-from transformers import UnivNetGan, UnivNetGanConfig, logging
+from transformers import UnivNetModel, UnivNetConfig, logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.univnet")
 
 
-def get_kernel_predictor_key_mapping(config: UnivNetGanConfig, old_prefix: str = "", new_prefix: str = ""):
+def get_kernel_predictor_key_mapping(config: UnivNetConfig, old_prefix: str = "", new_prefix: str = ""):
     mapping = {}
     # Initial conv layer
     mapping[f"{old_prefix}.input_conv.0.weight_g"] = f"{new_prefix}.input_conv.weight_g"
@@ -53,7 +53,7 @@ def get_kernel_predictor_key_mapping(config: UnivNetGanConfig, old_prefix: str =
     return mapping
 
 
-def get_key_mapping(config: UnivNetGanConfig):
+def get_key_mapping(config: UnivNetConfig):
     mapping = {}
 
     # NOTE: inital conv layer keys are the same
@@ -111,15 +111,15 @@ def convert_univnet_checkpoint(
     state_dict = model_state_dict_base["model_g"]
 
     if config_path is not None:
-        config = UnivNetGanConfig.from_pretrained(config_path)
+        config = UnivNetConfig.from_pretrained(config_path)
     else:
-        config = UnivNetGanConfig()
+        config = UnivNetConfig()
 
     keys_to_modify = get_key_mapping(config)
     keys_to_remove = set()
     hf_state_dict = rename_state_dict(state_dict, keys_to_modify, keys_to_remove)
 
-    model = UnivNetGan(config)
+    model = UnivNetModel(config)
     # Apply weight norm since the original checkpoint has weight norm applied
     model.apply_weight_norm()
     model.load_state_dict(hf_state_dict)

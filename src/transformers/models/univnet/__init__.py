@@ -24,9 +24,9 @@ from ...utils import (
 _import_structure = {
     "configuration_univnet": [
         "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "UnivNetGanConfig",
+        "UnivNetConfig",
     ],
-    "feature_extraction_univnet": ["UnivNetGanFeatureExtractor"],
+    "feature_extraction_univnet": ["UnivNetFeatureExtractor"],
 }
 
 try:
@@ -37,16 +37,16 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_univnet"] = [
         "UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "UnivNetGan",
+        "UnivNetModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_univnet import (
         UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        UnivNetGanConfig,
+        UnivNetConfig,
     )
-    from .feature_extraction_univnet import UnivNetGanFeatureExtractor
+    from .feature_extraction_univnet import UnivNetFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_univnet import (
             UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-            UnivNetGan,
+            UnivNetModel,
         )
 
 else:

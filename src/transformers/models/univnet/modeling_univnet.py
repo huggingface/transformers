@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch UnivNetGan model."""
+""" PyTorch UnivNetModel model."""
 
 from typing import List, Optional, Tuple, Union
 
@@ -24,7 +24,7 @@ from ...utils import (
     add_start_docstrings,
     logging,
 )
-from .configuration_univnet import UnivNetGanConfig
+from .configuration_univnet import UnivNetConfig
 
 
 logger = logging.get_logger(__name__)
@@ -44,13 +44,13 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
     block (LVCBlock).
 
     Parameters:
-        config: (`UnivNetGanConfig`):
-            Config for the `UnivNetGan` model.
+        config: (`UnivNetConfig`):
+            Config for the `UnivNetModel` model.
     """
 
     def __init__(
         self,
-        config: UnivNetGanConfig,
+        config: UnivNetConfig,
     ):
         super().__init__()
         self.channels = config.model_in_channels
@@ -92,8 +92,8 @@ class UnivNetKernelPredictor(nn.Module):
     [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L7).
 
     Parameters:
-        config: (`UnivNetGanConfig`):
-            Config for the `UnivNetGan` model.
+        config: (`UnivNetConfig`):
+            Config for the `UnivNetModel` model.
         conv_kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the location variable convolutional layer kernels (convolutional weight tensor).
         conv_layers (`int`, *optional*, defaults to 4):
@@ -102,7 +102,7 @@ class UnivNetKernelPredictor(nn.Module):
 
     def __init__(
         self,
-        config: UnivNetGanConfig,
+        config: UnivNetConfig,
         conv_kernel_size: int = 3,
         conv_layers: int = 4,
     ):
@@ -204,8 +204,8 @@ class UnivNetLVCResidualBlock(nn.Module):
     Implementation of the location variable convolution (LVC) residual block for the UnivNet residual network.
 
     Parameters:
-        config: (`UnivNetGanConfig`):
-            Config for the `UnivNetGan` model.
+        config: (`UnivNetConfig`):
+            Config for the `UnivNetModel` model.
         kernel_size (`int`):
             The kernel size for the dilated 1D convolutional layer.
         dilation (`int`):
@@ -214,7 +214,7 @@ class UnivNetLVCResidualBlock(nn.Module):
 
     def __init__(
         self,
-        config: UnivNetGanConfig,
+        config: UnivNetConfig,
         kernel_size: int,
         dilation: int,
     ):
@@ -330,8 +330,8 @@ class UnivNetLVCBlock(nn.Module):
     Based on LVCBlock in [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L98)
 
     Parameters:
-        config: (`UnivNetGanConfig`):
-            Config for the `UnivNetGan` model.
+        config: (`UnivNetConfig`):
+            Config for the `UnivNetModel` model.
         kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the dilated 1D convolutional layers in the residual blocks.
         stride (`int`, *optional*, defaults to 8):
@@ -345,7 +345,7 @@ class UnivNetLVCBlock(nn.Module):
 
     def __init__(
         self,
-        config: UnivNetGanConfig,
+        config: UnivNetConfig,
         kernel_size: int = 3,
         stride: int = 8,
         dilations: Union[Tuple[int], List[int]] = [1, 3, 9, 27],
@@ -413,7 +413,7 @@ UNIVNET_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`UnivNetGanConfig`]):
+        config ([`UnivNetConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -424,11 +424,11 @@ UNIVNET_START_DOCSTRING = r"""
     """UnivNet GAN vocoder.""",
     UNIVNET_START_DOCSTRING,
 )
-class UnivNetGan(PreTrainedModel):
-    config_class = UnivNetGanConfig
+class UnivNetModel(PreTrainedModel):
+    config_class = UnivNetConfig
     main_input_name = "input_features"
 
-    def __init__(self, config: UnivNetGanConfig):
+    def __init__(self, config: UnivNetConfig):
         super().__init__(config)
 
         self.num_kernels = len(config.resblock_kernel_sizes)
@@ -499,11 +499,11 @@ class UnivNetGan(PreTrainedModel):
         Example:
 
          ```python
-         >>> from transformers import UnivNetGanFeatureExtractor, UnivNetGan
+         >>> from transformers import UnivNetFeatureExtractor, UnivNetModel
          >>> from datasets import load_dataset, Audio
 
-         >>> model = UnivNetGan.from_pretrained("dg845/univnet-dev")
-         >>> feature_extractor = UnivNetGanFeatureExtractor.from_pretrained("dg845/univnet-dev")
+         >>> model = UnivNetModel.from_pretrained("dg845/univnet-dev")
+         >>> feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
 
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> # Resample the audio to the feature extractor's sampling rate.

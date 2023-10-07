@@ -576,8 +576,8 @@ _import_structure = {
     ],
     "models.univnet": [
         "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "UnivNetGanConfig",
-        "UnivNetGanFeatureExtractor",
+        "UnivNetConfig",
+        "UnivNetFeatureExtractor",
     ],
     "models.upernet": ["UperNetConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
@@ -2892,7 +2892,7 @@ else:
     _import_structure["models.univnet"].extend(
         [
             "UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "UnivNetGan",
+            "UnivNetModel",
         ]
     )
     _import_structure["models.upernet"].extend(
@@ -4692,8 +4692,8 @@ if TYPE_CHECKING:
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.univnet import (
         UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        UnivNetGanConfig,
-        UnivNetGanFeatureExtractor,
+        UnivNetConfig,
+        UnivNetFeatureExtractor,
     )
     from .models.upernet import UperNetConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
@@ -6634,7 +6634,7 @@ if TYPE_CHECKING:
             UniSpeechSatModel,
             UniSpeechSatPreTrainedModel,
         )
-        from .models.univnet import UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST, UnivNetGan
+        from .models.univnet import UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST, UnivNetModel
         from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
         from .models.videomae import (
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
