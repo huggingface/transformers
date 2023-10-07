@@ -1176,26 +1176,11 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        if self._additional_special_tokens is not None:
-            updated_tokens = []
-            for token in self._additional_special_tokens:
-                if (token not in value or str(token) not in value) and str(token) not in self.special_tokens_map.values():
-                    token.special = False
-                    updated_tokens.append(token)
-            self.add_tokens(updated_tokens)
-        updated_tokens = []
+        # just sets the easy to acces list of strings. Should only be used at init time
         self._additional_special_tokens = [] if value is not None else None
-        # 1. we are resetting the tokens that should not be special
-        # 2. The new additional special tokens should also be updated
         if value is not None:
             for token in value:
-                if str(token) not in self.special_tokens_map.values() and self.is_fast:
-                    self._additional_special_tokens.append(token)
-                else:
-                    updated_tokens.append(token)
-
-        # 3. Add everything to the tokenizer to overwrite
-        self.add_tokens(updated_tokens, True)
+                self._additional_special_tokens.append(token)
 
     @property
     def bos_token_id(self) -> Optional[int]:
