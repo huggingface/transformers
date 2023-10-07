@@ -396,6 +396,11 @@ class Owlv2ModelTester:
 @require_torch
 class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2Model,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": Owlv2Model, "zero-shot-object-detection": Owlv2ForObjectDetection}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

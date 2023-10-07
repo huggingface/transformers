@@ -29,9 +29,9 @@ from huggingface_hub import hf_hub_download
 
 from transformers import (
     CLIPTokenizer,
-    Owlv2ImageProcessor,
     Owlv2Config,
     Owlv2ForObjectDetection,
+    Owlv2ImageProcessor,
     Owlv2Processor,
     Owlv2TextConfig,
     Owlv2VisionConfig,
@@ -320,7 +320,7 @@ if __name__ == "__main__":
         default="owlv2-base-patch16",
         choices=["owlv2-base-patch16", "owlv2-base-patch16-ensemble"],
         type=str,
-        help="Name of the OWL-ViT model you'd like to convert from FLAX to PyTorch.",
+        help="Name of the Owlv2 model you'd like to convert from FLAX to PyTorch.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",

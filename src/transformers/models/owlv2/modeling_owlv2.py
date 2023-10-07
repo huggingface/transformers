@@ -187,7 +187,6 @@ def generalized_box_iou(boxes1, boxes2):
 
 
 @dataclass
-# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTObjectDetectionOutput with OwlViT->Owlv2,OWL-ViT->OWLv2
 class Owlv2ObjectDetectionOutput(ModelOutput):
     """
     Output type of [`Owlv2ForObjectDetection`].
@@ -1369,7 +1368,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         box_coordinates = torch.from_numpy(box_coordinates).to(device)
 
         return box_coordinates
-    
+
     def objectness_predictor(self, image_features: torch.FloatTensor) -> torch.FloatTensor:
         """Predicts the probability that each image feature token is an object.
         Args:
@@ -1446,7 +1445,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         return (pred_logits, image_class_embeds)
 
-    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_text_embedder
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_text_embedder with owlvit->owlv2
     def image_text_embedder(
         self,
         input_ids: torch.Tensor,
@@ -1489,7 +1488,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
         return (text_embeds, image_embeds, outputs)
 
-    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_embedder
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_embedder with owlvit->owlv2, OwlViTModel->Owlv2Model
     def image_embedder(
         self,
         pixel_values: torch.FloatTensor,
@@ -1566,7 +1565,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OWLV2_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Owlv2ImageGuidedObjectDetectionOutput, config_class=Owlv2Config)
-    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_guided_detection
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_guided_detection with OwlViTImageGuidedObjectDetectionOutput->Owlv2ImageGuidedObjectDetectionOutput, OwlViTForObjectDetection->Owlv2ForObjectDetection, owlvit-base-patch16->owlv2-base-patch16
     def image_guided_detection(
         self,
         pixel_values: torch.FloatTensor,

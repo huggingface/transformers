@@ -16,7 +16,6 @@
 Image/Text processor class for OWL-ViT
 """
 
-import warnings
 from typing import List
 
 import numpy as np
@@ -39,7 +38,7 @@ class Owlv2Processor(ProcessorMixin):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = ("Owlv2ImageProcessor")
+    image_processor_class = "Owlv2ImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor, tokenizer, **kwargs):
