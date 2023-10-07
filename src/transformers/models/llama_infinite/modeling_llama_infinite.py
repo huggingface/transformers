@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LLaMA-Infinite model. Reproducing LM-Infinite paper https://arxiv.org/abs/2308.16137 """
+""" PyTorch LLaMA-Infinite model. Reproducing LM-Infinite paper https://arxiv.org/abs/2308.16137"""
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -43,7 +43,6 @@ from .lambda_attention import lambda_matmul
 
 
 if is_flash_attn_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
@@ -336,13 +335,11 @@ class LlamaInfiniteAttention(nn.Module):
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """
-        This modified function implements LM-Infinite attention mask, which
-        involves a Lambda-shaped attention mask and a upper limit of the
-        effective distance for calculating relative positional attention.
-        Owing to the lambda_matmul function defined in lambda_attention.py,
-        our function allows for feeding the while sequence while maintining
-        O(n) computational complexity. A great advantage over feeding token by
-        token when encoding the context.
+        This modified function implements LM-Infinite attention mask, which involves a Lambda-shaped attention mask and
+        a upper limit of the effective distance for calculating relative positional attention. Owing to the
+        lambda_matmul function defined in lambda_attention.py, our function allows for feeding the while sequence while
+        maintining O(n) computational complexity. A great advantage over feeding token by token when encoding the
+        context.
         """
         bsz, q_len, _ = hidden_states.size()
 
@@ -391,16 +388,14 @@ class LlamaInfiniteAttention(nn.Module):
         # inv_freq controls the dtype of rotation phase, which can be large
         self.rotary_emb.inv_freq = self.rotary_emb.inv_freq.to(torch.float32)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        rot_query_states = apply_rotary_pos_emb_single(
-            query_states, cos, sin, position_ids)
-        rot_key_states = apply_rotary_pos_emb_single(
-            key_states, cos, sin, key_position_ids)
+        rot_query_states = apply_rotary_pos_emb_single(query_states, cos, sin, position_ids)
+        rot_key_states = apply_rotary_pos_emb_single(key_states, cos, sin, key_position_ids)
 
         stationary_key_states = key_states
-        effective_limit_distance = min(limit_distance, kv_seq_len-1)
-        stationary_query_states = \
-            (query_states * cos[0, 0, effective_limit_distance]) + \
-            (rotate_half(query_states) * sin[0, 0, effective_limit_distance])
+        effective_limit_distance = min(limit_distance, kv_seq_len - 1)
+        stationary_query_states = (query_states * cos[0, 0, effective_limit_distance]) + (
+            rotate_half(query_states) * sin[0, 0, effective_limit_distance]
+        )
 
         # If use_lambda_mask, we can use an efficient implementation
         lambda_attention_weights = (
@@ -409,10 +404,12 @@ class LlamaInfiniteAttention(nn.Module):
                 stationary_key_states,
                 rot_query_states,
                 stationary_query_states,
-                local_branch, global_branch,
+                local_branch,
+                global_branch,
                 padding_mask,
-            ) / math.sqrt(self.head_dim)
-         ).softmax()
+            )
+            / math.sqrt(self.head_dim)
+        ).softmax()
 
         if output_attentions:
             attn_weights = lambda_attention_weights.normal_shape_attention()
@@ -444,8 +441,9 @@ class LlamaInfiniteDecoderLayer(nn.Module):
     def __init__(self, config: LlamaInfiniteConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        assert not getattr(config, "_flash_attn_2_enabled", False), \
-            "LM-Infinite has its own attention kernel, conflicting with flash attention"
+        assert not getattr(
+            config, "_flash_attn_2_enabled", False
+        ), "LM-Infinite has its own attention kernel, conflicting with flash attention"
         self.self_attn = LlamaInfiniteAttention(config=config)
         self.mlp = LlamaInfiniteMLP(config)
         self.input_layernorm = LlamaInfiniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -976,8 +974,8 @@ class LlamaInfiniteForCausalLM(LlamaInfinitePreTrainedModel):
     """
     The LLaMa Model transformer with a sequence classification head on top (linear layer).
 
-    [`LlamaInfiniteForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
+    [`LlamaInfiniteForSequenceClassification`] uses the last token in order to do the classification, as other causal
+    models (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If

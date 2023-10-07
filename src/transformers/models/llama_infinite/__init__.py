@@ -21,6 +21,7 @@ from ...utils import (
     is_torch_available,
 )
 
+
 _import_structure = {
     "configuration_llama_infinite": ["LLAMAINFINITE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaInfiniteConfig"],
 }
@@ -48,10 +49,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_llama_infinite import LlamaInfiniteForCausalLM, \
-            LlamaInfiniteForSequenceClassification, LlamaInfiniteModel, \
-            LlamaInfinitePreTrainedModel
-
+        from .modeling_llama_infinite import (
+            LlamaInfiniteForCausalLM,
+            LlamaInfiniteForSequenceClassification,
+            LlamaInfiniteModel,
+            LlamaInfinitePreTrainedModel,
+        )
 
 
 else:

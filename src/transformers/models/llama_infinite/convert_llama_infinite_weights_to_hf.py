@@ -267,7 +267,9 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
     gc.collect()
 
     print("Loading the checkpoint in a LlamaInfinite model.")
-    model = LlamaInfiniteForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+    model = LlamaInfiniteForCausalLM.from_pretrained(
+        tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+    )
     # Avoid saving this as part of the config.
     del model.config._name_or_path
     model.config.torch_dtype = torch.float16

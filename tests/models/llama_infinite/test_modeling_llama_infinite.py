@@ -269,7 +269,11 @@ class LlamaInfiniteModelTester:
 
 @require_torch
 class LlamaInfiniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (LlamaInfiniteModel, LlamaInfiniteForCausalLM, LlamaInfiniteForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (LlamaInfiniteModel, LlamaInfiniteForCausalLM, LlamaInfiniteForSequenceClassification)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (LlamaInfiniteForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

@@ -29,11 +29,12 @@ LLAMAINFINITE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "glaciohound/llama-infinite": "https://huggingface.co/glaciohound/llama-infinite/resolve/main/config.json",
 }
 
+
 class LlamaInfiniteConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlamaInfiniteModel`]. It is used to instantiate an LlamaInfinite
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the LlamaInfinite-7B.
+    This is the configuration class to store the configuration of a [`LlamaInfiniteModel`]. It is used to instantiate
+    an LlamaInfinite model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the LlamaInfinite-7B.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -41,8 +42,8 @@ class LlamaInfiniteConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the LlamaInfinite model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LlamaInfiniteModel`]
+            Vocabulary size of the LlamaInfinite model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`LlamaInfiniteModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -67,8 +68,8 @@ class LlamaInfiniteConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. LlamaInfinite 1 supports up to 2048 tokens,
-            LlamaInfinite 2 up to 4096, CodeLlamaInfinite up to 16384.
+            The maximum sequence length that this model might ever be used with. LlamaInfinite 1 supports up to 2048
+            tokens, LlamaInfinite 2 up to 4096, CodeLlamaInfinite up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -86,8 +87,8 @@ class LlamaInfiniteConfig(PretrainedConfig):
             is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
-            https://www.reddit.com/r/LocalLlamaInfinite/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-            experimental feature, subject to breaking API changes in future versions.
+            https://www.reddit.com/r/LocalLlamaInfinite/comments/14mrgpr/dynamically_scaled_rope_further_increases/.
+            This is an experimental feature, subject to breaking API changes in future versions.
         attention_bias (`bool`, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
 
