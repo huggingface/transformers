@@ -318,3 +318,6 @@ documented on their corresponding model page.
 ## FlaxSeq2SeqQuestionAnsweringModelOutput
 
 [[autodoc]] modeling_flax_outputs.FlaxSeq2SeqQuestionAnsweringModelOutput
+
+## Diffusersstable-diffusionText-to-ImageModelOutput
+[[autodoc]] modeling_flax_outputs.FlaxDiffusersstable-diffusionText-to-ImageModelOutput
