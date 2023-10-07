@@ -142,7 +142,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(
-            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_features_mask"]
+            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_embeds_position_mask"]
         )
 
         # test if it raises when no input is passed
@@ -174,7 +174,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         # both image and text
         inputs = processor(text=input_str, images=image_input)
         self.assertListEqual(
-            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_features_mask"]
+            list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask", "image_embeds_position_mask"]
         )
 
         # only text
@@ -417,7 +417,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             outputs.input_ids
             == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[0][1:]
         )
-        assert outputs.image_features_mask == [0] * 2 + [1] * num_image_tokens + [0] + [0] * (
+        assert outputs.image_embeds_position_mask == [0] * 2 + [1] * num_image_tokens + [0] + [0] * (
             len(expected_input_ids[0]) - 1
         )
         assert np.allclose(outputs.pixel_values[0][:3, :3, :3], EXPECTED_PIXEL_VALUES_1, atol=1e-9)
@@ -451,7 +451,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         )
         assert outputs.attention_mask.numpy().tolist()[-1] == [1] * (2 + num_image_tokens + len(expected_input_ids[5]))
 
-        assert outputs.image_features_mask.numpy().tolist() == [
+        assert outputs.image_embeds_position_mask.numpy().tolist() == [
             [0, 0] + [1] * num_image_tokens + [0] + [0] * (len(expected_input_ids[5]) - 1)
         ] * len(batch_image)
 
@@ -477,7 +477,7 @@ class Kosmos2ProcessorTest(unittest.TestCase):
         assert outputs.attention_mask.numpy().tolist()[0] == [0] * (
             len(expected_input_ids[5]) - len(expected_input_ids[0])
         ) + [1, 1] + [1] * num_image_tokens + [1] + [1] * len(expected_input_ids[0][1:])
-        assert outputs.image_features_mask.numpy().tolist()[0] == [0] * (
+        assert outputs.image_embeds_position_mask.numpy().tolist()[0] == [0] * (
             len(expected_input_ids[5]) - len(expected_input_ids[0])
         ) + [0, 0] + [1] * num_image_tokens + [0] + [0] * len(expected_input_ids[0][1:])
 
@@ -487,6 +487,6 @@ class Kosmos2ProcessorTest(unittest.TestCase):
             == [0, 64003] + list(range(4, 4 + num_image_tokens)) + [64004] + expected_input_ids[5][1:]
         )
         assert outputs.attention_mask.numpy().tolist()[-1] == [1] * (2 + num_image_tokens + len(expected_input_ids[5]))
-        assert outputs.image_features_mask.numpy().tolist()[-1] == [0, 0] + [1] * num_image_tokens + [0] + [0] * (
-            len(expected_input_ids[5]) - 1
-        )
+        assert outputs.image_embeds_position_mask.numpy().tolist()[-1] == [0, 0] + [1] * num_image_tokens + [0] + [
+            0
+        ] * (len(expected_input_ids[5]) - 1)

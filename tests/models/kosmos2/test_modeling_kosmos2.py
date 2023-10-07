@@ -203,13 +203,13 @@ class Kosmos2ModelTester:
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
-        # build `image_features_mask`
-        image_features_mask = torch.zeros_like(input_ids)
-        image_features_mask[:, 1 : 1 + self.latent_query_num :] = 1
+        # build `image_embeds_position_mask`
+        image_embeds_position_mask = torch.zeros_like(input_ids)
+        image_embeds_position_mask[:, 1 : 1 + self.latent_query_num :] = 1
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, image_features_mask, pixel_values
+        return config, input_ids, attention_mask, image_embeds_position_mask, pixel_values
 
     def get_config(self):
         return Kosmos2Config(
@@ -218,26 +218,26 @@ class Kosmos2ModelTester:
             latent_query_num=self.latent_query_num,
         )
 
-    def create_and_check_model(self, config, input_ids, attention_mask, image_features_mask, pixel_values):
+    def create_and_check_model(self, config, input_ids, attention_mask, image_embeds_position_mask, pixel_values):
         model = Kosmos2Model(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(pixel_values, input_ids, image_features_mask, attention_mask)
+            result = model(pixel_values, input_ids, image_embeds_position_mask, attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.text_model_tester.batch_size, self.text_model_tester.seq_length, self.text_model_tester.hidden_size),
         )
         self.parent.assertEqual(
-            result.image_features.shape,
+            result.image_embeds.shape,
             (self.text_model_tester.batch_size, self.latent_query_num, self.text_model_tester.hidden_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, image_features_mask, pixel_values = config_and_inputs
+        config, input_ids, attention_mask, image_embeds_position_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "image_features_mask": image_features_mask,
+            "image_embeds_position_mask": image_embeds_position_mask,
             "pixel_values": pixel_values,
         }
         return config, inputs_dict
@@ -412,8 +412,10 @@ class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
 
             try:
                 main_input = inputs[main_input_name]
-                model(main_input, inputs["input_ids"], inputs["image_features_mask"])
-                traced_model = torch.jit.trace(model, (main_input, inputs["input_ids"], inputs["image_features_mask"]))
+                model(main_input, inputs["input_ids"], inputs["image_embeds_position_mask"])
+                traced_model = torch.jit.trace(
+                    model, (main_input, inputs["input_ids"], inputs["image_embeds_position_mask"])
+                )
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -495,8 +497,8 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             pixel_values=inputs["pixel_values"],
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
-            image_features=None,
-            image_features_mask=inputs["image_features_mask"],
+            image_embeds=None,
+            image_embeds_position_mask=inputs["image_embeds_position_mask"],
             use_cache=True,
             max_new_tokens=128,
             output_scores=True,
