@@ -43,8 +43,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value to pad with when applying the padding strategy defined by the `padding` argument to
-            [`UnivNetFeatureExtractor.__call__`]. Note that this is used to pad the raw input waveforms; if
-            `pad_end` is specified, we will pad the output spectrograms using `self.spectrogram_zero`.
+            [`UnivNetFeatureExtractor.__call__`]. Note that this is used to pad the raw input waveforms; if `pad_end`
+            is specified, we will pad the output spectrograms using `self.spectrogram_zero`.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly improve the
             performance for some models.

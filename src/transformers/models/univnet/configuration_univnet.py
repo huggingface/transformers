@@ -27,9 +27,9 @@ UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class UnivNetConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`UnivNetModel`]. It is used to instantiate a UnivNet
-    vocoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the UnivNet
+    This is the configuration class to store the configuration of a [`UnivNetModel`]. It is used to instantiate a
+    UnivNet vocoder model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the UnivNet
     [dg845/univnet-dev](https://huggingface.co/dg845/univnet-dev) architecture, which corresponds to the 'c32'
     architecture in [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/config/default_c32.yaml).
 
