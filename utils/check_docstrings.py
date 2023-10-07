@@ -98,7 +98,6 @@ OBJECTS_TO_IGNORE = [
     "BigBirdForQuestionAnswering",
     "BigBirdModel",
     "BigBirdPegasusConfig",
-    "BigBirdTokenizerFast",
     "BitImageProcessor",
     "BlenderbotConfig",
     "BlenderbotSmallConfig",
