@@ -459,10 +459,7 @@ def center_crop(
     crop_height, crop_width = int(crop_height), int(crop_width)
 
     # In case height is odd
-    diff_height = orig_height - crop_height
-    if diff_height % 2 == 1:
-        diff_height += 1
-    top = diff_height // 2
+    top = (orig_height - crop_height + 1) // 2
     bottom = top + crop_height
     # In case width is odd
     diff_width = orig_width - crop_width
