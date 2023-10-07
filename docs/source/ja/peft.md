@@ -12,7 +12,7 @@ rendered properly in your Markdown viewer.
 
 # Load adapters with 🤗 PEFT
 
-[[Colabで開く]]
+[[open-in-colab]]
 
 [Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) メソッドは、事前学習済みモデルのパラメータをファインチューニング中に凍結し、その上にわずかな訓練可能なパラメータ（アダプター）を追加するアプローチです。アダプターは、タスク固有の情報を学習するために訓練されます。このアプローチは、メモリ使用量が少なく、完全にファインチューニングされたモデルと比較して計算リソースを低く抑えつつ、同等の結果を生成することが示されています。
 

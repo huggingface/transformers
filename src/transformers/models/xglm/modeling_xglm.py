@@ -623,9 +623,7 @@ class XGLMModel(XGLMPreTrainedModel):
                 dtype=torch.long,
                 device=input_ids.device if input_ids is not None else inputs_embeds.device,
             )
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
-        else:
-            position_ids = position_ids.view(-1, input_shape[-1])
+            position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
