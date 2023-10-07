@@ -145,7 +145,6 @@ pytest -k adam tests/test_optimization.py
 pytest -k "not adam" tests/test_optimization.py
 ```
 
-# Japanese Translation
 
 以下は、提供されたテキストの日本語訳です。
 
