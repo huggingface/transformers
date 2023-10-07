@@ -131,7 +131,7 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
             min_value=1e-30,
             mel_floor=1e-30,
             pad_mode="constant",
-        )
+        ).T
 
         if not self.log_compression:
             pass
