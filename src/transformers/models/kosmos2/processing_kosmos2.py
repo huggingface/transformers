@@ -51,6 +51,8 @@ class Kosmos2Processor(ProcessorMixin):
             An instance of [`Kosmos2ImageProcessor`]. The image processor is a required input.
         tokenizer (`XLMRobertaTokenizerFast`):
             An instance of ['XLMRobertaTokenizerFast`]. The tokenizer is a required input.
+        num_patch_index_tokens (`int`, *optional*, defaults to 1024):
+            The number of tokens that represent patch indices.
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Kosmos2ImageProcessor"
