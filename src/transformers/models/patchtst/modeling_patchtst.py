@@ -265,17 +265,17 @@ def random_masking(
     if seed_number:
         set_seed(seed_number)
 
-    bs, nvars, L, D = xb.shape
+    batch_size, nvars, seq_len, feat = xb.shape
 
-    len_keep = int(L * (1 - mask_ratio))
+    len_keep = int(seq_len * (1 - mask_ratio))
 
     if channel_consistent_masking:
-        noise = torch.rand(bs, 1, L, device=xb.device)  # noise in [0, 1], bs x 1 x  L
-        noise = noise.repeat(1, nvars, 1)  # bs x nvars x L
+        noise = torch.rand(batch_size, 1, seq_len, device=xb.device)  # noise in [0, 1], bs x 1 x  L
+        noise = noise.repeat(1, nvars, 1)  # bs x nvars x time
     else:
-        noise = torch.rand(bs, nvars, L, device=xb.device)  # noise in [0, 1], bs x nvars x L
+        noise = torch.rand(batch_size, nvars, seq_len, device=xb.device)  # noise in [0, 1], bs x nvars x L
 
-    mask = torch.ones(bs, nvars, L, device=xb.device)  # mask: [bs x nvars x num_patch]
+    mask = torch.ones(batch_size, nvars, seq_len, device=xb.device)  # mask: [bs x nvars x num_patch]
     mask[:, :, :len_keep] = 0
 
     # sort noise for each sample
@@ -283,7 +283,7 @@ def random_masking(
     ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [bs x nvars x L]
 
     mask = torch.gather(mask, dim=-1, index=ids_restore)
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [bs x nvars x num_patches x patch_length]
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, feat)  # mask: [bs x nvars x num_patches x patch_length]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
@@ -325,29 +325,29 @@ def forecast_masking(
     if mix_ratio is None:
         mix_ratio = [1 for t in patch_lengths]
 
-    bs, nvars, L, D = xb.shape
-    mask = torch.zeros(bs, nvars, L, device=xb.device)
+    batch_size, nvars, seq_len, feat = xb.shape
+    mask = torch.zeros(batch_size, nvars, seq_len, device=xb.device)
 
     t_list = []
     total_length = 0
     total_ratio = sum(mix_ratio)
 
     for i, j in zip(patch_lengths, mix_ratio):
-        if i <= 0 or i >= L:
+        if i <= 0 or i >= seq_len:
             raise Exception("masked_patch_len should be greater than 0 and less than total patches.")
-        temp_len = int(bs * j / total_ratio)
+        temp_len = int(batch_size * j / total_ratio)
         t_list.append([i, j, temp_len])
         total_length += temp_len
 
     t_list = sorted(t_list, key=lambda x: x[2])
 
-    if total_length < bs:
-        t_list[0][2] = t_list[0][2] + (bs - total_length)
-    elif total_length > bs:
-        t_list[-1][2] = t_list[-1][2] + (total_length - bs)
+    if total_length < batch_size:
+        t_list[0][2] = t_list[0][2] + (batch_size - total_length)
+    elif total_length > batch_size:
+        t_list[-1][2] = t_list[-1][2] + (total_length - batch_size)
 
     b1 = 0
-    for p, r, l in t_list:
+    for p, _, l in t_list:
         b2 = b1 + l
         mask[b1:b2, :, -p:] = 1
         b1 = b2
@@ -355,7 +355,7 @@ def forecast_masking(
     perm = torch.randperm(mask.shape[0])
     mask = mask[perm]
 
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [bs x nvars x num_patch x patch_len]
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, feat)  # mask: [bs x nvars x num_patch x patch_len]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
