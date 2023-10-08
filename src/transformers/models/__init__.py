@@ -132,6 +132,7 @@ from . import (
     megatron_bert,
     megatron_gpt2,
     mgp_str,
+    mistral,
     mluke,
     mobilebert,
     mobilenet_v1,

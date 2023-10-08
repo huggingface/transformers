@@ -67,7 +67,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
-        bos_token (`str`, *optional*, defaults to `"<s>"`):
+        bos_token (`str`, *optional*, defaults to `"[SEP]"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
             <Tip>
@@ -77,7 +77,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
 
             </Tip>
 
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
+        eos_token (`str`, *optional*, defaults to `"[SEP]"`):
             The end of sequence token.
 
             <Tip>
@@ -87,23 +87,21 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
 
             </Tip>
 
-        sep_token (`str`, *optional*, defaults to `"</s>"`):
+        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        cls_token (`str`, *optional*, defaults to `"<s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
+        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (`str`, *optional*, defaults to `"<mask>"`):
+        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
+        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
-            Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
