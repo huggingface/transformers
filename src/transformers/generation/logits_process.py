@@ -1714,7 +1714,7 @@ class BarkEarlyStoppingLogitsProcessor(LogitsProcessor):
                 eos_token_id (`int`, *optional*, defaults to 50257):
                     The id of the *end-of-sequence* token.
                 min_eos_p (`float`, *optional*, defaults to None):
-                Minimum end of speech threshold.
+                    Minimum end of speech threshold.
     """
 
     def __init__(self, generate_config):
