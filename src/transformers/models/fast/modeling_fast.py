@@ -1,4 +1,5 @@
 import math
+import unittest
 from collections import OrderedDict
 
 import cv2
@@ -12,34 +13,34 @@ from transformers import PreTrainedModel
 
 def get_same_padding(kernel_size):
     if isinstance(kernel_size, tuple):
-        assert len(kernel_size) == 2, 'invalid kernel size: %s' % kernel_size
+        assert len(kernel_size) == 2, "invalid kernel size: %s" % kernel_size
         p1 = get_same_padding(kernel_size[0])
         p2 = get_same_padding(kernel_size[1])
         return p1, p2
-    assert isinstance(kernel_size, int), 'kernel size should be either `int` or `tuple`'
-    assert kernel_size % 2 > 0, 'kernel size should be odd number'
+    assert isinstance(kernel_size, int), "kernel size should be either `int` or `tuple`"
+    assert kernel_size % 2 > 0, "kernel size should be odd number"
     return kernel_size // 2
 
 
 def build_activation(act_func, inplace=True):
-    if act_func == 'relu':
+    if act_func == "relu":
         return nn.ReLU(inplace=inplace)
-    elif act_func == 'relu6':
+    elif act_func == "relu6":
         return nn.ReLU6(inplace=inplace)
-    elif act_func == 'tanh':
+    elif act_func == "tanh":
         return nn.Tanh()
-    elif act_func == 'sigmoid':
+    elif act_func == "sigmoid":
         return nn.Sigmoid()
     elif act_func is None:
         return None
     else:
-        raise ValueError('do not support: %s' % act_func)
+        raise ValueError("do not support: %s" % act_func)
 
 
 class My2DLayer(nn.Module):
-
-    def __init__(self, in_channels, out_channels,
-                 use_bn=True, act_func='relu', dropout_rate=0, ops_order='weight_bn_act'):
+    def __init__(
+            self, in_channels, out_channels, use_bn=True, act_func="relu", dropout_rate=0, ops_order="weight_bn_act"
+    ):
         super(My2DLayer, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -49,55 +50,55 @@ class My2DLayer(nn.Module):
         self.dropout_rate = dropout_rate
         self.ops_order = ops_order
 
-        """ modules """
+        """ modules"""
         modules = {}
         # batch norm
         if self.use_bn:
             if self.bn_before_weight:
-                modules['bn'] = nn.BatchNorm2d(in_channels)
+                modules["bn"] = nn.BatchNorm2d(in_channels)
             else:
-                modules['bn'] = nn.BatchNorm2d(out_channels)
+                modules["bn"] = nn.BatchNorm2d(out_channels)
         else:
-            modules['bn'] = None
+            modules["bn"] = None
         # activation
-        modules['act'] = build_activation(self.act_func, self.ops_list[0] != 'act')
+        modules["act"] = build_activation(self.act_func, self.ops_list[0] != "act")
         # dropout
         if self.dropout_rate > 0:
-            modules['dropout'] = nn.Dropout2d(self.dropout_rate, inplace=True)
+            modules["dropout"] = nn.Dropout2d(self.dropout_rate, inplace=True)
         else:
-            modules['dropout'] = None
+            modules["dropout"] = None
         # weight
-        modules['weight'] = self.weight_op()
+        modules["weight"] = self.weight_op()
 
         # add modules
         for op in self.ops_list:
             if modules[op] is None:
                 continue
-            elif op == 'weight':
-                if modules['dropout'] is not None:
-                    self.add_module('dropout', modules['dropout'])
-                for key in modules['weight']:
-                    self.add_module(key, modules['weight'][key])
+            elif op == "weight":
+                if modules["dropout"] is not None:
+                    self.add_module("dropout", modules["dropout"])
+                for key in modules["weight"]:
+                    self.add_module(key, modules["weight"][key])
             else:
                 self.add_module(op, modules[op])
 
     @property
     def ops_list(self):
-        return self.ops_order.split('_')
+        return self.ops_order.split("_")
 
     @property
     def bn_before_weight(self):
         for op in self.ops_list:
-            if op == 'bn':
+            if op == "bn":
                 return True
-            elif op == 'weight':
+            elif op == "weight":
                 return False
-        raise ValueError('Invalid ops_order: %s' % self.ops_order)
+        raise ValueError("Invalid ops_order: %s" % self.ops_order)
 
     def weight_op(self):
         raise NotImplementedError
 
-    """ Methods defined in MyModule """
+    """ Methods defined in MyModule"""
 
     def forward(self, x):
         for module in self._modules.values():
@@ -111,12 +112,12 @@ class My2DLayer(nn.Module):
     @property
     def config(self):
         return {
-            'in_channels': self.in_channels,
-            'out_channels': self.out_channels,
-            'use_bn': self.use_bn,
-            'act_func': self.act_func,
-            'dropout_rate': self.dropout_rate,
-            'ops_order': self.ops_order,
+            "in_channels": self.in_channels,
+            "out_channels": self.out_channels,
+            "use_bn": self.use_bn,
+            "act_func": self.act_func,
+            "dropout_rate": self.dropout_rate,
+            "ops_order": self.ops_order,
         }
 
     @staticmethod
@@ -137,7 +138,7 @@ def generate_bbox(keys, label, score, scales, cfg):
     scores = []
     for index in range(1, label_num):
         i = keys[index]
-        ind = (label == i)
+        ind = label == i
         ind_np = ind.data.cpu().numpy()
         points = np.array(np.where(ind_np)).transpose((1, 0))
         if points.shape[0] < cfg.test_cfg.min_area:
@@ -148,18 +149,18 @@ def generate_bbox(keys, label, score, scales, cfg):
             label[ind] = 0
             continue
 
-        if cfg.test_cfg.bbox_type == 'rect':
+        if cfg.test_cfg.bbox_type == "rect":
             rect = cv2.minAreaRect(points[:, ::-1])
             alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
             rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
             bbox = cv2.boxPoints(rect) * scales
 
-        elif cfg.test_cfg.bbox_type == 'poly':
-            binary = np.zeros(label.shape, dtype='uint8')
+        elif cfg.test_cfg.bbox_type == "poly":
+            binary = np.zeros(label.shape, dtype="uint8")
             binary[ind_np] = 1
             contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             bbox = contours[0] * scales
-        bbox = bbox.astype('int32')
+        bbox = bbox.astype("int32")
         bboxes.append(bbox.reshape(-1).tolist())
         scores.append(score_i)
     return bboxes, scores
@@ -170,10 +171,21 @@ class FalsePreTrainedModel(PreTrainedModel):
 
 
 class ConvLayer(My2DLayer):
-
-    def __init__(self, in_channels, out_channels,
-                 kernel_size=3, stride=1, dilation=1, groups=1, bias=False, has_shuffle=False,
-                 use_bn=True, act_func='relu', dropout_rate=0, ops_order='weight_bn_act'):
+    def __init__(
+            self,
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            dilation=1,
+            groups=1,
+            bias=False,
+            has_shuffle=False,
+            use_bn=True,
+            act_func="relu",
+            dropout_rate=0,
+            ops_order="weight_bn_act",
+    ):
         self.kernel_size = kernel_size
         self.stride = stride
         self.dilation = dilation
@@ -192,16 +204,21 @@ class ConvLayer(My2DLayer):
             padding[1] *= self.dilation
 
         weight_dict = OrderedDict()
-        weight_dict['conv'] = nn.Conv2d(
-            self.in_channels, self.out_channels, kernel_size=self.kernel_size, stride=self.stride, padding=padding,
-            dilation=self.dilation, groups=self.groups, bias=self.bias
+        weight_dict["conv"] = nn.Conv2d(
+            self.in_channels,
+            self.out_channels,
+            kernel_size=self.kernel_size,
+            stride=self.stride,
+            padding=padding,
+            dilation=self.dilation,
+            groups=self.groups,
+            bias=self.bias,
         )
 
         return weight_dict
 
 
 class RepConvLayer(nn.Module):
-
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, deploy=False):
         super(RepConvLayer, self).__init__()
 
@@ -214,47 +231,73 @@ class RepConvLayer(nn.Module):
         self.deploy = deploy
 
         assert len(kernel_size) == 2
-        padding = (int(((kernel_size[0] - 1) * dilation) / 2),
-                   int(((kernel_size[1] - 1) * dilation) / 2))
+        padding = (int(((kernel_size[0] - 1) * dilation) / 2), int(((kernel_size[1] - 1) * dilation) / 2))
 
         self.nonlinearity = nn.ReLU(inplace=True)
 
         if deploy:
-            self.fused_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                        kernel_size=kernel_size, stride=stride, padding=padding,
-                                        dilation=dilation, groups=groups, bias=True)
+            self.fused_conv = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+                bias=True,
+            )
         else:
-            self.main_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                       kernel_size=kernel_size, stride=stride, padding=padding,
-                                       dilation=dilation, groups=groups, bias=False)
+            self.main_conv = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+                bias=False,
+            )
             self.main_bn = nn.BatchNorm2d(num_features=out_channels)
 
             ver_pad = (int(((kernel_size[0] - 1) * dilation) / 2), 0)
             hor_pad = (0, int(((kernel_size[1] - 1) * dilation) / 2))
 
             if kernel_size[1] != 1:  # 卷积核的宽大于1 -> 有垂直卷积
-                self.ver_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                          kernel_size=(kernel_size[0], 1),
-                                          stride=stride, padding=ver_pad,
-                                          dilation=dilation, groups=groups, bias=False)
+                self.ver_conv = nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=(kernel_size[0], 1),
+                    stride=stride,
+                    padding=ver_pad,
+                    dilation=dilation,
+                    groups=groups,
+                    bias=False,
+                )
                 self.ver_bn = nn.BatchNorm2d(num_features=out_channels)
             else:
                 self.ver_conv, self.ver_bn = None, None
 
             if kernel_size[0] != 1:  # 卷积核的高大于1 -> 有水平卷积
-                self.hor_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                          kernel_size=(1, kernel_size[1]),
-                                          stride=stride, padding=hor_pad,
-                                          dilation=dilation, groups=groups, bias=False)
+                self.hor_conv = nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=(1, kernel_size[1]),
+                    stride=stride,
+                    padding=hor_pad,
+                    dilation=dilation,
+                    groups=groups,
+                    bias=False,
+                )
                 self.hor_bn = nn.BatchNorm2d(num_features=out_channels)
             else:
                 self.hor_conv, self.hor_bn = None, None
 
-            self.rbr_identity = nn.BatchNorm2d(
-                num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+            self.rbr_identity = (
+                nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+            )
 
     def forward(self, input):
-        if hasattr(self, 'fused_conv'):
+        if hasattr(self, "fused_conv"):
             return self.nonlinearity(self.fused_conv(input))
         else:
             main_outputs = self.main_conv(input)
@@ -282,7 +325,7 @@ class RepConvLayer(nn.Module):
         if identity is None:
             return 0, 0
         assert isinstance(identity, nn.BatchNorm2d)
-        if not hasattr(self, 'id_tensor'):
+        if not hasattr(self, "id_tensor"):
             input_dim = self.in_channels // self.groups
             kernel_value = np.zeros((self.in_channels, input_dim, 1, 1), dtype=np.float32)
             for i in range(self.in_channels):
@@ -331,8 +374,7 @@ class RepConvLayer(nn.Module):
         height, width = kernel.shape[2:]
         pad_left_right = (kernel_width - width) // 2
         pad_top_down = (kernel_height - height) // 2
-        return torch.nn.functional.pad(kernel, [pad_left_right, pad_left_right,
-                                                pad_top_down, pad_top_down])
+        return torch.nn.functional.pad(kernel, [pad_left_right, pad_left_right, pad_top_down, pad_top_down])
 
     # def switch_to_deploy(self):
     #     if hasattr(self, 'fused_conv'):
@@ -397,40 +439,68 @@ class RepConvLayer(nn.Module):
 
 
 class TextNet(PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
-        self.first_conv = ConvLayer(config.backbone_in_channels, config.backbone_out_channels,
-                                    config.backbone_kernel_size, config.backbone_stride, config.backbone_dilation,
-                                    config.backbone_groups, config.backbone_bias, config.backbone_has_shuffle,
-                                    config.backbone_use_bn, config.backbone_act_func, config.backbone_dropout_rate,
-                                    config.backbone_ops_order)
+        self.first_conv = ConvLayer(
+            config.backbone_in_channels,
+            config.backbone_out_channels,
+            config.backbone_kernel_size,
+            config.backbone_stride,
+            config.backbone_dilation,
+            config.backbone_groups,
+            config.backbone_bias,
+            config.backbone_has_shuffle,
+            config.backbone_use_bn,
+            config.backbone_act_func,
+            config.backbone_dropout_rate,
+            config.backbone_ops_order,
+        )
 
         stage1 = []
-        for stage_config in zip(config.backbone_stage1_in_channels, config.backbone_stage1_out_channels,
-                                config.backbone_stage1_kernel_size[0], config.backbone_stage1_stride[0],
-                                config.backbone_stage1_dilation[0], config.backbone_stage1_groups[0]):
+        for stage_config in zip(
+                config.backbone_stage1_in_channels,
+                config.backbone_stage1_out_channels,
+                config.backbone_stage1_kernel_size[0],
+                config.backbone_stage1_stride[0],
+                config.backbone_stage1_dilation[0],
+                config.backbone_stage1_groups[0],
+        ):
             stage1.append(RepConvLayer(*stage_config))
         self.stage1 = nn.ModuleList(stage1)
 
         stage2 = []
-        for stage_config in zip(config.backbone_stage2_in_channels, config.backbone_stage2_out_channels,
-                                config.backbone_stage2_kernel_size[0], config.backbone_stage2_stride[0],
-                                config.backbone_stage2_dilation[0], config.backbone_stage2_groups[0]):
+        for stage_config in zip(
+                config.backbone_stage2_in_channels,
+                config.backbone_stage2_out_channels,
+                config.backbone_stage2_kernel_size[0],
+                config.backbone_stage2_stride[0],
+                config.backbone_stage2_dilation[0],
+                config.backbone_stage2_groups[0],
+        ):
             stage2.append(RepConvLayer(*stage_config))
         self.stage2 = nn.ModuleList(stage2)
 
         stage3 = []
-        for stage_config in zip(config.backbone_stage3_in_channels, config.backbone_stage3_out_channels,
-                                config.backbone_stage3_kernel_size[0], config.backbone_stage3_stride[0],
-                                config.backbone_stage3_dilation[0], config.backbone_stage3_groups[0]):
+        for stage_config in zip(
+                config.backbone_stage3_in_channels,
+                config.backbone_stage3_out_channels,
+                config.backbone_stage3_kernel_size[0],
+                config.backbone_stage3_stride[0],
+                config.backbone_stage3_dilation[0],
+                config.backbone_stage3_groups[0],
+        ):
             stage3.append(RepConvLayer(*stage_config))
         self.stage3 = nn.ModuleList(stage3)
 
         stage4 = []
-        for stage_config in zip(config.backbone_stage4_in_channels, config.backbone_stage4_out_channels,
-                                config.backbone_stage4_kernel_size[0], config.backbone_stage4_stride[0],
-                                config.backbone_stage4_dilation[0], config.backbone_stage4_groups[0]):
+        for stage_config in zip(
+                config.backbone_stage4_in_channels,
+                config.backbone_stage4_out_channels,
+                config.backbone_stage4_kernel_size[0],
+                config.backbone_stage4_stride[0],
+                config.backbone_stage4_dilation[0],
+                config.backbone_stage4_groups[0],
+        ):
             stage4.append(RepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
 
@@ -446,7 +516,7 @@ class TextNet(PreTrainedModel):
 
     def forward(self, x):
         x = self.first_conv(x)
-        output = list()
+        output = []
 
         for block in self.stage1:
             x = block(x)
@@ -468,11 +538,18 @@ class TextNet(PreTrainedModel):
 
 
 class FASTNeck(PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
-        reduce_layer_configs = list(zip(config.neck_in_channels[0], config.neck_out_channels[0], config.neck_kernel_size[0],
-                          config.neck_stride[0], config.neck_dilation[0], config.neck_groups[0]))
+        reduce_layer_configs = list(
+            zip(
+                config.neck_in_channels[0],
+                config.neck_out_channels[0],
+                config.neck_kernel_size[0],
+                config.neck_stride[0],
+                config.neck_dilation[0],
+                config.neck_groups[0],
+            )
+        )
 
         self.reduce_layer1 = RepConvLayer(*reduce_layer_configs[0])
         self.reduce_layer2 = RepConvLayer(*reduce_layer_configs[1])
@@ -491,7 +568,7 @@ class FASTNeck(PreTrainedModel):
 
     def _upsample(self, x, y):
         _, _, H, W = y.size()
-        return F.upsample(x, size=(H, W), mode='bilinear')
+        return F.upsample(x, size=(H, W), mode="bilinear")
 
     def forward(self, x):
         f1, f2, f3, f4 = x
@@ -508,25 +585,38 @@ class FASTNeck(PreTrainedModel):
 
 
 class FASTHead(nn.Module):
-
     def __init__(self, config):
         super(FASTHead, self).__init__()
-        self.conv = RepConvLayer(config.head_conv_in_channels, config.head_conv_out_channels,
-                                 config.head_conv_kernel_size, config.head_conv_stride, config.head_conv_dilation,
-                                 config.head_conv_groups)
+        self.conv = RepConvLayer(
+            config.head_conv_in_channels,
+            config.head_conv_out_channels,
+            config.head_conv_kernel_size,
+            config.head_conv_stride,
+            config.head_conv_dilation,
+            config.head_conv_groups,
+        )
 
-        self.final = ConvLayer(config.head_final_in_channels[0], config.head_final_out_channels[0],
-                               config.head_final_kernel_size[0], config.head_final_stride[0], config.head_final_dilation[0],
-                               config.head_final_groups[0], config.head_final_bias[0], config.head_final_has_shuffle[0],
-                               config.head_final_use_bn[0], config.head_final_act_func[0], config.head_final_dropout_rate[0],
-                               config.head_final_ops_order)
+        self.final = ConvLayer(
+            config.head_final_in_channels[0],
+            config.head_final_out_channels[0],
+            config.head_final_kernel_size[0],
+            config.head_final_stride[0],
+            config.head_final_dilation[0],
+            config.head_final_groups[0],
+            config.head_final_bias[0],
+            config.head_final_has_shuffle[0],
+            config.head_final_use_bn[0],
+            config.head_final_act_func[0],
+            config.head_final_dropout_rate[0],
+            config.head_final_ops_order,
+        )
 
         self.pooling_size = config.head_pooling_size[0]
 
-        self.pooling_1s = nn.MaxPool2d(kernel_size=self.pooling_size, stride=1,
-                                       padding=(self.pooling_size - 1) // 2)
-        self.pooling_2s = nn.MaxPool2d(kernel_size=self.pooling_size // 2 + 1, stride=1,
-                                       padding=(self.pooling_size // 2) // 2)
+        self.pooling_1s = nn.MaxPool2d(kernel_size=self.pooling_size, stride=1, padding=(self.pooling_size - 1) // 2)
+        self.pooling_2s = nn.MaxPool2d(
+            kernel_size=self.pooling_size // 2 + 1, stride=1, padding=(self.pooling_size // 2) // 2
+        )
 
         if config.head_dropout_ratio[0] > 0:
             self.dropout = nn.Dropout2d(config.head_dropout_ratio[0])
@@ -551,17 +641,17 @@ class FASTHead(nn.Module):
         return x
 
     def get_results(self, out, img_meta, cfg, scale=2):
-
-        org_img_size = img_meta['org_img_size'][0]
-        img_size = img_meta['img_size'][0]  # 640*640
+        org_img_size = img_meta["org_img_size"][0]
+        img_size = img_meta["img_size"][0]  # 640*640
         batch_size = out.size(0)
-        outputs = dict()
+        outputs = {}
 
-        texts = F.interpolate(out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale),
-                              mode='nearest')  # B*1*320*320
+        texts = F.interpolate(
+            out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+        )  # B*1*320*320
         texts = self._max_pooling(texts, scale=scale)  # B*1*320*320
         score_maps = torch.sigmoid_(texts)  # B*1*320*320
-        score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode='nearest')  # B*1*640*640
+        score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
         score_maps = score_maps.squeeze(1)  # B*640*640
 
         kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
@@ -572,26 +662,24 @@ class FASTHead(nn.Module):
         labels_ = np.array(labels_)
         labels_ = torch.from_numpy(labels_)
         labels = labels_.unsqueeze(1).to(torch.float32)  # B*1*160*160
-        labels = F.interpolate(labels, size=(img_size[0] // scale, img_size[1] // scale), mode='nearest')  # B*1*320*320
+        labels = F.interpolate(
+            labels, size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+        )  # B*1*320*320
         labels = self._max_pooling(labels, scale=scale)
-        labels = F.interpolate(labels, size=(img_size[0], img_size[1]), mode='nearest')  # B*1*640*640
+        labels = F.interpolate(labels, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
         labels = labels.squeeze(1).to(torch.int32)  # B*640*640
 
         keys = [torch.unique(labels_[i], sorted=True) for i in range(batch_size)]
 
-        outputs.update(dict(kernels=kernels.data.cpu()))
+        outputs.update({"kernels": kernels.data.cpu()})
 
-        scales = (float(org_img_size[1]) / float(img_size[1]),
-                  float(org_img_size[0]) / float(img_size[0]))
+        scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
 
         results = []
         for i in range(batch_size):
             bboxes, scores = generate_bbox(keys[i], labels[i], score_maps[i], scales, cfg)
-            results.append(dict(
-                bboxes=bboxes,
-                scores=scores
-            ))
-        outputs.update(dict(results=results))
+            results.append({"bboxes": bboxes, "scores": scores})
+        outputs.update({"results": results})
 
         return outputs
 
@@ -603,19 +691,19 @@ class FASTHead(nn.Module):
         return x
 
 
-class FASTForImageCaptioning(nn.Module):
+class FASTForImageCaptioning(PreTrainedModel):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.backbone = TextNet(config=config)
         self.neck = FASTNeck(config=config)
         self.det_head = FASTHead(config=config)
 
     def _upsample(self, x, size, scale=1):
         _, _, H, W = size
-        return F.interpolate(x, size=(H // scale, W // scale), mode='bilinear')
+        return F.interpolate(x, size=(H // scale, W // scale), mode="bilinear")
 
     def forward(self, imgs, img_metas=None, cfg=None):
-        outputs = dict()
+        outputs = {}
 
         f = self.backbone(imgs)
 
