@@ -657,7 +657,7 @@ class LlavaTextDecoderLayer(nn.Module):
         return outputs
 
 
-LLAMA_START_DOCSTRING = r"""
+LLAVA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -667,7 +667,7 @@ LLAMA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`LlamaConfig`]):
+        config ([`LlavaTextConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -676,7 +676,7 @@ LLAMA_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAMA_START_DOCSTRING,
+    LLAVA_START_DOCSTRING,
 )
 # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->LlavaText
 class LlavaTextPreTrainedModel(PreTrainedModel):
@@ -703,7 +703,7 @@ class LlavaTextPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-LLAMA_INPUTS_DOCSTRING = r"""
+LLAVA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -769,9 +769,8 @@ LLAMA_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAMA_START_DOCSTRING,
+    LLAVA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->LlavaText
 class LlavaTextModel(LlavaTextPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlavaTextDecoderLayer`]
@@ -823,7 +822,7 @@ class LlavaTextModel(LlavaTextPreTrainedModel):
 
         return combined_attention_mask
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -961,7 +960,7 @@ class LlavaForCausalLM(LlavaTextPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LlavaTextModel(config.llama_config)
+        self.model = LlavaTextModel(config.llava_text_config)
         if config.llava_vision_config.projector == "Linear":
             modules = [nn.Linear(config.llava_vision_config.mm_hidden_size, config.llava_vision_config.hidden_size)]
             for _ in range(1, 2):
@@ -1180,7 +1179,7 @@ class LlavaForCausalLM(LlavaTextPreTrainedModel):
 
         return None, attention_mask, past_key_values, new_input_embeds, new_labels
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

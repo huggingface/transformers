@@ -280,6 +280,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
     "VitMatteForImageMatting",
+    "LlavaTextModel",
 ]
 
 # DO NOT edit this list!

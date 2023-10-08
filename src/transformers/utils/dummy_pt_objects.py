@@ -4510,6 +4510,20 @@ class LlavaForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class LlavaTextModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LlavaTextPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

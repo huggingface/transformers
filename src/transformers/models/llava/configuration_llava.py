@@ -301,7 +301,7 @@ class LlavaConfig(PretrainedConfig):
     >>> llava_text_config = LlavaTextConfig()
     >>> llava_vision_config = LlavaVisionConfig()
 
-    >>> config = LlavaConfig.from_llava_llava_text_configs(
+    >>> config = LlavaConfig.from_llava_configs(
     ...     llava_vision_config,
     ...     llava_text_config,
     ... )

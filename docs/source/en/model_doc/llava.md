@@ -83,6 +83,11 @@ This model was contributed by [Shauray Singh](https://huggingface.co/shauray) Th
 
 [[autodoc]] LlamaConfig
 
+## LlavaTextModel
+
+[[autodoc]] LlavaTextModel
+    - forward
+
 ## LlavaForCausalLM
 
 [[autodoc]] LlavaForCausalLM
