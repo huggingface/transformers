@@ -32,7 +32,7 @@ class LlamaInfiniteConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlamaInfiniteModel`]. It is used to instantiate
     an LlamaInfinite model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the LlamaInfinite-7B.
+    configuration with the defaults will yield a similar configuration to that of the Llama-7B.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

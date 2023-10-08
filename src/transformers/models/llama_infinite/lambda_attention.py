@@ -77,7 +77,9 @@ class Lambda_Attention_Matrix:
         device = key_rot.device
         min_value = torch.finfo(dtype).min
 
-        if query_length < key_length or query_length <= local_branch:
+        if query_length == 1:
+            self.mode = "single_query"
+        elif query_length < key_length or query_length <= local_branch:
             self.mode = "short_seq"
         else:
             self.mode = "long_seq"
@@ -114,7 +116,14 @@ class Lambda_Attention_Matrix:
             if padding_mask is not None:
                 for seq_i, _mask in enumerate(padding_mask):
                     self.attn[seq_i, ..., _mask.bool().logical_not()] = min_value
-
+        elif self.mode == "single_query":
+            attn_rot = torch.matmul(
+                query_rot,
+                key_rot[..., max(0, key_length-local_branch):,
+                        :].transpose(-1, -2)
+            )
+            self.attn = torch.cat((
+                attn_stationary, attn_rot), -1)
         else:
             # If we have a long sequence, we store the attention matrix in a
             # Z-shaped dense tensor
@@ -192,6 +201,14 @@ class Lambda_Attention_Matrix:
         """Matrix multiplication with the value tensor"""
         if self.mode == "short_seq":
             output = torch.matmul(self.attn, value)
+        elif self.mode == "single_query":
+            output = torch.matmul(
+                self.attn,
+                torch.cat((
+                    value[..., :self.global_branch, :],
+                    value[..., max(0, self.key_length-self.local_branch):, :]
+                ), -2)
+            )
         else:
             segmented_value = shift_and_pair(blockwise_sequence(value, self.local_branch))
             output_stationary = torch.matmul(
@@ -211,6 +228,13 @@ class Lambda_Attention_Matrix:
         """Return the attention matrix in the normal shape"""
         if self.mode == "short_seq":
             return self.attn
+        elif self.mode == "single_query":
+            output_attn = torch.zeros(*self.attn.shape[:-2], self.query_length, self.key_length)
+            if self.local_branch < self.key_length:
+                output_attn[..., :self.global_branch] = self.attn[..., :self.global_branch]
+            output_attn[..., -self.local_branch:] = \
+                self.attn[..., -min(self.local_branch, self.key_length):]
+            return output_attn
         else:
             output_attn = torch.zeros(*self.attn.shape[:-2], self.pad_to_length, self.pad_to_length)
             for block_i in range(self.pad_to_length // self.local_branch):
