@@ -39,6 +39,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_llama import LlamaConfig
+from .lambda_attention import lambda_matmul
 
 
 if is_flash_attn_available():
@@ -213,6 +214,17 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     return q_embed, k_embed
 
 
+def apply_rotary_pos_emb_single(vec, cos, sin, position_ids):
+    # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
+    cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
+    sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
+    cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+    sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
+
+    vec_embed = (vec * cos) + (rotate_half(vec) * sin)
+    return vec_embed
+
+
 class LlamaMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -324,6 +336,13 @@ class LlamaAttention(nn.Module):
         use_cache: bool = False,
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """
+        This modified function implements LM-Infinite attention mask, which involves a Lambda-shaped attention mask and
+        a upper limit of the effective distance for calculating relative positional attention. Owing to the
+        lambda_matmul function defined in lambda_attention.py, our function allows for feeding the while sequence while
+        maintining O(n) computational complexity. A great advantage over feeding token by token when encoding the
+        context.
+        """
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.pretraining_tp > 1:
@@ -353,48 +372,60 @@ class LlamaAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        limit_distance = self.max_position_embeddings
+        local_branch = self.max_position_embeddings
+        global_branch = 10
 
         if past_key_value is not None:
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
+            kv_seq_len += past_key_value[0].shape[-2]
+            key_position_ids = torch.arange(kv_seq_len)[None]
+        else:
+            key_position_ids = position_ids
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+        # inv_freq controls the dtype of rotation phase, which can be large
+        self.rotary_emb.inv_freq = self.rotary_emb.inv_freq.to(torch.float32)
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        rot_query_states = apply_rotary_pos_emb_single(query_states, cos, sin, position_ids)
+        rot_key_states = apply_rotary_pos_emb_single(key_states, cos, sin, key_position_ids)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        stationary_key_states = key_states
+        effective_limit_distance = min(limit_distance, kv_seq_len - 1)
+        stationary_query_states = (query_states * cos[0, 0, effective_limit_distance]) + (
+            rotate_half(query_states) * sin[0, 0, effective_limit_distance]
+        )
 
-        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                f" {attn_weights.size()}"
+        # If use_lambda_mask, we can use an efficient implementation
+        lambda_attention_weights = (
+            lambda_matmul(
+                rot_key_states,
+                stationary_key_states,
+                rot_query_states,
+                stationary_query_states,
+                local_branch,
+                global_branch,
+                padding_mask,
             )
+            / math.sqrt(self.head_dim)
+        ).softmax()
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights + attention_mask
+        if output_attentions:
+            attn_weights = lambda_attention_weights.normal_shape_attention()
+        else:
+            attn_weights = None
 
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_output = torch.matmul(attn_weights, value_states)
-
+        attn_output = lambda_attention_weights.matmul(value_states)
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.transpose(1, 2).contiguous()
-
+        attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
         if self.config.pretraining_tp > 1:
@@ -403,9 +434,6 @@ class LlamaAttention(nn.Module):
             attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
         else:
             attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights, past_key_value
 
