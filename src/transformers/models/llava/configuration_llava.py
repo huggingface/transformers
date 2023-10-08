@@ -90,7 +90,7 @@ class LlavaTextConfig(PretrainedConfig):
             experimental feature, subject to breaking API changes in future versions.
 
     """
-    model_type = "llama"
+    model_type = "llava_text"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -220,7 +220,7 @@ class LlavaVisionConfig(PretrainedConfig):
 
     """
 
-    model_type = "llavavision"
+    model_type = "llava_vision"
     attribute_map = {
         "num_attention_heads": "n_heads",
         "hidden_size": "d_model",
