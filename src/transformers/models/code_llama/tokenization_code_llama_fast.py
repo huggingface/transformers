@@ -103,8 +103,10 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             The token used to split the input between the prefix and suffix.
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
-        add_bos_token (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        add_eos_token (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        add_bos_token (`bool`, *optional*, defaults to `True`):
+            Whether to add a beginning of sequence token at the start of sequences.
+        add_eos_token (`bool`, *optional*, defaults to `False`):
+            Whether to add an end of sequence token at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
     """
