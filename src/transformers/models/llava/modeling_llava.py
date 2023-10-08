@@ -962,9 +962,15 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.model = LlamaModel(config.llama_config)
-        self.model.mm_projector = nn.Linear(
-            config.llava_vision_config.mm_hidden_size, config.llava_vision_config.hidden_size
-        )
+        self.model.mm_projector = nn.Sequential(
+            nn.Linear(
+                config.llava_vision_config.mm_hidden_size, config.llava_vision_config.hidden_size
+            ),
+            nn.GELU(),
+            nn.Linear(
+                config.llava_vision_config.mm_hidden_size, config.llava_vision_config.hidden_size
+            ),
+        )    
 
         self.lm_head = nn.Linear(
             config.llava_vision_config.hidden_size, config.llava_vision_config.vocab_size, bias=False
