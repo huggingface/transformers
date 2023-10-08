@@ -214,6 +214,7 @@ class LlavaVisionConfig(PretrainedConfig):
             the `inputs_ids` passed when calling [`MptModel`]. Check [this
             discussion](https://huggingface.co/bigscience/mpt/discussions/120#633d28389addb8530b406c2a) on how the
             `vocab_size` has been defined.
+        projector (`str`, *optional*, defaults to `"Linear"`): Checks if the model in v1.5 or v1.0
 
     Example:
 
@@ -344,4 +345,3 @@ class LlavaConfig(PretrainedConfig):
             llava_vision_config=llava_vision_config.to_dict(),
             **kwargs,
         )
-

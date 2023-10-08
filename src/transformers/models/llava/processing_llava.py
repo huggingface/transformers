@@ -184,4 +184,3 @@ class LlavaProcessor(ProcessorMixin):
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         args.append(vision_model)
         return cls(*args)
-

@@ -966,13 +966,15 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
             modules = [nn.Linear(config.llava_vision_config.mm_hidden_size, config.llava_vision_config.hidden_size)]
             for _ in range(1, 2):
                 modules.append(nn.GELU())
-                modules.append(nn.Linear(config.llava_vision_config.hidden_size, config.llava_vision_config.hidden_size))
-        
+                modules.append(
+                    nn.Linear(config.llava_vision_config.hidden_size, config.llava_vision_config.hidden_size)
+                )
+
             self.model.mm_projector = nn.Sequential(*modules)
         else:
             self.model.mm_projector = nn.Linear(
-                    config.llava_vision_config.mm_hidden_size, config.llava_vision_config.hidden_size
-                )
+                config.llava_vision_config.mm_hidden_size, config.llava_vision_config.hidden_size
+            )
         self.lm_head = nn.Linear(
             config.llava_vision_config.hidden_size, config.llava_vision_config.vocab_size, bias=False
         )
@@ -1009,12 +1011,14 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
         image_features = self.model.mm_projector(images)
         for batch_idx, cur_input_ids in enumerate(input_ids):
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
-                if config.llava_vision_config.projector == "Linear":
+                if self.config.llava_vision_config.projector == "Linear":
                     half_len = cur_input_ids.shape[0] // 2
                     cur_image_features = image_features[cur_image_idx]
                     cur_input_embeds_1 = self.get_model().embed_tokens(cur_input_ids[:half_len])
                     cur_input_embeds_2 = self.get_model().embed_tokens(cur_input_ids[half_len:])
-                    cur_input_embeds = torch.cat([cur_input_embeds_1, cur_image_features[0:0], cur_input_embeds_2], dim=0)
+                    cur_input_embeds = torch.cat(
+                        [cur_input_embeds_1, cur_image_features[0:0], cur_input_embeds_2], dim=0
+                    )
                 else:
                     cur_input_embeds = self.get_model().embed_tokens(cur_input_ids)
                     dummy_feature = torch.zeros(
@@ -1296,4 +1300,3 @@ class LlavaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
-
