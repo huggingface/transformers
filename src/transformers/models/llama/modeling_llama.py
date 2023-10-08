@@ -395,8 +395,8 @@ class LlamaAttention(nn.Module):
 
         stationary_key_states = key_states
         effective_limit_distance = min(limit_distance, kv_seq_len - 1)
-        stationary_query_states = (query_states * cos[0, 0, effective_limit_distance]) + (
-            rotate_half(query_states) * sin[0, 0, effective_limit_distance]
+        stationary_query_states = (query_states * cos[effective_limit_distance]) + (
+            rotate_half(query_states) * sin[effective_limit_distance]
         )
 
         # If use_lambda_mask, we can use an efficient implementation
