@@ -17,52 +17,37 @@
 import os
 import unittest
 
-from transformers import CharacterBertTokenizerFast
 from transformers.models.character_bert.tokenization_character_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
     CharacterBertTokenizer,
-    WordpieceTokenizer,
     _is_control,
     _is_punctuation,
     _is_whitespace,
 )
 from transformers.testing_utils import require_tokenizers, slow
+from transformers.tokenization_utils import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 
 @require_tokenizers
 class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    test_slow_tokenizer = True
     tokenizer_class = CharacterBertTokenizer
-    rust_tokenizer_class = CharacterBertTokenizerFast
-    test_rust_tokenizer = True
+    test_rust_tokenizer = False
+    rust_tokenizer_class = None
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
 
     def setUp(self):
         super().setUp()
-
-        vocab_tokens = [
-            "[UNK]",
-            "[CLS]",
-            "[SEP]",
-            "[PAD]",
-            "[MASK]",
-            "want",
-            "##want",
-            "##ed",
-            "wa",
-            "un",
-            "runn",
-            "##ing",
-            ",",
-            "low",
-            "lowest",
-        ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
-            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+        # NOTE: if we don't save this empty vocab file, the checkpoint folder won't
+        # be recognized as such et we will fail any calls to `.from_pretrained`
+        mlm_vocab_tokens = []
+        self.mlm_vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["mlm_vocab_file"])
+        with open(self.mlm_vocab_file, "w", encoding="utf-8") as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in mlm_vocab_tokens]))
 
     def get_input_output_texts(self, tokenizer):
         input_text = "UNwant\u00E9d,running"
@@ -70,11 +55,20 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_full_tokenizer(self):
-        tokenizer = self.tokenizer_class(self.vocab_file)
+        tokenizer = self.tokenizer_class()
 
-        tokens = tokenizer.tokenize("UNwant\u00E9d,running")
-        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11])
+        expected_tokens = tokenizer.tokenize("UNwant\u00E9d,running")
+        self.assertListEqual(expected_tokens, ["unwanted", ",", "running"])
+
+        expected_character_ids = [
+            [259, 118, 111, 120, 98, 111, 117, 102, 101, 260, 261] + [261] * (tokenizer.max_word_length - 11),
+            [259, 45, 260, 261, 261, 261, 261, 261, 261, 261, 261] + [261] * (tokenizer.max_word_length - 11),
+            [259, 115, 118, 111, 111, 106, 111, 104, 260, 261, 261] + [261] * (tokenizer.max_word_length - 11),
+        ]
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(expected_tokens),
+            expected_character_ids
+        )
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
@@ -189,18 +183,8 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.tokenize(text), expected)
 
     def test_wordpiece_tokenizer(self):
-        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
-
-        vocab = {}
-        for i, token in enumerate(vocab_tokens):
-            vocab[token] = i
-        tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
-
-        self.assertListEqual(tokenizer.tokenize(""), [])
-
-        self.assertListEqual(tokenizer.tokenize("unwanted running"), ["un", "##want", "##ed", "runn", "##ing"])
-
-        self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
+        # NOTE: CharacterBERT does not use a WordPiece tokenizer
+        pass
 
     def test_is_whitespace(self):
         self.assertTrue(_is_whitespace(" "))
@@ -340,3 +324,7 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ]
                 self.assertListEqual(tokens_without_spe_char_p, expected_tokens)
                 self.assertListEqual(tokens_without_spe_char_r, expected_tokens)
+
+    def test_add_tokens_tokenizer(self):
+        # NOTE: CharacterBERT is open-vocabulary.
+        pass
