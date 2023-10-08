@@ -15,7 +15,7 @@ KEYS_TO_IGNORE = [
 
 
 def rename_vision_key(key):
-    key = re.sub(r"img_model.visual\.", "vision_model.model.", key)
+    key = re.sub(r"img_model.visual\.", "vision_model.", key)
     key = re.sub(r"\.class_embedding$", ".embeddings.class_embedding", key)
     key = re.sub(r"\.positional_embedding$", ".embeddings.position_embedding.weight", key)
     key = re.sub(r"\.conv1.weight$", ".embeddings.patch_embedding.weight", key)
