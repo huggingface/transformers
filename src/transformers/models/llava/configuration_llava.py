@@ -234,6 +234,7 @@ class LlavaVisionConfig(PretrainedConfig):
         n_layers: int = 32,
         use_cache: bool = True,
         vocab_size: int = 50282,
+        projector: str = "Linear",
         **kwargs,
     ):
         self.mm_hidden_size = mm_hidden_size
@@ -241,6 +242,7 @@ class LlavaVisionConfig(PretrainedConfig):
         self.n_heads = n_heads
         self.n_layers = n_layers
         self.vocab_size = vocab_size
+        self.projector = projector
         super().__init__(**kwargs)
 
     @classmethod
@@ -342,3 +344,4 @@ class LlavaConfig(PretrainedConfig):
             llava_vision_config=llava_vision_config.to_dict(),
             **kwargs,
         )
+
