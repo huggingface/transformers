@@ -516,14 +516,14 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         return scores, generated_ids, generated_text, processed_text, final_text_with_entities
 
     def test_snowman_image_captioning(self):
-        url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2/resolve/main/snowman.png"
+        url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001/resolve/main/snowman.png"
 
         image = Image.open(requests.get(url, stream=True).raw)
         image.save("new_image.jpg")
         image = Image.open("new_image.jpg")
 
-        model = AutoModelForVision2Seq.from_pretrained("ydshieh/temp-testing-kosmos-2").to(torch_device)
-        processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2")
+        model = AutoModelForVision2Seq.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001").to(torch_device)
+        processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
 
         prompt = "<grounding>An image of"
         scores, generated_ids, generated_text, processed_text, final_text_with_entities = self.run_example(
@@ -648,18 +648,18 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         ]
 
     def test_snowman_image_captioning_batch(self):
-        url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2/resolve/main/snowman.png"
+        url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001/resolve/main/snowman.png"
 
         image = Image.open(requests.get(url, stream=True).raw)
         image.save("new_image.jpg")
         image = Image.open("new_image.jpg")
 
-        model = AutoModelForVision2Seq.from_pretrained("ydshieh/temp-testing-kosmos-2").to(torch_device)
+        model = AutoModelForVision2Seq.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001").to(torch_device)
 
         prompt = ["<grounding>An image of", "<grounding>Describe this image in detail:"]
 
         # left padding
-        processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2", padding_side="left")
+        processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001", padding_side="left")
 
         scores, generated_ids, generated_text, processed_text, final_text_with_entities = self.run_example(
             prompt, [image] * len(prompt), model, processor
@@ -707,7 +707,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         assert all_entities == [EXPECTED_ENTITIES_0, EXPECTED_ENTITIES_1]
 
         # right padding
-        processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2")
+        processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
 
         scores, generated_ids, generated_text, processed_text, final_text_with_entities = self.run_example(
             prompt, [image] * len(prompt), model, processor
