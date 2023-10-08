@@ -25,7 +25,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ydshieh/temp-testing-kosmos-2": ("https://huggingface.co/ydshieh/temp-testing-kosmos-2/resolve/main/config.json"),
+    "ydshieh/temp-testing-kosmos-2-rename-001": ("https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001/resolve/main/config.json"),
     # See all KOSMOS-2 models at https://huggingface.co/models?filter=kosmos-2
 }
 
@@ -35,7 +35,7 @@ class Kosmos2TextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Kosmos2TextModel`]. It is used to instantiate a
     KOSMOS-2 text decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text decoder of the KOSMOS-2
-    [ydshieh/temp-testing-kosmos-2](https://huggingface.co/ydshieh/temp-testing-kosmos-2) architecture.
+    [ydshieh/temp-testing-kosmos-2-rename-001](https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -153,7 +153,7 @@ class Kosmos2VisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Kosmos2VisionModel`]. It is used to instantiate a
     KOSMOS-2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the KOSMOS-2
-    [ydshieh/temp-testing-kosmos-2](https://huggingface.co/ydshieh/temp-testing-kosmos-2) architecture.
+    [ydshieh/temp-testing-kosmos-2-rename-001](https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -244,7 +244,7 @@ class Kosmos2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Kosmos2Model`]. It is used to instantiate a
     KOSMOS-2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the KOSMOS-2
-    [ydshieh/temp-testing-kosmos-2](https://huggingface.co/ydshieh/temp-testing-kosmos-2) architecture.
+    [ydshieh/temp-testing-kosmos-2-rename-001](https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001) architecture.
 
     Args:
         text_config (`dict`, *optional*):

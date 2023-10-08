@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = Kosmos2Config
 
 KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ydshieh/temp-testing-kosmos-2",
+    "ydshieh/temp-testing-kosmos-2-rename-001",
     # See all KOSMOS-2 models at https://huggingface.co/models?filter=kosmos-2
 ]
 
@@ -1807,10 +1807,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Kosmos2Model
 
-        >>> model = Kosmos2Model.from_pretrained("ydshieh/temp-testing-kosmos-2")
-        >>> processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2")
+        >>> model = Kosmos2Model.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
+        >>> processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
 
-        >>> url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2/resolve/main/snowman.jpg"
+        >>> url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001/resolve/main/snowman.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> text = (
@@ -1953,10 +1953,10 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
 
-        >>> model = Kosmos2ForConditionalGeneration.from_pretrained("ydshieh/temp-testing-kosmos-2")
-        >>> processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2")
+        >>> model = Kosmos2ForConditionalGeneration.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
+        >>> processor = AutoProcessor.from_pretrained("ydshieh/temp-testing-kosmos-2-rename-001")
 
-        >>> url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2/resolve/main/snowman.jpg"
+        >>> url = "https://huggingface.co/ydshieh/temp-testing-kosmos-2-rename-001/resolve/main/snowman.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> prompt = "<grounding> An image of"
