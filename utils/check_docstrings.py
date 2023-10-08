@@ -788,7 +788,6 @@ OBJECTS_TO_IGNORE = [
     "Wav2Vec2ConformerConfig",
     "Wav2Vec2ConformerForCTC",
     "Wav2Vec2FeatureExtractor",
-    "Wav2Vec2ForCTC",
     "Wav2Vec2PhonemeCTCTokenizer",
     "WavLMConfig",
     "WavLMForCTC",
