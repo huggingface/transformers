@@ -50,7 +50,8 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
             Number of Mel-frequency bins.
         max_length (`int`, *optional*, defaults to 1876):
             Maximum length to which to pad/truncate the extracted features. Set to -1 to deactivate the functionallity.
-        padding_value (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
+        padding_value (`int`, *optional*, defaults to 0.0):
+            The value used to pad the input waveform.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the log-Mel features using `mean` and `std`.
         mean (`float`, *optional*, defaults to 2.06755686098554):
