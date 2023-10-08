@@ -214,15 +214,17 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertFalse(_is_punctuation(" "))
 
     def test_clean_text(self):
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
+        if self.test_slow_tokenizer:
+            tokenizer = self.get_tokenizer()
+            # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
+            # NOTE: CharacterBERT supports any input token, so not UNK is returned
+            self.assertListEqual([tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["test"], [], ["test"]])
 
-        # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
-        self.assertListEqual([tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]])
-
-        self.assertListEqual(
-            [rust_tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]]
-        )
+        if self.test_rust_tokenizer:
+            rust_tokenizer = self.get_rust_tokenizer()
+            self.assertListEqual(
+                [rust_tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["test"], [], ["test"]]
+            )
 
     @slow
     def test_sequence_builders(self):
@@ -328,3 +330,23 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_add_tokens_tokenizer(self):
         # NOTE: CharacterBERT is open-vocabulary.
         pass
+
+    def test_conversion_reversible(self):
+        # NOTE: instead of checking reversible conversion based on the vocab items
+        # we check for the standard special tokens + a few words
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                for word in [
+                    tokenizer.cls_token,
+                    tokenizer.sep_token,
+                    tokenizer.pad_token,
+                    tokenizer.mask_token,
+                    "some", "other", "random", "words"
+                ]:
+                    if word == tokenizer.unk_token:
+                        continue
+                    character_ids = tokenizer.convert_tokens_to_ids(word)
+                    self.assertIsInstance(character_ids, (list, tuple))
+                    self.assertIsInstance(character_ids[0], int)
+                    self.assertEqual(tokenizer.convert_ids_to_tokens(character_ids), word)

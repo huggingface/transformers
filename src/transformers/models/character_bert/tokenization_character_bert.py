@@ -267,7 +267,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return len(self.mlm_vocab)
 
     def get_vocab(self):
-        return self.vocab
+        return dict(self.vocab, **self.added_tokens_encoder)
 
     def get_mlm_vocab(self):
         return self.mlm_vocab
@@ -320,21 +320,21 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, character_ids):
         """Converts a list of character ids (integer) intp a token (str)."""
-        assert len(character_ids) != self.max_word_length, (
+        assert len(character_ids) == self.max_word_length, (
             f"Got a character sequence of length {len(character_ids)} while "
             f"`max_word_length={self.max_word_length}`"
         )
 
-        character_ids_ = [(index - 1) for index in character_ids]
-        if character_ids_ == self.cls_character_ids:
+        if character_ids == self.cls_character_ids:
             return self.cls_token
-        elif character_ids_ == self.sep_character_ids:
+        elif character_ids == self.sep_character_ids:
             return self.sep_token
-        elif character_ids_ == self.mask_character_ids:
+        elif character_ids == self.mask_character_ids:
             return self.mask_token
-        elif character_ids_ == self.pad_character_ids:
+        elif character_ids == self.pad_character_ids:
             return self.pad_token
         else:
+            character_ids_ = [(index - 1) for index in character_ids]
             utf8_codes = list(
                 filter(
                     lambda x: (
@@ -346,6 +346,40 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 )
             )
             return bytes(utf8_codes).decode("utf-8")
+
+    def convert_ids_to_tokens(
+        self, ids: Union[int, List[int]], skip_special_tokens: bool = False
+    ) -> Union[str, List[str]]:
+        # NOTE: the first condition needed to be adapted for character_ids instead
+        # of token ids.
+        """
+        Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
+        added tokens.
+
+        Args:
+            ids (`int` or `List[int]`):
+                The token id (or token ids) to convert to tokens.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+
+        Returns:
+            `str` or `List[str]`: The decoded token(s).
+        """
+        if isinstance(ids, list) and isinstance(ids[0], int):
+            #if ids in self._added_tokens_decoder:
+            #    return self._added_tokens_decoder[ids].content
+            #else:
+            return self._convert_id_to_token(ids)
+        tokens = []
+        for index in ids:
+            index = int(index)
+            if skip_special_tokens and index in self.all_special_ids:
+                continue
+            if index in self._added_tokens_decoder:
+                tokens.append(self._added_tokens_decoder[index].content)
+            else:
+                tokens.append(self._convert_id_to_token(index))
+        return tokens
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
