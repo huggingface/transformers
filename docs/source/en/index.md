@@ -171,8 +171,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [LUKE](model_doc/luke)                          |       ✅        |         ❌         |      ❌      |
 |                        [LXMERT](model_doc/lxmert)                        |       ✅        |         ✅         |      ❌      |
 |                        [M-CTC-T](model_doc/mctct)                        |       ✅        |         ❌         |      ❌      |
-|                         [MAEST](model_doc/maest)                         |       ✅        |         ❌         |      ❌      |
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
+|                         [MAEST](model_doc/maest)                         |       ✅        |         ❌         |      ❌      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |

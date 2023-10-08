@@ -50,6 +50,7 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
             Number of Mel-frequency bins.
         max_length (`int`, *optional*, defaults to 1876):
             Maximum length to which to pad/truncate the extracted features. Set to -1 to deactivate the functionallity.
+        padding_value (`<fill_type>`, *optional*, defaults to 0.0): <fill_docstring>
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the log-Mel features using `mean` and `std`.
         mean (`float`, *optional*, defaults to 2.06755686098554):
@@ -63,7 +64,7 @@ class MAESTFeatureExtractor(SequenceFeatureExtractor):
             Length of the FFT window.
         hop_length (`int`, *optional*, defaults to 256):
             Number of samples between successive frames.
-        log_compression (`str`, *optional*, defaults to `logC`):
+        log_compression (`str`, *optional*, defaults to `"logC"`):
             Type of log compression to apply to the mel-spectrogram. Can be one of [`None`, `log`, `logC`].
     """
 
