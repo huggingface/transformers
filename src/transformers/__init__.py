@@ -424,6 +424,7 @@ _import_structure = {
     "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
+<<<<<<< HEAD
     "models.fastspeech2_conformer": [
         "FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -433,6 +434,9 @@ _import_structure = {
         "FastSpeech2ConformerTokenizer",
         "FastSpeech2ConformerWithHifiGanConfig",
     ],
+=======
+    "models.fast": ["FastConfig"],
+>>>>>>> 67fec5b40 (Refactor modeling and add tests)
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -5113,6 +5117,7 @@ if TYPE_CHECKING:
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
+<<<<<<< HEAD
     from .models.fastspeech2_conformer import (
         FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5122,6 +5127,9 @@ if TYPE_CHECKING:
         FastSpeech2ConformerTokenizer,
         FastSpeech2ConformerWithHifiGanConfig,
     )
+=======
+    from .models.fast import FastConfig
+>>>>>>> 67fec5b40 (Refactor modeling and add tests)
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6698,12 +6706,17 @@ if TYPE_CHECKING:
             FalconModel,
             FalconPreTrainedModel,
         )
+<<<<<<< HEAD
         from .models.fastspeech2_conformer import (
             FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,
             FastSpeech2ConformerWithHifiGan,
+=======
+        from .models.fast import (
+            FASTForImageCaptioning,
+>>>>>>> 67fec5b40 (Refactor modeling and add tests)
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
