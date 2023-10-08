@@ -32,7 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_llava import LlamaConfig, LlavaConfig
+from .configuration_llava import LlavaConfig, LlavaTextConfig
 
 
 if is_flash_attn_available():
@@ -90,11 +90,11 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm
-class LlamaRMSNorm(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->LlavaText
+class LlavaTextRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        LlamaRMSNorm is equivalent to T5LayerNorm
+        LlavaTextRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -108,8 +108,8 @@ class LlamaRMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding
-class LlamaRotaryEmbedding(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->LlavaText
+class LlavaTextRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -145,9 +145,9 @@ class LlamaRotaryEmbedding(nn.Module):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding
-class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
-    """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->LlavaText
+class LlavaTextLinearScalingRotaryEmbedding(LlavaTextRotaryEmbedding):
+    """LlavaTextRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -165,9 +165,9 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding
-class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
-    """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->LlavaText
+class LlavaTextDynamicNTKScalingRotaryEmbedding(LlavaTextRotaryEmbedding):
+    """LlavaTextRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -212,8 +212,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaMLP
-class LlamaMLP(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaMLP with Llama->LlavaText
+class LlavaTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -260,11 +260,11 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaAttention
-class LlamaAttention(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaAttention with Llama->LlavaText
+class LlavaTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: LlavaTextConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -288,7 +288,7 @@ class LlamaAttention(nn.Module):
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
-            self.rotary_emb = LlamaRotaryEmbedding(
+            self.rotary_emb = LlavaTextRotaryEmbedding(
                 self.head_dim,
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
@@ -297,14 +297,14 @@ class LlamaAttention(nn.Module):
             scaling_type = self.config.rope_scaling["type"]
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
-                self.rotary_emb = LlamaLinearScalingRotaryEmbedding(
+                self.rotary_emb = LlavaTextLinearScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
-                self.rotary_emb = LlamaDynamicNTKScalingRotaryEmbedding(
+                self.rotary_emb = LlavaTextDynamicNTKScalingRotaryEmbedding(
                     self.head_dim,
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
@@ -412,9 +412,9 @@ class LlamaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class LlamaFlashAttention2(LlamaAttention):
+class LlavaTextFlashAttention2(LlavaTextAttention):
     """
-    Llama flash attention module. This module inherits from `LlamaAttention` as the weights of the module stays
+    LlavaText flash attention module. This module inherits from `LlavaTextAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
     flash attention and deal with padding tokens in case the input contains any of them.
     """
@@ -586,19 +586,19 @@ class LlamaFlashAttention2(LlamaAttention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer
-class LlamaDecoderLayer(nn.Module):
-    def __init__(self, config: LlamaConfig):
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->LlavaText
+class LlavaTextDecoderLayer(nn.Module):
+    def __init__(self, config: LlavaTextConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = (
-            LlamaAttention(config=config)
+            LlavaTextAttention(config=config)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else LlamaFlashAttention2(config=config)
+            else LlavaTextFlashAttention2(config=config)
         )
-        self.mlp = LlamaMLP(config)
-        self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = LlavaTextMLP(config)
+        self.input_layernorm = LlavaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = LlavaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -678,12 +678,12 @@ LLAMA_START_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel
-class LlamaPreTrainedModel(PreTrainedModel):
-    config_class = LlamaConfig
+# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->LlavaText
+class LlavaTextPreTrainedModel(PreTrainedModel):
+    config_class = LlavaTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
+    _no_split_modules = ["LlavaTextDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
 
@@ -699,7 +699,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LlamaModel):
+        if isinstance(module, LlavaTextModel):
             module.gradient_checkpointing = value
 
 
@@ -771,23 +771,23 @@ LLAMA_INPUTS_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel
-class LlamaModel(LlamaPreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->LlavaText
+class LlavaTextModel(LlavaTextPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlavaTextDecoderLayer`]
 
     Args:
-        config: LlamaConfig
+        config: LlavaTextConfig
     """
 
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: LlavaTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layers = nn.ModuleList([LlavaTextDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = LlavaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -956,12 +956,12 @@ class LlamaModel(LlamaPreTrainedModel):
         )
 
 
-class LlavaForCausalLM(LlamaPreTrainedModel):
+class LlavaForCausalLM(LlavaTextPreTrainedModel):
     config_class = LlavaConfig
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = LlamaModel(config.llama_config)
+        self.model = LlavaTextModel(config.llama_config)
         if config.llava_vision_config.projector == "Linear":
             modules = [nn.Linear(config.llava_vision_config.mm_hidden_size, config.llava_vision_config.hidden_size)]
             for _ in range(1, 2):

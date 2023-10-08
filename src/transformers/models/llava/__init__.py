@@ -36,6 +36,8 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_llava"] = [
         "LlavaForCausalLM",
+        "LlavaTextModel",
+        "LlavaTextPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -48,7 +50,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_llava import LlavaForCausalLM
+        from .modeling_llava import LlavaForCausalLM, LlavaTextModel, LlavaTextPreTrainedModel
 
 
 else:

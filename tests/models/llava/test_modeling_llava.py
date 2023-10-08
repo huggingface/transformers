@@ -22,7 +22,8 @@ from typing import Optional, Union
 import requests
 from PIL import Image
 
-from transformers import LlamaConfig, LlavaConfig, LlavaVisionConfig, is_torch_available
+from transformers import LlavaConfig, LlavaVisionConfig, is_torch_available
+from transformers.models.llava.configuration_llava import LlavaTextConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -117,7 +118,7 @@ class LlamaModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return LlamaConfig(
+        return LlavaTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -281,7 +282,7 @@ class LlavaModelTester:
 
     def get_config(self):
         return LlavaConfig.from_llava_configs(
-            llama_config=self.llama_model_tester.get_config(),
+            llava_text_config=self.llama_model_tester.get_config(),
             llava_vision_config=self.llava_vision_tester.get_config(),
         )
 
@@ -420,7 +421,7 @@ class LlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
-        for key in ["llama_config", "llava_vision_config"]:
+        for key in ["llava_text_config", "llava_vision_config"]:
             setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)

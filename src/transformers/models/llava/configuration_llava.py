@@ -29,7 +29,7 @@ LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class LlamaConfig(PretrainedConfig):
+class LlavaTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlamaModel`]. It is used to instantiate an LLaMA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -178,7 +178,7 @@ class LlamaConfig(PretrainedConfig):
 
         # get the qformer config dict if we are loading from InstructBlipConfig
         if config_dict.get("model_type") == "llava":
-            config_dict = config_dict["llama_config"]
+            config_dict = config_dict["llava_text_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
@@ -275,8 +275,8 @@ class LlavaConfig(PretrainedConfig):
     [`PretrainedConfig`] for more information.
 
     Args:
-        llama_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`LlamaConfig`].
+        llava_text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`LlavaTextConfig`].
         llava_vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`LlavaVisionConfig`].
         kwargs (*optional*):
@@ -285,7 +285,7 @@ class LlavaConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers.models.llava.configuration_llava import LlamaConfig
+    >>> from transformers.models.llava.configuration_llava import LlavaTextConfig
     >>> from transformers import LlavaVisionConfig, LlavaConfig, LlavaForCausalLM
 
     >>> # Initializing a LlavaConfig with shauray/Llava-Llama-2-7B-hf style configuration
@@ -298,29 +298,29 @@ class LlavaConfig(PretrainedConfig):
     >>> configuration = model.config
 
     >>> # Initializing Llava, Llama configurations
-    >>> llama_config = LlamaConfig()
+    >>> llava_text_config = LlavaTextConfig()
     >>> llava_vision_config = LlavaVisionConfig()
 
-    >>> config = LlavaConfig.from_llava_llama_configs(
+    >>> config = LlavaConfig.from_llava_llava_text_configs(
     ...     llava_vision_config,
-    ...     llama_config,
+    ...     llava_text_config,
     ... )
     ```"""
 
     model_type = "llava"
 
-    def __init__(self, llama_config=None, llava_vision_config=None, **kwargs):
+    def __init__(self, llava_text_config=None, llava_vision_config=None, **kwargs):
         super().__init__(**kwargs)
 
-        if llama_config is None:
-            llama_config = {}
-            logger.info("llama_config is None. initializing the LlamaConfig with default values.")
+        if llava_text_config is None:
+            llava_text_config = {}
+            logger.info("llava_text_config is None. initializing the LlavaTextConfig with default values.")
 
         if llava_vision_config is None:
             llava_vision_config = {}
             logger.info("llava_vision_config is None. Initializing the LlavaVisionConfig with default values.")
 
-        self.llama_config = LlamaConfig(**llama_config)
+        self.llava_text_config = LlavaTextConfig(**llava_text_config)
         self.llava_vision_config = LlavaVisionConfig(**llava_vision_config)
 
         self.initializer_factor = 1.0
@@ -329,7 +329,7 @@ class LlavaConfig(PretrainedConfig):
     @classmethod
     def from_llava_configs(
         cls,
-        llama_config: LlamaConfig,
+        llava_text_config: LlavaTextConfig,
         llava_vision_config: LlavaVisionConfig,
         **kwargs,
     ):
@@ -341,7 +341,7 @@ class LlavaConfig(PretrainedConfig):
         """
 
         return cls(
-            llama_config=llama_config.to_dict(),
+            llava_text_config=llava_text_config.to_dict(),
             llava_vision_config=llava_vision_config.to_dict(),
             **kwargs,
         )
