@@ -21,7 +21,11 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ...generation.logits_process import AlternatingCodebooksLogitsProcessor, BarkEarlyStoppingLogitsProcessor, SuppressTokensLogitsProcessor
+from ...generation.logits_process import (
+    AlternatingCodebooksLogitsProcessor,
+    BarkEarlyStoppingLogitsProcessor,
+    SuppressTokensLogitsProcessor,
+)
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel, get_parameter_device
 from ...utils import (

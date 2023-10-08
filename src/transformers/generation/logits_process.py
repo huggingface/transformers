@@ -1702,12 +1702,12 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         unconditional_logits = torch.nn.functional.log_softmax(logits[:, -1], dim=-1)
         out = self.guidance_scale * (scores - unconditional_logits) + unconditional_logits
         return out
-    
+
 
 class BarkEarlyStoppingLogitsProcessor(LogitsProcessor):
     r"""This processor will set every tokens' log probability other than the EOS token to `-inf`
     when the probabiliy of the EOS token id is superior to min_eos_p.
-    
+
     Args:
         generate_config (`GenerateConfig`):
             The generate config used to generate the output. The following parameters are required:
