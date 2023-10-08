@@ -62,6 +62,48 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.owlvit.image_processing_owlvit._upcast
+def _upcast(t):
+    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
+    if t.is_floating_point():
+        return t if t.dtype in (torch.float32, torch.float64) else t.float()
+    else:
+        return t if t.dtype in (torch.int32, torch.int64) else t.int()
+
+
+# Copied from transformers.models.owlvit.image_processing_owlvit.box_area
+def box_area(boxes):
+    """
+    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
+
+    Args:
+        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
+            < x2` and `0 <= y1 < y2`.
+    Returns:
+        `torch.FloatTensor`: a tensor containing the area for each box.
+    """
+    boxes = _upcast(boxes)
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+
+# Copied from transformers.models.owlvit.image_processing_owlvit.box_iou
+def box_iou(boxes1, boxes2):
+    area1 = box_area(boxes1)
+    area2 = box_area(boxes2)
+
+    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+
+    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
+    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
+
+    union = area1[:, None] + area2 - inter
+
+    iou = inter / union
+    return iou, union
+
+
 def _preprocess_resize_output_shape(image, output_shape):
     """Validate resize output shape according to input image.
 
@@ -168,7 +210,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             by `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 960, "width": 960}`):
             Size to resize the image to. Can be overriden by `size` in the `preprocess` method.
-        resample (`PIL.Image`, *optional*, defaults to 2):
+        resample (`PIL.Image`, *optional*, defaults to `2`):
             Resampling method to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
@@ -485,6 +527,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
     # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_image_guided_detection
     def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
         """
