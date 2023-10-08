@@ -74,7 +74,6 @@ OBJECTS_TO_IGNORE = [
     "TFBertTokenizer",
     "TFGPT2Tokenizer",
     # Missing arguments in the docstring
-    "ASTFeatureExtractor",
     "AlbertModel",
     "AlbertTokenizerFast",
     "AlignTextModel",
