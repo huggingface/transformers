@@ -282,8 +282,8 @@ class LlavaModelTester:
 
     def get_config(self):
         return LlavaConfig.from_llava_configs(
-            llava_text_config=self.llama_model_tester.get_config(),
-            llava_vision_config=self.llava_vision_tester.get_config(),
+            text_config=self.llama_model_tester.get_config(),
+            vision_config=self.llava_vision_tester.get_config(),
         )
 
     def create_and_check_model(
@@ -421,7 +421,7 @@ class LlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
-        for key in ["llava_text_config", "llava_vision_config"]:
+        for key in ["text_config", "vision_config"]:
             setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
