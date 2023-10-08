@@ -118,7 +118,6 @@ OBJECTS_TO_IGNORE = [
     "BridgeTowerTextConfig",
     "BridgeTowerVisionConfig",
     "BrosModel",
-    "CLIPImageProcessor",
     "CLIPSegTextConfig",
     "CLIPSegVisionConfig",
     "CLIPTextConfig",
