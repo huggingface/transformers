@@ -31,6 +31,9 @@ Tips:
 
 - Weights for the Llava 7B can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-7B-hf/)
 - Weights for the Llava 13B can be obtained from [here](https://huggingface.co/shauray/Llava-Llama-2-13B-hf/)
+
+- Weights for the Llava v1.5 7B can be obtained from [here](https://huggingface.co/shauray/Llava-v1.5-7B-hf/)
+- Weights for the Llava v1.5 13B can be obtained from [here](https://huggingface.co/shauray/Llava-v1.5-13B-hf/)
 - The architecture is very similar to the first Llama, with the addition of Grouped Query Attention (GQA) following this [paper](https://arxiv.org/pdf/2305.13245.pdf)
 
 Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions

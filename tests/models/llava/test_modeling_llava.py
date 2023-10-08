@@ -206,6 +206,7 @@ class LlavaVisionTester:
         self.image_size = 30
         self.batch_size = 13
         self.num_channels = 3
+        self.projector = "None"
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.num_channels, self.image_size, self.image_size])
@@ -223,6 +224,7 @@ class LlavaVisionTester:
             mm_hidden_size=self.mm_hidden_size,
             n_heads=self.n_heads,
             n_layers=self.n_layers,
+            projector=self.projector,
         )
 
     def prepare_config_and_inputs_for_common(self):
