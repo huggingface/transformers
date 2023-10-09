@@ -310,7 +310,7 @@ def forecast_masking(
     For every batch, distribute the patch lengths based on mix_ratio and ignore masks for column indices mentioned in
     unmasked_channel_indices.
 
-    Args:
+    Parameters:
         inputs (`torch.Tensor`):
             Input to mask [ bs x nvars x num_patch x patch_len] or [ bs x tsg1 x tag2 x nvars x num_patch x patch_len]
         patch_lengths (list):
@@ -383,7 +383,7 @@ class PatchTSTPatchify(nn.Module):
         stride (int, required): stride between patches.
 
     Returns:
-        z: output tensor data [bs x num_input_channels x num_patches x patch_length]
+        `torch.Tensor` of shape `(batch_size, nvars, num_patches, patch_length)`
     """
 
     def __init__(
@@ -412,10 +412,10 @@ class PatchTSTPatchify(nn.Module):
     def forward(self, past_values: torch.Tensor):
         """
         Parameters:
-            past_values (torch.Tensor, required): Input of shape [bs x sequence_length x num_input_channels]
+            past_values (`torch.Tensor` of shape `(batch_size, sequence_length, nvars)`, *required*):
 
         Returns:
-            x: output tensor data [bs x num_input_channels x num_patches x patch_length]
+            `torch.Tensor` of shape `(batch_size, nvars, num_patches, patch_length)`
         """
         sequence_length = past_values.shape[-2]
         if sequence_length != self.sequence_length:
@@ -433,9 +433,9 @@ class PatchTSTPatchify(nn.Module):
 
 class PatchTSTMasking(nn.Module):
     """
-    PatchTSTMasking: Class for random or forcast masking on inputs.
+    Class for random or forcast masking on inputs.
 
-    Args:
+    Parameters:
         mask_type (str, optional): Masking type. Allowed values are random, forecast. Defaults to random.
         mask_ratio (float, optional): Mask ratio.
         mask_patches (list, optional): List of patch lengths to mask in the end of the data.
@@ -450,6 +450,10 @@ class PatchTSTMasking(nn.Module):
         seed_number (int, optional): Random seed, when None seed is not set. Defaults to None.
 
     Returns:
+        x_mask (`torch.Tensor` of shape `(batch_size, nvars, num_patches, patch_length)`)
+                Masked patched input
+        mask (`torch.Tensor` of shape `(batch_size, nvars, num_patches)`)
+            Bool tensor indicating True on masked points
 
     """
 
@@ -479,15 +483,16 @@ class PatchTSTMasking(nn.Module):
 
     def forward(self, x: torch.Tensor):
         """
-        Input:
-            x: patched input
-                4D: [bs x num_input_channels x num_patches x patch_length]
+        Parameters:
+            x (`torch.Tensor` of shape `(batch_size, nvars, num_patches, patch_length)`, *required*):
+                Patched input
+            
+        Return:
+            x_mask (`torch.Tensor` of shape `(batch_size, nvars, num_patches, patch_length)`) 
+                Masked patched input                
+            mask (`torch.Tensor` of shape `(batch_size, nvars, num_patches)`)
+                Bool tensor indicating True on masked points
 
-        Output:
-            x_mask: Masked patched input
-                4D: [bs x num_input_channels x num_patches x patch_length]
-            mask: bool tensor indicating True on masked points
-                4D: [bs x num_input_channels x num_patch]
         """
 
         if self.mask_type == "random":
@@ -517,6 +522,9 @@ class PatchTSTMasking(nn.Module):
 
 
 class PatchTSTEncoderBlock(nn.Module):
+    """
+    PatchTST encoder block
+    """
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
@@ -524,8 +532,14 @@ class PatchTSTEncoderBlock(nn.Module):
 
     def forward(self, hidden_state: torch.Tensor, output_hidden_states: Optional[bool] = None):
         """
-        hidden_state: tensor [bs x nvars x sequence_length x d_model] Return:
-            Tensor [bs x nvars x sequence_length x d_model]
+        Parameters:
+            hidden_state (`torch.Tensor` of shape `(batch_size, nvars, sequence_length, d_model)`, *required*):
+                Past values of the time series
+            output_hidden_states (`bool`, *optional*):
+                output hidden state option
+        Return:
+            `torch.Tensor` of shape `(batch_size, nvars, sequence_length, d_model)`
+
         """
         all_hidden_states = []
 
@@ -539,6 +553,9 @@ class PatchTSTEncoderBlock(nn.Module):
 
 
 class PatchTSTEncoderLayer(nn.Module):
+    """
+    PatchTST encoder layer
+    """
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
@@ -591,8 +608,12 @@ class PatchTSTEncoderLayer(nn.Module):
 
     def forward(self, src: torch.Tensor):
         """
-        src: tensor [batch_size x nvars x sequence_length x d_model] Return:
-            Tensor [batch_size x nvars x sequence_length x d_model]
+        Parameters:
+            src (`torch.Tensor` of shape `(batch_size, nvars, sequence_length, d_model)`, *required*):
+                Past values of the time series
+        Return:
+            `torch.Tensor` of shape `(batch_size, nvars, sequence_length, d_model)`
+
         """
         batch_size, num_input_channels, sequence_length, d_model = src.shape
 
@@ -724,12 +745,13 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
     ) -> BaseModelOutputWithNoAttention:
         """
         Parameters:
-            past_values: tensor [bs x nvars x num_patches x patch_length].
+            past_values (`torch.Tensor` of shape `(batch_size, nvars, num_patches, patch_length)`, *required*):
+                Past values of the time series
             output_hidden_states (bool, optional): Indicates if hidden states should be output.
 
         return:
-            tensor [bs x nvars x num_patches x d_model]
-                or [bs x nvars x (num_patches+1) x d_model] if use cls_token
+            `torch.Tensor` of shape `(batch_size, nvars, num_patches, d_model)`
+            or `(batch_size, nvars, num_patches+1, d_model)` if cls_token is used
         """
         _, num_input_channels, _, _ = past_values.shape
 
