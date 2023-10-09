@@ -18,6 +18,8 @@ Processor class for LlavaModel
 
 from typing import List, Optional, Union
 
+from PIL import Image
+
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
@@ -27,7 +29,6 @@ from ...utils import (
     is_torch_available,
 )
 
-from PIL import Image
 
 if is_torch_available():
     import torch
@@ -139,15 +140,17 @@ class LlavaProcessor(ProcessorMixin):
 
             dummy["input_ids"] = input_ids.unsqueeze(0)
             encoding.update(dummy)
-        new_images = []
         if images is not None:
-            images = self.expand2square(images, tuple(int(x*255) for x in self.image_processor.image_mean))
-            image_encoding = self.image_processor.preprocess(images, return_tensors='pt')["pixel_values"][0]
-            new_images.append(image_encoding)
-            if all(x.shape == new_images[0].shape for x in new_images):
-                image_encoding = torch.stack(new_images, dim=0)
+            if self.image_processor.pad:
+                new_images = []
+                images = self.expand2square(images, tuple(int(x * 255) for x in self.image_processor.image_mean))
+                image_encoding = self.image_processor.preprocess(images, return_tensors="pt")["pixel_values"][0]
+                new_images.append(image_encoding)
+                if all(x.shape == new_images[0].shape for x in new_images):
+                    image_encoding = torch.stack(new_images, dim=0)
+            else:
+                image_encoding = self.image_processor.preprocess(images, return_tensors=return_tensors)["pixel_values"]
 
-            #image_encoding = self.image_processor.preprocess(images, return_tensors=return_tensors)
             vision_encoding = self.vision_model(image_encoding, output_hidden_states=True)
             image_features = vision_encoding.hidden_states[-2]
             image_features = image_features[:, 1:]
@@ -168,7 +171,6 @@ class LlavaProcessor(ProcessorMixin):
             result = Image.new(pil_img.mode, (height, height), background_color)
             result.paste(pil_img, ((height - width) // 2, 0))
             return result
-
 
     def feature_select(image_forward_outs):
         image_features = image_forward_outs.hidden_states[-2]
@@ -200,9 +202,8 @@ class LlavaProcessor(ProcessorMixin):
 
     # overwrite to load the Q-Former tokenizer from a separate folder
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14-336")
+    def from_pretrained(self, cls, pretrained_model_name_or_path, **kwargs):
+        vision_model = CLIPVisionModel.from_pretrained(self.image_processor.model_path)
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         args.append(vision_model)
         return cls(*args)
-
