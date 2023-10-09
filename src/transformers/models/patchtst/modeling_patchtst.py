@@ -845,9 +845,9 @@ class PatchTSTModelOutputWithNoAttention(ModelOutput):
 
 
 @dataclass
-class PatchTSTForMaskPretrainingOutput(ModelOutput):
+class PatchTSTForPretrainingOutput(ModelOutput):
     """
-    Output type of [`PatchTSTForMaskPretraining`].
+    Output type of [`PatchTSTForPretraining`].
 
     Parameters:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -1288,7 +1288,7 @@ class MaskPretrainHead(nn.Module):
         return x
 
 
-class PatchTSTForMaskPretraining(PatchTSTPreTrainedModel):
+class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     # PatchTSTModel + Pretraining Head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
@@ -1308,7 +1308,7 @@ class PatchTSTForMaskPretraining(PatchTSTPreTrainedModel):
         future_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PatchTSTForMaskPretrainingOutput]:
+    ) -> Union[Tuple, PatchTSTForPretrainingOutput]:
         """
         past_values (x): tensor [bs x sequence_length x num_input_channels ] future_values (y): labels
         """
@@ -1332,7 +1332,7 @@ class PatchTSTForMaskPretraining(PatchTSTPreTrainedModel):
         encoder_states = model_output.hidden_states
         if not return_dict:
             return tuple(v for v in [masked_loss, x_hat, encoder_states] if v is not None)
-        return PatchTSTForMaskPretrainingOutput(
+        return PatchTSTForPretrainingOutput(
             loss=masked_loss, prediction_output=x_hat, hidden_states=encoder_states
         )
 

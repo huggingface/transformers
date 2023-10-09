@@ -179,7 +179,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "InformerForPrediction",
     "AutoformerForPrediction",
     "PatchTSTForForecasting",
-    "PatchTSTForMaskPretraining",
+    "PatchTSTForPretraining",
     "PatchTSTForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
