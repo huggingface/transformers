@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Image-to-Image Task Guide
 
+[[open-in-colab]]
+
 Image-to-Image task is the task where an application receives an image and outputs another image. This has various subtasks, including image enhancement (super resolution, low light enhancement, deraining and so on), image inpainting, and more. 
 
 This guide will show you how to:
