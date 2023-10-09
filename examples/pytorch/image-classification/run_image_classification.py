@@ -20,6 +20,7 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
+# Importing Evaluation metrics and image dataset transformation packages
 import evaluate
 import numpy as np
 import torch
@@ -96,8 +97,8 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": (
-                "For debugging purposes or quicker training, truncate the number of training examples to this "
-                "value if set."
+                """For debugging purposes or quicker training, truncate the number of training examples to this 
+                value if set."""
             )
         },
     )
@@ -105,8 +106,8 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": (
-                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-                "value if set."
+                """For debugging purposes or quicker training, truncate the number of evaluation examples to this 
+                value if set."""
             )
         },
     )
@@ -147,8 +148,8 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+                """The token to use as HTTP bearer authorization for remote files. If not specified, will use the token 
+                generated when running `huggingface-cli login` (stored in `~/.huggingface`)."""
             )
         },
     )
