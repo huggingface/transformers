@@ -339,23 +339,24 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = [
+            expected_arg_names_with_target = [
                 "context_values",
                 "observed_mask",
                 "target_values",
+                "output_hidden_states",
+                "return_loss",
             ]
-            # if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or \
-            #         model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
-            #     expected_arg_names.remove("target_values")
-            #     expected_arg_names.append("labels")
-            if model_class in [PatchTSMixerModel, PatchTSMixerForMaskPretraining]:
-                expected_arg_names.remove("target_values")
+            expected_arg_names_without_target = ["context_values", "observed_mask", "output_hidden_states"]
 
-            # expected_arg_names.extend(
-            #     [
-            #         "output_hidden_states",
-            #     ]
-            # )
+            expected_arg_names = expected_arg_names_with_target
+            if model_class == PatchTSMixerForMaskPretraining:
+                expected_arg_names = expected_arg_names_without_target + ["return_loss"]
+            if model_class == PatchTSMixerModel:
+                expected_arg_names = expected_arg_names_without_target
+            if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
+                MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
+            ):
+                expected_arg_names.remove("observed_mask")
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
@@ -417,6 +418,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
 
 
+@require_torch
 class PatchTSMixerFunctionalTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
