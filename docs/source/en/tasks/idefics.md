@@ -357,7 +357,7 @@ for a batch of examples by passing a list of prompts:
 ...     ],
 ... ]
 
->>> inputs = processor(prompts, return_tensors="pt").to(device)
+>>> inputs = processor(prompts, return_tensors="pt").to("cuda")
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10, bad_words_ids=bad_words_ids)
