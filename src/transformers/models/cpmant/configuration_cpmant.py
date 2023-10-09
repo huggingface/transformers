@@ -50,15 +50,17 @@ class CpmAntConfig(PretrainedConfig):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 48):
             Number of layers of the Transformer encoder.
-        dropout_p (`float`, *optional*, defaults to 0.1):
+        dropout_p (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder.
         position_bias_num_buckets (`int`, *optional*, defaults to 512):
             The number of position_bias buckets.
         position_bias_max_distance (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        eps (`float`, *optional*, defaults to 1e-6):
+        eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
+        init_std (`float`, *optional*, defaults to 1.0):
+            Initialize parameters with std = init_std.
         prompt_types (`int`, *optional*, defaults to 32):
             The type of prompt.
         prompt_length (`int`, *optional*, defaults to 32):
@@ -67,8 +69,6 @@ class CpmAntConfig(PretrainedConfig):
             The type of segment.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use cache.
-        init_std (`float`, *optional*, defaults to 1.0):
-            Initialize parameters with std = init_std.
 
     Example:
 

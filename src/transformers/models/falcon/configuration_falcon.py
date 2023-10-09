@@ -13,12 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Falcon configuration"""
-import os
-from typing import Optional, Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto.configuration_auto import sanitize_code_revision
 
 
 logger = logging.get_logger(__name__)
@@ -50,13 +46,13 @@ class FalconConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 71):
             Number of attention heads for each attention layer in the Transformer encoder.
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether the model should return the last key/values attentions (not used by all models). Only relevant if
             `config.is_decoder=True`.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
-            The epsilon used by the layer normalization layers.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for MLP layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -193,26 +189,3 @@ class FalconConfig(PretrainedConfig):
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
-        force_download: bool = False,
-        local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
-        revision: str = "main",
-        **kwargs,
-    ) -> "PretrainedConfig":
-        revision = sanitize_code_revision(pretrained_model_name_or_path, revision, kwargs.get("trust_remote_code"))
-
-        return super().from_pretrained(
-            pretrained_model_name_or_path,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            local_files_only=local_files_only,
-            token=token,
-            revision=revision,
-            **kwargs,
-        )

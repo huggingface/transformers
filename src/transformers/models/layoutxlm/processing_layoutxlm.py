@@ -37,9 +37,9 @@ class LayoutXLMProcessor(ProcessorMixin):
     into token-level `labels` for token classification tasks (such as FUNSD, CORD).
 
     Args:
-        image_processor (`LayoutLMv2ImageProcessor`):
+        image_processor (`LayoutLMv2ImageProcessor`, *optional*):
             An instance of [`LayoutLMv2ImageProcessor`]. The image processor is a required input.
-        tokenizer (`LayoutXLMTokenizer` or `LayoutXLMTokenizerFast`):
+        tokenizer (`LayoutXLMTokenizer` or `LayoutXLMTokenizerFast`, *optional*):
             An instance of [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`]. The tokenizer is a required input.
     """
 

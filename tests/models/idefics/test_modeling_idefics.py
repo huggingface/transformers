@@ -260,7 +260,7 @@ class IdeficsModelTester:
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
-    pipeline_model_mapping = {}
+    pipeline_model_mapping = {"feature-extraction": IdeficsModel} if is_torch_available() else {}
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -503,7 +503,11 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
 class IdeficsModelIntegrationTest(TestCasePlus):
     @cached_property
     def default_processor(self):
-        return IdeficsProcessor.from_pretrained("HuggingFaceM4/idefics-9b") if is_vision_available() else None
+        return (
+            IdeficsProcessor.from_pretrained("HuggingFaceM4/idefics-9b", revision="refs/pr/11")
+            if is_vision_available()
+            else None
+        )
 
     @require_bitsandbytes
     @slow
