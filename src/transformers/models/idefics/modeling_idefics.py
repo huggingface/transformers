@@ -702,7 +702,9 @@ class IdeficsAttention(nn.Module):
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         if not is_cross_attention:
-            query_states, key_states = self.rotary_emb(query_states, key_states, position_ids, seq_len=max(kv_seq_len, q_len))
+            query_states, key_states = self.rotary_emb(
+                query_states, key_states, position_ids, seq_len=max(kv_seq_len, q_len)
+            )
         # [bsz, nh, t, hd]
 
         if past_key_value is not None:
