@@ -295,7 +295,6 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
 
         if self.cur_lang_code == self.unk_token_id:
-            raise ValueError(f"`tgt_lang={src_lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id.")
             logger.warning_once(
                 f"`tgt_lang={src_lang}` has not be found in the `vocabulary`. Behaviour will probably be unexpected because the language token id will be replaced by the unknown token id."
             )
@@ -358,7 +357,39 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+    
+    @classmethod
+    def _from_pretrained(
+        cls,
+        resolved_vocab_files,
+        pretrained_model_name_or_path,
+        init_configuration,
+        *init_inputs,
+        token=None,
+        cache_dir=None,
+        local_files_only=False,
+        _commit_hash=None,
+        _is_local=False,
+        **kwargs,
+    ):      
+        tokenizer = super()._from_pretrained(
+            resolved_vocab_files,
+            pretrained_model_name_or_path,
+            init_configuration,
+            *init_inputs,
+            token=token,
+            cache_dir=cache_dir,
+            local_files_only=local_files_only,
+            _commit_hash=_commit_hash,
+            _is_local=_is_local,
+            **kwargs, 
+        )
+        
+        # ensure also set after from pretrained
+        tokenizer.set_src_lang_special_tokens(tokenizer._src_lang)
+        tokenizer.set_tgt_lang_special_tokens(tokenizer._tgt_lang)    
 
+        return tokenizer
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,

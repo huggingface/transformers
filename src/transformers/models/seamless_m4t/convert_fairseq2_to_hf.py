@@ -252,25 +252,26 @@ def load_model(save_dir, model_type, repo_id):
     ######### TOKENIZER
 
     langs = MEDIUM_SUPPORTED_LANGUAGES if model_type == "medium" else LARGE_SUPPORTED_LANGUAGES
+    langs = [f"__{lang}__" for lang in langs]
     vocab_file = os.path.join(os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model")
 
     save_dir = os.path.join(save_dir, name)
     Path(save_dir).mkdir(exist_ok=True)
 
-    tokenizer = SeamlessM4TTokenizer(vocab_file, language_code=langs)
+    tokenizer = SeamlessM4TTokenizer(vocab_file, additional_special_tokens=langs)
 
-    sanity_check_lang_id = tokenizer.lang_code_to_id["__fra__"]
+    sanity_check_lang_id = tokenizer.convert_tokens_to_ids("__fra__")
 
     tokenizer.save_pretrained(save_dir)
     tokenizer = SeamlessM4TTokenizer.from_pretrained(save_dir)
 
-    if sanity_check_lang_id != tokenizer.lang_code_to_id["__fra__"]:
+    if sanity_check_lang_id != tokenizer.convert_tokens_to_ids("__fra__"):
         raise ValueError(
-            f"Error in tokenizer saving/loading - __fra__ lang id is not coherent: {sanity_check_lang_id} vs {tokenizer.lang_code_to_id['__fra__']}"
+            f"Error in tokenizer saving/loading - __fra__ lang id is not coherent: {sanity_check_lang_id} vs {tokenizer.convert_tokens_to_ids('__fra__')}"
         )
 
     ####### get language to ids dict
-    text_decoder_lang_code_to_id = {lang: tokenizer.lang_code_to_id[f"__{lang}__"] for lang in langs}
+    text_decoder_lang_code_to_id = {lang: tokenizer.convert_tokens_to_ids(lang) for lang in langs}
     # offset: vocoder unit vocab size + 5 (for EOS/PAD/BOS/UNK/MSK) + len(supported_languages)
     t2u_lang_code_to_id = {
         code.replace("__", ""): i + 10005 + len(UNIT_SUPPORTED_LANGUAGES)
@@ -387,7 +388,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--model_type",
-        default="medium",
+        default="large",
         type=str,
         help="Model type.",
     )
@@ -401,7 +402,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--repo_id",
-        default="facebook/hf-seamless-m4t-medium",
+        default="facebook/hf-seamless-m4t-large",
         type=str,
         help="Repo ID.",
     )

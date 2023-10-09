@@ -448,11 +448,11 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         return cls
 
     def test_language_codes(self):
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__ace_Latn__"], 256002)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__shn__"], 256152)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__eng__"], 256047)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__fra__"], 256057)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["__quy__"], 256144)
+        self.assertEqual(self.tokenizer.convert_tokens_to_ids("__ace_Latn__"), 256002)
+        self.assertEqual(self.tokenizer.convert_tokens_to_ids("__shn__"), 256152)
+        self.assertEqual(self.tokenizer.convert_tokens_to_ids("__eng__"), 256047)
+        self.assertEqual(self.tokenizer.convert_tokens_to_ids("__fra__"), 256057)
+        self.assertEqual(self.tokenizer.convert_tokens_to_ids("__quy__"), 256144)
 
     def test_tokenizer_tgt_lang(self):
         ids = self.tokenizer(self.src_text, src_lang="fra").input_ids[0]
@@ -505,7 +505,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
         batch["decoder_input_ids"] = shift_tokens_right(
-            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.lang_code_to_id["__ron__"]
+            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.convert_tokens_to_ids("__ron__")
         )
 
         self.assertIsInstance(batch, BatchEncoding)
@@ -530,7 +530,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         batch["decoder_input_ids"] = shift_tokens_right(
             labels,
             self.tokenizer.pad_token_id,
-            decoder_start_token_id=self.tokenizer.lang_code_to_id[self.tokenizer.tgt_lang],
+            decoder_start_token_id=self.tokenizer.convert_tokens_to_ids(self.tokenizer.tgt_lang),
         )
 
         self.assertEqual(batch.input_ids.shape[1], 3)
