@@ -1651,8 +1651,8 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
     "Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a [`SeamlessM4TEncoderLayer`].",
     SEAMLESS_M4T_START_DOCSTRING,
     """
-        embed_tokens (`nn.Embedding`, *optional*): 
-            Input embedding 
+        embed_tokens (`nn.Embedding`, *optional*):
+            Input embedding
         is_t2u_encoder (`bool`, *optional*, defaults to `False`):
             indicates if it belongs to the text-to-units model, in which case it won't have input embeddings
     """,
@@ -1859,7 +1859,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
     "Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`].",
     SEAMLESS_M4T_START_DOCSTRING,
     """
-        embed_tokens (`nn.Embedding`, *optional*): 
+        embed_tokens (`nn.Embedding`, *optional*):
             Input embedding
     """,
 )
