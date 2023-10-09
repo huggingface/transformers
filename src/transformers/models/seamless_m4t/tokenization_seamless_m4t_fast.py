@@ -357,7 +357,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-    
+
     @classmethod
     def _from_pretrained(
         cls,
@@ -371,7 +371,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         _commit_hash=None,
         _is_local=False,
         **kwargs,
-    ):      
+    ):
         tokenizer = super()._from_pretrained(
             resolved_vocab_files,
             pretrained_model_name_or_path,
@@ -382,14 +382,15 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             local_files_only=local_files_only,
             _commit_hash=_commit_hash,
             _is_local=_is_local,
-            **kwargs, 
+            **kwargs,
         )
-        
+
         # ensure also set after from pretrained
         tokenizer.set_src_lang_special_tokens(tokenizer._src_lang)
-        tokenizer.set_tgt_lang_special_tokens(tokenizer._tgt_lang)    
+        tokenizer.set_tgt_lang_special_tokens(tokenizer._tgt_lang)
 
         return tokenizer
+
     def __call__(
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,

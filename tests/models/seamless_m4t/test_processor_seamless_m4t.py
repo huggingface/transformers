@@ -64,7 +64,6 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
             tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
         )
         processor.save_pretrained(self.tmpdirname)
-
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
 
@@ -72,15 +71,21 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
+        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
+
+        # FIX: seamlessM4Tprocessor is using tokenizer fast, which adds the new bos at the end of the vocabulary instead
+
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        vocab = tokenizer_add_kwargs.get_vocab()
+        for key, val in processor.tokenizer.get_vocab().items():
+            if vocab[key] != val:
+                print(key, val, vocab[key])
 
         tokenizer_instance = isinstance(processor.tokenizer, SeamlessM4TTokenizerFast) or isinstance(
             processor.tokenizer, SeamlessM4TTokenizer
         )
         self.assertTrue(tokenizer_instance)
-
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()

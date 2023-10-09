@@ -207,12 +207,12 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 [[autodoc]] SeamlessM4THifiGan
 
+## SeamlessM4TTextToUnitModel
+
+[[autodoc]] SeamlessM4TTextToUnitModel
 
 ## SeamlessM4TTextToUnitForConditionalGeneration
 
 [[autodoc]] SeamlessM4TTextToUnitForConditionalGeneration
 
 
-## SeamlessM4TTextToUnitModel
-
-[[autodoc]] SeamlessM4TTextToUnitModel

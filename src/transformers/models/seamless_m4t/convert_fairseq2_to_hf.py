@@ -147,8 +147,6 @@ default_cache_dir = os.path.join(os.path.expanduser("~"), ".cache")
 CACHE_DIR = os.path.join(os.getenv("XDG_CACHE_HOME", default_cache_dir), "huggingface", "hub")
 
 
-
-
 def _load_hf_config(model_type="medium"):
     if model_type == "medium":
         kwargs = {

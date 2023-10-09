@@ -799,6 +799,7 @@ class SeamlessM4TConverter(SpmConverter):
             ],
         )
 
+
 class XLMRobertaConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [

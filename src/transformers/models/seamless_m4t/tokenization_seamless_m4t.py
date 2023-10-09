@@ -48,6 +48,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/hf-seamless-m4t-medium": 2048,
 }
 
+
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
     Construct an SeamlessM4T tokenizer.
@@ -115,7 +116,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         sp_model_kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments to pass to the model initialization.
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
-            A tuple or a list of additional special tokens. Can be used to specify the list of languages that will be supported by the tokenizer.
+            A tuple or a list of additional special tokens. Can be used to specify the list of languages that will be
+            supported by the tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -161,9 +163,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         self.sp_model_size = len(self.sp_model)
 
-        #self.fairseq_tokens_to_ids["<MINED_DATA>"] = current_id
-        #self.fairseq_tokens_to_ids["<MMT_BT_DATA>"] = current_id + 1
-        #self.fairseq_tokens_to_ids["<SMT_BT_DATA>"] = current_id + 2
+        # self.fairseq_tokens_to_ids["<MINED_DATA>"] = current_id
+        # self.fairseq_tokens_to_ids["<MMT_BT_DATA>"] = current_id + 1
+        # self.fairseq_tokens_to_ids["<SMT_BT_DATA>"] = current_id + 2
 
         self._src_lang = f"__{src_lang}__" if "__" not in src_lang else src_lang
         self._tgt_lang = f"__{tgt_lang}__" if "__" not in tgt_lang else tgt_lang
@@ -182,7 +184,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-        
+
         self.set_src_lang_special_tokens(self._src_lang)
         self.set_tgt_lang_special_tokens(self._tgt_lang)
 
@@ -206,7 +208,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) 
+        return len(self.sp_model)
 
     def __call__(
         self,
@@ -406,7 +408,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         return inputs
 
     def get_vocab(self):
-        vocab = {self._convert_id_to_token(i): i for i in range(self.fairseq_offset,self.vocab_size+self.fairseq_offset)}
+        vocab = {
+            self._convert_id_to_token(i): i for i in range(self.fairseq_offset, self.vocab_size + self.fairseq_offset)
+        }
         # need to ensure that fairseq_tokens_to_id are placed at the beginning of the vocabulary
         vocab.update(self.fairseq_tokens_to_ids)
         vocab.update(self.added_tokens_encoder)

@@ -1651,8 +1651,9 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
     "Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a [`SeamlessM4TEncoderLayer`].",
     SEAMLESS_M4T_START_DOCSTRING,
     """
-        embed_tokens (`nn.Embedding`, *optional*): output embedding is_t2u_encoder (`bool`, *optional*, defaults to
-        `False`):
+        embed_tokens (`nn.Embedding`, *optional*): 
+            Input embedding 
+        is_t2u_encoder (`bool`, *optional*, defaults to `False`):
             indicates if it belongs to the text-to-units model, in which case it won't have input embeddings
     """,
 )
@@ -1669,7 +1670,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
         self.padding_idx = config.pad_token_id
         embed_dim = config.hidden_size
-        
+
         self.is_t2u_encoder = is_t2u_encoder
         self.max_source_positions = config.max_position_embeddings
 
@@ -1689,10 +1690,14 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
 
         layers = []
         for _ in range(config.encoder_layers):
-            layers.append(SeamlessM4TEncoderLayer(
-                    config, encoder_attention_heads=config.encoder_attention_heads, encoder_ffn_dim=config.encoder_ffn_dim
-                ))
-            
+            layers.append(
+                SeamlessM4TEncoderLayer(
+                    config,
+                    encoder_attention_heads=config.encoder_attention_heads,
+                    encoder_ffn_dim=config.encoder_ffn_dim,
+                )
+            )
+
         self.layers = nn.ModuleList(layers)
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
@@ -1854,7 +1859,8 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
     "Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`].",
     SEAMLESS_M4T_START_DOCSTRING,
     """
-        embed_tokens (`nn.Embedding`, *optional*): output embedding
+        embed_tokens (`nn.Embedding`, *optional*): 
+            Input embedding
     """,
 )
 class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
@@ -1886,11 +1892,13 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
 
         layers = []
         for _ in range(config.decoder_layers):
-            layers.append(SeamlessM4TDecoderLayer(
+            layers.append(
+                SeamlessM4TDecoderLayer(
                     config,
                     decoder_attention_heads=config.decoder_attention_heads,
                     decoder_ffn_dim=config.decoder_ffn_dim,
-                ))
+                )
+            )
         self.layers = nn.ModuleList(layers)
         self.layer_norm = nn.LayerNorm(config.hidden_size)
 

@@ -37,18 +37,18 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`SequenceFeatureExtractor`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using TorchAudio
+    This class extracts mel-filter bank features from raw speech.
 
     Args:
-        feature_size (`int`, defaults to 80, *optional*, defaults to 80):
+        feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000, *optional*, defaults to 16000):
+        sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        num_mel_bins (`int`, defaults to 80, *optional*, defaults to 80):
+        num_mel_bins (`int`, *optional*, defaults to 80):
             Number of Mel-frequency bins.
-        padding_value (`float`, defaults to 0.0, *optional*, defaults to 0.0):
+        padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding vectors.
-        stride (`int`, defaults to 2, *optional*, defaults to 2):
+        stride (`int`, *optional*, defaults to 2):
             Stride used to reshape audios from shape (batch_size,num_frames,num_mel_bins) to
             (batch_size,num_frames//stride,num_mel_bins*stride).
     """

@@ -47,6 +47,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4TModel`],
             [`~SeamlessM4TForSpeechToSpeech`] or [`~SeamlessM4TForTextToSpeech`].
 
+        > Parameters shared across sub-models
 
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the "intermediate" layers in the architecture.
@@ -79,6 +80,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         scale_embedding (`bool`, *optional*, defaults to `True`):
             Scale embeddings by diving by sqrt(d_model).
 
+        > Text encoder and text decoder specific parameters
 
         encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer text encoder.
@@ -104,6 +106,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 3):
             The id of the _end-of-stream_ text token. Only applied to the text-decoder model.
 
+        > Speech encoder specific parameters
 
         speech_encoder_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer speech encoder.
@@ -150,7 +153,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         conv_depthwise_kernel_size (`int`, defaults to 31, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
 
-
+        > Text-To-Unit (t2u) model specific parameters
 
         t2u_bos_token_id (`int`, *optional*, defaults to 0):
             The id of the _beginning-of-stream_ unit token. Only applied to the text-to-unit seq2seq model.
@@ -180,6 +183,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             The maximum sequence length that this model text-to-unit component might ever be used with. Typically set
             this to something large just in case (e.g., 512 or 1024 or 2048).
 
+         > Hifi-Gan Vocoder specific parameters
 
         sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
