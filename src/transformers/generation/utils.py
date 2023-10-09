@@ -1241,6 +1241,10 @@ class GenerationMixin:
                 decoder_model_args = set(inspect.signature(decoder.forward).parameters)
                 model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
+            # allow assistant_encoder_outputs to be passed if we're doing assisted generating
+            if "assistant_encoder_outputs" in model_kwargs:
+                model_args |= {"assistant_encoder_outputs"}
+
         for key, value in model_kwargs.items():
             if value is not None and key not in model_args:
                 unused_model_args.append(key)
@@ -1575,7 +1579,7 @@ class GenerationMixin:
                 raise ValueError("assisted generate requires `use_cache=True`")
 
             # 11. If the assistant model is an encoder-decoder, prepare its encoder outputs
-            if assistant_model.config.is_encoder_decoder:
+            if assistant_model.config.is_encoder_decoder and "assistant_encoder_outputs" not in model_kwargs:
                 assistant_model_kwargs = copy.deepcopy(model_kwargs)
                 inputs_tensor, model_input_name, assistant_model_kwargs = assistant_model._prepare_model_inputs(
                     inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_model_kwargs
@@ -4391,19 +4395,16 @@ class GenerationMixin:
                     # `new_token_len` can be 1 or 2 (next token in assistant + last token picked by the larger model)
                     new_token_len = candidate_input_ids.shape[1] - prev_seq_len
                     assist_inputs = candidate_input_ids[:, -new_token_len:]
-                    assist_attn = torch.ones_like(candidate_input_ids)
                     # TODO (joao): make it compatible with models that use unconventional fwd pass logic, like blip2
                     if assistant_model.config.is_encoder_decoder:
                         assistant_model_outputs = assistant_model(
                             decoder_input_ids=assist_inputs,
-                            decoder_attention_mask=assist_attn,
                             past_key_values=model_kwargs["assistant_past_key_values"],
                             encoder_outputs=model_kwargs["assistant_encoder_outputs"],
                         )
                     else:
                         assistant_model_outputs = assistant_model(
                             assist_inputs,
-                            attention_mask=assist_attn,
                             past_key_values=model_kwargs["assistant_past_key_values"],
                         )
                 else:
@@ -4529,10 +4530,10 @@ class GenerationMixin:
             # 6. Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
             # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
             # cost of forecasting incorrect assistant tokens.
-            if n_matches == int(assistant_model.max_assistant_tokens):
-                assistant_model.max_assistant_tokens += 2.0
-            else:
-                assistant_model.max_assistant_tokens = max(1.0, assistant_model.max_assistant_tokens - 1.0)
+            # if n_matches == int(assistant_model.max_assistant_tokens):
+            #     assistant_model.max_assistant_tokens += 2.0
+            # else:
+            #     assistant_model.max_assistant_tokens = max(1.0, assistant_model.max_assistant_tokens - 1.0)
 
             # Assistant: main logic end
 
