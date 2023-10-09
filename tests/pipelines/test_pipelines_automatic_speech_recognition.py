@@ -683,6 +683,55 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             },
         )
 
+    @slow
+    @require_torch
+    def test_whisper_word_timestamps_batched(self):
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            chunk_length_s=30,
+            return_timestamps="word",
+        )
+        data = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = data[0]["audio"]
+
+        EXPECTED_OUTPUT = {
+            "text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel.",
+            "chunks": [
+                {"text": " Mr.", "timestamp": (0.48, 0.96)},
+                {"text": " Quilter", "timestamp": (0.96, 1.22)},
+                {"text": " is", "timestamp": (1.22, 1.5)},
+                {"text": " the", "timestamp": (1.5, 1.72)},
+                {"text": " apostle", "timestamp": (1.72, 2.0)},
+                {"text": " of", "timestamp": (2.0, 2.34)},
+                {"text": " the", "timestamp": (2.34, 2.5)},
+                {"text": " middle", "timestamp": (2.5, 2.66)},
+                {"text": " classes", "timestamp": (2.66, 3.18)},
+                {"text": " and", "timestamp": (3.18, 3.56)},
+                {"text": " we", "timestamp": (3.56, 3.68)},
+                {"text": " are", "timestamp": (3.68, 3.8)},
+                {"text": " glad", "timestamp": (3.8, 4.1)},
+                {"text": " to", "timestamp": (4.1, 4.3)},
+                {"text": " welcome", "timestamp": (4.3, 4.58)},
+                {"text": " his", "timestamp": (4.58, 4.94)},
+                {"text": " gospel.", "timestamp": (4.94, 5.82)},
+            ],
+        }
+
+        # batch size 1: copy the audio sample since pipeline consumes it
+        output = pipe(sample.copy(), batch_size=1)
+        self.assertDictEqual(
+            output,
+            EXPECTED_OUTPUT,
+        )
+
+        # batch size 2
+        output = pipe(sample, batch_size=2)
+        self.assertDictEqual(
+            output,
+            EXPECTED_OUTPUT,
+        )
+
     @require_torch
     @slow
     def test_torch_speech_encoder_decoder(self):

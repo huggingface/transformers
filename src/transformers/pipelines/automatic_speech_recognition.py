@@ -549,7 +549,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     generate_kwargs["return_token_timestamps"] = True
 
                     if stride is not None:
-                        generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
+                        if isinstance(stride, tuple):
+                            generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
+                        else:
+                            generate_kwargs["num_frames"] = stride[0][0] // self.feature_extractor.hop_length
 
             tokens = self.model.generate(
                 encoder_outputs=encoder(inputs, attention_mask=attention_mask),
