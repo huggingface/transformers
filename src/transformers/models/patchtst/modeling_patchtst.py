@@ -395,9 +395,10 @@ class PatchTSTPatchify(nn.Module):
     ):
         super().__init__()
 
-        assert (
-            sequence_length > patch_length
-        ), f"Sequence length ({sequence_length}) has to be greater than the patch length ({patch_length})"
+        if sequence_length <= patch_length:
+            raise ValueError(
+                f"Sequence length ({sequence_length}) has to be greater than the patch length ({patch_length})"
+            )
 
         self.sequence_length = sequence_length
         self.patch_length = patch_length
@@ -417,9 +418,10 @@ class PatchTSTPatchify(nn.Module):
             x: output tensor data [bs x num_input_channels x num_patches x patch_length]
         """
         sequence_length = past_values.shape[-2]
-        assert (
-            sequence_length == self.sequence_length
-        ), f"Input sequence length ({sequence_length}) doesn't match model configuration ({self.sequence_length})."
+        if sequence_length != self.sequence_length:
+            raise ValueError(
+                f"Input sequence length ({sequence_length}) doesn't match model configuration ({self.sequence_length})."
+            )
 
         x = past_values[:, self.s_begin :, :]  # x: [bs x new_sequence_length x nvars]
         x = x.unfold(
