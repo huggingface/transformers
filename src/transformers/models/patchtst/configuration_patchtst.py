@@ -112,8 +112,6 @@ class PatchTSTConfig(PretrainedConfig):
             Mask value to set.
         pooling (`str`, *optional*, defaults to `"mean"`):
             Pooling in the latent representation. `"mean"`, `"max"` and None are supported.
-        num_labels (`int`, *optional*, defaults to 1):
-            Number of classes is defined for classification task.
         head_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for head.
         prediction_length (`int`):
@@ -191,7 +189,6 @@ class PatchTSTConfig(PretrainedConfig):
         mask_value=0,
         # head
         pooling: str = "mean",
-        num_labels: int = 1,
         head_dropout: float = 0.0,
         prediction_length: int = 24,
         num_output_channels: int = 1,
@@ -251,9 +248,6 @@ class PatchTSTConfig(PretrainedConfig):
 
         # Forecast head
         self.shared_projection = shared_projection
-
-        # Classification
-        self.num_labels = num_labels
 
         # Forcasting and prediction
         self.prediction_length = prediction_length
