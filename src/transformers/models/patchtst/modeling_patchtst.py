@@ -373,11 +373,7 @@ def forecast_masking(
     return inputs_mask, mask[..., 0]
 
 
-def compute_num_patches(sequence_length, patch_length, stride):
-    return (max(sequence_length, patch_length) - patch_length) // stride + 1
-
-
-class Patchify(nn.Module):
+class PatchTSTPatchify(nn.Module):
     """
     A class to patchify the time series sequence into different patches
 
@@ -408,8 +404,8 @@ class Patchify(nn.Module):
         self.stride = stride
 
         # get the number of patches
-        self.num_patches = compute_num_patches(sequence_length, patch_length, stride)
-        new_sequence_length = patch_length + stride * (self.num_patches - 1)
+        num_patches = (max(sequence_length, patch_length) - patch_length) // stride + 1
+        new_sequence_length = patch_length + stride * (num_patches - 1)
         self.s_begin = sequence_length - new_sequence_length
 
     def forward(self, past_values: torch.Tensor):
@@ -431,69 +427,6 @@ class Patchify(nn.Module):
         )  # x: [bs x num_patches x num_input_channels x patch_length]
         x = x.transpose(-2, -3).contiguous()  # xb: [bs x num_input_channels x num_patches x patch_length]
         return x
-
-
-class PatchEmbeddings(nn.Module):
-    """
-    Parameters:
-    A class to patchify the time series sequence into different patches
-        sequence_length (int, required): input sequence length. patch_length (int, required): patch length. stride
-        (int, required): stride between patches.
-
-    Returns:
-        embeddings: output tensor data [bs x num_input_channels x num_patches x embed_dim]
-    """
-
-    def __init__(self, sequence_length: int, patch_length: int, stride: int, embed_dim: int):
-        super().__init__()
-
-        assert (
-            sequence_length > patch_length
-        ), f"Sequence length ({sequence_length}) has to be greater than the patch length ({patch_length})"
-
-        # assert ((max(sequence_length, patch_length) - patch_length) % stride == 0), f"sequence length minus patch length has to be divisible to the stride"
-
-        self.sequence_length = sequence_length
-        self.patch_length = patch_length
-        self.stride = stride
-        self.embed_dim = embed_dim
-
-        # get the number of patches
-        self.num_patches = compute_num_patches(sequence_length, patch_length, stride)
-        new_sequence_length = patch_length + stride * (self.num_patches - 1)
-        self.s_begin = sequence_length - new_sequence_length
-
-        # Embedding
-        self.projection = nn.Conv1d(
-            in_channels=1,
-            out_channels=embed_dim,
-            kernel_size=patch_length,
-            stride=stride,
-        )
-
-    def forward(self, past_values: torch.Tensor):
-        """
-        Parameters:
-            past_values (torch.Tensor, required): Input of shape [bs x sequence_length x num_input_channels]
-        Returns:
-            embeddings: output tensor data [bs x num_input_channels x num_patches x emb_dim]
-        """
-        bs, sequence_length, num_input_channels = past_values.shape
-        assert (
-            sequence_length == self.sequence_length
-        ), f"Input sequence length ({sequence_length}) doesn't match the configuration sequence length ({self.sequence_length})."
-
-        x = past_values[:, self.s_begin :, :]  # x: [bs x new_sequence_length x nvars]
-        # convert past_values to shape [bs*num_input_channels x 1 x sequence_length ]
-        x = x.transpose(1, 2).reshape(bs * num_input_channels, 1, -1).contiguous()
-        # projection
-        embeddings = self.projection(x)  # embeddings: [bs*num_input_channels x emb_dim x num_patches]
-        # reshape
-        embeddings = (
-            embeddings.transpose(1, 2).view(bs, num_input_channels, -1, self.embed_dim).contiguous()
-        )  # embeddings: [bs x num_input_channels x num_patches x emb_dim]
-        # embeddings = embeddings.flatten(2).transpose(1, 2)
-        return embeddings
 
 
 class PatchMasking(nn.Module):
@@ -1264,7 +1197,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         else:
             self.scaler = PatchTSTNOPScaler(dim=1, keepdim=True)
 
-        self.patching = Patchify(
+        self.patching = PatchTSTPatchify(
             config.context_length,
             patch_length=config.patch_length,
             stride=config.stride,
