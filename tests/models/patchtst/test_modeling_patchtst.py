@@ -71,7 +71,7 @@ class PatchTSTModelTester:
         lags_sequence=[1, 2, 3, 4, 5],
         distil=False,
         seed_number=42,
-        num_classes=2,
+        num_labels=2,
         num_output_channels=2,
     ):
         self.parent = parent
@@ -93,7 +93,7 @@ class PatchTSTModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
         self.seed_number = seed_number
-        self.num_classes = num_classes
+        self.num_labels = num_labels
         self.num_output_channels = num_output_channels
         self.distil = distil
         self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.stride + 1
@@ -113,7 +113,7 @@ class PatchTSTModelTester:
             context_length=self.context_length,
             activation_function=self.hidden_act,
             seed_number=self.seed_number,
-            num_classes=self.num_classes,
+            num_labels=self.num_labels,
             num_output_channels=self.num_output_channels,
         )
 
@@ -191,7 +191,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # if classification model:
         if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
-            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_classes, rng=rng)
+            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels, rng=rng)
             inputs_dict["labels"] = labels
             inputs_dict.pop("future_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):

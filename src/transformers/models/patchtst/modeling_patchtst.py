@@ -1384,7 +1384,7 @@ class ClassificationHead(nn.Module):
         self.pooling = config.pooling
         self.flatten = nn.Flatten(start_dim=1)
         self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
-        self.linear = nn.Linear(config.num_input_channels * config.d_model, config.num_classes)
+        self.linear = nn.Linear(config.num_input_channels * config.d_model, config.num_labels)
 
     def forward(self, x: torch.Tensor):
         """

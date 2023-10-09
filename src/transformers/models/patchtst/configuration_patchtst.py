@@ -253,7 +253,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.shared_projection = shared_projection
 
         # Classification
-        self.num_classes = num_classes
+        self.num_labels = num_labels
 
         # Forcasting and prediction
         self.prediction_length = prediction_length
