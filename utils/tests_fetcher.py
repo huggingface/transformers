@@ -946,7 +946,7 @@ def infer_tests_to_run(
     print(f"\n### IMPACTED FILES ###\n{_print_list(impacted_files)}")
 
     # Grab the corresponding test files:
-    if "setup.py" in modified_files:
+    if True:
         test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
     else:
