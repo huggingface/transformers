@@ -431,11 +431,11 @@ class PatchTSTPatchify(nn.Module):
         return x
 
 
-class PatchMasking(nn.Module):
+class PatchTSTMasking(nn.Module):
     """
-    PatchMasking: Class to random or forcast masking.
+    PatchTSTMasking: Class for random or forcast masking on inputs.
 
-    Parameters:
+    Args:
         mask_type (str, optional): Masking type. Allowed values are random, forecast. Defaults to random.
         mask_ratio (float, optional): Mask ratio.
         mask_patches (list, optional): List of patch lengths to mask in the end of the data.
@@ -448,6 +448,9 @@ class PatchMasking(nn.Module):
             across channels. Defaults to True.
         mask_value (int, optional): Value to use for masking. Defaults to 0.
         seed_number (int, optional): Random seed, when None seed is not set. Defaults to None.
+
+    Returns:
+
     """
 
     def __init__(
@@ -1207,7 +1210,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         self.mask_input = config.mask_input
 
         if self.mask_input:
-            self.masking = PatchMasking(
+            self.masking = PatchTSTMasking(
                 mask_type=config.mask_type,
                 mask_ratio=config.mask_ratio,
                 mask_patches=config.mask_patches,
