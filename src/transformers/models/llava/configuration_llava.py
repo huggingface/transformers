@@ -88,7 +88,20 @@ class LlavaTextConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
-
+        pad_token_id (`int`, *optional*, defaults to `None`):
+            The ID of the padding token used for input sequences. This token is typically used to pad sequences to a
+            common length during tokenization.
+        bos_token_id (`int`, *optional*, defaults to `1`):
+            The ID of the beginning-of-sequence (BOS) token. The BOS token is used to mark the start of a sequence and
+            is often used in language generation tasks.
+        eos_token_id (`int`, *optional*, defaults to `2`):
+            The ID of the end-of-sequence (EOS) token. The EOS token is used to mark the end of a sequence and is often
+            used in language generation tasks.
+        mm_hidden_size (`int`, *optional*, defaults to 1024):
+            Dimension of the hidden representations.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            The type of attention bias to apply during model computation. This parameter controls how the model attends
+            to certain positions in the input sequence.
     """
     model_type = "llava_text"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -101,18 +114,18 @@ class LlavaTextConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         num_key_value_heads=None,
+        pretraining_tp=1,
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
+        pad_token_id=None,
+        bos_token_id=1,
+        eos_token_id=2,
         mm_hidden_size=1024,
         attention_bias=False,
         **kwargs,
