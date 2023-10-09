@@ -46,7 +46,7 @@ from datasets import load_dataset
 dataset = load_dataset("beans")
 ```
 
-We can use either of the processors, given they return the same output. We will use the `map()` method of `dataset` to apply the preprocessing to every split of the dataset.
+We can use an image processor from either of the models, as in this case they return the same output. We will use the `map()` method of `dataset` to apply the preprocessing to every split of the dataset.
 
 ```python
 from transformers import AutoImageProcessor
