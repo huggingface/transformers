@@ -545,9 +545,8 @@ class ChannelAttentionTSTEncoderLayer(nn.Module):
         super().__init__()
 
         self.channel_attention = config.channel_attention
-        # Multi-Head attention
-        # self.self_attn = PatchTSTAttention(config)
 
+        # Multi-Head attention
         self.self_attn = PatchTSTAttention(
             embed_dim=config.d_model,
             num_heads=config.encoder_attention_heads,
@@ -673,11 +672,11 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (ChannelAttentionPatchTSTEncoder)):
+        if isinstance(module, (PatchTSTEncoder)):
             module.gradient_checkpointing = value
 
 
-class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
+class PatchTSTEncoder(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
         self.num_input_channels = config.num_input_channels
@@ -730,8 +729,7 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
             tensor [bs x nvars x num_patches x d_model]
                 or [bs x nvars x (num_patches+1) x d_model] if use cls_token
         """
-        # bs, num_patches, num_input_channels, patch_length = x.shape
-        bs, num_input_channels, num_patches, patch_length = past_values.shape
+        _, num_input_channels, _, _ = past_values.shape
 
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1222,7 +1220,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
             )
         else:
             self.masking = nn.Identity()
-        self.encoder = ChannelAttentionPatchTSTEncoder(config)
+        self.encoder = PatchTSTEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
