@@ -721,6 +721,7 @@ class BarkSemanticModel(BarkCausalModel):
         semantic_generation_config: BarkSemanticGenerationConfig = None,
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        min_eos_p: float = 0.5,  # Set your desired threshold here
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -793,17 +794,34 @@ class BarkSemanticModel(BarkCausalModel):
         )
 
         suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(tokens_to_suppress)
+         
+        # Define a logits processor to suppress tokens based on EOS probability
+        class SuppressTokensLogitsProcessor:
+            def __init__(self, eos_token_id, min_eos_p):
+                self.eos_token_id = eos_token_id
+                self.min_eos_p = min_eos_p
+
+            def __call__(self, input_ids, logits, **kwargs):
+                eos_token_prob = torch.softmax(logits[:, self.eos_token_id], dim=-1)
+                suppress_mask = eos_token_prob > self.min_eos_p
+                logits[:, ~suppress_mask] = float("-inf")
+                return logits
+
+
+        # Create a list of logits processors
+        logits_processors = LogitsProcessorList([SuppressTokensLogitsProcessor(eos_token_id, min_eos_p), MinLengthLogitsProcessor(1)])
 
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
         # (except to get the input seq_len - that's why we keep the first 257 tokens)
+
         semantic_output = super().generate(
             torch.ones((batch_size, max_input_semantic_length + 1), dtype=torch.int).to(self.device),
             input_embeds=input_embeds,
-            logits_processor=[suppress_tokens_logits_processor],
+            logits_processor=logits_processors,
             generation_config=semantic_generation_config,
             **kwargs,
-        )  # size: 10048
-
+        )
+        
         # take the generated semantic tokens
         semantic_output = semantic_output[:, max_input_semantic_length + 1 :]
 
