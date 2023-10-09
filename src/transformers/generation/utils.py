@@ -4486,6 +4486,7 @@ class GenerationMixin:
             new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
             if len(logits_processor) > 0:
                 for i in range(candidate_length):
+                    import ipdb; ipdb.set_trace()
                     new_logits[:, i, :] = logits_processor(candidate_input_ids[:, : cur_len + i], new_logits[:, i, :])
             if len(logits_warper) > 0:
                 for i in range(candidate_length):
@@ -4493,10 +4494,10 @@ class GenerationMixin:
 
             # 3. Obtain the next tokens from the original model logits.
             if do_sample:
-                probs = new_logits[:, -candidate_length - 1 :, :].softmax(dim=-1)
+                probs = new_logits.softmax(dim=-1)
                 selected_tokens = torch.multinomial(probs[0, :, :], num_samples=1).squeeze(1)[None, :]
             else:
-                selected_tokens = new_logits[:, -candidate_length - 1 :, :].argmax(dim=-1)
+                selected_tokens = new_logits.argmax(dim=-1)
 
             # 4. Compare the argmax from the original model logits with the assistant forecasted tokens. We can keep
             # the assistant forecasted tokens until the first mismatch, or until the max length is reached.
