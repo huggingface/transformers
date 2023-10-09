@@ -27,6 +27,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from transformers.cache_utils import Cache, DynamicCache
+
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -319,7 +321,7 @@ class LlamaAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Union[Tuple[torch.Tensor], Cache]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
         padding_mask: Optional[torch.LongTensor] = None,
@@ -352,18 +354,24 @@ class LlamaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        if isinstance(past_key_value, Cache):
+            past_key_value.update_pre_rotation(key_states, value_states)
+
         kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
+        if past_key_value:
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        if past_key_value is not None:
+        if past_key_value:
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
-        past_key_value = (key_states, value_states) if use_cache else None
+        if isinstance(past_key_value, Cache):
+            past_key_value.update(key_states, value_states)
+        elif past_key_value is not None:
+            past_key_value = (key_states, value_states)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -407,7 +415,7 @@ class LlamaAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, (past_key_value if use_cache else None)
 
 
 class LlamaFlashAttention2(LlamaAttention):
@@ -856,9 +864,18 @@ class LlamaModel(LlamaPreTrainedModel):
         seq_length_with_past = seq_length
         past_key_values_length = 0
 
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+        # If not None and not Cache, set to Dynamic Cache
+        if use_cache:
+            if past_key_values is None:
+                past_key_values = DynamicCache()
+
+            elif not isinstance(past_key_values, Cache):
+                past_key_values = DynamicCache.from_past_key_values(past_key_values)
+                # TODO: Remove this code duplication
+                past_key_values_length = past_key_values[0].shape[2]
+            else:
+                past_key_values_length = past_key_values[0].shape[2]
+            seq_length_with_past += past_key_values_length
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -903,14 +920,14 @@ class LlamaModel(LlamaPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
+            past_key_values.set_layer_idx(idx)
 
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, past_key_value, output_attentions, padding_mask=padding_mask)
+                        return module(*inputs, past_key_values, output_attentions, padding_mask=padding_mask)
 
                     return custom_forward
 
@@ -922,7 +939,7 @@ class LlamaModel(LlamaPreTrainedModel):
                     hidden_states,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     padding_mask=padding_mask,
@@ -931,7 +948,11 @@ class LlamaModel(LlamaPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+                present_key_values = layer_outputs[2 if output_attentions else 1]
+                if isinstance(present_key_values, Cache):
+                    next_decoder_cache = present_key_values
+                else:
+                    next_decoder_cache += (present_key_values,)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
