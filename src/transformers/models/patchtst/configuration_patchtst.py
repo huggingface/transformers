@@ -29,7 +29,6 @@ PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class PatchTSTConfig(PretrainedConfig):
-    model_type = "patchtst"
     r"""
     This is the configuration class to store the configuration of an [`PatchTSTModel`]. It is used to instantiate an
     PatchTST model according to the specified arguments, defining the model architecture.
@@ -139,6 +138,8 @@ class PatchTSTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    model_type = "patchtst"
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
