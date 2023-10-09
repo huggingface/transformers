@@ -122,4 +122,6 @@ output = np.moveaxis(output, source=0, destination=-1)
 output = (output * 255.0).round().astype(np.uint8)
 Image.fromarray(output)
 ```
-![Image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat_upscaled.png)
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat_upscaled.png" alt="Upscaled photo of a cat"/>
+</div>
