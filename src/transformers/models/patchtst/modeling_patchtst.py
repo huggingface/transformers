@@ -518,11 +518,11 @@ class PatchTSTMasking(nn.Module):
         return x_mask, mask
 
 
-class ChannelAttentionTSTEncoder(nn.Module):
+class PatchTSTEncoderBlock(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
-        self.layers = nn.ModuleList([ChannelAttentionTSTEncoderLayer(config) for i in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.encoder_layers)])
 
     def forward(self, hidden_state: torch.Tensor, output_hidden_states: Optional[bool] = None):
         """
@@ -540,7 +540,7 @@ class ChannelAttentionTSTEncoder(nn.Module):
         return hidden_state, all_hidden_states
 
 
-class ChannelAttentionTSTEncoderLayer(nn.Module):
+class PatchTSTEncoderLayer(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
@@ -716,7 +716,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         )
 
         # Encoder
-        self.encoder = ChannelAttentionTSTEncoder(config)
+        self.encoder = PatchTSTEncoderBlock(config)
 
         # Initialize weights and apply final processing
         self.post_init()
