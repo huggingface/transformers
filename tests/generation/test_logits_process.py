@@ -54,6 +54,8 @@ if is_torch_available():
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
     )
 
+    from transformers.generation.logits_process import BarkEarlyStoppingLogitsProcessor
+
 
 @require_torch
 class LogitsProcessorTest(unittest.TestCase):
@@ -800,3 +802,17 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertAlmostEqual(out[0].item(), res[0].item())
         self.assertAlmostEqual(out[1].item(), res[1].item())
         self.assertAlmostEqual(out[2].item(), res[2].item())
+
+    def test_early_stop_processor(self):
+        input_ids = None
+        scores = self._get_uniform_logits(2, 4)
+        eos_token_id = 2
+        min_eos_p = 0.1  ## some small float
+
+        esp = BarkEarlyStoppingLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
+        actual_scores = esp(input_ids, scores)
+        expected_scores_list = [
+            [float("-inf"), float("-inf"), 0.1, float("-inf")],
+            [float("-inf"), float("-inf"), 0.3, float("-inf")],
+        ]
+        self.assertListEqual(actual_scores.tolist(), expected_scores_list)
