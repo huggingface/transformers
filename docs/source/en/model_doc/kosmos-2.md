@@ -34,13 +34,6 @@ The abstract from the paper is the following:
 This model was contributed by [Yih-Dar SHIEH](https://huggingface.co/ydshieh). The original code can be found [here](https://github.com/microsoft/unilm/tree/master/kosmos-2).
 
 
-<Tip warning={true}>
-
-Kosmos-2 modeling code in Transformers is for finetuning and inferencing the pre-trained Kosmos-2 models.
-
-</Tip>
-
-
 ## Kosmos2Config
 
 [[autodoc]] Kosmos2Config
