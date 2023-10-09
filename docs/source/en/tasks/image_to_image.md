@@ -55,7 +55,9 @@ print(image.size)
 ```bash
 # (532, 432)
 ```
-![Image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat.jpg)
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat.jpg" alt="Photo of a cat"/>
+</div>
 
 We can now do inference with the pipeline. We will get an upscaled version of the cat image. 
 
