@@ -1723,5 +1723,7 @@ class BarkEarlyStoppingLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        scores[:, self.eos_token_id] = -float("inf")
+        for k in range(input_ids.shape[0]):
+            if scores[k, self.eos_token_id] > self.min_eos_p:
+                scores[k, : self.eos_token_id] = -float("inf")
         return scores
