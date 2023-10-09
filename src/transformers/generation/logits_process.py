@@ -1705,21 +1705,18 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
 
 class BarkEarlyStoppingLogitsProcessor(LogitsProcessor):
-    r"""This processor will set every tokens' log probability other than the EOS token to `-inf`
-    when the probabiliy of the EOS token id is superior to min_eos_p.
+    r"""This processor ensures that the EOS token is sampled if its probability is greater than the `min_eos_p`.
 
     Args:
-        generate_config (`GenerateConfig`):
-            The generate config used to generate the output. The following parameters are required:
-                eos_token_id (`int`, *optional*, defaults to 50257):
-                    The id of the *end-of-sequence* token.
-                min_eos_p (`float`, *optional*, defaults to None):
-                    Minimum end of speech threshold.
+        eos_token_id (`int`):
+            The id of the *end-of-sequence* token.
+        min_eos_p (`float`, *optional*):
+            Minimum end of speech threshold.
     """
 
-    def __init__(self, generate_config):
-        self.eos_token_id = generate_config.eos_token_id
-        self.min_eos_p = generate_config.min_eos_p
+    def __init__(self, eos_token_id: int, min_eos_p: float):
+        self.eos_token_id = eos_token_id
+        self.min_eos_p = min_eos_p
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
