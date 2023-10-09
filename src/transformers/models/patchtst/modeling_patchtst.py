@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 TSFM team. All rights reserved.
+# Copyright 2023 IBM & Hugging Face. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -195,34 +195,35 @@ class PatchTSTAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class Transpose(nn.Module):
+class PatchTSTTranspose(nn.Module):
     def __init__(self, *dims, contiguous=False):
         super().__init__()
         self.dims, self.contiguous = dims, contiguous
 
-    def forward(self, x):
+    def forward(self, inputs):
         if self.contiguous:
-            return x.transpose(*self.dims).contiguous()
+            return inputs.transpose(*self.dims).contiguous()
         else:
-            return x.transpose(*self.dims)
+            return inputs.transpose(*self.dims)
 
 
-def positional_encoding(pe, learn_pe, q_len, d_model):
+def positional_encoding(position_embedding_type, learned, q_len, d_model):
     # Positional encoding
-    if pe is None:
-        w_pos = torch.empty((q_len, d_model))  # pe = None and learn_pe = False can be used to measure impact of pe
-        nn.init.uniform_(w_pos, -0.02, 0.02)
-        learn_pe = False
-    elif pe == "zeros":
+    if position_embedding_type is None:
+        # position_embedding_type = None and learned = False can be used to measure impact of positional encoding
         w_pos = torch.empty((q_len, d_model))
         nn.init.uniform_(w_pos, -0.02, 0.02)
-    elif pe == "normal":
+        learned = False
+    elif position_embedding_type == "zeros":
+        w_pos = torch.empty((q_len, d_model))
+        nn.init.uniform_(w_pos, -0.02, 0.02)
+    elif position_embedding_type == "normal":
         w_pos = torch.zeros((q_len, 1))
         torch.nn.init.normal_(w_pos, mean=0.0, std=0.1)
-    elif pe == "uniform":
+    elif position_embedding_type == "uniform":
         w_pos = torch.zeros((q_len, 1))
         nn.init.uniform_(w_pos, a=0.0, b=0.1)
-    elif pe == "sincos":
+    elif position_embedding_type == "sincos":
         pos_enc = torch.zeros(q_len, d_model)
         position = torch.arange(0, q_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
@@ -233,9 +234,9 @@ def positional_encoding(pe, learn_pe, q_len, d_model):
         w_pos = pos_enc
     else:
         raise ValueError(
-            f"{pe} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
+            f"{position_embedding_type} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
         )
-    return nn.Parameter(w_pos, requires_grad=learn_pe)
+    return nn.Parameter(w_pos, requires_grad=learned)
 
 
 def random_masking(
@@ -609,7 +610,9 @@ class ChannelAttentionTSTEncoderLayer(nn.Module):
         # Add & Norm of the sublayer 1
         self.dropout_path1 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
         if "batch" in config.norm.lower():
-            self.norm_sublayer1 = nn.Sequential(Transpose(1, 2), nn.BatchNorm1d(config.d_model), Transpose(1, 2))
+            self.norm_sublayer1 = nn.Sequential(
+                PatchTSTTranspose(1, 2), nn.BatchNorm1d(config.d_model), PatchTSTTranspose(1, 2)
+            )
         else:
             self.norm_sublayer1 = nn.LayerNorm(config.d_model)
 
@@ -617,7 +620,9 @@ class ChannelAttentionTSTEncoderLayer(nn.Module):
         if self.channel_attention:
             self.dropout_path2 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
             if "batch" in config.norm.lower():
-                self.norm_sublayer2 = nn.Sequential(Transpose(1, 2), nn.BatchNorm1d(config.d_model), Transpose(1, 2))
+                self.norm_sublayer2 = nn.Sequential(
+                    PatchTSTTranspose(1, 2), nn.BatchNorm1d(config.d_model), PatchTSTTranspose(1, 2)
+                )
             else:
                 self.norm_sublayer2 = nn.LayerNorm(config.d_model)
 
@@ -632,7 +637,9 @@ class ChannelAttentionTSTEncoderLayer(nn.Module):
         # Add & Norm of sublayer 3
         self.dropout_path3 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
         if "batch" in config.norm.lower():
-            self.norm_sublayer3 = nn.Sequential(Transpose(1, 2), nn.BatchNorm1d(config.d_model), Transpose(1, 2))
+            self.norm_sublayer3 = nn.Sequential(
+                PatchTSTTranspose(1, 2), nn.BatchNorm1d(config.d_model), PatchTSTTranspose(1, 2)
+            )
         else:
             self.norm_sublayer3 = nn.LayerNorm(config.d_model)
 
