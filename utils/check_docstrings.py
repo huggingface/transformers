@@ -784,7 +784,6 @@ OBJECTS_TO_IGNORE = [
     "ViltConfig",
     "ViltForImagesAndTextClassification",
     "ViltModel",
-    "VisionEncoderDecoderModel",
     "VisionTextDualEncoderModel",
     "VisualBertConfig",
     "VisualBertModel",
