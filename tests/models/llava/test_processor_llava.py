@@ -46,6 +46,7 @@ class LlavaProcessorTest(unittest.TestCase):
         image_processor = CLIPImageProcessor()
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
         vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
+        image_processor.pad = False
 
         processor = LlavaProcessor(image_processor, tokenizer, vision_model)
 
