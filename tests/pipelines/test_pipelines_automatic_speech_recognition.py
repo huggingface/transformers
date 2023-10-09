@@ -689,7 +689,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
-            chunk_length_s=30,
+            chunk_length_s=2,
             return_timestamps="word",
         )
         data = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
