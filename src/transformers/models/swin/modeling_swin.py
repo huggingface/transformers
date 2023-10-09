@@ -915,6 +915,10 @@ SWIN_START_DOCSTRING = r"""
         config ([`SwinConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+            Whether or not to apply pooling layer(`nn.AdaptiveAvgPool1d`) after the encoder output.
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether or not create and apply mask tokens to the input embeddings.
 """
 
 SWIN_INPUTS_DOCSTRING = r"""
