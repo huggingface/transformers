@@ -724,6 +724,7 @@ class PushToHubMixin:
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
         revision: str = None,
+        commit_description:str = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -778,6 +779,7 @@ class PushToHubMixin:
             repo_id=repo_id,
             operations=operations,
             commit_message=commit_message,
+            commit_description=commit_description,
             token=token,
             create_pr=create_pr,
             revision=revision,
@@ -794,6 +796,7 @@ class PushToHubMixin:
         create_pr: bool = False,
         safe_serialization: bool = False,
         revision: str = None,
+        commit_description: str = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -890,7 +893,8 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
+            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=True)
+            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=False)
 
             return self._upload_modified_files(
                 work_dir,
@@ -900,6 +904,7 @@ class PushToHubMixin:
                 token=token,
                 create_pr=create_pr,
                 revision=revision,
+                commit_description=commit_description
             )
 
 
