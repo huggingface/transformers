@@ -1784,7 +1784,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             "\nNo chat template is defined for this tokenizer - using a default chat template "
             "that implements the ChatML format. If the default is not appropriate for "
             "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n",
+            FutureWarning,
         )
         return (
             "{% for message in messages %}"
