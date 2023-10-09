@@ -130,7 +130,9 @@ class GPTNeoXJapaneseAttention(nn.Module):
         if has_layer_past:
             offset = layer_past[0].shape[-2]
             seq_len += offset
-        query, key = self.rotary_emb(query_rot, key_rot, offset=offset, seq_len=seq_len)
+        query = self.rotary_emb(query_rot, seq_len=seq_len, offset=offset)
+        key = self.rotary_emb(key_rot, seq_len=seq_len, offset=offset)
+
         query = torch.cat((query, query_pass), dim=-1)
         key = torch.cat((key, key_pass), dim=-1)
 
@@ -268,23 +270,22 @@ class RotaryEmbedding(nn.Module):
         x2 = x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
-    def apply_rotary_pos_emb(self, q, k, cos, sin, offset: int = 0):
-        cos = cos[..., offset : q.shape[-2] + offset, :]
-        sin = sin[..., offset : q.shape[-2] + offset, :]
-        q_embed = (q * cos) + (self.rotate_half(q) * sin)
-        k_embed = (k * cos) + (self.rotate_half(k) * sin)
-        return q_embed, k_embed
+    def apply_rotary_pos_emb(self, x, cos, sin, offset: int = 0):
+        cos = cos[..., offset : x.shape[-2] + offset, :]
+        sin = sin[..., offset : x.shape[-2] + offset, :]
+        x_embed = (x * cos) + (self.rotate_half(x) * sin)
+        return x_embed
 
-    def forward(self, q, k, offset=0, seq_len=None):
-        # q/k: [bs, num_attention_heads, seq_len, head_size]
+    def forward(self, x, seq_len=None, offset=0):
+        # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=q.device, dtype=q.dtype)
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         cos, sin = (
-            self.cos_cached[:seq_len].to(dtype=q.dtype),
-            self.sin_cached[:seq_len].to(dtype=q.dtype),
+            self.cos_cached[:seq_len].to(dtype=x.dtype),
+            self.sin_cached[:seq_len].to(dtype=x.dtype),
         )
-        return self.apply_rotary_pos_emb(q, k, cos, sin, offset)
+        return self.apply_rotary_pos_emb(x, cos, sin, offset)
 
 
 def rotate_half(x):

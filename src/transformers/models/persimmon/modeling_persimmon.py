@@ -103,23 +103,22 @@ class PersimmonRotaryEmbedding(nn.Module):
         x2 = x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
-    def apply_rotary_pos_emb(self, q, k, cos, sin, position_ids):
+    def apply_rotary_pos_emb(self, x, cos, sin, position_ids):
         cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
         sin = sin[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
-        q_embed = (q * cos) + (self.rotate_half(q) * sin)
-        k_embed = (k * cos) + (self.rotate_half(k) * sin)
-        return q_embed, k_embed
+        x_embed = (x * cos) + (self.rotate_half(x) * sin)
+        return x_embed
 
-    def forward(self, q, k, position_ids, seq_len=None):
-        # q/k: [bs, num_attention_heads, seq_len, head_size]
+    def forward(self, x, seq_len=None, position_ids=None):
+        # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=q.device, dtype=q.dtype)
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         cos, sin = (
-            self.cos_cached[:seq_len].to(dtype=q.dtype),
-            self.sin_cached[:seq_len].to(dtype=q.dtype),
+            self.cos_cached[:seq_len].to(dtype=x.dtype),
+            self.sin_cached[:seq_len].to(dtype=x.dtype),
         )
-        return self.apply_rotary_pos_emb(q, k, cos, sin, position_ids)
+        return self.apply_rotary_pos_emb(x, cos, sin, position_ids)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Persimmon
@@ -327,7 +326,8 @@ class PersimmonAttention(nn.Module):
             key_states[..., self.rotary_emb.dim :],
         )
         # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
-        query_rot, key_rot = self.rotary_emb(query_rot, key_rot, position_ids, seq_len=kv_seq_len)
+        query_rot = self.rotary_emb(query_rot, seq_len=kv_seq_len, position_ids=position_ids)
+        key_rot = self.rotary_emb(key_rot, seq_len=kv_seq_len, position_ids=position_ids)
 
         # [batch_size, seq_length, num_heads, head_dim]
         query_states = torch.cat((query_rot, query_pass), dim=-1)
