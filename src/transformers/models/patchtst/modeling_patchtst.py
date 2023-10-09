@@ -464,8 +464,6 @@ class PatchTSTMasking(nn.Module):
         mask_value=0,
         seed_number: Optional[int] = None,
     ):
-        # if seed_number:
-        #     set_seed(seed_number)
         self.mask_ratio = mask_ratio
         self.channel_consistent_masking = channel_consistent_masking
         self.mask_type = mask_type
