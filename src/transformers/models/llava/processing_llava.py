@@ -202,8 +202,11 @@ class LlavaProcessor(ProcessorMixin):
 
     # overwrite to load the Q-Former tokenizer from a separate folder
     @classmethod
-    def from_pretrained(self, cls, pretrained_model_name_or_path, **kwargs):
-        vision_model = CLIPVisionModel.from_pretrained(self.image_processor.model_path)
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        if "1.5" in pretrained_model_name_or_path:
+            vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14-336")
+        else:
+            vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         args.append(vision_model)
         return cls(*args)
