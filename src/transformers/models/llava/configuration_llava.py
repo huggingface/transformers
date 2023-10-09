@@ -97,7 +97,7 @@ class LlavaTextConfig(PretrainedConfig):
         eos_token_id (`int`, *optional*, defaults to `2`):
             The ID of the end-of-sequence (EOS) token. The EOS token is used to mark the end of a sequence and is often
             used in language generation tasks.
-        mm_hidden_size (`int`, *optional*, defaults to 1024):
+        mm_hidden_size (`int`, *optional*, defaults to `1024`):
             Dimension of the hidden representations.
         attention_bias (`bool`, *optional*, defaults to `False`):
             The type of attention bias to apply during model computation. This parameter controls how the model attends
