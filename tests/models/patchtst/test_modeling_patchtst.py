@@ -41,8 +41,8 @@ if is_torch_available():
         PatchTSTConfig,
         PatchTSTForClassification,
         PatchTSTForForecasting,
-        PatchTSTForPretraining,
         PatchTSTForPrediction,
+        PatchTSTForPretraining,
         PatchTSTForRegression,
         PatchTSTModel,
     )

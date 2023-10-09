@@ -524,20 +524,20 @@ class ChannelAttentionTSTEncoder(nn.Module):
 
         self.layers = nn.ModuleList([ChannelAttentionTSTEncoderLayer(config) for i in range(config.encoder_layers)])
 
-    def forward(self, src: torch.Tensor, output_hidden_states: Optional[bool] = None):
+    def forward(self, hidden_state: torch.Tensor, output_hidden_states: Optional[bool] = None):
         """
-        src: tensor [bs x nvars x sequence_length x d_model] Return:
+        hidden_state: tensor [bs x nvars x sequence_length x d_model] Return:
             Tensor [bs x nvars x sequence_length x d_model]
         """
         all_hidden_states = []
 
         for mod in self.layers:
-            src = mod(src)
+            hidden_state = mod(hidden_state)
             if output_hidden_states:
-                all_hidden_states.append(src)
+                all_hidden_states.append(hidden_state)
         if output_hidden_states is None:
-            return src, None
-        return src, all_hidden_states
+            return hidden_state, None
+        return hidden_state, all_hidden_states
 
 
 class ChannelAttentionTSTEncoderLayer(nn.Module):
@@ -612,13 +612,15 @@ class ChannelAttentionTSTEncoderLayer(nn.Module):
             src = self.norm_sublayer1(
                 src + self.dropout_path1(self.self_attn(src)[0])
             )  # src: [(bs*nvars) x sequence_length x d_model]
-        src = src.reshape(batch_size, num_input_channels, sequence_length, d_model)  # [bs x nvars x sequence_length x d_model]
+        src = src.reshape(
+            batch_size, num_input_channels, sequence_length, d_model
+        )  # [bs x nvars x sequence_length x d_model]
 
         # second sublayer: attention across variable at any given time
         # [bs x nvars x sequence_length x d_model] -> [bs x sequence_length x nvars x d_model] -> [(bs*sequence_length) x nvars x d_model]
         if self.channel_attention:
             src = (
-                src.transpose(2, 1).contiguous().view(bs * sequence_length, num_input_channels, d_model)
+                src.transpose(2, 1).contiguous().view(batch_size * sequence_length, num_input_channels, d_model)
             )  # [(bs*sequence_length) x nvars x d_model]
             if self.pre_norm:
                 ## Norm and Multi-Head attention and Add residual connection
@@ -648,7 +650,9 @@ class ChannelAttentionTSTEncoderLayer(nn.Module):
             src = self.norm_sublayer3(
                 src + self.dropout_path3(self.ff(src))
             )  # Add: residual connection with residual dropout
-        src = src.reshape(batch_size, num_input_channels, sequence_length, d_model)  # [bs x nvars x sequence_length x d_model]
+        src = src.reshape(
+            batch_size, num_input_channels, sequence_length, d_model
+        )  # [bs x nvars x sequence_length x d_model]
 
         return src
 
@@ -1330,9 +1334,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         encoder_states = model_output.hidden_states
         if not return_dict:
             return tuple(v for v in [masked_loss, x_hat, encoder_states] if v is not None)
-        return PatchTSTForPretrainingOutput(
-            loss=masked_loss, prediction_output=x_hat, hidden_states=encoder_states
-        )
+        return PatchTSTForPretrainingOutput(loss=masked_loss, prediction_output=x_hat, hidden_states=encoder_states)
 
 
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
