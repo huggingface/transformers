@@ -37,8 +37,8 @@ We can now initialize the pipeline with a [Swin2SR model](https://huggingface.co
 ```python
 from transformers import pipeline
 
-image = Image.open("/content/cat.png")
-pipe = pipeline(task="image-to-image", model="caidas/swin2SR-lightweight-x2-64", device=0)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+pipe = pipeline(task="image-to-image", model="caidas/swin2SR-lightweight-x2-64", device=device)
 ```
 
 Now, let's load an image.
@@ -51,6 +51,8 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 
 print(image.size)
+```
+```bash
 # (532, 432)
 ```
 ![Image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/cat.jpg)
@@ -60,7 +62,8 @@ We can now do inference with the pipeline. We will get an upscaled version of th
 ```python
 upscaled = pipe(image)
 print(upscaled.size)
-
+```
+```bash
 # (1072, 880)
 ```
 
@@ -69,7 +72,7 @@ If you wish to do inference yourself with no pipeline, you can use the `Swin2SRF
 ```python
 from transformers import Swin2SRForImageSuperResolution, Swin2SRImageProcessor 
 
-model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-lightweight-x2-64").to(device=0)
+model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-lightweight-x2-64").to(device)
 processor = Swin2SRImageProcessor("caidas/swin2SR-lightweight-x2-64")
 ```
 
@@ -79,7 +82,7 @@ processor = Swin2SRImageProcessor("caidas/swin2SR-lightweight-x2-64")
 pixel_values = processor(image, return_tensors="pt").pixel_values
 print(pixel_values.shape)
 
-pixel_values = pixel_values.to(device=0)
+pixel_values = pixel_values.to(device)
 ```
 
 We can now infer the image by passing pixel values to the model.
