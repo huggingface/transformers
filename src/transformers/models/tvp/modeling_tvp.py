@@ -20,7 +20,6 @@ from typing import Dict, Optional, Tuple
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -28,6 +27,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mod
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
 from ...utils import logging
+from ..auto import AutoBackbone
 from .configuration_tvp import TvpConfig
 
 
@@ -188,341 +188,14 @@ class TvpLoss(nn.Module):
         return losses_dict
 
 
-class TvpVisionConv2d(torch.nn.Conv2d):
-    """
-    A wrapper around :class:`torch.nn.Conv2d` to support empty inputs and more features.
-    """
-
-    def __init__(self, *args, **kwargs):
-        """
-        Extra keyword arguments supported in addition to those in `torch.nn.Conv2d`:
-
-        Args:
-            norm (nn.Module, optional): a normalization layer
-            activation (callable(Tensor) -> Tensor): a callable activation function
-
-        It assumes that norm layer is used before activation.
-        """
-        norm = kwargs.pop("norm", None)
-        activation = kwargs.pop("activation", None)
-        super().__init__(*args, **kwargs)
-
-        self.norm = norm
-        self.activation = activation
-
-    def forward(self, x):
-        x = super().forward(x)
-        if self.norm is not None:
-            x = self.norm(x)
-        if self.activation is not None:
-            x = self.activation(x)
-        return x
-
-
-class TvpVisionBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    It contains non-trainable buffers called "weight" and "bias", "running_mean", "running_var", initialized to perform
-    identity transformation.
-
-    The forward is implemented by `F.batch_norm(..., training=False)`.
-    """
-
-    def __init__(self, num_features, eps=1e-5):
-        super().__init__()
-        self.num_features = num_features
-        self.eps = eps
-        self.register_buffer("weight", torch.ones(num_features))
-        self.register_buffer("bias", torch.zeros(num_features))
-        self.register_buffer("running_mean", torch.zeros(num_features))
-        self.register_buffer("running_var", torch.ones(num_features) - eps)
-
-    def forward(self, x):
-        return F.batch_norm(
-            x,
-            self.running_mean,
-            self.running_var,
-            self.weight,
-            self.bias,
-            training=False,
-            eps=self.eps,
-        )
-
-
-class TvpVisionBasicStem(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        self.in_channels = config.resnets_stem_input_channels
-        self.out_channels = config.resnets_stem_out_channels
-        self.conv1 = TvpVisionConv2d(
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
-            kernel_size=7,
-            stride=2,
-            padding=3,
-            bias=False,
-            norm=TvpVisionBatchNorm2d(self.out_channels),
-        )
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu_(x)
-        x = F.max_pool2d(x, kernel_size=3, stride=2, padding=1)
-        return x
-
-
-class TvpVisionBasicBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1):
-        """
-        Args:
-            in_channels (int): Number of input channels.
-            out_channels (int): Number of output channels.
-            stride (int): Stride for the first conv.
-        """
-        super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.stride = stride
-
-        if in_channels != out_channels:
-            self.shortcut = TvpVisionConv2d(
-                in_channels,
-                out_channels,
-                kernel_size=1,
-                stride=stride,
-                bias=False,
-                norm=TvpVisionBatchNorm2d(out_channels),
-            )
-        else:
-            self.shortcut = None
-
-        self.conv1 = TvpVisionConv2d(
-            in_channels,
-            out_channels,
-            kernel_size=3,
-            stride=stride,
-            padding=1,
-            bias=False,
-            norm=TvpVisionBatchNorm2d(out_channels),
-        )
-
-        self.conv2 = TvpVisionConv2d(
-            out_channels,
-            out_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=False,
-            norm=TvpVisionBatchNorm2d(out_channels),
-        )
-
-    def forward(self, x):
-        out = self.conv1(x)
-        out = F.relu_(out)
-        out = self.conv2(out)
-
-        if self.shortcut is not None:
-            shortcut = self.shortcut(x)
-        else:
-            shortcut = x
-
-        out += shortcut
-        out = F.relu_(out)
-        return out
-
-
-class TvpVisionBottleneckBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        bottleneck_channels,
-        stride=1,
-        num_groups=1,
-        dilation=1,
-    ):
-        super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.stride = stride
-
-        if in_channels != out_channels:
-            self.shortcut = TvpVisionConv2d(
-                in_channels,
-                out_channels,
-                kernel_size=1,
-                stride=stride,
-                bias=False,
-                norm=TvpVisionBatchNorm2d(out_channels),
-            )
-        else:
-            self.shortcut = None
-
-        self.conv1 = TvpVisionConv2d(
-            in_channels,
-            bottleneck_channels,
-            kernel_size=1,
-            stride=stride,
-            bias=False,
-            norm=TvpVisionBatchNorm2d(bottleneck_channels),
-        )
-
-        self.conv2 = TvpVisionConv2d(
-            bottleneck_channels,
-            bottleneck_channels,
-            kernel_size=3,
-            stride=1,
-            padding=dilation,
-            bias=False,
-            groups=num_groups,
-            dilation=dilation,
-            norm=TvpVisionBatchNorm2d(bottleneck_channels),
-        )
-
-        self.conv3 = TvpVisionConv2d(
-            bottleneck_channels,
-            out_channels,
-            kernel_size=1,
-            bias=False,
-            norm=TvpVisionBatchNorm2d(out_channels),
-        )
-
-    def forward(self, x):
-        # print(x[-1][-1][-1])
-        # import pdb; pdb.set_trace()
-        out = self.conv1(x)
-        out = F.relu_(out)
-
-        out = self.conv2(out)
-        out = F.relu_(out)
-
-        out = self.conv3(out)
-
-        if self.shortcut is not None:
-            shortcut = self.shortcut(x)
-        else:
-            shortcut = x
-
-        out += shortcut
-        out = F.relu_(out)
-        return out
-
-
-class TvpVisionBackbone(nn.Module):
-    def __init__(self, config):
-        super(TvpVisionBackbone, self).__init__()
-        self.config = config
-        self.stem = TvpVisionBasicStem(config)
-
-        stages = self.build_backbone(config)
-
-        self.stages_and_names = []
-        for i, blocks in enumerate(stages):
-            stage = nn.Sequential(*blocks)
-            name = "res" + str(i + 2)
-            self.add_module(name, stage)
-            self.stages_and_names.append((stage, name))
-
-    def forward(self, x):
-        x = self.stem(x)
-        for stage, name in self.stages_and_names:
-            x = stage(x)
-
-        return x
-
-    def make_stage(self, block_class, num_blocks, first_stride, **kwargs):
-        """
-        Create a TvpVisionBackbone stage by creating many blocks.
-
-        Args:
-            block_class (class): A class of TvpVisionBasicBlock or TvpVisionBottleneckBlock.
-            num_blocks (int): The number of blocks.
-            first_stride (int): The stride of the first block. The other blocks will have stride=1.
-                A `stride` argument will be passed to the block constructor.
-            kwargs: Other arguments passed to the block constructor.
-
-        Returns:
-            list[nn.Module]: a list of block module.
-        """
-        blocks = []
-        for i in range(num_blocks):
-            blocks.append(block_class(stride=first_stride if i == 0 else 1, **kwargs))
-            kwargs["in_channels"] = kwargs["out_channels"]
-
-        return blocks
-
-    def build_backbone(self, config):
-        """
-        Return stages of TvpVisionBackbone
-        """
-        out_features = config.features
-        depth = config.resnets_depth
-        num_groups = config.resnets_num_groups
-        width_per_group = config.resnets_width_per_group
-        bottleneck_channels = num_groups * width_per_group
-        in_channels = config.resnets_stem_out_channels
-        out_channels = config.resnets_res_out_channels
-        res5_dilation = config.resnets_res_dilation
-
-        if depth not in [18, 34, 50, 101, 152]:
-            raise ValueError("The depth should be in [18, 34, 50, 101, 152]")
-        if res5_dilation not in [1, 2]:
-            raise ValueError("The res5_dilation should be in [1, 2]")
-
-        num_blocks_per_stage = {
-            18: [2, 2, 2, 2],
-            34: [3, 4, 6, 3],
-            50: [3, 4, 6, 3],
-            101: [3, 4, 23, 3],
-            152: [3, 8, 36, 3],
-        }[depth]
-
-        stages = []
-
-        # Avoid creating variables without gradients
-        # It consumes extra memory and may cause allreduce to fail
-        out_stage_idx = [{"res2": 2, "res3": 3, "res4": 4, "res5": 5}[f] for f in out_features]
-        if len(out_stage_idx) == 0:
-            raise ValueError("The element in out_features should be in [res2, res3, res4, res5]")
-        max_stage_idx = max(out_stage_idx)
-        for idx, stage_idx in enumerate(range(2, max_stage_idx + 1)):
-            dilation = res5_dilation if stage_idx == 5 else 1
-            first_stride = 1 if idx == 0 or (stage_idx == 5 and dilation == 2) else 2
-            stage_kargs = {
-                "num_blocks": num_blocks_per_stage[idx],
-                "first_stride": first_stride,
-                "in_channels": in_channels,
-                "out_channels": out_channels,
-            }
-            # Use TvpVisionBasicBlock for R18 and R34.
-            if depth in [18, 34]:
-                stage_kargs["block_class"] = TvpVisionBasicBlock
-            else:
-                stage_kargs["bottleneck_channels"] = bottleneck_channels
-                stage_kargs["dilation"] = dilation
-                stage_kargs["num_groups"] = num_groups
-                stage_kargs["block_class"] = TvpVisionBottleneckBlock
-            blocks = self.make_stage(**stage_kargs)
-            in_channels = out_channels
-            out_channels *= 2
-            bottleneck_channels *= 2
-
-            stages.append(blocks)
-
-        return stages
-
-
 class TvpVisionModel(nn.Module):
     def __init__(self, config):
         super(TvpVisionModel, self).__init__()
-        self.in_features = config.features
-        self.backbone = TvpVisionBackbone(config)
+        self.backbone = AutoBackbone.from_config(config.backbone_config)
         self.grid_encoder = nn.Sequential(
             nn.Conv2d(
-                config.grid_encoder_conv_input_size,
-                config.grid_encoder_conv_output_size,
+                config.backbone_config.hidden_sizes[-1],
+                config.hidden_size,
                 kernel_size=3,
                 stride=1,
                 padding=1,
@@ -538,7 +211,7 @@ class TvpVisionModel(nn.Module):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         # (batch_size * num_frames, num_channels, height, width)
         pixel_values = pixel_values.view(batch_size * num_frames, num_channels, height, width)
-        grid_feat_outputs = self.backbone(pixel_values)
+        grid_feat_outputs = self.backbone(pixel_values)["feature_maps"][0]
         grid = self.grid_encoder(grid_feat_outputs)
         new_channel, new_height, new_width = grid.shape[-3:]
         # (batch_size, num_frames, num_channels, height, width)
@@ -1121,7 +794,7 @@ class TvpModel(TvpPreTrainedModel):
     def __init__(self, config):
         super(TvpModel, self).__init__(config)
         self.config = config
-        self.cnn = TvpVisionModel(config.vision_config)
+        self.cnn = TvpVisionModel(config)
         self.transformer = TvpTransformer(config)
         if config.visual_prompter_type == "downpad":
             self.visual_prompter = TvpDownPadPrompter(config.max_img_size, config.pad_size)

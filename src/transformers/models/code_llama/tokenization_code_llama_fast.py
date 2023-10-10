@@ -178,12 +178,16 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         """
         bos = self.bos_token
         bos_token_id = self.bos_token_id
+        if bos is None and self.add_bos_token:
+            raise ValueError("add_bos_token = True but bos_token = None")
 
         eos = self.eos_token
         eos_token_id = self.eos_token_id
+        if eos is None and self.add_eos_token:
+            raise ValueError("add_eos_token = True but eos_token = None")
 
-        single = f"{(bos+':0 ') * self.add_bos_token}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' '+bos+':1') * self.add_bos_token} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
+        single = f"{(bos+':0 ') if self.add_bos_token else ''}$A:0{(' '+eos+':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' '+bos+':1') if self.add_bos_token else ''} $B:1{(' '+eos+':1') if self.add_eos_token else ''}"
 
         special_tokens = []
         if self.add_bos_token:
@@ -278,7 +282,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         special_tokens = [(self.bos_token, self.bos_token_id)] if self.add_bos_token and add_special_tokens else []
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
-            pair += [self.prefix_token, self.suffix_token, "$A", self.middle_token, "$B"]
+            pair += [self.prefix_token, self.suffix_token, "$B", self.middle_token, "$A"]
             special_tokens += [
                 (self.prefix_token, self.prefix_id),
                 (self.suffix_token, self.suffix_id),
@@ -303,7 +307,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
     def encode_plus(self, text, text_pair=None, suffix_first=False, add_special_tokens=True, **kwargs):
         # hack to make sure the input is pre-process but outside rust
         text_pair = kwargs.pop("suffix", text_pair)
-        if self.fill_token in text and text_pair is None:
+        if self.fill_token is not None and self.fill_token in text and text_pair is None:
             text, text_pair = text.split(self.fill_token)
 
         if text_pair is None or len(text_pair) < 1:

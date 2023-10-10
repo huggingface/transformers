@@ -790,8 +790,6 @@ class GPT2Model(GPT2PreTrainedModel):
 
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
-        if position_ids is not None:
-            position_ids = position_ids.view(-1, input_shape[-1])
 
         if past_key_values is None:
             past_length = 0
@@ -800,7 +798,7 @@ class GPT2Model(GPT2PreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+            position_ids = position_ids.unsqueeze(0)
 
         # GPT2Attention mask.
         if attention_mask is not None:

@@ -195,10 +195,6 @@ Tips:
 
 [[autodoc]] TvpConfig
 
-## TvpVisionConfig
-
-[[autodoc]] TvpVisionConfig
-
 ## TvpImageProcessor
 
 [[autodoc]] TvpImageProcessor

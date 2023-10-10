@@ -74,7 +74,7 @@ class MobileViTConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
         conv_kernel_size (`int`, *optional*, defaults to 3):
             The size of the convolutional kernel in the MobileViT layer.
-        output_stride (`int`, `optional`, defaults to 32):
+        output_stride (`int`, *optional*, defaults to 32):
             The ratio of the spatial resolution of the output to the resolution of the input image.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the Transformer encoder.
@@ -84,11 +84,11 @@ class MobileViTConfig(PretrainedConfig):
             The dropout ratio for attached classifiers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        aspp_out_channels (`int`, `optional`, defaults to 256):
+        aspp_out_channels (`int`, *optional*, defaults to 256):
             Number of output channels used in the ASPP layer for semantic segmentation.
         atrous_rates (`List[int]`, *optional*, defaults to `[6, 12, 18]`):
             Dilation (atrous) factors used in the ASPP layer for semantic segmentation.

@@ -39,7 +39,7 @@ class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
             The schedule function to apply after the warmup for the rest of training.
         warmup_steps (`int`):
             The number of steps for the warmup part of training.
-        power (`float`, *optional*, defaults to 1):
+        power (`float`, *optional*, defaults to 1.0):
             The power to use for the polynomial warmup (defaults is a linear warmup).
         name (`str`, *optional*):
             Optional name prefix for the returned tensors during the schedule.
@@ -180,18 +180,18 @@ class AdamWeightDecay(Adam):
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
 
     Args:
-        learning_rate (`Union[float, tf.keras.optimizers.schedules.LearningRateSchedule]`, *optional*, defaults to 1e-3):
+        learning_rate (`Union[float, tf.keras.optimizers.schedules.LearningRateSchedule]`, *optional*, defaults to 0.001):
             The learning rate to use or a schedule.
         beta_1 (`float`, *optional*, defaults to 0.9):
             The beta1 parameter in Adam, which is the exponential decay rate for the 1st momentum estimates.
         beta_2 (`float`, *optional*, defaults to 0.999):
             The beta2 parameter in Adam, which is the exponential decay rate for the 2nd momentum estimates.
-        epsilon (`float`, *optional*, defaults to 1e-7):
+        epsilon (`float`, *optional*, defaults to 1e-07):
             The epsilon parameter in Adam, which is a small constant for numerical stability.
-        amsgrad (`bool`, *optional*, default to `False`):
+        amsgrad (`bool`, *optional*, defaults to `False`):
             Whether to apply AMSGrad variant of this algorithm or not, see [On the Convergence of Adam and
             Beyond](https://arxiv.org/abs/1904.09237).
-        weight_decay_rate (`float`, *optional*, defaults to 0):
+        weight_decay_rate (`float`, *optional*, defaults to 0.0):
             The weight decay to apply.
         include_in_weight_decay (`List[str]`, *optional*):
             List of the parameter names (or re patterns) to apply weight decay to. If none is passed, weight decay is
@@ -199,7 +199,7 @@ class AdamWeightDecay(Adam):
         exclude_from_weight_decay (`List[str]`, *optional*):
             List of the parameter names (or re patterns) to exclude from applying weight decay to. If a
             `include_in_weight_decay` is passed, the names in it will supersede this list.
-        name (`str`, *optional*, defaults to 'AdamWeightDecay'):
+        name (`str`, *optional*, defaults to `"AdamWeightDecay"`):
             Optional name for the operations created when applying gradients.
         kwargs (`Dict[str, Any]`, *optional*):
             Keyword arguments. Allowed to be {`clipnorm`, `clipvalue`, `lr`, `decay`}. `clipnorm` is clip gradients by

@@ -21,7 +21,6 @@ _import_structure = {
     "configuration_tvp": [
         "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TvpConfig",
-        "TvpVisionConfig",
     ],
     "processing_tvp": ["TvpProcessor"],
 }
@@ -51,7 +50,6 @@ if TYPE_CHECKING:
     from .configuration_tvp import (
         TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TvpConfig,
-        TvpVisionConfig,
     )
     from .processing_tvp import TvpProcessor
 

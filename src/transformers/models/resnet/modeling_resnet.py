@@ -129,7 +129,6 @@ class ResNetBasicLayer(nn.Module):
         out_channels: int,
         stride: int = 1,
         activation: str = "relu",
-        downsample_in_bottleneck: bool = False,
     ):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
@@ -156,7 +155,8 @@ class ResNetBottleNeckLayer(nn.Module):
     A classic ResNet's bottleneck layer composed by three `3x3` convolutions.
 
     The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
-    convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`.
+    convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`. If
+    `downsample_in_bottleneck` is true, downsample will be in the first layer instead of the second layer.
     """
 
     def __init__(
@@ -209,16 +209,18 @@ class ResNetStage(nn.Module):
 
         layer = ResNetBottleNeckLayer if config.layer_type == "bottleneck" else ResNetBasicLayer
 
-        self.layers = nn.Sequential(
-            # downsampling is done in the first layer with stride of 2
-            layer(
+        if config.layer_type == "bottleneck":
+            first_layer = layer(
                 in_channels,
                 out_channels,
                 stride=stride,
                 activation=config.hidden_act,
                 downsample_in_bottleneck=config.downsample_in_bottleneck,
-            ),
-            *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
+            )
+        else:
+            first_layer = layer(in_channels, out_channels, stride=stride, activation=config.hidden_act)
+        self.layers = nn.Sequential(
+            first_layer, *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)]
         )
 
     def forward(self, input: Tensor) -> Tensor:

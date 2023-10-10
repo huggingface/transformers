@@ -582,6 +582,19 @@ class LlamaIntegrationTest(unittest.TestCase):
         # a dummy prefix space is not added by the sp_model as it was de-activated
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁▁", out_type=str))
 
+    def test_fast_post_processor(self):
+        tokenizer = LlamaTokenizerFast(
+            SAMPLE_VOCAB, eos_token=None, bos_token=None, add_bos_token=False, add_eos_token=False
+        )
+        tokenizer.encode(" Hey ")
+
+        with self.assertRaises(ValueError):
+            tokenizer = LlamaTokenizerFast(
+                SAMPLE_VOCAB, bos_token=None, eos_token="<s>", add_bos_token=True, add_eos_token=False
+            )
+        with self.assertRaises(ValueError):
+            tokenizer = LlamaTokenizerFast(SAMPLE_VOCAB, eos_token=None, add_bos_token=True, add_eos_token=True)
+
     @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
