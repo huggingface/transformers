@@ -24,6 +24,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn.modules.activation import MultiheadAttention
 
+from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from transformers.modeling_utils import PreTrainedModel
 from transformers.trainer_utils import set_seed
 from transformers.utils import ModelOutput
@@ -752,6 +753,7 @@ class ForecastHead(nn.Module):
         head_dropout: float = 0.2,
         mode: str = "common_channel",
         forecast_channel_indices: list = None,
+        distribution_output = None
     ):
         super().__init__()
         self.forecast_len = forecast_len
@@ -767,17 +769,25 @@ class ForecastHead(nn.Module):
         self.mode = mode
 
         if self.mode in ["common_channel", "mix_channel"]:
-            self.base_forecast_block = nn.Sequential(
-                nn.Dropout(head_dropout),
-                nn.Linear((num_patches * num_features), forecast_len),
-            )
+            if distribution_output is None:
+                self.base_forecast_block = nn.Sequential(
+                    nn.Dropout(head_dropout),
+                    nn.Linear((num_patches * num_features), forecast_len),
+                )
+            else:
+                self.base_forecast_block = distribution_output.get_parameter_projection(num_patches * num_features)
+
             self.flatten = nn.Flatten(start_dim=-2)
 
         else:
-            self.base_forecast_block = nn.Sequential(
-                nn.Dropout(head_dropout),
-                nn.Linear((num_patches * num_features), forecast_len * in_channels),
-            )
+            if distribution_output is None:
+                self.base_forecast_block = nn.Sequential(
+                    nn.Dropout(head_dropout),
+                    nn.Linear((num_patches * num_features), forecast_len * in_channels),
+                )
+            else:
+                self.base_forecast_block = distribution_output.get_parameter_projection(num_patches * num_features)
+
             self.flatten = nn.Flatten(start_dim=1)
 
     def forward(self, x, y=None):
@@ -1742,6 +1752,52 @@ class PatchTSMixerForForecastOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
 
 
+@dataclass
+class SamplePatchTSTForecastOutput(ModelOutput):
+    """
+    Base class for time series model's predictions outputs that contains the sampled values from the chosen
+    distribution.
+
+    Parameters:
+        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length, number_channels)`):
+            Sampled values from the chosen distribution.
+    """
+
+    sequences: torch.FloatTensor = None
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
+def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+    return -input.log_prob(target)
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.weighted_average
+def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+    """
+    Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
+    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
+
+    Args:
+        input_tensor (`torch.FloatTensor`):
+            Input tensor, of which the average must be computed.
+        weights (`torch.FloatTensor`, *optional*):
+            Weights tensor, of the same shape as `input_tensor`.
+        dim (`int`, *optional*):
+            The dim along which to average `input_tensor`.
+
+    Returns:
+        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
+    """
+    if weights is not None:
+        weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
+        sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
+        return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
+    else:
+        return input_tensor.mean(dim=dim)
+
+
 class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for forecasting application.
@@ -1756,7 +1812,28 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
-
+        
+        if config.loss == "mse":
+            self.loss = nn.MSELoss(reduction="mean")
+            self.distribution_output = None
+        else:
+            self.loss = nll
+            if config.mode in ["common_channel", "mix_channel"]:
+                dim = config.forecast_len
+            else:
+                dim = config.forecast_len * config.in_channels
+            
+            if config.distribution_output == "student_t":
+                self.distribution_output = StudentTOutput(dim=dim)
+            elif config.distribution_output == "normal":
+                self.distribution_output = NormalOutput(dim=dim)
+            elif config.distribution_output == "negative_binomial":
+                self.distribution_output = NegativeBinomialOutput(
+                    dim=dim
+                )
+            else:
+                raise ValueError(f"Unknown distribution output {config.distribution_output}")
+        
         self.model = PatchTSMixerModel(config)
         self.head = ForecastHead(
             num_patches=config.num_patches,
@@ -1768,8 +1845,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             mode=config.mode,
             forecast_channel_indices=config.forecast_channel_indices,
         )
-        self.loss = torch.nn.MSELoss(reduction="mean")
-
+        
         # Initialize weights and apply final processing
         if config.post_init:
             self.post_init()
@@ -1807,10 +1883,26 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                     y_hat * model_output.scale[..., self.config.forecast_channel_indices]
                     + model_output.loc[..., self.config.forecast_channel_indices]
                 )
-                loss_val = self.loss(y_hat_unscaled, target_values[..., self.config.forecast_channel_indices])
+                if self.distribution_output:
+                    distribution = self.distribution_output.distribution(
+                        y_hat_unscaled
+                    )
+                    loss_val = self.loss(distribution, target_values[..., self.config.forecast_channel_indices])
+                    # take average of the loss
+                    loss_val = weighted_average(loss_val)
+                else:
+                    loss_val = self.loss(y_hat_unscaled, target_values[..., self.config.forecast_channel_indices])
             else:
                 y_hat_unscaled = y_hat * model_output.scale + model_output.loc
-                loss_val = self.loss(y_hat_unscaled, target_values)
+
+                if self.distribution_output:
+                    distribution = self.distribution_output.distribution(
+                        y_hat_unscaled
+                    )
+                    loss_val = self.loss(distribution, target_values)
+                    loss_val = weighted_average(loss_val)
+                else:
+                    loss_val = self.loss(y_hat_unscaled, target_values)
         else:
             loss_val = None
 

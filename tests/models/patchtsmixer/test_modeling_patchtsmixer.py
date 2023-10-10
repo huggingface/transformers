@@ -782,6 +782,16 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             forecast_channel_indices=[0, 2],
         )
         self.forecast_full_module(params)
+    
+    def test_forecast_full_distributional(self):
+        params = self.__class__.params.copy()
+        params.update(
+            mode="mix_channel",
+            forecast_channel_indices=[0, 2],
+            loss = "nll",
+            # distribution_output = "normal",
+        )
+        self.forecast_full_module(params)
 
     # def test_forecast_full(self):
     #     config = PatchTSMixerConfig(**self.__class__.params)

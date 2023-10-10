@@ -133,6 +133,15 @@ class PatchTSMixerConfig(PretrainedConfig):
         post_init (`bool`, *optional*, defaults to `False`):
             Whether to use custom weight initialization from `transformers` library, or the default initialization in
             `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
+        distribution_output (`string`, *optional*, defaults to `student_t`):
+            The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
+            "negative_binomial".
+        loss (`string`, *optional*, defaults to `"mse"`):
+            The loss function for the model corresponding to the `distribution_output` head. For parametric
+            distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
+            error "mse".
+        num_parallel_samples (`int`, *optional*, defaults to 100):
+            The number of samples to generate in parallel for probablistic forecast.
 
     Example:
 
@@ -190,6 +199,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         init_std: float = 0.02,
         seed_number: Optional[int] = None,
         post_init: bool = False,
+        distribution_output: str = "student_t",
+        loss: str = "mse",
+        num_parallel_samples: int = 100,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -244,5 +256,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.init_std = init_std
         self.seed_number = seed_number
         self.post_init = post_init
+        self.distribution_output = distribution_output
+        self.loss = loss
+        self.num_parallel_samples = num_parallel_samples
 
         super().__init__(**kwargs)
