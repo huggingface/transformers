@@ -16,6 +16,7 @@
 Processor class for LlavaModel
 """
 
+import os
 from typing import List, Optional, Union
 
 from PIL import Image
@@ -87,9 +88,6 @@ class LlavaProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
-        # Model Constants
-        IMAGE_TOKEN_INDEX = -200
-        DEFAULT_IMAGE_TOKEN = "<image>"
 
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
@@ -97,7 +95,7 @@ class LlavaProcessor(ProcessorMixin):
         encoding = BatchFeature()
         dummy = {}
         if text is not None:
-            text = DEFAULT_IMAGE_TOKEN + "\n" + text
+            text = self.DEFAULT_IMAGE_TOKEN + "\n" + text
             prompt_chunks = [
                 self.tokenizer(
                     chunk,
@@ -132,7 +130,7 @@ class LlavaProcessor(ProcessorMixin):
                 offset = 1
                 input_ids.append(prompt_chunks[0][0])
 
-            for x in insert_separator(prompt_chunks, [IMAGE_TOKEN_INDEX] * (offset + 1)):
+            for x in insert_separator(prompt_chunks, [self.IMAGE_TOKEN_INDEX] * (offset + 1)):
                 input_ids.extend(x[offset:])
 
             if return_tensors == "pt":
@@ -200,6 +198,14 @@ class LlavaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    def save_pretrained(self, save_directory, **kwargs):
+        if os.path.isfile(save_directory):
+            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
+        os.makedirs(save_directory, exist_ok=True)
+        clip_path = os.path.join(save_directory, "clip")
+        self.vision_model.save_pretrained(clip_path)
+        return super().save_pretrained(save_directory, **kwargs)
 
     # overwrite to load the Q-Former tokenizer from a separate folder
     @classmethod
