@@ -341,6 +341,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
+    # Copied from tests.models.nllb.test_tokenization_nllb.NllbTokenizationTest.test_special_tokens_initialization
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):

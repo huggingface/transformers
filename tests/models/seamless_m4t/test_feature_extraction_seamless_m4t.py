@@ -36,6 +36,7 @@ if is_torch_available():
 global_rng = random.Random()
 
 
+# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -89,6 +90,7 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
         }
 
+    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTester.prepare_inputs_for_common
     def prepare_inputs_for_common(self, equal_length=False, numpify=False):
         def _flatten(list_of_lists):
             return list(itertools.chain(*list_of_lists))
@@ -170,6 +172,7 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     @require_torch
+    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad
     def test_double_precision_pad(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         np_speech_inputs = np.random.rand(100, 32).astype(np.float64)
