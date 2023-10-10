@@ -146,6 +146,13 @@ def find_code_in_transformers(object_name: str, base_path: str = TRANSFORMERS_PA
     parts = object_name.split(".")
     i = 0
 
+    # Detail: the `Copied from` statement is originally designed to work with the last part of `TRANSFORMERS_PATH`,
+    # (which is `transformers`). The same should be applied for `MODEL_TEST_PATH`. However, its last part is `models`
+    # (to only check and search in it) which is a bit confusing. So we keep the copied statement staring with
+    # `tests.models.` and change it to `tests` here.
+    if base_path == MODEL_TEST_PATH:
+        base_path = "tests"
+
     # First let's find the module where our object lives.
     module = parts[i]
     while i < len(parts) and not os.path.isfile(os.path.join(base_path, f"{module}.py")):
@@ -187,7 +194,7 @@ def find_code_in_transformers(object_name: str, base_path: str = TRANSFORMERS_PA
 
 
 _re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)\s*($|\S.*$)")
-_re_copy_warning_for_test_file = re.compile(r"^(\s*)#\s*Copied from\s+models\.(\S+\.\S+)\s*($|\S.*$)")
+_re_copy_warning_for_test_file = re.compile(r"^(\s*)#\s*Copied from\s+tests\.(\S+\.\S+)\s*($|\S.*$)")
 _re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
 _re_fill_pattern = re.compile(r"<FILL\s+[^>]*>")
 
