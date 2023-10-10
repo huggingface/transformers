@@ -37,6 +37,11 @@ COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile"}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
+TEST_HFH_PRELEASE = [
+    "pip uninstall huggingface_hub",
+    "pip install huggingface_hub==0.18.0.rc0",
+]
+
 class EmptyJob:
     job_name = "empty"
 
@@ -282,7 +287,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
-    ],
+    ] + TEST_HFH_PRELEASE,
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
 )
@@ -296,7 +301,7 @@ torch_and_flax_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager --upgrade pip",
         "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
-    ],
+    ] + TEST_HFH_PRELEASE,
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
 )
@@ -309,7 +314,7 @@ torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
-    ],
+    ] + TEST_HFH_PRELEASE,
     parallelism=1,
     pytest_num_workers=8,
 )
@@ -322,7 +327,7 @@ tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
-    ],
+    ] + TEST_HFH_PRELEASE,
     parallelism=1,
 )
 
@@ -333,7 +338,7 @@ flax_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece,flax-speech,vision]",
-    ],
+    ] + TEST_HFH_PRELEASE,
     parallelism=1,
 )
 
@@ -345,7 +350,7 @@ pipelines_torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
-    ],
+    ] + TEST_HFH_PRELEASE,
     marker="is_pipeline_test",
 )
 
@@ -358,7 +363,7 @@ pipelines_tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
-    ],
+    ] + TEST_HFH_PRELEASE,
     marker="is_pipeline_test",
 )
 
@@ -381,7 +386,7 @@ custom_tokenizers_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
         "python -m unidic download",
-    ],
+    ] + TEST_HFH_PRELEASE,
     parallelism=None,
     resource_class=None,
     tests_to_run=[
@@ -400,7 +405,7 @@ examples_torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
-    ],
+    ] + TEST_HFH_PRELEASE,
 )
 
 
@@ -412,7 +417,7 @@ examples_tensorflow_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tensorflow,sentencepiece,testing]",
         "pip install -U --upgrade-strategy eager -r examples/tensorflow/_tests_requirements.txt",
-    ],
+    ] + TEST_HFH_PRELEASE,
 )
 
 
@@ -423,7 +428,7 @@ examples_flax_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece]",
         "pip install -U --upgrade-strategy eager -r examples/flax/_tests_requirements.txt",
-    ],
+    ] + TEST_HFH_PRELEASE,
 )
 
 
@@ -436,7 +441,7 @@ hub_job = CircleCIJob(
         'git config --global user.name "ci"',
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing,vision]",
-    ],
+    ] + TEST_HFH_PRELEASE,
     marker="is_staging_test",
     pytest_num_workers=1,
 )
@@ -448,7 +453,7 @@ onnx_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
-    ],
+    ] + TEST_HFH_PRELEASE,
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
 )
@@ -469,7 +474,7 @@ exotic_models_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager python-Levenshtein",
         "pip install -U --upgrade-strategy eager opencv-python",
         "pip install -U --upgrade-strategy eager nltk",
-    ],
+    ] + TEST_HFH_PRELEASE,
     tests_to_run=[
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
@@ -486,7 +491,7 @@ repo_utils_job = CircleCIJob(
     install_steps=[
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[quality,testing,torch]",
-    ],
+    ] + TEST_HFH_PRELEASE,
     parallelism=None,
     pytest_num_workers=1,
     resource_class="large",
@@ -528,7 +533,7 @@ doc_test_job = CircleCIJob(
             "command":
                 "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt"
         },
-    ],
+    ] + TEST_HFH_PRELEASE,
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
     pytest_options={"-doctest-modules": None, "doctest-glob": "*.md", "dist": "loadfile", "rvsA": None},
     command_timeout=1200,  # test cannot run longer than 1200 seconds
