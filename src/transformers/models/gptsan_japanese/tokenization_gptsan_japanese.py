@@ -265,8 +265,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             "\nNo chat template is defined for this tokenizer - using the default template "
             f"for the {self.__class__.__name__} class. If the default is not appropriate for "
             "your model, please set `tokenizer.chat_template` to an appropriate template. "
-            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n",
-            FutureWarning,
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
         )
         return (
             "{% for message in messages %}"
