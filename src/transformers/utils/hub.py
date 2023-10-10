@@ -724,7 +724,7 @@ class PushToHubMixin:
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
         revision: str = None,
-        commit_description:str = None,
+        commit_description: str = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -905,7 +905,7 @@ class PushToHubMixin:
                 token=token,
                 create_pr=create_pr,
                 revision=revision,
-                commit_description=commit_description
+                commit_description=commit_description,
             )
 
 
