@@ -623,12 +623,20 @@ class BartDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = BartAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self.encoder_attn = BartFlashAttention2(
+                embed_dim=self.embed_dim,
+                num_heads=config.decoder_attention_heads,
+                dropout=config.attention_dropout,
+                is_decoder=True,
+            )
+        else:
+            self.encoder_attn = BartAttention(
+                embed_dim=self.embed_dim,
+                num_heads=config.decoder_attention_heads,
+                dropout=config.attention_dropout,
+                is_decoder=True,
+            )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
