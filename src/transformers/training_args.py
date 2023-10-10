@@ -34,7 +34,6 @@ from .trainer_utils import (
     HubStrategy,
     IntervalStrategy,
     SchedulerType,
-    ShardedDDPOption,
 )
 from .utils import (
     ExplicitEnum,
@@ -328,9 +327,9 @@ class TrainingArguments:
         fp16_backend (`str`, *optional*, defaults to `"auto"`):
             This argument is deprecated. Use `half_precision_backend` instead.
         half_precision_backend (`str`, *optional*, defaults to `"auto"`):
-            The backend to use for mixed precision training. Must be one of `"auto", "cuda_amp", "apex", "cpu_amp"`.
-            `"auto"` will use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices
-            will force the requested backend.
+            The backend to use for mixed precision training. Must be one of `"auto", "apex", "cpu_amp"`. `"auto"` will
+            use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices will force the
+            requested backend.
         bf16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values. This is an experimental API and it may change.
@@ -410,21 +409,6 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        sharded_ddp (`bool`, `str` or list of [`~trainer_utils.ShardedDDPOption`], *optional*, defaults to `''`):
-            Use Sharded DDP training from [FairScale](https://github.com/facebookresearch/fairscale) (in distributed
-            training only). This is an experimental feature.
-
-            A list of options along the following:
-
-            - `"simple"`: to use first instance of sharded DDP released by fairscale (`ShardedDDP`) similar to ZeRO-2.
-            - `"zero_dp_2"`: to use the second instance of sharded DPP released by fairscale (`FullyShardedDDP`) in
-              Zero-2 mode (with `reshard_after_forward=False`).
-            - `"zero_dp_3"`: to use the second instance of sharded DPP released by fairscale (`FullyShardedDDP`) in
-              Zero-3 mode (with `reshard_after_forward=True`).
-            - `"offload"`: to add ZeRO-offload (only compatible with `"zero_dp_2"` and `"zero_dp_3"`).
-
-            If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
-            list for `False` and `["simple"]` for `True`.
         fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `''`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
@@ -877,7 +861,7 @@ class TrainingArguments:
         default="auto",
         metadata={
             "help": "The backend to be used for half precision.",
-            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+            "choices": ["auto", "apex", "cpu_amp"],
         },
     )
     bf16_full_eval: bool = field(
@@ -994,17 +978,6 @@ class TrainingArguments:
                 "When resuming training, whether or not to skip the first epochs and batches to get to the same"
                 " training data."
             )
-        },
-    )
-    sharded_ddp: Optional[Union[List[ShardedDDPOption], str]] = field(
-        default="",
-        metadata={
-            "help": (
-                "Whether or not to use sharded DDP training (in distributed training only). The base option should be"
-                " `simple`, `zero_dp_2` or `zero_dp_3` and you can add CPU-offload to `zero_dp_2` or `zero_dp_3` like"
-                " this: zero_dp_2 offload` or `zero_dp_3 offload`. You can add auto-wrap to `zero_dp_2` or `zero_dp_3`"
-                " with the same syntax: zero_dp_2 auto_wrap` or `zero_dp_3 auto_wrap`."
-            ),
         },
     )
     fsdp: Optional[Union[List[FSDPOption], str]] = field(
@@ -1154,7 +1127,7 @@ class TrainingArguments:
         default="auto",
         metadata={
             "help": "Deprecated. Use half_precision_backend instead",
-            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+            "choices": ["auto", "apex", "cpu_amp"],
         },
     )
     push_to_hub_model_id: Optional[str] = field(
@@ -1407,8 +1380,6 @@ class TrainingArguments:
                     " `--half_precision_backend apex`: GPU bf16 is not supported by apex. Use"
                     " `--half_precision_backend cuda_amp` instead"
                 )
-            if not (self.sharded_ddp == "" or not self.sharded_ddp):
-                raise ValueError("sharded_ddp is not supported with bf16")
 
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
             if self.evaluation_strategy == IntervalStrategy.NO:
@@ -1508,7 +1479,7 @@ class TrainingArguments:
                 # no need to assert on else
 
         # if training args is specified, it will override the one specified in the accelerate config
-        if self.half_precision_backend != "apex" and len(self.sharded_ddp) == 0:
+        if self.half_precision_backend != "apex":
             mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
             if self.fp16:
                 mixed_precision_dtype = "fp16"
@@ -1540,26 +1511,6 @@ class TrainingArguments:
                 "Both warmup_ratio and warmup_steps given, warmup_steps will override any effect of warmup_ratio"
                 " during training"
             )
-
-        if not (self.sharded_ddp == "" or not self.sharded_ddp):
-            warnings.warn(
-                "using `sharded_ddp` is deprecated and will be removed in version 4.33"
-                " of 🤗 Transformers. Use `fsdp` instead",
-                FutureWarning,
-            )
-        if isinstance(self.sharded_ddp, bool):
-            self.sharded_ddp = "simple" if self.sharded_ddp else ""
-        if isinstance(self.sharded_ddp, str):
-            self.sharded_ddp = [ShardedDDPOption(s) for s in self.sharded_ddp.split()]
-        if self.sharded_ddp == [ShardedDDPOption.OFFLOAD]:
-            raise ValueError(
-                "`--sharded_ddp offload` can't work on its own. It needs to be added to `--sharded_ddp zero_dp_2` or "
-                '`--sharded_ddp zero_dp_3`. For example, `--sharded_ddp "zero_dp_2 offload"`.'
-            )
-        elif len(self.sharded_ddp) > 1 and ShardedDDPOption.SIMPLE in self.sharded_ddp:
-            raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
-        elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
-            raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
 
         if isinstance(self.fsdp, bool):
             self.fsdp = "full_shard" if self.fsdp else ""
