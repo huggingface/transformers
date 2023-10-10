@@ -49,6 +49,7 @@ class CharacterBertModelTester:
     def __init__(
         self,
         parent,
+        max_word_length=50,
         batch_size=13,
         seq_length=7,
         is_training=True,
@@ -72,6 +73,7 @@ class CharacterBertModelTester:
         scope=None,
     ):
         self.parent = parent
+        self.max_word_length = max_word_length
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
@@ -95,7 +97,8 @@ class CharacterBertModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        num_possible_utf8_bytes = 256
+        input_ids = ids_tensor([self.batch_size, self.seq_length, self.max_word_length], num_possible_utf8_bytes + 1)
 
         input_mask = None
         if self.use_input_mask:
@@ -615,19 +618,36 @@ class CharacterBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
         model = CharacterBertModel.from_pretrained("helboukkouri/character-bert-base-uncased")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        input_ids = torch.tensor(
+            [[
+                [259, 257, 260, 261, 261, 261, 261, 261, 261, 261] + [261] * model.config.max_word_length,
+                [259, 81, 98, 115, 106, 116, 260, 261, 261, 261]   + [261] * model.config.max_word_length,
+                [259, 106, 116, 260, 261, 261, 261, 261, 261, 261] + [261] * model.config.max_word_length,
+                [259, 117, 105, 102, 260, 261, 261, 261, 261, 261] + [261] * model.config.max_word_length,
+                [259, 100, 98, 113, 106, 117, 98, 109, 260, 261]   + [261] * model.config.max_word_length,
+                [259, 112, 103, 260, 261, 261, 261, 261, 261, 261] + [261] * model.config.max_word_length,
+                [259, 262, 260, 261, 261, 261, 261, 261, 261, 261] + [261] * model.config.max_word_length,
+                [259, 258, 260, 261, 261, 261, 261, 261, 261, 261] + [261] * model.config.max_word_length,
+            ]]
+        )
+        attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
             output = model(input_ids, attention_mask=attention_mask)[0]
-        expected_shape = torch.Size((1, 11, 768))
+        expected_shape = torch.Size([1, 8, 768])
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
+        expected_slice = torch.tensor([[
+            [ 0.0430, -0.3031,  0.2274],
+            [ 0.1547, -0.2594,  0.3634],
+            [-0.2890, -0.2062,  0.2870]]
+        ])
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_no_head_relative_embedding_key(self):
-        model = CharacterBertModel.from_pretrained("zhiheng-huang/helboukkouri/character-bert-base-uncased-embedding-relative-key")
+        # NOTE: this checkpoint does not exist
+        return
+        model = CharacterBertModel.from_pretrained("helboukkouri/character-bert-base-uncased-embedding-relative-key")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -642,7 +662,9 @@ class CharacterBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_relative_embedding_key_query(self):
-        model = CharacterBertModel.from_pretrained("zhiheng-huang/helboukkouri/character-bert-base-uncased-embedding-relative-key-query")
+        # NOTE: this checkpoint does not exist
+        return
+        model = CharacterBertModel.from_pretrained("helboukkouri/character-bert-base-uncased-embedding-relative-key-query")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
