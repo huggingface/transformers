@@ -4315,7 +4315,10 @@ class GenerationMixin:
         ```"""
         # Assistant: initialize assistant-related variables
         if hasattr(assistant_model, "max_assistant_tokens"):
-            warnings.warn("Setting `max_assistant_tokens` via `assistant_model.max_assistant_tokens` is deprecated and will be removed in v5. Make sure to set `max_assistant_tokens` via the generation_config instead.", FutureWarning)
+            warnings.warn(
+                "Setting `max_assistant_tokens` via `assistant_model.max_assistant_tokens` is deprecated and will be removed in v5. Make sure to set `max_assistant_tokens` via the generation_config instead.",
+                FutureWarning,
+            )
             max_assistant_tokens = assistant_model.max_assistant_tokens
         else:
             max_assistant_tokens = assistant_model.generation_config.max_assistant_tokens
