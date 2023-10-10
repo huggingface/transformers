@@ -633,6 +633,11 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
         self.assertEqual(output.loss.item() < 100, True)
 
+        if config.loss == "nll" and task == "forecast":
+            samples = mdl.generate(self.__class__.data)
+            ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1, -1)
+            self.assertEqual(samples.sequences.shape,ref_samples.shape)
+
     def test_forecast(self):
         for mode in ["flatten", "common_channel", "mix_channel"]:
             for self_attn in [True, False]:

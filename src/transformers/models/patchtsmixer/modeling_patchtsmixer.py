@@ -1953,13 +1953,21 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         else:
             loss_val = None
 
+        if self.config.forecast_channel_indices is not None:
+            loc = model_output.loc[..., self.config.forecast_channel_indices]
+            scale = model_output.scale[..., self.config.forecast_channel_indices]
+        else:
+            loc = model_output.loc
+            scale = model_output.scale
+        
+        
         return PatchTSMixerForForecastOutput(
             prediction_logits=y_hat,  # tensor [bs x forecast_len x input_size]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
-            loc = model_output.loc,
-            scale = model_output.scale,
+            loc = loc,
+            scale = scale,
         )
     
 
@@ -1998,9 +2006,11 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         )
 
         # get distribution
+                
         distribution = self.distribution_output.distribution(
             outputs.prediction_logits, loc=outputs.loc, scale=outputs.scale
         )
+
         # get samples
         samples = [
             distribution.sample() for _ in range(num_parallel_samples)
