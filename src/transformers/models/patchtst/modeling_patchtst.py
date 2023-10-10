@@ -204,11 +204,12 @@ class PatchTSTAttention(nn.Module):
 
 class PatchTSTTranspose(nn.Module):
     """
-    Transpose the tensor to the dimension defined in **dims**
     Parameters:
+    Transpose the tensor to the dimension defined in **dims**
         dims (`list`): list of dimensions to be transposed
         contiguous (`bool`): if True, the transposed tensor is contiguous
     """
+
     def __init__(self, *dims, contiguous=False):
         super().__init__()
         self.dims, self.contiguous = dims, contiguous
@@ -299,9 +300,13 @@ def random_masking(
         noise = torch.rand(batch_size, 1, sequence_length, device=device)  # noise in [0, 1], bs x 1 x  L
         noise = noise.repeat(1, num_channels, 1)  # bs x num_channels x time
     else:
-        noise = torch.rand(batch_size, num_channels, sequence_length, device=device)  # noise in [0, 1], bs x num_channels x L
+        noise = torch.rand(
+            batch_size, num_channels, sequence_length, device=device
+        )  # noise in [0, 1], bs x num_channels x L
 
-    mask = torch.ones(batch_size, num_channels, sequence_length, device=device)  # mask: [bs x num_channels x num_patch]
+    mask = torch.ones(
+        batch_size, num_channels, sequence_length, device=device
+    )  # mask: [bs x num_channels x num_patch]
     mask[:, :, :len_keep] = 0
 
     # sort noise for each sample
@@ -331,7 +336,8 @@ def forecast_masking(
 
     Parameters:
         inputs (`torch.Tensor`):
-            Input to mask [ bs x num_channels x num_patch x patch_len] or [ bs x tsg1 x tag2 x num_channels x num_patch x patch_len]
+            Input to mask [ bs x num_channels x num_patch x patch_len] or [ bs x tsg1 x tag2 x num_channels x num_patch
+            x patch_len]
         patch_lengths (list):
             List of patch lengths to mask in the end of the data.
         mix_ratio (list, *optional* defaults to None):
@@ -505,10 +511,10 @@ class PatchTSTMasking(nn.Module):
         Parameters:
             x (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`, *required*):
                 Patched input
-            
+
         Return:
             x_mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`)
-                Masked patched input                
+                Masked patched input
             mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches)`)
                 Bool tensor indicating True on masked points
 
@@ -544,6 +550,7 @@ class PatchTSTEncoderBlock(nn.Module):
     """
     PatchTST encoder block
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
@@ -575,6 +582,7 @@ class PatchTSTEncoderLayer(nn.Module):
     """
     PatchTST encoder layer
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
@@ -770,8 +778,8 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             output_hidden_states (bool, optional): Indicates if hidden states should be output.
 
         return:
-            `torch.Tensor` of shape `(batch_size, num_channels, num_patches, d_model)`
-            or `(batch_size, num_channels, num_patches+1, d_model)` if cls_token is used
+            `torch.Tensor` of shape `(batch_size, num_channels, num_patches, d_model)` or `(batch_size, num_channels,
+            num_patches+1, d_model)` if cls_token is used
         """
         _, num_input_channels, _, _ = past_values.shape
 
@@ -794,9 +802,13 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             # append cls token
             cls_token = self.cls_token + self.w_pos[:1, :]  # cls_token: [1 x 1 x 1 x d_model]
             cls_tokens = cls_token.expand(past_values.shape[0], -1, -1)  # get the same copy for all the batch samples
-            past_values = torch.cat((cls_tokens, past_values), dim=1)  # x: [bs x num_channels x (num_patches+1) x d_model]
+            past_values = torch.cat(
+                (cls_tokens, past_values), dim=1
+            )  # x: [bs x num_channels x (num_patches+1) x d_model]
         else:
-            past_values = self.positional_dropout(past_values + self.w_pos)  # x: [bs x num_channels x num_patches x d_model]
+            past_values = self.positional_dropout(
+                past_values + self.w_pos
+            )  # x: [bs x num_channels x num_patches x d_model]
 
         # Encoder
         past_values, hidden_states = self.encoder(
@@ -1495,9 +1507,8 @@ class PredictionHead(nn.Module):
 
 
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
-    """
+    """ """
 
-    """
     # PatchTST model + prediction head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
@@ -1670,10 +1681,8 @@ class ForecastHead(nn.Module):
         else:
             z = self.flatten(y)  # z: [bs x num_channels x (d_model * num_patches)] or [bs x num_channels x d_model)]
             z = self.dropout(z)
-            output = self.projection(
-                z
-            )  # output: [bs x num_channels x forecast_len]
-               # or tuple ([bs x num_channels x forecast_len], [bs x num_channels x forecast_len]) if using distribution head
+            output = self.projection(z)  # output: [bs x num_channels x forecast_len]
+            # or tuple ([bs x num_channels x forecast_len], [bs x num_channels x forecast_len]) if using distribution head
 
         if isinstance(output, tuple):
             output = tuple(
@@ -1689,6 +1698,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
     """
     PatchTST for forecasting
     """
+
     # PatchTST model + Forecasting head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
