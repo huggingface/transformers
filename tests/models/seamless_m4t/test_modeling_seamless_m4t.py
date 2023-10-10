@@ -473,7 +473,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="SeamlessM4TModel has actually a bigger architecture than seamlessM4T models for specific tasks."
+        reason="SeamlessM4TModel is base class but has actually a bigger architecture than seamlessM4T task-specific models."
     )
     def test_save_load_fast_init_to_base(self):
         pass
@@ -726,7 +726,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     @unittest.skip(
-        reason="SeamlessM4TModel has actually a bigger architecture than seamlessM4T models for specific tasks."
+        reason="SeamlessM4TModel is base class but has actually a bigger architecture than seamlessM4T task-specific models."
     )
     def test_save_load_fast_init_to_base(self):
         pass
