@@ -99,7 +99,7 @@ class LlavaProcessor(ProcessorMixin):
         encoding = BatchFeature()
         dummy = {}
         if text is not None:
-            text = self.DEFAULT_IMAGE_TOKEN + "\n" + text
+            text = self.DEFAULT_IMAGE_TOKEN + "\n" + text + "###"
             prompt_chunks = [
                 self.tokenizer(
                     chunk,
@@ -211,7 +211,7 @@ class LlavaProcessor(ProcessorMixin):
         self.vision_model.save_pretrained(clip_path)
         return super().save_pretrained(save_directory, **kwargs)
 
-    # overwrite to load the Q-Former tokenizer from a separate folder
+    # overwrite to load the CLIP vision model from a separate folder
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         vision_model = CLIPVisionModel.from_pretrained(pretrained_model_name_or_path, subfolder="clip")
