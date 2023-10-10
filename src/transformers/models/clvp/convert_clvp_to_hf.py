@@ -32,6 +32,7 @@ _MODELS = {
 }
 
 dim = 1024
+sub_dim = dim // 16
 
 CLVP_ENCODERS_MAPPING = {
     "text_transformer.transformer.attn_layers": "text_encoder_model",
@@ -140,31 +141,20 @@ def convert_decoder_weights(original_weights):
                 slice1, slice2, slice3 = original_weights[updated_key].squeeze(-1).split(split_size=dim, dim=0)
             else:
                 slice1, slice2, slice3 = original_weights[updated_key].split(split_size=dim, dim=0)
-            sub_dim = dim // 16
+
+            indices = torch.arange(dim)
+            index1, index2, index3 = (indices.unfold(0, sub_dim, sub_dim*3).flatten(),
+                                      indices[sub_dim:].unfold(0, sub_dim, sub_dim*3).flatten(),
+                                      indices[2*sub_dim:].unfold(0, sub_dim, sub_dim*3).flatten())
 
             converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.q_proj.{attr}"] = torch.concatenate(
-                [
-                    *[slice1[i * sub_dim : (i + 1) * sub_dim] for i in range(0, 16, 3)],
-                    *[slice2[i * sub_dim : (i + 1) * sub_dim] for i in range(2, 16, 3)],
-                    *[slice3[i * sub_dim : (i + 1) * sub_dim] for i in range(1, 14, 3)],
-                ],
-                axis=0,
+                [slice1[index1], slice2[index3], slice3[index2]], axis=0,
             )
             converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.k_proj.{attr}"] = torch.concatenate(
-                [
-                    *[slice1[i * sub_dim : (i + 1) * sub_dim] for i in range(1, 14, 3)],
-                    *[slice2[i * sub_dim : (i + 1) * sub_dim] for i in range(0, 16, 3)],
-                    *[slice3[i * sub_dim : (i + 1) * sub_dim] for i in range(2, 16, 3)],
-                ],
-                axis=0,
+                [slice1[index2], slice2[index1], slice3[index3]], axis=0,
             )
             converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.v_proj.{attr}"] = torch.concatenate(
-                [
-                    *[slice1[i * sub_dim : (i + 1) * sub_dim] for i in range(2, 16, 3)],
-                    *[slice2[i * sub_dim : (i + 1) * sub_dim] for i in range(1, 14, 3)],
-                    *[slice3[i * sub_dim : (i + 1) * sub_dim] for i in range(0, 16, 3)],
-                ],
-                axis=0,
+                [slice1[index3], slice2[index2], slice3[index1]], axis=0,
             )
             continue
 

@@ -290,6 +290,7 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = ClvpDecoderTester(self)
+        self.decoder_config_tester = ConfigTester(self, config_class=ClvpDecoderConfig, hidden_size=64)
 
     def tearDown(self):
         super().tearDown()
@@ -415,6 +416,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)
+        self.clvp_config_tester = ConfigTester(self, config_class=ClvpConfig, hidden_size=64)
 
     def tearDown(self):
         super().tearDown()
