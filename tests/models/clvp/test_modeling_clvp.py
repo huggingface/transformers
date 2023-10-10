@@ -203,7 +203,7 @@ class ClvpDecoderTester:
         seq_length=7,
         is_training=True,
         vocab_size=300,
-        max_mel_tokens=256,
+        max_position_embeddings=256,
         max_text_tokens=256,
         use_input_mask=True,
         hidden_size=32,
@@ -219,7 +219,7 @@ class ClvpDecoderTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.vocab_size = vocab_size
-        self.max_mel_tokens = max_mel_tokens
+        self.max_position_embeddings = max_position_embeddings
         self.max_text_tokens = max_text_tokens
         self.use_input_mask = use_input_mask
         self.hidden_size = hidden_size
@@ -233,11 +233,11 @@ class ClvpDecoderTester:
     def get_config(self):
         decoder_config = ClvpDecoderConfig(
             vocab_size=self.vocab_size,
-            max_mel_tokens=self.max_mel_tokens,
+            max_position_embeddings=self.max_position_embeddings,
             max_text_tokens=self.max_text_tokens,
-            n_embd=self.hidden_size,
-            n_layer=self.num_hidden_layers,
-            n_head=self.num_attention_heads,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             relative_attention_num_buckets=self.relative_attention_num_buckets,
@@ -346,11 +346,11 @@ class ClvpModelForConditionalGenerationTester:
     def get_config(self):
         decoder_config = ClvpDecoderConfig(
             vocab_size=200,
-            max_mel_tokens=150,
+            max_position_embeddings=150,
             max_text_tokens=100,
-            n_embd=32,
-            n_layer=2,
-            n_head=2,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
             bos_token_id=97,
             eos_token_id=98,
             relative_attention_num_buckets=4,
@@ -556,7 +556,7 @@ class ClvpIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             conditioning_encoder_outputs.shape,
-            torch.Size((self.input_features.shape[0], 18, self.model.config.decoder_config.n_embd)),
+            torch.Size((self.input_features.shape[0], 18, self.model.config.decoder_config.hidden_size)),
         )
 
         EXPECTED_OUTPUTS = torch.tensor(

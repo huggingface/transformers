@@ -173,20 +173,20 @@ class ClvpDecoderConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 8194):
             Vocabulary size of the model.
-        max_mel_tokens (`int`, *optional*, defaults to 608):
+        max_position_embeddings (`int`, *optional*, defaults to 608):
             The maximum sequence length of mel tokens that this model might ever be used with. Similar to `n_positions`
             in `GPT2Config`.
         max_text_tokens (`int`, *optional*, defaults to 404):
             The maximum sequence length of text tokens that this model might ever be used with. Similar to
             `n_positions` in `GPT2Config`.
-        n_embd (`int`, *optional*, defaults to 1024):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the embeddings and hidden states.
-        n_layer (`int`, *optional*, defaults to 30):
+        num_hidden_layers (`int`, *optional*, defaults to 30):
             Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*):
-            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times `n_embd`.
+            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times `hidden_size`.
         num_mel_attn_blocks (`int`, *optional*, defaults to 6):
             Denotes the number of self attention layers in [`ClvpConditioningEncoder`].
         activation_function (`str`, *optional*, defaults to `"gelu_new"`):
@@ -195,7 +195,7 @@ class ClvpDecoderConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         embd_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the embeddings.
-        attn_pdrop (`float`, *optional*, defaults to 0.1):
+        attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers.
@@ -252,28 +252,21 @@ class ClvpDecoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "clvp_decoder"
-    attribute_map = {
-        "hidden_size": "n_embd",
-        "max_position_embeddings": "max_mel_tokens",
-        "num_attention_heads": "n_head",
-        "num_hidden_layers": "n_layer",
-        "attention_dropout": "attn_pdrop",
-    }
 
     def __init__(
         self,
         vocab_size=8194,
-        max_mel_tokens=608,
+        max_position_embeddings=608,
         max_text_tokens=404,
-        n_embd=1024,
-        n_layer=30,
-        n_head=16,
+        hidden_size=1024,
+        num_hidden_layers=30,
+        num_attention_heads=16,
         n_inner=None,
         num_mel_attn_blocks=6,
         activation_function="gelu_new",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
-        attn_pdrop=0.1,
+        attention_dropout=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         summary_type="cls_index",
@@ -291,17 +284,17 @@ class ClvpDecoderConfig(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.max_mel_tokens = max_mel_tokens
+        self.max_position_embeddings = max_position_embeddings
         self.max_text_tokens = max_text_tokens
-        self.n_embd = n_embd
-        self.n_layer = n_layer
-        self.n_head = n_head
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.n_inner = n_inner
         self.num_mel_attn_blocks = num_mel_attn_blocks
         self.activation_function = activation_function
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
-        self.attn_pdrop = attn_pdrop
+        self.attention_dropout = attention_dropout
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
         self.summary_type = summary_type
@@ -337,26 +330,6 @@ class ClvpDecoderConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
-
-    # This makes sure that the config will be saved as a nested dict of {"decoder_config": config}, so that
-    # when loading the `ClvpForCausalLM` and `ClvpDecoder` from a custom config won't fail.
-    def to_json_string(self, use_diff: bool = True) -> str:
-        """
-        Serializes this instance to a JSON string.
-
-        Args:
-            use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
-                is serialized to JSON string.
-
-        Returns:
-            `str`: String containing all the attributes that make up this configuration instance in JSON format.
-        """
-        if use_diff is True:
-            config_dict = {"decoder_config": self.to_diff_dict()}
-        else:
-            config_dict = {"decoder_config": self.to_dict()}
-        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
 
 class ClvpConfig(PretrainedConfig):
@@ -476,17 +449,3 @@ class ClvpConfig(PretrainedConfig):
             decoder_config=decoder_config.to_dict(),
             **kwargs,
         )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["speech_config"] = self.speech_config.to_dict()
-        output["decoder_config"] = self.decoder_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

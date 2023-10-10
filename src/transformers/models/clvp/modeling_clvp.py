@@ -549,10 +549,10 @@ class ClvpConditioningEncoder(nn.Module):
         text_config = config.text_config
         decoder_config = config.decoder_config
 
-        self.text_token_embedding = nn.Embedding(text_config.vocab_size, decoder_config.n_embd)
-        self.text_position_embedding = nn.Embedding(decoder_config.max_text_tokens, decoder_config.n_embd)
+        self.text_token_embedding = nn.Embedding(text_config.vocab_size, decoder_config.hidden_size)
+        self.text_position_embedding = nn.Embedding(decoder_config.max_text_tokens, decoder_config.hidden_size)
 
-        self.mel_conv = nn.Conv1d(decoder_config.feature_size, decoder_config.n_embd, kernel_size=1)
+        self.mel_conv = nn.Conv1d(decoder_config.feature_size, decoder_config.hidden_size, kernel_size=1)
 
         # define group norms to be used before each attention layer
         num_groups = self.compute_groupnorm_groups(decoder_config.hidden_size)
@@ -570,13 +570,11 @@ class ClvpConditioningEncoder(nn.Module):
 
         self.gradient_checkpointing = False
 
-    def compute_groupnorm_groups(self, channels: int):
+    def compute_groupnorm_groups(self, channels: int, groups: int = 32):
         """
-        Calculates the value of both `num_groups` and `num_channels` for nn.GroupNorm. This logic is taken from the
-        official tortoise repository. link :
+        Calculates the value of `num_groups` for nn.GroupNorm. This logic is taken from the official tortoise repository. link :
         https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/models/arch_util.py#L26
         """
-        groups = 32
         if channels <= 16:
             groups = 8
         elif channels <= 64:
@@ -696,7 +694,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ClvpForCausalLM):
             for name, p in module.named_parameters():
                 if name == "c_proj.weight":
-                    p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+                    p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers)))
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -993,14 +991,14 @@ class ClvpDecoder(ClvpPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.config = config.decoder_config if hasattr(config, "decoder_config") else config
+        self.config = config
 
-        self.input_embeds_layer = nn.Embedding(self.config.vocab_size, self.config.n_embd)
-        self.position_embeds_layer = nn.Embedding(self.config.max_mel_tokens, self.config.n_embd)
+        self.input_embeds_layer = nn.Embedding(self.config.vocab_size, self.config.hidden_size)
+        self.position_embeds_layer = nn.Embedding(self.config.max_position_embeddings, self.config.hidden_size)
 
         self.drop = nn.Dropout(self.config.embd_pdrop)
-        self.layers = nn.ModuleList([ClvpDecoderLayer(self.config) for _ in range(self.config.n_layer)])
-        self.layer_norm = nn.LayerNorm(self.config.n_embd, eps=self.config.layer_norm_epsilon)
+        self.layers = nn.ModuleList([ClvpDecoderLayer(self.config) for _ in range(self.config.num_hidden_layers)])
+        self.layer_norm = nn.LayerNorm(self.config.hidden_size, eps=self.config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
 
@@ -1105,9 +1103,9 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # head_mask has shape n_layer x batch x n_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
+        # attention_probs has shape bsz x num_attention_heads x N x N
+        # head_mask has shape num_hidden_layers x batch x num_attention_heads x N x N
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         hidden_states = inputs_embeds
 
@@ -1200,7 +1198,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
 class ClvpModel(ClvpPreTrainedModel):
     def __init__(self, config: ClvpDecoderConfig):
         super().__init__(config)
-        self.config = config.decoder_config if hasattr(config, "decoder_config") else config
+        self.config = config
         self.decoder = ClvpDecoder(self.config)
 
         # Initialize weights and apply final processing
@@ -1272,11 +1270,11 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.config = config.decoder_config if hasattr(config, "decoder_config") else config
+        self.config = config
         self.model = ClvpModel(self.config)
 
         self.final_norm = nn.LayerNorm(self.config.hidden_size)
-        self.lm_head = nn.Linear(self.config.n_embd, self.config.vocab_size, bias=True)
+        self.lm_head = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1511,7 +1509,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         self.conditioning_encoder = ClvpConditioningEncoder(config)
 
-        self.speech_decoder_model = ClvpForCausalLM(config)
+        self.speech_decoder_model = ClvpForCausalLM(config.decoder_config)
 
         self.text_encoder_model = ClvpEncoder(config.text_config)
         self.speech_encoder_model = ClvpEncoder(config.speech_config)
