@@ -946,7 +946,7 @@ SWIN_INPUTS_DOCSTRING = r"""
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
                 Whether or not to apply pooling layer.
         use_mask_token (`bool`, *optional*, defaults to `False`):
-                Whether or not create and apply mask tokens to the input embeddings.
+                Whether or not to create and apply mask tokens in the embedding layer.
     """,
 )
 class SwinModel(SwinPreTrainedModel):
