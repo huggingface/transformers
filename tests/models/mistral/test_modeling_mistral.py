@@ -39,7 +39,7 @@ if is_torch_available():
     )
 
 
-# Copied from transformers.tests.mistral.test_modelling_mistral.MistralModelTest with Llama->Mistral
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Llama->Mistral
 class MistralModelTester:
     def __init__(
         self,

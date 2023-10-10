@@ -32,7 +32,7 @@ from transformers.testing_utils import require_tokenizers, slow
 from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
 
-# Copied from transformers.tests.models.bert.test_modeling_bert.py with Bert->MobileBert and pathfix
+# Copied from tests.models.bert.test_modeling_bert.py with Bert->MobileBert and pathfix
 @require_tokenizers
 class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = MobileBertTokenizer
