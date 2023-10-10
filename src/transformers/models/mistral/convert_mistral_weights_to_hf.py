@@ -90,7 +90,6 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
 
     # For some reason this is a string in the params.json
     sliding_window = int(params["sliding_window"])
-
     n_layers = params["n_layers"]
     n_heads = params["n_heads"]
     n_heads_per_shard = n_heads // num_shards
