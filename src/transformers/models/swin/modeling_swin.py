@@ -944,7 +944,7 @@ SWIN_INPUTS_DOCSTRING = r"""
     SWIN_START_DOCSTRING,
     """
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
-                Whether or not to apply pooling layer(`nn.AdaptiveAvgPool1d`) after the encoder output.
+                Whether or not to apply pooling layer.
         use_mask_token (`bool`, *optional*, defaults to `False`):
                 Whether or not create and apply mask tokens to the input embeddings.
     """,
