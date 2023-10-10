@@ -504,8 +504,8 @@ class FastSpeech2ConformerWithHifiGanTester:
         self.vocoder_config = FastSpeech2ConformerHifiGanConfig(
             model_in_dim=self.num_mel_bins, upsample_initial_channel=self.upsample_initial_channel
         )
-        return FastSpeech2ConformerWithHifiGanConfig.from_sub_model_configs(
-            model_config=self.model_config, vocoder_config=self.vocoder_config
+        return FastSpeech2ConformerWithHifiGanConfig(
+            model_config=self.model_config.to_dict(), vocoder_config=self.vocoder_config.to_dict()
         )
 
     def create_and_check_model(self, config, input_ids, *args):

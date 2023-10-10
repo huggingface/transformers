@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for the SpeechT5 tokenizers."""
+"""Tests for the FastSpeech2Conformer tokenizer."""
 
 import unittest
 
@@ -94,7 +94,7 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
     @slow
     def test_tokenizer_integration(self):
         # Custom test since:
-        # 1) This tokenizer does not decode (phonemes cannot be converted to text with complete accuracy)
+        # 1) This tokenizer only decodes to tokens (phonemes cannot be converted to text with complete accuracy)
         # 2) Uses a sequence without numbers since espnet has different, custom number conversion.
         # This tokenizer can phonemize numbers, but where in espnet "32" is phonemized as "thirty two",
         # here "32" is phonemized as "thirty-two" because we haven't implemented the custom number handling.
@@ -128,8 +128,14 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
         }
         # fmt: on
 
+        actual_tokens = [tokenizer.decode(input_ids) for input_ids in expected_encoding["input_ids"]]
+        expected_tokens = [
+            [tokenizer.convert_ids_to_tokens(id) for id in sequence] for sequence in expected_encoding["input_ids"]
+        ]
+
         self.assertListEqual(actual_encoding["input_ids"], expected_encoding["input_ids"])
         self.assertListEqual(actual_encoding["attention_mask"], expected_encoding["attention_mask"])
+        self.assertTrue(actual_tokens == expected_tokens)
 
     @unittest.skip(
         reason="FastSpeech2Conformer tokenizer does not support adding tokens as they can't be added to the g2p_en backend"

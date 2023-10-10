@@ -484,23 +484,3 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
         self.vocoder_config = FastSpeech2ConformerHifiGanConfig(**vocoder_config)
 
         super().__init__(**kwargs)
-
-    @classmethod
-    def from_sub_model_configs(
-        cls,
-        model_config: FastSpeech2ConformerConfig,
-        vocoder_config: FastSpeech2ConformerHifiGanConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`FastSpeech2ConformerWithHifiGanConfig`] (or a derived class) from bark sub-models
-        configuration.
-
-        Returns:
-            [`FastSpeech2ConformerWithHifiGanConfig`]: An instance of a configuration object
-        """
-        return cls(
-            model_config=model_config.to_dict(),
-            vocoder_config=vocoder_config.to_dict(),
-            **kwargs,
-        )

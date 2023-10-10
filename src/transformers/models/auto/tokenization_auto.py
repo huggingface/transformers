@@ -28,6 +28,7 @@ from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
     cached_file,
     extract_commit_hash,
+    is_g2p_en_available,
     is_sentencepiece_available,
     is_tokenizers_available,
     logging,

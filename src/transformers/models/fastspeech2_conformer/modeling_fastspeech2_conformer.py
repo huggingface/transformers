@@ -193,6 +193,53 @@ FASTSPEECH2_CONFORMER_WITH_HIFIGAN_START_DOCSTRING = r"""
 """
 
 
+def length_regulator(encoded_embeddings, duration_labels, speaking_speed=1.0):
+    """
+    Length regulator for feed-forward Transformer.
+
+    This is the length regulator module described in `FastSpeech: Fast, Robust and Controllable Text to Speech`
+    https://arxiv.org/pdf/1905.09263.pdf. The length regulator expands char or phoneme-level embedding features to
+    frame-level by repeating each feature based on the corresponding predicted durations.
+
+    Args:
+        encoded_embeddings (`torch.Tensor` of shape `(batch_size, max_text_length, embedding_dim)`):
+            Batch of sequences of char or phoneme embeddings.
+        duration_labels (`torch.LongTensor` of shape `(batch_size, time)`):
+            Batch of durations of each frame.
+        speaking_speed (`float`, *optional*, defaults to 1.0):
+            Value to control speed of speech.
+
+    Returns:
+        `torch.Tensor`:
+            Replicated input tensor based on durations (batch_size, time*, embedding_dim).
+    """
+
+    if speaking_speed <= 0:
+        raise ValueError("`speaking_speed` must be greater than 0.")
+    elif speaking_speed != 1.0:
+        duration_labels = torch.round(duration_labels.float() * speaking_speed).long()
+
+    if duration_labels.sum() == 0:
+        duration_labels[duration_labels.sum(dim=1).eq(0)] = 1
+
+    # Calculate the maximum length needed
+    max_len = torch.sum(duration_labels, dim=1).max()
+
+    # Create a padded tensor to hold the results
+    hidden_states = torch.zeros(
+        (encoded_embeddings.size(0), max_len, encoded_embeddings.size(2)),
+        dtype=torch.float,
+        device=encoded_embeddings.device,
+    )
+
+    # Loop through the batch and fill in the data
+    for i, (encoded_embedding, target_duration) in enumerate(zip(encoded_embeddings, duration_labels)):
+        repeated = torch.repeat_interleave(encoded_embedding, target_duration, dim=0)
+        hidden_states[i, : repeated.size(0)] = repeated
+
+    return hidden_states
+
+
 class FastSpeech2ConformerDurationPredictor(nn.Module):
     """
     Duration predictor module.
@@ -248,61 +295,6 @@ class FastSpeech2ConformerDurationPredictor(nn.Module):
         if not self.training:
             # NOTE: calculate in linear domain
             hidden_states = torch.clamp(torch.round(hidden_states.exp() - self.log_domain_offset), min=0).long()
-
-        return hidden_states
-
-
-class FastSpeech2ConformerLengthRegulator(nn.Module):
-    """
-    Length regulator module for feed-forward Transformer.
-
-    This is the length regulator module described in `FastSpeech: Fast, Robust and Controllable Text to Speech`
-    https://arxiv.org/pdf/1905.09263.pdf. The length regulator expands char or phoneme-level embedding features to
-    frame-level by repeating each feature based on the corresponding predicted durations.
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, encoded_embeddings, duration_labels, speaking_speed=1.0):
-        """
-        Calculate forward propagation.
-
-        Args:
-            encoded_embeddings (`torch.Tensor` of shape `(batch_size, max_text_length, embedding_dim)`):
-                Batch of sequences of char or phoneme embeddings.
-            duration_labels (`torch.LongTensor` of shape `(batch_size, time)`):
-                Batch of durations of each frame.
-            speaking_speed (`float`, *optional*, defaults to 1.0):
-                Value to control speed of speech.
-
-        Returns:
-            `torch.Tensor`:
-                Replicated input tensor based on durations (batch_size, time*, embedding_dim).
-        """
-
-        if speaking_speed <= 0:
-            raise ValueError("`speaking_speed` must be greater than 0.")
-        elif speaking_speed != 1.0:
-            duration_labels = torch.round(duration_labels.float() * speaking_speed).long()
-
-        if duration_labels.sum() == 0:
-            duration_labels[duration_labels.sum(dim=1).eq(0)] = 1
-
-        # Calculate the maximum length needed
-        max_len = torch.sum(duration_labels, dim=1).max()
-
-        # Create a padded tensor to hold the results
-        hidden_states = torch.zeros(
-            (encoded_embeddings.size(0), max_len, encoded_embeddings.size(2)),
-            dtype=torch.float,
-            device=encoded_embeddings.device,
-        )
-
-        # Loop through the batch and fill in the data
-        for i, (encoded_embedding, target_duration) in enumerate(zip(encoded_embeddings, duration_labels)):
-            repeated = torch.repeat_interleave(encoded_embedding, target_duration, dim=0)
-            hidden_states[i, : repeated.size(0)] = repeated
 
         return hidden_states
 
@@ -404,7 +396,7 @@ class FastSpeech2ConformerVariancePredictor(nn.Module):
         dropout_rate=0.5,
     ):
         """
-        Initilize duration predictor module.
+        Initilize variance predictor module.
 
         Args:
             input_dim (`int`): Input dimension.
@@ -1177,8 +1169,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             dropout_rate=config.energy_embed_dropout,
         )
 
-        self.length_regulator = FastSpeech2ConformerLengthRegulator()
-
         # The decoder is an encoder
         self.decoder = FastSpeech2ConformerEncoder(config, config.decoder_config, use_encoder_input_layer=False)
 
@@ -1322,13 +1312,13 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             embedded_pitch_curve = self.pitch_embed(pitch_predictions)
             embedded_energy_curve = self.energy_embed(energy_predictions)
             hidden_states = hidden_states + embedded_energy_curve + embedded_pitch_curve
-            hidden_states = self.length_regulator(hidden_states, duration_predictions, self.config.speaking_speed)
+            hidden_states = length_regulator(hidden_states, duration_predictions, self.config.speaking_speed)
         else:
             # use groundtruth in training
             embedded_pitch_curve = self.pitch_embed(pitch_labels)
             embedded_energy_curve = self.energy_embed(energy_labels)
             hidden_states = hidden_states + embedded_energy_curve + embedded_pitch_curve
-            hidden_states = self.length_regulator(hidden_states, duration_labels)
+            hidden_states = length_regulator(hidden_states, duration_labels)
 
         # forward decoder
         if not self.training:
