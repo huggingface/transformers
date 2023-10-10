@@ -89,11 +89,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
     num_shards = NUM_SHARDS[model_size]
 
     # For some reason this is a string in the params.json
-    try:
-        sliding_window = int(params["ragged_attention"])
-
-    except KeyError:
-        sliding_window = int(params["sliding_window"])
+    sliding_window = int(params["sliding_window"])
 
     n_layers = params["n_layers"]
     n_heads = params["n_heads"]
