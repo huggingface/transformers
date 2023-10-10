@@ -420,7 +420,6 @@ class BartFlashAttention2(BartAttention):
 
         return attn_output, attn_weights, past_key_value
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
         self, query_states, key_states, value_states, padding_mask, query_length, causal=True, dropout=0.0, softmax_scale=None
     ):
