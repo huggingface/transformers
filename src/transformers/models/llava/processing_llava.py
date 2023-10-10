@@ -63,6 +63,8 @@ class LlavaProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
 
         self.vision_model = vision_model
+        self.DEFAULT_IMAGE_TOKEN = "<image>"
+        self.IMAGE_TOKEN_INDEX = -200
 
     def __call__(
         self,
