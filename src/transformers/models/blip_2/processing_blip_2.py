@@ -104,7 +104,7 @@ class Blip2Processor(ProcessorMixin):
         encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
 
         if text is not None:
-            if isinstance(text, str) and encoding_image_processor["pixel_values"].size()[0] != 1: 
+            if isinstance(text, str) and len(encoding_image_processor["pixel_values"]) != 1: 
                 text = [[text]*encoding_image_processor["pixel_values"].size()[0]]
             text_encoding = self.tokenizer(
                 text=text,
