@@ -178,9 +178,41 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
 
 
 class BertEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+    """
+        This class Construct the embeddings from word, position and token_type embeddings.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            word_embeddings (nn.Embedding): Word embeddings layer.
+            position_embeddings (nn.Embedding): Position embeddings layer.
+            token_type_embeddings (nn.Embedding): Token type embeddings layer.
+            LayerNorm (nn.LayerNorm): Layer normalization for embeddings.
+            dropout (nn.Dropout): Dropout layer for embeddings.
+            position_embedding_type (str): Type of position embeddings (e.g. "absolute").
+            position_ids (torch.Tensor): Position IDs buffer.
+            token_type_ids (torch.Tensor): Token type IDs buffer.
+
+    Methods:
+        forward(input_ids = None, token_type_ids = None, position_ids = None, inputs_embeds = None, past_key_values_length = 0):
+            Compute embeddings for input tokens.
+
+        Args:
+            input_ids (torch.LongTensor, optional): Input token IDs.
+            token_type_ids (torch.LongTensor, optional): Token type IDs.
+            position_ids (torch.LongTensor, optional): Position IDs.
+            inputs_embeds (torch.FloatTensor, optional): Input embeddings.
+            past_key_values_length (int, optional): Length of past key values.
+        Returns:
+
+
+    """
 
     def __init__(self, config):
+        """
+            Initializes an instance of class BertEmbeddings
+        """
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -207,6 +239,20 @@ class BertEmbeddings(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
+        """
+            Compute embeddings for input tokens.
+
+            Args:
+                input_ids (torch.LongTensor, optional): Input token IDs.
+                token_type_ids (torch.LongTensor, optional): Token type IDs.
+                position_ids (torch.LongTensor, optional): Position IDs.
+                inputs_embeds (torch.FloatTensor, optional): Input embeddings.
+                past_key_values_length (int, optional): Length of past key values.
+
+            Returns:
+                torch.Tensor: Computed embeddings.
+
+        """
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -242,7 +288,56 @@ class BertEmbeddings(nn.Module):
 
 
 class BertSelfAttention(nn.Module):
+    """
+       This class implements the self-attention mechanism used in a BERT model.
+
+       Args:
+           config (BertConfig): Configuration settings for the BERT model.
+           position_embedding_type (str, optional): Type of position embeddings (e.g., "absolute" or "relative").
+
+       Attributes:
+           num_attention_heads (int): Number of attention heads.
+           attention_head_size (int): Size of each attention head.
+           all_head_size (int): Total size of all attention heads combined.
+           query (nn.Linear): Linear transformation for query vectors.
+           key (nn.Linear): Linear transformation for key vectors.
+           value (nn.Linear): Linear transformation for value vectors.
+           dropout (nn.Dropout): Dropout layer for attention probabilities.
+           position_embedding_type (str): Type of position embeddings used.
+           is_decoder (bool): Indicates if the attention mechanism is used in a decoder context.
+
+       Methods:
+           transpose_for_scores(x):
+               Transpose the input tensor to prepare it for attention score calculation.
+
+               Args:
+                   x (torch.Tensor): input tensor
+
+               Returns:
+                   torch.Tensor: Transposed tensor
+
+           forward(
+               hidden_states, attention_mask=None, head_mask=None, encoder_hidden_states=None,
+               encoder_attention_mask=None, past_key_value=None, output_attentions=False
+           ):
+               Perform a forward pass for the self-attention mechanism.
+
+               Args:
+                   hidden_states (torch.Tensor): Input hidden states.
+                   attention_mask (torch.FloatTensor, optional): Attention mask for input tokens.
+                   head_mask (torch.FloatTensor, optional): Mask for individual attention heads.
+                   encoder_hidden_states (torch.FloatTensor, optional): Hidden states from an encoder.
+                   encoder_attention_mask (torch.FloatTensor, optional): Attention mask for encoder states.
+                   past_key_value (Tuple[Tuple[torch.FloatTensor]], optional): Cached key and value tensors.
+                   output_attentions (bool, optional): Whether to output attention scores.
+
+               Returns:
+                   Tuple[torch.Tensor]: Tuple containing the context layer and other optional values.
+       """
     def __init__(self, config, position_embedding_type=None):
+
+        """ Initializes an instance of BertSelfAttention"""
+
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -269,6 +364,14 @@ class BertSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+        """
+            Transposes the input tensor to prepare it for attention score calculation
+        Args:
+            x(torch.Tensor): input tensor
+
+        Returns:
+            torch.Tensor: Transposed tensor
+        """
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
@@ -283,6 +386,22 @@ class BertSelfAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+
+        """
+            Perform a forward pass for the self-attention mechanism.
+
+            Args:
+                hidden_states (torch.Tensor): Input hidden states.
+                attention_mask (torch.FloatTensor, optional): Attention mask for input tokens.
+                head_mask (torch.FloatTensor, optional): Mask for individual attention heads.
+                encoder_hidden_states (torch.FloatTensor, optional): Hidden states from an encoder.
+                encoder_attention_mask (torch.FloatTensor, optional): Attention mask for encoder states.
+                past_key_value (Tuple[Tuple[torch.FloatTensor]], optional): Cached key and value tensors.
+                output_attentions (bool, optional): Whether to output attention scores.
+
+            Returns:
+                Tuple[torch.Tensor]: Tuple containing the context layer and other optional values.
+        """
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -376,13 +495,50 @@ class BertSelfAttention(nn.Module):
 
 
 class BertSelfOutput(nn.Module):
+    """
+        This class represents the output layer of the self-attention mechanism in a BERT model.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            dense (nn.Linear): Linear layer for projecting hidden states.
+            LayerNorm (nn.LayerNorm): Layer normalization for hidden states.
+            dropout (nn.Dropout): Dropout layer for regularization.
+
+        Methods:
+            forward(hidden_states, input_tensor):
+                Performs forward pass for the self-attention output layer.
+
+                Args:
+                    hidden_states (torch.Tensor): Hidden states from the previous layer.
+                    input_tensor (torch.Tensor): Input tensor to the self-attention layer.
+
+                Returns:
+                    torch.Tensor: Output tensor after applying linear transformation, dropout, and layer normalization.
+        """
     def __init__(self, config):
+
+        """Initializes an instance of BertSelfOutput"""
+
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+
+        """
+                Perform a forward pass for the self-attention output layer.
+
+                Args:
+                    hidden_states (torch.Tensor): Hidden states from the previous layer.
+                    input_tensor (torch.Tensor): Input tensor to the self-attention layer.
+
+                Returns:
+                    torch.Tensor: Output tensor after applying linear transformation, dropout, and layer normalization.
+        """
+
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -390,13 +546,65 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
+    """
+        This class represents the attention mechanism in a BERT model.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+            position_embedding_type (str, optional): Type of position embeddings (e.g., "absolute" or "relative").
+
+        Attributes:
+            self (BertSelfAttention): Self-attention mechanism.
+            output (BertSelfOutput): Self-attention output layer.
+            pruned_heads (set): Set of pruned attention heads.
+
+        Methods:
+            prune_heads(heads):
+                Prunes specified attention heads from the self-attention mechanism.
+
+                Args:
+                    heads (list): Number of head indices to prune.
+
+                Returns:
+                    None: This function returns None.
+
+            forward(
+                hidden_states, attention_mask=None, head_mask=None, encoder_hidden_states=None,
+                encoder_attention_mask=None, past_key_value=None, output_attentions=False
+            ):
+                Perform a forward pass for the BERT attention mechanism.
+
+                Args:
+                    hidden_states (torch.Tensor): Input hidden states.
+                    attention_mask (torch.FloatTensor, optional): Attention mask for input tokens.
+                    head_mask (torch.FloatTensor, optional): Mask for individual attention heads.
+                    encoder_hidden_states (torch.FloatTensor, optional): Hidden states from an encoder.
+                    encoder_attention_mask (torch.FloatTensor, optional): Attention mask for encoder states.
+                    past_key_value (Tuple[Tuple[torch.FloatTensor]], optional): Cached key and value tensors.
+                    output_attentions (bool, optional): Whether to output attention scores.
+
+                Returns:
+                    Tuple[torch.Tensor]: Tuple containing the attention output and other optional values.
+    """
     def __init__(self, config, position_embedding_type=None):
+        """
+            Initializes an instance of the class BertAttention.
+        """
         super().__init__()
         self.self = BertSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
+        """
+            prunes Specified attention heads from the self-attention mechanism.
+
+            Args:
+                heads: Number of head indicies to be pruned.
+
+            Returns:
+                None: This function returns None.
+        """
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -424,6 +632,21 @@ class BertAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        """
+            Perform a forward-pass for the BERT attention mechanism.
+
+            Args:
+                hidden_states: Input hidden states.
+                attention_mask: Attention mask for input tokens.
+                head_mask: Mask for individual attention heads.
+                encoder_hidden_states: Hidden states for an encoder.
+                encoder_attention_mask: Attention mask for encoder states.
+                past_key_value: cached key and value tensor.
+                output_attentions: whether to output attention scores.
+
+            Returns:
+                torch.Tensor: Tuple containing attention output.
+        """
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -439,7 +662,29 @@ class BertAttention(nn.Module):
 
 
 class BertIntermediate(nn.Module):
+    """
+        This class represents the intermediate layer in a BERT model.
+
+        The intermediate layer is responsible for performing a linear transformation
+        on the hidden states followed by an activation function specified in the
+        BERT configuration.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            dense (nn.Linear): Linear layer for projecting hidden states.
+            intermediate_act_fn (callable): Activation function for the intermediate layer.
+
+        Methods:
+            forward(hidden_states: torch.Tensor) -> torch.Tensor:
+
+            Perform a forward pass for the intermediate layer.
+    """
     def __init__(self, config):
+        """
+            Initialize an instance of BertIntermediate.
+        """
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -448,19 +693,64 @@ class BertIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+            Performs a forward pass for the intermediate layer.
+
+            Args:
+                hidden_states (torch.Tensor): input hidder states.
+
+            Returns:
+                torch.Tensor: Output tensor after applying linear transformation and activation.
+        """
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
 class BertOutput(nn.Module):
+    """
+        This class represents the output layer of a BERT model.
+
+        The BertOutput layer takes the intermediate hidden states and combines them
+        with the input tensor using a linear transformation, followed by dropout
+        regularization and layer normalization.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            dense (nn.Linear): Linear layer for projecting intermediate hidden states.
+            LayerNorm (nn.LayerNorm): Layer normalization for hidden states.
+            dropout (nn.Dropout): Dropout layer for regularization.
+
+        Methods:
+            forward(hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+            Perform a forward pass for the BertOutput layer.
+    """
     def __init__(self, config):
+
+        """
+            Initialize an instance of class BertOutput.
+        """
+
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+
+        """
+            Perform a forward pass for the BertOutput layer.
+
+            Args:
+                hidden_states (torch.Tensor): Intermediate hidden states.
+                input_tensor (torch.Tensor): Input tensor to be combined with hidden states.
+
+            Returns:
+                torch.Tensor: Output tensor after linear transformation, dropout and layer normalization.
+        """
+
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -468,7 +758,47 @@ class BertOutput(nn.Module):
 
 
 class BertLayer(nn.Module):
+
+    """
+        This class represents a single layer in a BERT model.
+
+        A BertLayer consists of self-attention, feed-forward, and output modules.
+        It can be used both in the encoder and decoder parts of the model.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            chunk_size_feed_forward (int): Chunk size for feed-forward computation.
+            seq_len_dim (int): Dimension for sequence length.
+            attention (BertAttention): Self-attention module.
+            is_decoder (bool): Indicates whether the layer is part of a decoder model.
+            add_cross_attention (bool): Indicates whether cross-attention is added for decoder layers.
+            crossattention (BertAttention): Cross-attention module for decoder layers.
+            intermediate (BertIntermediate): Intermediate feed-forward module.
+            output (BertOutput): Output module for the layer.
+
+        Methods:
+            forward(
+                hidden_states: torch.Tensor,
+                attention_mask: Optional[torch.FloatTensor] = None,
+                head_mask: Optional[torch.FloatTensor] = None,
+                encoder_hidden_states: Optional[torch.FloatTensor] = None,
+                encoder_attention_mask: Optional[torch.FloatTensor] = None,
+                past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+                output_attentions: Optional[bool] = False,
+            ) -> Tuple[torch.Tensor]:
+
+            Perform a forward pass for a single BertLayer.
+
+            feed_forward_chunk(attention_output: torch.Tensor) -> torch.Tensor:
+                Compute the feed-forward chunk of a BertLayer.
+    """
+
     def __init__(self, config):
+        """
+            Initialize an instance of class BertLayer
+        """
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
@@ -492,6 +822,22 @@ class BertLayer(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        """
+            Performs a forward pass for a single BERT layer.
+
+            Args:
+                hidden_states: Input hidden states.
+                attention_mask: Mask for attention computation.
+                head_mask: Mask for attention heads.
+                encoder_hidden_states: Hidden states from an encoder layer.
+                encoder_attention_mask: Mask for attention encoder.
+                past_key_value: Cached key/value states.
+                output_attentions: Whether to output attention weights.
+
+            Returns:
+                Tuple[torch.Tensor]: Tuple containing the layer's output and other optional outputs.
+
+        """
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -547,14 +893,57 @@ class BertLayer(nn.Module):
 
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
+    def feed_forward_chunk(self, attention_output: torch.Tensor)->torch.Tensor:
+        """
+            compute the feed-forward chunk of a BertLayer.
+
+            Args:
+                attention_output: Output from the self-attention module.
+
+            Returns:
+                torch.Tensor: Output after feed-forward computation.
+        """
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
 
 class BertEncoder(nn.Module):
+    """
+        This class represents the encoder component of a BERT model.
+
+        The BertEncoder consists of multiple layers, each with its own BertLayer module.
+        It can be used for encoding text sequences and is commonly used in both the
+        BERT base and BERT large architectures.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            config (BertConfig): Configuration settings for the BERT model.
+            layer (nn.ModuleList): List of BertLayer modules representing the encoder layers.
+            gradient_checkpointing (bool): Indicates whether gradient checkpointing is used for training.
+
+        Methods:
+            forward(
+                hidden_states: torch.Tensor,
+                attention_mask: Optional[torch.FloatTensor] = None,
+                head_mask: Optional[torch.FloatTensor] = None,
+                encoder_hidden_states: Optional[torch.FloatTensor] = None,
+                encoder_attention_mask: Optional[torch.FloatTensor] = None,
+                past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+                use_cache: Optional[bool] = None,
+                output_attentions: Optional[bool] = False,
+                output_hidden_states: Optional[bool] = False,
+                return_dict: Optional[bool] = True,
+            ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+                Perform a forward pass through the BertEncoder.
+
+    """
     def __init__(self, config):
+        """
+            Initialize an instance of class BertEncoder.
+        """
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
@@ -573,6 +962,25 @@ class BertEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+        """
+            Performs a forward pass through the BertEncoder.
+
+            Args:
+                hidden_states: Input hiddern states.
+                attention_mask: Mask for attention computation.
+                head_mask: Mask for attention heads.
+                encoder_hidden_states: Hidden states from an encoder layer.
+                encoder_attention_mask: Mask for encoder attention.
+                past_key_values: Cached key/value states.
+                use_cache: Whether to use caching for intermediate layer.
+                output_attentions: Whether to output attention weights.
+                output_hidden_states: Whether to output hidden states.
+                return_dict: Whether to return reults as a dictionary.
+
+            Returns:
+                Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+                Tuple or dictionary containing encoder outputs and optional intermediate results.
+        """
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -652,12 +1060,44 @@ class BertEncoder(nn.Module):
 
 
 class BertPooler(nn.Module):
+    """
+        This class represents the pooling layer in a BERT model.
+
+        The BertPooler takes the hidden states of the input sequence and performs pooling
+        to obtain a representation of the entire sequence. It does this by applying a linear
+        transformation followed by a hyperbolic tangent (Tanh) activation function to the
+        hidden state corresponding to the first token.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            dense (nn.Linear): Linear layer for projecting hidden states.
+            activation (nn.Tanh): Tanh activation function.
+
+        Methods:
+            forward(hidden_states: torch.Tensor) -> torch.Tensor:
+                Perform a forward pass for the BertPooler layer.
+    """
     def __init__(self, config):
+        """
+            Initailize an instance of class BertPooler.
+        """
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+            performs forward-pass for the BertPooler layer.
+
+            Args:
+                hidden_states (torch.Tensor): Hidden states of the input sequence.
+
+            Returns:
+                torch.Tensor: Pooled representation of the input sequence.
+        """
+
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
@@ -667,7 +1107,30 @@ class BertPooler(nn.Module):
 
 
 class BertPredictionHeadTransform(nn.Module):
+    """
+        This class represents the transformation layer for the prediction head in a BERT model.
+
+        The BertPredictionHeadTransform module takes the hidden states of the model and
+        performs a series of transformations, including a linear transformation, activation
+        function, and layer normalization, to prepare the hidden states for prediction tasks.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            dense (nn.Linear): Linear layer for projecting hidden states.
+            transform_act_fn (callable): Activation function for the transformation layer.
+            LayerNorm (nn.LayerNorm): Layer normalization for hidden states.
+
+        Methods:
+            forward(hidden_states: torch.Tensor) -> torch.Tensor:
+                Perform a forward pass for the BertPredictionHeadTransform layer.
+
+    """
     def __init__(self, config):
+        """
+            Initializes an instance of the class BertPredictionHeadTransform.
+        """
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         if isinstance(config.hidden_act, str):
@@ -677,6 +1140,16 @@ class BertPredictionHeadTransform(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+            Perform a forward pass for the BertPredictHeadTradform layer.
+
+            Args:
+                hidden_states(torch.Tensor) : Hidden states of the BERT model.
+
+            Returns:
+                torch.Tensor: Transformed hidden states prepared for prediction tasks.
+
+        """
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
@@ -684,7 +1157,28 @@ class BertPredictionHeadTransform(nn.Module):
 
 
 class BertLMPredictionHead(nn.Module):
+    """
+        This class represents the prediction head for Language Modeling in a BERT model.
+
+        The BertLMPredictionHead module consists of a transformation layer and output weights.
+        It is responsible for predicting the next token in a masked language modeling task.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            transform (BertPredictionHeadTransform): Transformation layer for hidden states.
+            decoder (nn.Linear): Linear layer for output weights.
+            bias (nn.Parameter): Output bias for each token.
+
+        Methods:
+            forward(hidden_states: torch.Tensor) -> torch.Tensor:
+                Perform a forward pass for the BertLMPredictionHead layer.
+    """
     def __init__(self, config):
+        """
+            Initializes an instance of the class BertLMPredictionHead.
+        """
         super().__init__()
         self.transform = BertPredictionHeadTransform(config)
 
@@ -697,39 +1191,136 @@ class BertLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+            Perform a forward pass for the BertLMPredictionHead layer.
+
+            Args:
+                hidden_states(torch.Tensor) : Hidden states of the BERT model.
+
+            Returns:
+                torch.Tensor: Predicted logits for the next token in the sequence.
+
+        """
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
 
 
 class BertOnlyMLMHead(nn.Module):
+    """
+        This class represents the Masked Language Model (MLM) head in a BERT model.
+
+        The BertOnlyMLMHead module consists of the prediction head used for masked language modeling tasks.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            predictions (BertLMPredictionHead): Prediction head for masked language modeling.
+
+        Methods:
+            forward(sequence_output: torch.Tensor) -> torch.Tensor:
+                Perform a forward pass for the BertOnlyMLMHead layer.
+    """
     def __init__(self, config):
+        """
+            Initializes an instance of the class BertOnlyMLMHead.
+        """
         super().__init__()
         self.predictions = BertLMPredictionHead(config)
 
     def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
+        """
+            Perform a forward pass for the BertOnlyMLMHead layer.
+
+            Args:
+                sequence_output(torch.Tensor): Output from the BERT model for the input sequence.
+
+            Returns:
+                torch.Tensor: Predicted logits for masked language modeling.
+        """
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
 
 class BertOnlyNSPHead(nn.Module):
+    """
+        This class represents the Next Sentence Prediction (NSP) head in a BERT model.
+
+        The BertOnlyNSPHead module is used for binary classification to predict whether two
+        input sequences are consecutive or not.
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            seq_relationship (nn.Linear): Linear layer for sequence relationship prediction.
+
+        Methods:
+            forward(pooled_output: torch.Tensor) -> torch.Tensor:
+                Perform a forward pass for the BertOnlyNSPHead layer.
+
+    """
     def __init__(self, config):
+        """
+            Initializes an instance of the class BertOnlyNSPHead.
+        """
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
-    def forward(self, pooled_output):
+    def forward(self, pooled_output: torch.Tensor) -> torch.Tensor:
+        """
+            Perform a forward pass for the BertOnlyNSPHead layer.
+
+            Args:
+                pooled_output(torch.Tensor): Pooled output from the BERT model.
+
+            Returns:
+                torch.Tensor: Predicted sequence relationship score (binary classification).
+        """
         seq_relationship_score = self.seq_relationship(pooled_output)
         return seq_relationship_score
 
 
 class BertPreTrainingHeads(nn.Module):
+    """
+        This class represents the pre-training heads in a BERT model.
+
+        The BertPreTrainingHeads module consists of two prediction heads: one for masked
+        language modeling (MLM) and another for next sentence prediction (NSP).
+
+        Args:
+            config (BertConfig): Configuration settings for the BERT model.
+
+        Attributes:
+            predictions (BertLMPredictionHead): Prediction head for masked language modeling.
+            seq_relationship (nn.Linear): Linear layer for sequence relationship prediction.
+
+        Methods:
+            forward(sequence_output: torch.Tensor, pooled_output: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+            Perform a forward pass for the BertPreTrainingHeads layer.
+    """
     def __init__(self, config):
+        """
+            Initializes an instance of the class BertPreTrainingHeads.
+        """
         super().__init__()
         self.predictions = BertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, sequence_output, pooled_output):
+        """
+            Perform a forward pass for the BertPreTrainingHeads layer.
+
+            Args:
+                sequence_output (torch.Tensor): Output from the BERT model for the input sequence.
+                pooled_output (torch.Tensor):  Pooled output from the BERT model.
+
+            Returns:
+                Tuple[torch.Tensor, torch.Tensor]: Predicted logits for MLM and sequence relationship (NSP) scores.
+
+        """
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score
@@ -737,8 +1328,24 @@ class BertPreTrainingHeads(nn.Module):
 
 class BertPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
+        An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+        models.
+        This abstract class serves as the base for all BERT-like models. It provides methods for initializing model weights,
+        loading pretrained weights, and handling gradient checkpointing for the BERT encoder.
+
+        Attributes:
+            config_class (type): Class representing the configuration settings for the model.
+            load_tf_weights (callable): Function for loading TensorFlow pretrained weights.
+            base_model_prefix (str): Prefix for the base model.
+            supports_gradient_checkpointing (bool): Indicates whether gradient checkpointing is supported.
+
+        Methods:
+            _init_weights(module):
+                Initialize the weights of the model module.
+
+            _set_gradient_checkpointing(module, value=False):
+                Set the gradient checkpointing attribute of a BertEncoder module.
+
     """
 
     config_class = BertConfig
