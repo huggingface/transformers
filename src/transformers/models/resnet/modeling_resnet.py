@@ -123,13 +123,7 @@ class ResNetBasicLayer(nn.Module):
     A classic ResNet's residual layer composed by two `3x3` convolutions.
     """
 
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        stride: int = 1,
-        activation: str = "relu",
-    ):
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
         super().__init__()
         should_apply_shortcut = in_channels != out_channels or stride != 1
         self.shortcut = (
