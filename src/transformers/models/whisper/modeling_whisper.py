@@ -578,11 +578,12 @@ class WhisperFlashAttention2(WhisperAttention):
             key_states = key_states.to(torch.float16)
             value_states = value_states.to(torch.float16)
 
+        causal = self.is_decoder and not is_cross_attention
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, padding_mask, q_len, dropout=dropout_rate
+            query_states, key_states, value_states, padding_mask, q_len, causal=causal, dropout=dropout_rate
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1)
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -590,9 +591,8 @@ class WhisperFlashAttention2(WhisperAttention):
 
         return attn_output, attn_weights, past_key_value
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, padding_mask, query_length, dropout=0.0, softmax_scale=None
+        self, query_states, key_states, value_states, padding_mask, query_length, causal=True, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -633,13 +633,13 @@ class WhisperFlashAttention2(WhisperAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=True,
+                causal=causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=True
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal,
             )
 
         return attn_output
@@ -689,7 +689,7 @@ class WhisperEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if getattr(config, "_flash_attn_2_enabled", False) and False:
+        if getattr(config, "_flash_attn_2_enabled", False):
             self.self_attn = WhisperFlashAttention2(
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
@@ -786,7 +786,7 @@ class WhisperDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        if getattr(config, "_flash_attn_2_enabled", False) and False:
+        if getattr(config, "_flash_attn_2_enabled", False):
             self.encoder_attn = WhisperFlashAttention2(
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
