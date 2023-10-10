@@ -214,6 +214,7 @@ class FunnelTokenizerFast(PreTrainedTokenizerFast):
 
         if token_ids_1 is not None:
             output += token_ids_1 + [self.sep_token_id]
+
         return output
 
     def create_token_type_ids_from_sequences(
