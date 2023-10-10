@@ -166,7 +166,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`l`, *optional*, defaults to `True`):
+        vocab_file (`str`, *optional*, defaults to `True`):
             File containing the vocabulary.
         tokenizer_file (`<fill_type>`, *optional*): <fill_docstring>
         do_lower_case (`bool`, *optional*, defaults to `True`):
