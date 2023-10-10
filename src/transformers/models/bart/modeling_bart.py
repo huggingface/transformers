@@ -345,7 +345,7 @@ class BartFlashAttention2(BartAttention):
         bsz, q_len, _ = hidden_states.size()
 
         # get query proj
-        query_states = self._shape(self.q_proj(hidden_states), -1, bsz) * self.scaling
+        query_states = self._shape(self.q_proj(hidden_states), -1, bsz)
         # get key, value proj
         # `past_key_value[0].shape[2] == key_value_states.shape[1]`
         # is checking that the `sequence_length` of the `past_key_value` is the same as
