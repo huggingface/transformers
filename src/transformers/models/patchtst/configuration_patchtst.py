@@ -37,7 +37,7 @@ class PatchTSTConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-    Parameters:
+    Args:
         num_input_channels (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
@@ -82,7 +82,8 @@ class PatchTSTConfig(PretrainedConfig):
             Consider bias in the feed-forward networks.
         activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (string) in the encoder.`"gelu"` and `"relu"` are supported.
-        pre_norm (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        pre_norm (`bool`, *optional*, defaults to `False`):
+            TODO
         positional_encoding (`str`, *optional*, defaults to `"sincos"`):
             Positional encodings. `"zeros"`, `"normal"`, `"uniform"' and `"sincos"` are supported.
         learn_pe (`bool`, *optional*, defaults to `False`):
@@ -104,8 +105,10 @@ class PatchTSTConfig(PretrainedConfig):
             Masking type. Only `"random"` is currently supported.
         mask_ratio (`float`, *optional*, defaults to 0.5):
             Masking ratio is applied to mask the input data during pretraining.
-        mask_patches (`List`, *optional*, defaults to `[2, 3]`): <fill_docstring>
-        mask_patch_ratios (`List`, *optional*, defaults to `[1, 1]`): <fill_docstring>
+        mask_patches (`List`, *optional*, defaults to `[2, 3]`):
+            TODO
+        mask_patch_ratios (`List`, *optional*, defaults to `[1, 1]`):
+            TODO
         channel_consistent_masking (`bool`, *optional*, defaults to `False`):
             If channel consistent masking is True, all the channels will have the same masking.
         unmasked_channel_indices (`list`, *optional*):
@@ -125,7 +128,7 @@ class PatchTSTConfig(PretrainedConfig):
         num_parallel_samples (`int`, *optional*, defaults to 100):
             The number of samples to generate in parallel for probablistic forecast.
 
-    Example:
+        Example:
 
     ```python
     >>> from transformers import PatchTSTConfig, PatchTSTModel
@@ -139,7 +142,6 @@ class PatchTSTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
     model_type = "patchtst"
     attribute_map = {
         "hidden_size": "d_model",
