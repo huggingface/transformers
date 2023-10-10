@@ -88,7 +88,7 @@ class LlavaProcessor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
         """
         # Model Constants
-        IMAGE_TOKEN_INDEX = 200
+        IMAGE_TOKEN_INDEX = -200
         DEFAULT_IMAGE_TOKEN = "<image>"
 
         if images is None and text is None:
@@ -148,6 +148,7 @@ class LlavaProcessor(ProcessorMixin):
                 new_images.append(image_encoding)
                 if all(x.shape == new_images[0].shape for x in new_images):
                     image_encoding = torch.stack(new_images, dim=0)
+
             else:
                 image_encoding = self.image_processor.preprocess(images, return_tensors=return_tensors)["pixel_values"]
 
@@ -203,7 +204,8 @@ class LlavaProcessor(ProcessorMixin):
     # overwrite to load the Q-Former tokenizer from a separate folder
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
+        vision_model = CLIPVisionModel.from_pretrained(pretrained_model_name_or_path, subfolder="clip")
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         args.append(vision_model)
         return cls(*args)
+
