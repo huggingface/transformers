@@ -51,7 +51,11 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
+<<<<<<< HEAD
         vocab_file (`str`, *optional*, defaults to `True`):
+=======
+        vocab_file (`str`l`, *optional*, defaults to `True`):
+>>>>>>> 57a5bb72dd2c2d5332146a2c823b9cbc4ddaa95d
             File containing the vocabulary.
         tokenizer_file (`<fill_type>`, *optional*): <fill_docstring>
         do_lower_case (`bool`, *optional*, defaults to `True`):
@@ -124,7 +128,6 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
             normalizer_state["strip_accents"] = strip_accents
             normalizer_state["handle_chinese_chars"] = tokenize_chinese_chars
             self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
-
         self.do_lower_case = do_lower_case
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
@@ -148,7 +151,6 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
 
         if token_ids_1 is not None:
             output += token_ids_1 + [self.sep_token_id]
-
         return output
 
     def create_token_type_ids_from_sequences(
