@@ -206,8 +206,8 @@ class PatchTSTTranspose(nn.Module):
     """
     Parameters:
     Transpose the tensor to the dimension defined in **dims**
-        dims (`list`): list of dimensions to be transposed
-        contiguous (`bool`): if True, the transposed tensor is contiguous
+        dims (`list`): list of dimensions to be transposed contiguous (`bool`): if True, the transposed tensor is
+        contiguous
     """
 
     def __init__(self, *dims, contiguous=False):
@@ -1373,7 +1373,9 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
         # past_values: [bs x num_channels x num_patches x d_model] or
         # [bs x num_channels x (num_patches+1) x d_model] if use cls_token
-        model_output = self.model(past_values, output_hidden_states=output_hidden_states)
+        model_output = self.model(
+            past_values, past_observed_mask=past_observed_mask, output_hidden_states=output_hidden_states
+        )
 
         # model_output[0]: [bs x num_channels x num_patches x patch_length] or
         # [bs x num_channels x (num_patches+1) x patch_length] if use cls_token
