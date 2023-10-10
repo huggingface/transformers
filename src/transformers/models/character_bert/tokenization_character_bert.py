@@ -194,6 +194,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             )
 
         super().__init__(
+            mlm_vocab_file=None,
+            max_word_length=50,
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
             never_split=never_split,
@@ -371,14 +373,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             #else:
             return self._convert_id_to_token(ids)
         tokens = []
-        for index in ids:
-            index = int(index)
-            if skip_special_tokens and index in self.all_special_ids:
-                continue
-            if index in self._added_tokens_decoder:
-                tokens.append(self._added_tokens_decoder[index].content)
-            else:
-                tokens.append(self._convert_id_to_token(index))
+        for character_ids in ids:
+            tokens.append(self._convert_id_to_token(character_ids))
         return tokens
 
     def convert_tokens_to_string(self, tokens):
