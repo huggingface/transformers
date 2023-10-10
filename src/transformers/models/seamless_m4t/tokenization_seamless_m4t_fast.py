@@ -76,10 +76,6 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     Args:
         vocab_file (`str`, *optional*):
             Path to the vocabulary file.
-        language_code (`List[str]`, *optional*):
-            List of languages that will be supported by the tokenizer. If non-specified, it will defaults to the
-            languages supported by the [large version of Meta's
-            seamless-M4T](https://huggingface.co/facebook/seamless-m4t-large).
         tokenizer_file (`str`, *optional*):
             The path to a tokenizer file to use instead of the vocab file.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
@@ -134,7 +130,6 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file=None,
-        language_code: Optional[List] = None,
         tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",
@@ -149,7 +144,6 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     ):
         super().__init__(
             vocab_file=vocab_file,
-            language_code=language_code,
             tokenizer_file=tokenizer_file,
             bos_token=bos_token,
             eos_token=eos_token,

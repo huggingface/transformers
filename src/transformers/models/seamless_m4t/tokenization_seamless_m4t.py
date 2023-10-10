@@ -51,7 +51,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
-    Construct an SeamlessM4T tokenizer.
+    Construct a SeamlessM4T tokenizer.
 
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
@@ -162,10 +162,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.fairseq_offset = 1
 
         self.sp_model_size = len(self.sp_model)
-
-        # self.fairseq_tokens_to_ids["<MINED_DATA>"] = current_id
-        # self.fairseq_tokens_to_ids["<MMT_BT_DATA>"] = current_id + 1
-        # self.fairseq_tokens_to_ids["<SMT_BT_DATA>"] = current_id + 2
 
         self._src_lang = f"__{src_lang}__" if "__" not in src_lang else src_lang
         self._tgt_lang = f"__{tgt_lang}__" if "__" not in tgt_lang else tgt_lang
