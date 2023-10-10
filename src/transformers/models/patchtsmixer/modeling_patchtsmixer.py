@@ -40,7 +40,7 @@ _CONFIG_FOR_DOC = "PatchTSMixerConfig"
 
 PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ibm/patchtsmixer-etth1-pretrain",
-    # See all PatchTST models at https://huggingface.co/models?filter=patchtsmixer
+    # See all PatchTSMixer models at https://huggingface.co/models?filter=patchtsmixer
 ]
 
 
@@ -767,7 +767,7 @@ class ForecastHead(nn.Module):
         if self.forecast_channel_indices is not None:
             self.forecast_channel_indices.sort()
         self.mode = mode
-
+        self.distribution_output = distribution_output
         if self.mode in ["common_channel", "mix_channel"]:
             if distribution_output is None:
                 self.base_forecast_block = nn.Sequential(
@@ -775,7 +775,10 @@ class ForecastHead(nn.Module):
                     nn.Linear((num_patches * num_features), forecast_len),
                 )
             else:
-                self.base_forecast_block = distribution_output.get_parameter_projection(num_patches * num_features)
+                self.base_forecast_block = nn.Sequential(
+                    nn.Dropout(head_dropout),
+                    distribution_output.get_parameter_projection(num_patches * num_features)
+                )
 
             self.flatten = nn.Flatten(start_dim=-2)
 
@@ -786,7 +789,10 @@ class ForecastHead(nn.Module):
                     nn.Linear((num_patches * num_features), forecast_len * in_channels),
                 )
             else:
-                self.base_forecast_block = distribution_output.get_parameter_projection(num_patches * num_features)
+                self.base_forecast_block = nn.Sequential(
+                    nn.Dropout(head_dropout),
+                    distribution_output.get_parameter_projection(num_patches * num_features)
+                )
 
             self.flatten = nn.Flatten(start_dim=1)
 
@@ -805,15 +811,35 @@ class ForecastHead(nn.Module):
             # )  # [bs x n_vars x num_patch * num_features]
 
             forecast = self.base_forecast_block(x)  # [bs x n_vars x forecast_len]
-            forecast = forecast.transpose(-1, -2)  # [bs x forecast_len x n_vars]
+            if isinstance(forecast, tuple):
+                forecast = tuple(
+                    z.transpose(-1,-2) for z in forecast
+                )
+            else:
+                forecast = forecast.transpose(-1, -2)  # [bs x forecast_len x n_vars]
+
+            
 
         else:
             x = self.flatten(x)  # x: [bs x num_patches*num_features]
             forecast = self.base_forecast_block(x)  # [bs x forecast_len * self.nvars]
-            forecast = forecast.reshape(-1, self.forecast_len, self.nvars)  # y: [bs x forecast_len x n_vars]
 
+            if isinstance(forecast, tuple):
+                forecast = tuple(
+                    z.reshape(-1, self.forecast_len, self.nvars) for z in forecast
+                )
+            else:
+                forecast = forecast.reshape(-1, self.forecast_len, self.nvars)  # [bs x forecast_len x n_vars]
+
+            
         if self.forecast_channel_indices is not None:
-            forecast = forecast[..., self.forecast_channel_indices]
+            if isinstance(forecast, tuple):
+                forecast = tuple(
+                    z[..., self.forecast_channel_indices] for z in forecast
+                )
+            else:
+                forecast = forecast[..., self.forecast_channel_indices]  # [bs x forecast_len x n_vars]
+
 
         return forecast
 
@@ -847,6 +873,7 @@ class LinearHead(nn.Module):
         output_range: list = None,
         head_agg: str = "max_pool",
         mode: str = "common_channel",
+        distribution_output=None,
     ):
         super().__init__()
         self.nvars = in_channels
@@ -865,13 +892,21 @@ class LinearHead(nn.Module):
             mul_factor = 1
 
         if mode != "flatten":
-            self.linear = nn.Linear(num_features * in_channels * mul_factor, output_dim)
+            if distribution_output is None:
+                self.projection = nn.Linear(num_features * in_channels * mul_factor, output_dim)
+            else:
+                self.projection = distribution_output.get_parameter_projection(num_features * in_channels * mul_factor)
+
             if self.head_agg is None:
                 self.flatten = nn.Flatten(start_dim=-3)
             else:
                 self.flatten = nn.Flatten(start_dim=-2)
         else:
-            self.linear = nn.Linear(num_features * mul_factor, output_dim)
+            if distribution_output is None:
+                self.projection = nn.Linear(num_features * mul_factor, output_dim)
+            else:
+                self.projection = distribution_output.get_parameter_projection(num_features * mul_factor)
+            
             if self.head_agg is None:
                 self.flatten = nn.Flatten(start_dim=-2)
             else:
@@ -900,7 +935,7 @@ class LinearHead(nn.Module):
         if self.flatten:
             x = self.flatten(x)
         x = self.dropout(x)
-        x = self.linear(x)  # bs x output_dim
+        x = self.projection(x)  # bs x output_dim
 
         if self.output_range is not None:
             x = torch.sigmoid(x) * (self.output_range[1] - self.output_range[0]) + self.output_range[0]
@@ -1744,16 +1779,23 @@ class PatchTSMixerForForecastOutput(ModelOutput):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
             Total loss.
+        loc (`torch.FloatTensor`, *optional* of shape `(batch_size, 1, input_size)`):
+            Input mean
+        scale (`torch.FloatTensor`, *optional* of shape `(batch_size, 1, input_size)`):
+            Input std dev
+
     """
 
     prediction_logits: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None
+    loc: torch.FloatTensor = None
+    scale: torch.FloatTensor = None
 
 
 @dataclass
-class SamplePatchTSTForecastOutput(ModelOutput):
+class SamplePatchTSMixerForecastOutput(ModelOutput):
     """
     Base class for time series model's predictions outputs that contains the sampled values from the chosen
     distribution.
@@ -1821,7 +1863,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             if config.mode in ["common_channel", "mix_channel"]:
                 dim = config.forecast_len
             else:
-                dim = config.forecast_len * config.in_channels
+                dim = config.forecast_len * config.input_size
             
             if config.distribution_output == "student_t":
                 self.distribution_output = StudentTOutput(dim=dim)
@@ -1844,6 +1886,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             head_dropout=config.head_dropout,
             mode=config.mode,
             forecast_channel_indices=config.forecast_channel_indices,
+            distribution_output=self.distribution_output,
         )
         
         # Initialize weights and apply final processing
@@ -1879,39 +1922,92 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         if target_values is not None and return_loss is True:
             if self.config.forecast_channel_indices is not None:
-                y_hat_unscaled = (
-                    y_hat * model_output.scale[..., self.config.forecast_channel_indices]
-                    + model_output.loc[..., self.config.forecast_channel_indices]
-                )
                 if self.distribution_output:
+                    
                     distribution = self.distribution_output.distribution(
-                        y_hat_unscaled
+                        y_hat,
+                        loc=model_output.loc[..., self.config.forecast_channel_indices], 
+                        scale=model_output.scale[..., self.config.forecast_channel_indices]
                     )
                     loss_val = self.loss(distribution, target_values[..., self.config.forecast_channel_indices])
                     # take average of the loss
                     loss_val = weighted_average(loss_val)
                 else:
-                    loss_val = self.loss(y_hat_unscaled, target_values[..., self.config.forecast_channel_indices])
+                    y_hat = (
+                        y_hat * model_output.scale[..., self.config.forecast_channel_indices]
+                        + model_output.loc[..., self.config.forecast_channel_indices]
+                        )
+                    loss_val = self.loss(y_hat, target_values[..., self.config.forecast_channel_indices])
             else:
-                y_hat_unscaled = y_hat * model_output.scale + model_output.loc
 
                 if self.distribution_output:
+                    
                     distribution = self.distribution_output.distribution(
-                        y_hat_unscaled
+                        y_hat, loc=model_output.loc, scale=model_output.scale
                     )
                     loss_val = self.loss(distribution, target_values)
                     loss_val = weighted_average(loss_val)
                 else:
-                    loss_val = self.loss(y_hat_unscaled, target_values)
+                    y_hat = y_hat * model_output.scale + model_output.loc
+                    loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
         return PatchTSMixerForForecastOutput(
-            prediction_logits=y_hat_unscaled,  # tensor [bs x forecast_len x input_size]
+            prediction_logits=y_hat,  # tensor [bs x forecast_len x input_size]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
+            loc = model_output.loc,
+            scale = model_output.scale,
         )
+    
+
+    def generate(
+        self,
+        context_values: torch.Tensor,
+        observed_mask: Optional[torch.Tensor] = None,
+    ) -> SamplePatchTSMixerForecastOutput:
+        """
+        Generate sequences of sample predictions from a model with a probability distribution head.
+
+        Parameters:
+            context_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Past values of the time series that serves as context in order to predict the future.
+
+            observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
+        Return:
+            [`SamplePatchTSMixerForecastOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of samples, prediction_length,
+            num_input_channels)`.
+        """
+        # get number of samples
+        num_parallel_samples = self.config.num_parallel_samples
+
+        # get model output
+        outputs = self(
+            context_values=context_values,
+            target_values=None,
+            observed_mask=observed_mask,
+            output_hidden_states=False,
+        )
+
+        # get distribution
+        distribution = self.distribution_output.distribution(
+            outputs.prediction_logits, loc=outputs.loc, scale=outputs.scale
+        )
+        # get samples
+        samples = [
+            distribution.sample() for _ in range(num_parallel_samples)
+        ]  # samples: list of [bs x forecast_len x num_channels]
+        # stack tensors
+        samples = torch.stack(samples, dim=1)  # [bs x num_samples x forecast_len x num_channels]
+        return SamplePatchTSMixerForecastOutput(sequences=samples)
 
 
 @dataclass
