@@ -827,6 +827,8 @@ class PushToHubMixin:
                 Whether or not to convert the model weights in safetensors format for safer serialization.
             revision (`str`, *optional*):
                 Branch to push the uploaded files to.
+            commit_description (`str`, *optional*):
+                The description of the commit that will be created
 
         Examples:
 
