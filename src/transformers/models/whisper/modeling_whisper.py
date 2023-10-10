@@ -464,16 +464,27 @@ class WhisperAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+# Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->Whisper
+class WhisperFlashAttention2(WhisperAttention):
+    pass
+
 # Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper
 class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = WhisperAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-        )
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self.self_attn = WhisperFlashAttention2(
+                embed_dim=self.embed_dim,
+                num_heads=config.encoder_attention_heads,
+                dropout=config.attention_dropout,
+            )
+        else:
+            self.self_attn = WhisperAttention(
+                embed_dim=self.embed_dim,
+                num_heads=config.encoder_attention_heads,
+                dropout=config.attention_dropout,
+            )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -539,23 +550,39 @@ class WhisperDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = WhisperAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self.self_attn = WhisperFlashAttention2(
+                embed_dim=self.embed_dim,
+                num_heads=config.encoder_attention_heads,
+                dropout=config.attention_dropout,
+                is_decoder=True,
+            )
+        else:
+            self.self_attn = WhisperAttention(
+                embed_dim=self.embed_dim,
+                num_heads=config.encoder_attention_heads,
+                dropout=config.attention_dropout,
+                is_decoder=True,
+            )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = WhisperAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
+        if getattr(config, "_flash_attn_2_enabled", False):
+            self.encoder_attn = WhisperFlashAttention2(
+                embed_dim=self.embed_dim,
+                num_heads=config.decoder_attention_heads,
+                dropout=config.attention_dropout,
+                is_decoder=True,
+            )
+        else:
+            self.encoder_attn = WhisperAttention(
+                embed_dim=self.embed_dim,
+                num_heads=config.decoder_attention_heads,
+                dropout=config.attention_dropout,
+                is_decoder=True,
+            )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
