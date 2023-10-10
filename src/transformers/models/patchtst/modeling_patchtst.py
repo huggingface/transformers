@@ -42,14 +42,7 @@ PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST
 class PatchTSTAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper
-
-    Parameters:
-        hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, d_model)`):
-            Input to the multi-head attention block
-
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
         self,
@@ -78,8 +71,8 @@ class PatchTSTAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, sequence_length: int, bsz: int):
-        return tensor.view(bsz, sequence_length, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -1130,7 +1123,7 @@ class PatchTSTStdScaler(nn.Module):
     Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
     by subtracting from the mean and dividing by the standard deviation.
 
-    Parameters:
+    Args:
         dim (`int`):
             Dimension along which to calculate the mean and standard deviation.
         keepdim (`bool`, *optional*, defaults to `False`):
@@ -1164,7 +1157,7 @@ class PatchTSTMeanScaler(nn.Module):
     Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
     accordingly.
 
-    Parameters:
+    Args:
         dim (`int`):
             Dimension along which to compute the scale.
         keepdim (`bool`, *optional*, defaults to `False`):
@@ -1221,7 +1214,7 @@ class PatchTSTNOPScaler(nn.Module):
     """
     Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
 
-    Parameters:
+    Args:
         dim (`int`):
             Dimension along which to compute the scale.
         keepdim (`bool`, *optional*, defaults to `False`):
