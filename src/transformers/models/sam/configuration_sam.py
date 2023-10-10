@@ -51,6 +51,15 @@ class SamPromptEncoderConfig(PretrainedConfig):
             The number of point embeddings to be used.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the encoder and pooler.
+    Note:
+        The following additional arguments are available for controlling tokenization and special tokens:
+        pad_token_id (`int`, *optional*):
+            The token id used for padding in the input sequences.
+        bos_token_id (`int`, *optional*):
+            The token id used for the beginning of the input sequences.
+        eos_token_id (`int`, *optional*):
+            The token id used for the end of the input sequences.
+
     """
 
     def __init__(
@@ -254,6 +263,12 @@ class SamConfig(PretrainedConfig):
 
         kwargs (*optional*):
             Dictionary of keyword arguments.
+        pad_token_id (`int`, *optional*):
+            The token id used for padding in the input sequences.
+        bos_token_id (`int`, *optional*):
+            The token id used for the beginning of the input sequences.
+        eos_token_id (`int`, *optional*):
+            The token id used for the end of the input sequences.
 
     Example:
 
