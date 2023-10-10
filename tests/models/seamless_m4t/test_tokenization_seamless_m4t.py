@@ -488,10 +488,10 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
 
     def test_special_tokens_unaffacted_by_save_load(self):
         tmpdirname = tempfile.mkdtemp()
-        original_special_tokens = self.tokenizer.fairseq_tokens_to_ids
+        original_special_tokens = self.tokenizer.additional_special_tokens
         self.tokenizer.save_pretrained(tmpdirname)
         new_tok = SeamlessM4TTokenizer.from_pretrained(tmpdirname)
-        self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
+        self.assertListEqual(new_tok.additional_special_tokens, original_special_tokens)
 
     @require_torch
     def test_enro_tokenizer_prepare_batch(self):

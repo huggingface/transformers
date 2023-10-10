@@ -25,6 +25,7 @@ from ...tokenization_utils import (
     PreTrainedTokenizer,
     TextInput,
 )
+from ...tokenization_utils_base import AddedToken
 from ...utils import PaddingStrategy, logging
 
 
@@ -156,7 +157,12 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         # fairseq  | '<pad>'   | '<unk>' | '<s>' | '</s>' | 'an' | 'en' | '▁d' | 'er' | 'in' | '▁s'
 
         # Mimic fairseq token-to-id alignment for the first 4 token
-        self.fairseq_tokens_to_ids = {pad_token: 0, unk_token: 1, bos_token: 2, eos_token: 3}
+        self._added_tokens_decoder = {
+            0: AddedToken(pad_token, special=True),
+            1: AddedToken(unk_token, special=True),
+            2: AddedToken(bos_token, special=True),
+            3: AddedToken(eos_token, special=True),
+        }
 
         # The first "real" token "an" has position 4 in the original fairseq vocab and position 3 in the spm vocab
         self.fairseq_offset = 1
@@ -405,10 +411,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         vocab = {
-            self._convert_id_to_token(i): i for i in range(self.fairseq_offset, self.vocab_size + self.fairseq_offset)
+            self.convert_ids_to_tokens(i): i for i in range(self.fairseq_offset, self.vocab_size + self.fairseq_offset)
         }
-        # need to ensure that fairseq_tokens_to_id are placed at the beginning of the vocabulary
-        vocab.update(self.fairseq_tokens_to_ids)
         vocab.update(self.added_tokens_encoder)
         return vocab
 
@@ -418,8 +422,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token in self.fairseq_tokens_to_ids:
-            return self.fairseq_tokens_to_ids[token]
         spm_id = self.sp_model.PieceToId(token)
 
         # Need to return unknown token if the SP model returned 0

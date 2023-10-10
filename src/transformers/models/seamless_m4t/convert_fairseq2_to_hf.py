@@ -386,7 +386,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--model_type",
-        default="large",
+        default="medium",
         type=str,
         help="Model type.",
     )
@@ -400,7 +400,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--repo_id",
-        default="facebook/hf-seamless-m4t-large",
+        default="facebook/hf-seamless-m4t-medium",
         type=str,
         help="Repo ID.",
     )

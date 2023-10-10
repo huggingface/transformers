@@ -73,14 +73,7 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
-
-        # FIX: seamlessM4Tprocessor is using tokenizer fast, which adds the new bos at the end of the vocabulary instead
-
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        vocab = tokenizer_add_kwargs.get_vocab()
-        for key, val in processor.tokenizer.get_vocab().items():
-            if vocab[key] != val:
-                print(key, val, vocab[key])
 
         tokenizer_instance = isinstance(processor.tokenizer, SeamlessM4TTokenizerFast) or isinstance(
             processor.tokenizer, SeamlessM4TTokenizer
