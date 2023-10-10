@@ -895,8 +895,7 @@ class PushToHubMixin:
             files_timestamps = self._get_files_timestamps(work_dir)
 
             # Save all files.
-            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=True)
-            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=False)
+            self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
 
             return self._upload_modified_files(
                 work_dir,
