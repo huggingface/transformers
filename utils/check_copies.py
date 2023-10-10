@@ -138,7 +138,10 @@ def find_code_in_transformers(object_name: str, base_path: str = TRANSFORMERS_PA
     Find and return the source code of an object.
 
     Args:
-        object_name (`str`): The name of the object we want the source code of.
+        object_name (`str`):
+            The name of the object we want the source code of.
+        base_path (`str`, *optional*, defaults to `TRANSFORMERS_PATH`):
+            The path to the base folder where files are checked.
 
     Returns:
         `str`: The source code of the object.
