@@ -19,11 +19,11 @@ import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-import torch.nn.functional as F
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -67,6 +67,7 @@ def _get_unpad_data(padding_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
+
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
@@ -155,6 +156,7 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         ).expand(bsz, -1)
 
         return super().forward(positions + self.offset)
+
 
 class BartAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -309,8 +311,10 @@ class BartAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped, past_key_value
 
+
 class BartFlashAttention2(BartAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
 
@@ -334,7 +338,7 @@ class BartFlashAttention2(BartAttention):
         bsz, q_len, _ = hidden_states.size()
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self._shape(self.q_proj(hidden_states), -1, bsz) * self.scaling
         # get key, value proj
         # `past_key_value[0].shape[2] == key_value_states.shape[1]`
         # is checking that the `sequence_length` of the `past_key_value` is the same as
@@ -402,8 +406,8 @@ class BartFlashAttention2(BartAttention):
             query_states, key_states, value_states, padding_mask, q_len, dropout=dropout_rate
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
-        attn_output = self.o_proj(attn_output)
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
@@ -500,6 +504,7 @@ class BartFlashAttention2(BartAttention):
             (cu_seqlens_q, cu_seqlens_k),
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
+
 
 class BartEncoderLayer(nn.Module):
     def __init__(self, config: BartConfig):

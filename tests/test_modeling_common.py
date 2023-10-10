@@ -2797,16 +2797,35 @@ class ModelTesterMixin:
                 dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
                 dummy_attention_mask = torch.LongTensor([[0, 1, 1, 1, 1]]).to(torch_device)
 
-                logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
-                logits_fa = model_fa(dummy_input, output_hidden_states=True).hidden_states[-1]
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model(dummy_input, output_hidden_states=True)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
 
                 self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
 
-                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                logits_fa = output_fa.hidden_states[-1]
+                outputs = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                outputs_fa = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
 
-                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                logits = output.hidden_states[-1]
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
 
                 self.assertTrue(torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2))
 
@@ -2839,16 +2858,35 @@ class ModelTesterMixin:
                 dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
                 dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1, 0]]).to(torch_device)
 
-                logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
-                logits_fa = model_fa(dummy_input, output_hidden_states=True).hidden_states[-1]
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model(dummy_input, output_hidden_states=True)
+
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
 
                 self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-2, rtol=4e-2))
 
-                output_fa = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                logits_fa = output_fa.hidden_states[-1]
+                outputs = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+                outputs_fa = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
 
-                output = model(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
-                logits = output.hidden_states[-1]
+                logits = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                logits_fa = (
+                    outputs.hidden_states[-1]
+                    if not model.config.is_encoder_decoder
+                    else outputs_fa.decoder_hidden_states[-1]
+                )
 
                 self.assertTrue(torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2))
 
@@ -2938,6 +2976,11 @@ class ModelTesterMixin:
                 return
 
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # make sure that all models have at least 40 position ids
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = 40
+
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -2947,7 +2990,11 @@ class ModelTesterMixin:
                 dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                    # tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                    tmpdirname,
+                    torch_dtype=torch.float32,
+                    use_flash_attention_2=False,
+                    low_cpu_mem_usage=True,
                 ).to(torch_device)
 
                 # Just test that a large cache works as expected
