@@ -51,6 +51,7 @@ from transformers.utils import direct_transformers_import
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_copies.py
 TRANSFORMERS_PATH = "src/transformers"
+MODEL_TEST_PATH = "tests/models"
 PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
 
@@ -132,7 +133,7 @@ def _should_continue(line: str, indent: str) -> bool:
     return line.startswith(indent) or len(line.strip()) == 0 or re.search(r"^\s*\)(\s*->.*:|:)\s*$", line) is not None
 
 
-def find_code_in_transformers(object_name: str) -> str:
+def find_code_in_transformers(object_name: str, base_path: str = TRANSFORMERS_PATH) -> str:
     """
     Find and return the source code of an object.
 
@@ -147,7 +148,7 @@ def find_code_in_transformers(object_name: str) -> str:
 
     # First let's find the module where our object lives.
     module = parts[i]
-    while i < len(parts) and not os.path.isfile(os.path.join(TRANSFORMERS_PATH, f"{module}.py")):
+    while i < len(parts) and not os.path.isfile(os.path.join(base_path, f"{module}.py")):
         i += 1
         if i < len(parts):
             module = os.path.join(module, parts[i])
@@ -156,7 +157,7 @@ def find_code_in_transformers(object_name: str) -> str:
             f"`object_name` should begin with the name of a module of transformers but got {object_name}."
         )
 
-    with open(os.path.join(TRANSFORMERS_PATH, f"{module}.py"), "r", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(base_path, f"{module}.py"), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
 
     # Now let's find the class / func in the code!
@@ -291,7 +292,9 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
 
         # There is some copied code here, let's retrieve the original.
         indent, object_name, replace_pattern = search.groups()
-        theoretical_code = find_code_in_transformers(object_name)
+
+        base_path = TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
+        theoretical_code = find_code_in_transformers(object_name, base_path=base_path)
         theoretical_indent = get_indent(theoretical_code)
 
         start_index = line_index + 1 if indent == theoretical_indent else line_index
@@ -357,6 +360,9 @@ def check_copies(overwrite: bool = False):
             Whether or not to overwrite the copies when they don't match.
     """
     all_files = glob.glob(os.path.join(TRANSFORMERS_PATH, "**/*.py"), recursive=True)
+    all_test_files = glob.glob(os.path.join(MODEL_TEST_PATH, "**/*.py"), recursive=True)
+    all_files = list(all_files) + list(all_test_files)
+
     diffs = []
     for filename in all_files:
         new_diffs = is_copy_consistent(filename, overwrite)
