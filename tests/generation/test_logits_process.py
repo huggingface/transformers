@@ -812,7 +812,7 @@ class LogitsProcessorTest(unittest.TestCase):
         esp = BarkEarlyStoppingLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
         actual_scores = esp(input_ids, scores)
         expected_scores_list = [
-            [float("-inf"), float("-inf"), 0.1, float("-inf")],
-            [float("-inf"), float("-inf"), 0.3, float("-inf")],
+            [float("-inf"), float("-inf"), scores[0][0], float("-inf")],
+            [float("-inf"), float("-inf"), scores[0][0], float("-inf")],
         ]
         self.assertListEqual(actual_scores.tolist(), expected_scores_list)

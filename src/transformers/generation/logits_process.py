@@ -1729,9 +1729,8 @@ class BarkEarlyStoppingLogitsProcessor(LogitsProcessor):
             early_stop_scores = torch.ones_like(scores) * -float("inf")
             early_stop_scores[:, self.eos_token_id] = scores[:, self.eos_token_id]
 
-            # TODO: confirm threshold. mask requires work.
-            do_early_stop = scores[:, self.eos_token_id, None] > np.log(self.min_eos_p)
-
-            scores = torch.where(do_early_stop, early_stop_scores, scores)
+            do_early_stop = torch.any(scores[:, self.eos_token_id] > np.log(self.min_eos_p))
+            if do_early_stop:
+                scores = early_stop_scores
 
         return scores
