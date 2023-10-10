@@ -187,6 +187,7 @@ def find_code_in_transformers(object_name: str, base_path: str = TRANSFORMERS_PA
 
 
 _re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)\s*($|\S.*$)")
+_re_copy_warning_for_test_file = re.compile(r"^(\s*)#\s*Copied from\s+models\.(\S+\.\S+)\s*($|\S.*$)")
 _re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
 _re_fill_pattern = re.compile(r"<FILL\s+[^>]*>")
 
@@ -285,7 +286,11 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
     line_index = 0
     # Not a for loop cause `lines` is going to change (if `overwrite=True`).
     while line_index < len(lines):
-        search = _re_copy_warning.search(lines[line_index])
+        search_re = _re_copy_warning
+        if filename.startswith("tests"):
+            search_re = _re_copy_warning_for_test_file
+
+        search = search_re.search(lines[line_index])
         if search is None:
             line_index += 1
             continue
