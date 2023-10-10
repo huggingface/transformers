@@ -133,21 +133,26 @@ def _should_continue(line: str, indent: str) -> bool:
     return line.startswith(indent) or len(line.strip()) == 0 or re.search(r"^\s*\)(\s*->.*:|:)\s*$", line) is not None
 
 
-def find_code_in_transformers(object_name: str, base_path: str = TRANSFORMERS_PATH) -> str:
+def find_code_in_transformers(object_name: str, base_path: str = None) -> str:
     """
     Find and return the source code of an object.
 
     Args:
         object_name (`str`):
             The name of the object we want the source code of.
-        base_path (`str`, *optional*, defaults to `TRANSFORMERS_PATH`):
-            The path to the base folder where files are checked.
+        base_path (`str`, *optional*):
+            The path to the base folder where files are checked. If not set, it will be set to `TRANSFORMERS_PATH`.
 
     Returns:
         `str`: The source code of the object.
     """
     parts = object_name.split(".")
     i = 0
+
+    # We can't set this as the default value in the argument, otherwise `CopyCheckTester` will fail, as it uses a
+    # patched temp directory.
+    if base_path is None:
+        base_path = TRANSFORMERS_PATH
 
     # Detail: the `Copied from` statement is originally designed to work with the last part of `TRANSFORMERS_PATH`,
     # (which is `transformers`). The same should be applied for `MODEL_TEST_PATH`. However, its last part is `models`
