@@ -144,7 +144,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         pad_token (`str`, *optional*):
-            Id of the padding token in the vocabulary.
+            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (GPT2 tokenizer detect beginning of words by the preceding space).

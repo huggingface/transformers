@@ -238,7 +238,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         pad_token (`str`, *optional*):
-            Id of the padding token in the vocabulary.
+            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
@@ -1029,7 +1029,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     if previous_tokens:
         if return_timestamps:
             logger.warning(
-                "Whisper did not predict an ending timestamp, which can happen if audio is cut off in the middle of a word. "
+                "Whisper did not predict an ending timestamp, which can happen if audio is cut off in the middle of a word. " 
                 "Also make sure WhisperTimeStampLogitsProcessor was used during generation."
             )
         # Happens when we don't use timestamps
