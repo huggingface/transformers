@@ -19,8 +19,6 @@ Processor class for LlavaModel
 import os
 from typing import List, Optional, Union
 
-from PIL import Image
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
@@ -28,8 +26,12 @@ from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStr
 from ...utils import (
     TensorType,
     is_torch_available,
+    is_vision_available,
 )
 
+
+if is_vision_available():
+    from PIL import Image
 
 if is_torch_available():
     import torch
