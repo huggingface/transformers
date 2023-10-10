@@ -458,7 +458,7 @@ class PatchTSTPatchify(nn.Module):
 
 class PatchTSTMasking(nn.Module):
     """
-    Class for random or forcast masking on inputs.
+    Class to perform random or forecast masking.
 
     Parameters:
         mask_type (str, optional): Masking type. Allowed values are random, forecast. Defaults to random.
