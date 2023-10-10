@@ -545,8 +545,8 @@ class BartEncoderLayer(nn.Module):
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
         layer_head_mask: torch.FloatTensor,
-        output_attentions: Optional[bool] = False,
         padding_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
@@ -643,10 +643,10 @@ class BartDecoderLayer(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
         padding_mask: Optional[torch.Tensor] = None,
         encoder_padding_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = True,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -1120,12 +1120,14 @@ class BartEncoder(BartPreTrainedModel):
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
+                        padding_mask
                     )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
                         attention_mask,
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                        padding_mask=padding_mask,
                         output_attentions=output_attentions,
                     )
 
@@ -1403,10 +1405,10 @@ class BartDecoder(BartPreTrainedModel):
                         cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
                     ),
                     past_key_value=past_key_value,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
                     padding_mask=padding_mask,
                     encoder_padding_mask=encoder_padding_mask,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
                 )
             hidden_states = layer_outputs[0]
 
