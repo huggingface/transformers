@@ -203,8 +203,6 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
-            Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,

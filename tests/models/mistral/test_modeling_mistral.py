@@ -15,10 +15,13 @@
 """ Testing suite for the PyTorch Mistral model. """
 
 
+import tempfile
 import unittest
 
+from pytest import mark
+
 from transformers import AutoTokenizer, MistralConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_flash_attn, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -351,6 +354,75 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_past_key_values_format(self):
         pass
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_padding_right(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
+                ).to(torch_device)
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+
+                model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                ).to(torch_device)
+
+                with self.assertRaises(ValueError):
+                    _ = model.generate(
+                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
+                    )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_padding_right(self):
+        import torch
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                )
+                model_fa.to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                )
+                model.to(torch_device)
+
+                dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1, 0]]).to(torch_device)
+
+                _ = model(dummy_input, output_hidden_states=True).hidden_states[-1]
+                with self.assertRaises(ValueError):
+                    _ = model_fa(
+                        dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True
+                    ).hidden_states[-1]
+
 
 @require_torch
 class MistralIntegrationTest(unittest.TestCase):
@@ -358,7 +430,8 @@ class MistralIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
-        out = model(torch.tensor([input_ids])).logits
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        out = model(input_ids).logits.cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)

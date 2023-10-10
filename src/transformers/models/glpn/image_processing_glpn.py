@@ -48,7 +48,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor (`int`, *optional*, defaults to 32):
             When `do_resize` is `True`, images are resized so their height and width are rounded down to the closest
             multiple of `size_divisor`. Can be overridden by `size_divisor` in `preprocess`.
-        resample (`PIL.Image` resampling filter, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Can be

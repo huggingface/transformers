@@ -15,7 +15,6 @@
 """PyTorch Falcon model."""
 
 import math
-import os
 from typing import Optional, Tuple, Union
 
 import torch
@@ -39,7 +38,6 @@ from ...utils import (
     is_flash_attn_available,
     logging,
 )
-from ..auto.configuration_auto import sanitize_code_revision
 from .configuration_falcon import FalconConfig
 
 
@@ -110,15 +108,15 @@ class FalconRotaryEmbedding(nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.seq_len_cached = seq_len
-        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(seq_len, device=device).to(dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1).to(device)
 
         if dtype in [torch.float16, torch.bfloat16]:
             emb = emb.float()
 
-        self.cos_cached = emb.cos()[None, :, :]
-        self.sin_cached = emb.sin()[None, :, :]
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
@@ -135,8 +133,8 @@ class FalconRotaryEmbedding(nn.Module):
         self.sin_cached = self.sin_cached.to(device)
 
         # Gather cos, sin at the designated position ids
-        cos = self.cos_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
-        sin = self.sin_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
+        cos = self.cos_cached[position_ids]  # [bs, seq_len, dim]
+        sin = self.sin_cached[position_ids]  # [bs, seq_len, dim]
         return cos, sin
 
     def forward(self, query, key, past_key_values_length, position_ids):
@@ -173,7 +171,7 @@ class FalconLinearScalingRotaryEmbedding(FalconRotaryEmbedding):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.seq_len_cached = seq_len
-        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(seq_len, device=device).to(dtype)
         # This line is the only difference from FalconRotaryEmbedding._set_cos_sin_cache
         t = t / self.scaling_factor
 
@@ -183,8 +181,8 @@ class FalconLinearScalingRotaryEmbedding(FalconRotaryEmbedding):
         if dtype in [torch.float16, torch.bfloat16]:
             emb = emb.float()
 
-        self.cos_cached = emb.cos()[None, :, :]
-        self.sin_cached = emb.sin()[None, :, :]
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
@@ -210,15 +208,15 @@ class FalconDynamicNTKScalingRotaryEmbedding(FalconRotaryEmbedding):
             inv_freq = 1.0 / (base ** (torch.arange(0, self.head_dim, 2).float().to(device) / self.head_dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(seq_len, device=device).to(dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1).to(device)
 
         if dtype in [torch.float16, torch.bfloat16]:
             emb = emb.float()
 
-        self.cos_cached = emb.cos()[None, :, :]
-        self.sin_cached = emb.sin()[None, :, :]
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
@@ -694,13 +692,17 @@ class FalconFlashAttention2(FalconAttention):
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
     def _upad_input(self, query_layer, key_layer, value_layer, padding_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
-        batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
+        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
-        key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
-        value_layer = index_first_axis(value_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k)
+        key_layer = index_first_axis(
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
+        value_layer = index_first_axis(
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+        )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -977,37 +979,6 @@ class FalconPreTrainedModel(PreTrainedModel):
             for layer_past in past_key_value
         )
 
-    @classmethod
-    def from_pretrained(
-        cls,
-        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
-        *model_args,
-        config: Optional[Union[str, os.PathLike]] = None,
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
-        ignore_mismatched_sizes: bool = False,
-        force_download: bool = False,
-        local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
-        revision: str = "main",
-        use_safetensors: bool = None,
-        **kwargs,
-    ):
-        revision = sanitize_code_revision(pretrained_model_name_or_path, revision, kwargs.get("trust_remote_code"))
-
-        return super().from_pretrained(
-            pretrained_model_name_or_path,
-            *model_args,
-            config=config,
-            cache_dir=cache_dir,
-            ignore_mismatched_sizes=ignore_mismatched_sizes,
-            force_download=force_download,
-            local_files_only=local_files_only,
-            token=token,
-            revision=revision,
-            use_safetensors=use_safetensors,
-            **kwargs,
-        )
-
 
 @add_start_docstrings(
     "The bare Falcon Model transformer outputting raw hidden-states without any specific head on top.",
@@ -1123,6 +1094,12 @@ class FalconModel(FalconPreTrainedModel):
 
         hidden_states = inputs_embeds
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -1151,9 +1128,7 @@ class FalconModel(FalconPreTrainedModel):
                 position_ids = torch.arange(
                     past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
                 )
-                position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
-            else:
-                position_ids = position_ids.view(-1, seq_length).long()
+                position_ids = position_ids.unsqueeze(0)
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
@@ -1166,11 +1141,6 @@ class FalconModel(FalconPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

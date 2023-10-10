@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.34.0.dev0")
+check_min_version("4.35.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -497,13 +497,12 @@ def main():
 
     if data_args.block_size is None:
         block_size = tokenizer.model_max_length
-        if block_size > 1024:
+        if block_size > config.max_position_embeddings:
             logger.warning(
-                "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
-                " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
-                " override this default with `--block_size xxx`."
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                f"Using block_size={min(1024, config.max_position_embeddings)} instead. You can change that default value by passing --block_size xxx."
             )
-            block_size = 1024
+            block_size = min(1024, config.max_position_embeddings)
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warning(

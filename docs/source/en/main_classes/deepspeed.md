@@ -1224,6 +1224,7 @@ As long as you don't enable `offload_optimizer` you can mix and match DeepSpeed 
 optimizers, with the exception of using the combination of HuggingFace scheduler and DeepSpeed optimizer:
 
 | Combos       | HF Scheduler | DS Scheduler |
+|:-------------|:-------------|:-------------|
 | HF Optimizer | Yes          | Yes          |
 | DS Optimizer | No           | Yes          |
 
