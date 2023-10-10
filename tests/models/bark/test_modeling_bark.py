@@ -74,7 +74,6 @@ class BarkSemanticModelTester:
         initializer_range=0.02,
         n_codes_total=8,  # for BarkFineModel
         n_codes_given=1,  # for BarkFineModel
-        min_eos_p=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -94,7 +93,6 @@ class BarkSemanticModelTester:
         self.bos_token_id = output_vocab_size - 1
         self.eos_token_id = output_vocab_size - 1
         self.pad_token_id = output_vocab_size - 1
-        self.min_eos_p = min_eos_p
 
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
@@ -581,6 +579,14 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+        model = self.all_model_classes[0](config).eval().to(torch_device)
+        model.generate(
+            input_ids,
+            semantic_generation_config=BarkSemanticGenerationConfig(
+                max_input_semantic_length=int(len(input_ids) / 2), max_new_tokens=10, min_eos_p=0.1
+            ),
+        )
 
 
 @require_torch
