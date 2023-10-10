@@ -753,7 +753,7 @@ class ForecastHead(nn.Module):
         head_dropout: float = 0.2,
         mode: str = "common_channel",
         forecast_channel_indices: list = None,
-        distribution_output = None
+        distribution_output=None,
     ):
         super().__init__()
         self.forecast_len = forecast_len
@@ -776,8 +776,7 @@ class ForecastHead(nn.Module):
                 )
             else:
                 self.base_forecast_block = nn.Sequential(
-                    nn.Dropout(head_dropout),
-                    distribution_output.get_parameter_projection(num_patches * num_features)
+                    nn.Dropout(head_dropout), distribution_output.get_parameter_projection(num_patches * num_features)
                 )
 
             self.flatten = nn.Flatten(start_dim=-2)
@@ -790,8 +789,7 @@ class ForecastHead(nn.Module):
                 )
             else:
                 self.base_forecast_block = nn.Sequential(
-                    nn.Dropout(head_dropout),
-                    distribution_output.get_parameter_projection(num_patches * num_features)
+                    nn.Dropout(head_dropout), distribution_output.get_parameter_projection(num_patches * num_features)
                 )
 
             self.flatten = nn.Flatten(start_dim=1)
@@ -812,34 +810,24 @@ class ForecastHead(nn.Module):
 
             forecast = self.base_forecast_block(x)  # [bs x n_vars x forecast_len]
             if isinstance(forecast, tuple):
-                forecast = tuple(
-                    z.transpose(-1,-2) for z in forecast
-                )
+                forecast = tuple(z.transpose(-1, -2) for z in forecast)
             else:
                 forecast = forecast.transpose(-1, -2)  # [bs x forecast_len x n_vars]
-
-            
 
         else:
             x = self.flatten(x)  # x: [bs x num_patches*num_features]
             forecast = self.base_forecast_block(x)  # [bs x forecast_len * self.nvars]
 
             if isinstance(forecast, tuple):
-                forecast = tuple(
-                    z.reshape(-1, self.forecast_len, self.nvars) for z in forecast
-                )
+                forecast = tuple(z.reshape(-1, self.forecast_len, self.nvars) for z in forecast)
             else:
                 forecast = forecast.reshape(-1, self.forecast_len, self.nvars)  # [bs x forecast_len x n_vars]
 
-            
         if self.forecast_channel_indices is not None:
             if isinstance(forecast, tuple):
-                forecast = tuple(
-                    z[..., self.forecast_channel_indices] for z in forecast
-                )
+                forecast = tuple(z[..., self.forecast_channel_indices] for z in forecast)
             else:
                 forecast = forecast[..., self.forecast_channel_indices]  # [bs x forecast_len x n_vars]
-
 
         return forecast
 
@@ -885,7 +873,7 @@ class LinearHead(nn.Module):
         self.head_agg = head_agg
         self.output_range = output_range
         self.num_patches = num_patches
-
+        self.distribution_output = distribution_output
         if self.head_agg is None:
             mul_factor = self.num_patches
         else:
@@ -906,7 +894,7 @@ class LinearHead(nn.Module):
                 self.projection = nn.Linear(num_features * mul_factor, output_dim)
             else:
                 self.projection = distribution_output.get_parameter_projection(num_features * mul_factor)
-            
+
             if self.head_agg is None:
                 self.flatten = nn.Flatten(start_dim=-2)
             else:
@@ -937,7 +925,7 @@ class LinearHead(nn.Module):
         x = self.dropout(x)
         x = self.projection(x)  # bs x output_dim
 
-        if self.output_range is not None:
+        if (self.distribution_output is None) and (self.output_range is not None):
             x = torch.sigmoid(x) * (self.output_range[1] - self.output_range[0]) + self.output_range[0]
         return x
 
@@ -1807,6 +1795,21 @@ class SamplePatchTSMixerForecastOutput(ModelOutput):
 
     sequences: torch.FloatTensor = None
 
+
+@dataclass
+class SamplePatchTSMixerRegressionOutput(ModelOutput):
+    """
+    Base class for time series model's predictions outputs that contains the sampled values from the chosen
+    distribution.
+
+    Parameters:
+        sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, n_targets)`
+                Sampled values from the chosen distribution.
+    """
+
+    sequences: torch.FloatTensor = None
+
+
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
 def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
     """
@@ -1854,7 +1857,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
-        
+
         if config.loss == "mse":
             self.loss = nn.MSELoss(reduction="mean")
             self.distribution_output = None
@@ -1864,18 +1867,16 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 dim = config.forecast_len
             else:
                 dim = config.forecast_len * config.input_size
-            
+
             if config.distribution_output == "student_t":
                 self.distribution_output = StudentTOutput(dim=dim)
             elif config.distribution_output == "normal":
                 self.distribution_output = NormalOutput(dim=dim)
             elif config.distribution_output == "negative_binomial":
-                self.distribution_output = NegativeBinomialOutput(
-                    dim=dim
-                )
+                self.distribution_output = NegativeBinomialOutput(dim=dim)
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
-        
+
         self.model = PatchTSMixerModel(config)
         self.head = ForecastHead(
             num_patches=config.num_patches,
@@ -1888,7 +1889,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             forecast_channel_indices=config.forecast_channel_indices,
             distribution_output=self.distribution_output,
         )
-        
+
         # Initialize weights and apply final processing
         if config.post_init:
             self.post_init()
@@ -1923,11 +1924,10 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         if target_values is not None and return_loss is True:
             if self.config.forecast_channel_indices is not None:
                 if self.distribution_output:
-                    
                     distribution = self.distribution_output.distribution(
                         y_hat,
-                        loc=model_output.loc[..., self.config.forecast_channel_indices], 
-                        scale=model_output.scale[..., self.config.forecast_channel_indices]
+                        loc=model_output.loc[..., self.config.forecast_channel_indices],
+                        scale=model_output.scale[..., self.config.forecast_channel_indices],
                     )
                     loss_val = self.loss(distribution, target_values[..., self.config.forecast_channel_indices])
                     # take average of the loss
@@ -1936,12 +1936,10 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                     y_hat = (
                         y_hat * model_output.scale[..., self.config.forecast_channel_indices]
                         + model_output.loc[..., self.config.forecast_channel_indices]
-                        )
+                    )
                     loss_val = self.loss(y_hat, target_values[..., self.config.forecast_channel_indices])
             else:
-
                 if self.distribution_output:
-                    
                     distribution = self.distribution_output.distribution(
                         y_hat, loc=model_output.loc, scale=model_output.scale
                     )
@@ -1959,17 +1957,15 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         else:
             loc = model_output.loc
             scale = model_output.scale
-        
-        
+
         return PatchTSMixerForForecastOutput(
             prediction_logits=y_hat,  # tensor [bs x forecast_len x input_size]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
-            loc = loc,
-            scale = scale,
+            loc=loc,
+            scale=scale,
         )
-    
 
     def generate(
         self,
@@ -2006,7 +2002,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         )
 
         # get distribution
-                
+
         distribution = self.distribution_output.distribution(
             outputs.prediction_logits, loc=outputs.loc, scale=outputs.scale
         )
@@ -2161,17 +2157,21 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         super().__init__(config)
 
         self.model = PatchTSMixerModel(config)
-        self.head = LinearHead(
-            num_patches=config.num_patches,
-            in_channels=config.input_size,
-            num_features=config.num_features,
-            head_dropout=config.head_dropout,
-            output_dim=config.n_targets,
-            output_range=config.output_range,
-            head_agg=config.head_agg,
-            mode=config.mode,
-        )
-        self.loss = torch.nn.MSELoss(reduction="mean")
+
+        if config.loss == "mse":
+            self.loss = nn.MSELoss(reduction="mean")
+            self.distribution_output = None
+        else:
+            self.loss = nll
+
+            if config.distribution_output == "student_t":
+                self.distribution_output = StudentTOutput(dim=config.n_targets)
+            elif config.distribution_output == "normal":
+                self.distribution_output = NormalOutput(dim=config.n_targets)
+            elif config.distribution_output == "negative_binomial":
+                self.distribution_output = NegativeBinomialOutput(dim=config.n_targets)
+            else:
+                raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
         if config.scaling in ["std", "mean", True]:
             if config.mode == "flatten":
@@ -2181,6 +2181,18 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             )
         else:
             self.inject_scale = None
+
+        self.head = LinearHead(
+            num_patches=config.num_patches,
+            in_channels=config.input_size,
+            num_features=config.num_features,
+            head_dropout=config.head_dropout,
+            output_dim=config.n_targets,
+            output_range=config.output_range,
+            head_agg=config.head_agg,
+            mode=config.mode,
+            distribution_output=self.distribution_output,
+        )
 
         # Initialize weights and apply final processing
         if config.post_init:
@@ -2217,7 +2229,13 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_targets]
 
         if target_values is not None and return_loss is True:
-            loss_val = self.loss(y_hat, target_values)
+            if self.distribution_output:
+                distribution = self.distribution_output.distribution(y_hat)
+                loss_val = self.loss(distribution, target_values)
+                # take average of the loss
+                loss_val = weighted_average(loss_val)
+            else:
+                loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
@@ -2227,3 +2245,36 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             hidden_states=model_output.hidden_states,
             loss=loss_val,
         )
+
+    def generate(
+        self,
+        context_values: torch.Tensor,
+    ) -> SamplePatchTSMixerRegressionOutput:
+        """
+        Generate sequences of sample predictions from a model with a probability distribution head.
+
+        Parameters:
+            context_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Past values of the time series that serves as context in order to predict the future.
+
+        Return:
+            [`SamplePatchTSMixerRegressionOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of samples, n_targets)`.
+        """
+        # get number of samples
+        num_parallel_samples = self.config.num_parallel_samples
+
+        # get model output
+        outputs = self(
+            context_values=context_values,
+            target_values=None,
+            output_hidden_states=False,
+        )
+
+        # get distribution
+        distribution = self.distribution_output.distribution(outputs.prediction_logits)
+
+        # get samples
+        samples = [distribution.sample() for _ in range(num_parallel_samples)]  # samples: list of [bs x n_targets]
+        # stack tensors
+        samples = torch.stack(samples, dim=1)  # [bs x num_samples x n_targets]
+        return SamplePatchTSMixerRegressionOutput(sequences=samples)

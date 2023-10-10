@@ -97,7 +97,7 @@ class PatchTSMixerModelTester:
         is_training=True,
         seed_number=42,
         post_init=True,
-        num_parallel_samples = 4,
+        num_parallel_samples=4,
     ):
         self.input_size = input_size
         self.seq_len = seq_len
@@ -175,7 +175,6 @@ class PatchTSMixerModelTester:
             head_agg=self.head_agg,
             post_init=self.post_init,
             seed_number=self.seed_number,
-
         )
         self.num_patches = config_.num_patches
         return config_
@@ -459,7 +458,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             learn_pe=True,
             self_attn=False,
             self_attn_heads=1,
-            num_parallel_samples = 4
+            num_parallel_samples=4,
         )
 
         cls.num_patches = (
@@ -591,6 +590,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                 target_output = self.__class__.correct_sel_forecast_output
             else:
                 target_output = target_input
+            ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1, -1)
 
         elif task == "classification":
             mdl = PatchTSMixerForClassification(config)
@@ -600,6 +600,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             mdl = PatchTSMixerForRegression(config)
             target_input = self.__class__.correct_regression_output
             target_output = self.__class__.correct_regression_output
+            ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1)
         elif task == "pretrain":
             mdl = PatchTSMixerForMaskPretraining(config)
             target_input = None
@@ -617,7 +618,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         else:
             output = mdl(self.__class__.data, target_values=target_input, output_hidden_states=output_hidden_states)
 
-        if isinstance(output.prediction_logits,tuple):
+        if isinstance(output.prediction_logits, tuple):
             for t in output.prediction_logits:
                 self.assertEqual(t.shape, target_output.shape)
         else:
@@ -633,10 +634,9 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
         self.assertEqual(output.loss.item() < 100, True)
 
-        if config.loss == "nll" and task == "forecast":
+        if config.loss == "nll" and task in ["forecast", "regression"]:
             samples = mdl.generate(self.__class__.data)
-            ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1, -1)
-            self.assertEqual(samples.sequences.shape,ref_samples.shape)
+            self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
     def test_forecast(self):
         for mode in ["flatten", "common_channel", "mix_channel"]:
@@ -644,7 +644,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                 for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
                         for forecast_channel_indices in [None, [0, 2]]:
-                            for loss in ["mse","nll"]:
+                            for loss in ["mse", "nll"]:
                                 params = self.__class__.params.copy()
                                 params.update(
                                     mode=mode,
@@ -652,7 +652,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                                     scaling=scaling,
                                     forecast_channel_indices=forecast_channel_indices,
                                     gated_attn=gated_attn,
-                                    loss = loss
+                                    loss=loss,
                                 )
 
                                 self.check_module(task="forecast", params=params)
@@ -683,19 +683,21 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
                 for scaling in [True, False, "mean", "std"]:
                     for gated_attn in [True, False]:
                         for head_agg in ["max_pool", "avg_pool"]:
-                            if mode == "flatten" and scaling in ["mean", "std", True]:
-                                continue
-                            params = self.__class__.params.copy()
-                            params.update(
-                                mode=mode,
-                                self_attn=self_attn,
-                                scaling=scaling,
-                                head_agg=head_agg,
-                                gated_attn=gated_attn,
-                            )
-                            # print(mode,self_attn,revin,gated_attn,head_agg)
+                            for loss in ["mse", "nll"]:
+                                if mode == "flatten" and scaling in ["mean", "std", True]:
+                                    continue
+                                params = self.__class__.params.copy()
+                                params.update(
+                                    mode=mode,
+                                    self_attn=self_attn,
+                                    scaling=scaling,
+                                    head_agg=head_agg,
+                                    gated_attn=gated_attn,
+                                    loss=loss,
+                                )
+                                # print(mode,self_attn,revin,gated_attn,head_agg)
 
-                            self.check_module(task="regression", params=params)
+                                self.check_module(task="regression", params=params)
 
     def test_pretrain(self):
         for mode in ["common_channel", "mix_channel", "flatten"]:
@@ -761,12 +763,11 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
         self.assertEqual(output.loss.item() < 100, True)
 
-
         if config.loss == "nll":
             samples = mdl.generate(self.__class__.data)
             ref_samples = target_val.unsqueeze(1).expand(-1, params["num_parallel_samples"], -1, -1)
-            self.assertEqual(samples.sequences.shape,ref_samples.shape)
-            
+            self.assertEqual(samples.sequences.shape, ref_samples.shape)
+
         # print("loss shape", output.loss, output.loss.shape)
 
     def test_forecast_full(self):
@@ -804,45 +805,45 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             forecast_channel_indices=[0, 2],
         )
         self.forecast_full_module(params)
-    
+
     def test_forecast_full_distributional(self):
         params = self.__class__.params.copy()
         params.update(
             mode="mix_channel",
             forecast_channel_indices=[0, 2],
-            loss = "nll",
-            distribution_output = "normal",
+            loss="nll",
+            distribution_output="normal",
         )
 
         self.forecast_full_module(params)
-    
+
     def test_forecast_full_distributional_2(self):
         params = self.__class__.params.copy()
         params.update(
             mode="flatten",
             forecast_channel_indices=[0, 2],
-            loss = "nll",
+            loss="nll",
             # distribution_output = "normal",
         )
         self.forecast_full_module(params)
-    
+
     def test_forecast_full_distributional_3(self):
         params = self.__class__.params.copy()
         params.update(
             mode="mix_channel",
             # forecast_channel_indices=[0, 2],
-            loss = "nll",
-            distribution_output = "normal",
+            loss="nll",
+            distribution_output="normal",
         )
         self.forecast_full_module(params)
-    
+
     def test_forecast_full_distributional_4(self):
         params = self.__class__.params.copy()
         params.update(
             mode="flatten",
             # forecast_channel_indices=[0, 2],
-            loss = "nll",
-            distribution_output = "normal",
+            loss="nll",
+            distribution_output="normal",
         )
         self.forecast_full_module(params)
 
@@ -915,5 +916,57 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         )
         self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
         self.assertEqual(output.loss.item() < 100, True)
+
+    def test_regression_full_distribute(self):
+        params = self.__class__.params.copy()
+        params.update(loss="nll", distribution_output="normal")
+
+        config = PatchTSMixerConfig(**params)
+
+        mdl = PatchTSMixerForRegression(config)
+        output = mdl(self.__class__.data, target_values=self.__class__.correct_regression_output)
+        self.assertEqual(
+            output.prediction_logits[0].shape,
+            self.__class__.correct_regression_output.shape,
+        )
+        self.assertEqual(
+            output.prediction_logits[1].shape,
+            self.__class__.correct_regression_output.shape,
+        )
+        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(output.loss.item() < 100, True)
+
+        if config.loss == "nll":
+            samples = mdl.generate(self.__class__.data)
+            ref_samples = self.__class__.correct_regression_output.unsqueeze(1).expand(
+                -1, params["num_parallel_samples"], -1
+            )
+            self.assertEqual(samples.sequences.shape, ref_samples.shape)
+
+    def test_regression_full_distribute_2(self):
+        params = self.__class__.params.copy()
+        params.update(loss="nll", distribution_output="student_t")
+
+        config = PatchTSMixerConfig(**params)
+
+        mdl = PatchTSMixerForRegression(config)
+        output = mdl(self.__class__.data, target_values=self.__class__.correct_regression_output)
+        self.assertEqual(
+            output.prediction_logits[0].shape,
+            self.__class__.correct_regression_output.shape,
+        )
+        self.assertEqual(
+            output.prediction_logits[1].shape,
+            self.__class__.correct_regression_output.shape,
+        )
+        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
+        self.assertEqual(output.loss.item() < 100, True)
+
+        if config.loss == "nll":
+            samples = mdl.generate(self.__class__.data)
+            ref_samples = self.__class__.correct_regression_output.unsqueeze(1).expand(
+                -1, params["num_parallel_samples"], -1
+            )
+            self.assertEqual(samples.sequences.shape, ref_samples.shape)
 
         # print("loss shape", output.loss, output.loss.shape)
