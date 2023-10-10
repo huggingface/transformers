@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Shauray/Llava-Llama-2-7B-hf": "https://huggingface.co/shauray/Llava-Llama-2-7B-hf/resolve/main/config.json",
+    "shauray/Llava-Llama-2-7B-hf": "https://huggingface.co/shauray/Llava-Llama-2-7B-hf/resolve/main/config.json",
 }
 
 
