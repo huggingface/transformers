@@ -453,7 +453,7 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     >>> vocoder_config = FastSpeech2ConformerHifiGanConfig()
 
     >>> # Initializing a FastSpeech2ConformerWithHifiGan module style configuration
-    >>> configuration = FastSpeech2ConformerWithHifiGanConfig.from_sub_model_configs(model_config, vocoder_config)
+    >>> configuration = FastSpeech2ConformerWithHifiGanConfig(model_config.to_dict(), vocoder_config.to_dict())
 
     >>> # Initializing a model (with random weights)
     >>> model = FastSpeech2ConformerWithHifiGan(configuration)
