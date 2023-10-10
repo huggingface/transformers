@@ -1718,7 +1718,7 @@ class BarkEarlyStoppingLogitsProcessor(LogitsProcessor):
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         self.eos_token_id = eos_token_id
-        if min_eos_p <= 0:
+        if min_eos_p is not None and min_eos_p <= 0:
             raise ValueError(f"`min_eos_p` has to be a positive float, but is {min_eos_p}")
         self.min_eos_p = min_eos_p
 

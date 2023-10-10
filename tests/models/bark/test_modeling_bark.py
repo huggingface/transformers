@@ -74,6 +74,7 @@ class BarkSemanticModelTester:
         initializer_range=0.02,
         n_codes_total=8,  # for BarkFineModel
         n_codes_given=1,  # for BarkFineModel
+        min_eos_p=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -93,6 +94,7 @@ class BarkSemanticModelTester:
         self.bos_token_id = output_vocab_size - 1
         self.eos_token_id = output_vocab_size - 1
         self.pad_token_id = output_vocab_size - 1
+        self.min_eos_p = min_eos_p
 
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
@@ -1041,6 +1043,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
                 semantic_temperature=0.9,
                 coarse_temperature=0.2,
                 fine_temperature=0.1,
+                semantic_min_eos_p=0.1,
             )
 
     @require_torch_gpu

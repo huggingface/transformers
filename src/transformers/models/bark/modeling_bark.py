@@ -797,7 +797,11 @@ class BarkSemanticModel(BarkCausalModel):
         )
 
         suppress_tokens_logits_processor = SuppressTokensLogitsProcessor(tokens_to_suppress)
-        early_stopping_logits_processor = BarkEarlyStoppingLogitsProcessor(semantic_generation_config)
+
+        min_eos_p = kwargs.get("min_eos_p", semantic_generation_config.min_eos_p)
+        early_stopping_logits_processor = BarkEarlyStoppingLogitsProcessor(
+            eos_token_id=semantic_generation_config.eos_token_id, min_eos_p=min_eos_p
+        )
 
         # pass input_ids in order to stay consistent with the transformers generate method even though it is not used
         # (except to get the input seq_len - that's why we keep the first 257 tokens)
