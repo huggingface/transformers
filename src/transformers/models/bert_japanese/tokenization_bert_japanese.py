@@ -117,7 +117,7 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         spm_file (`str`, *optional*):
             Path to [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm or .model
             extension) that contains the vocabulary.
-        do_lower_case (`bool`, *optional*, defaults to `True`):
+        do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether to lower case the input. Only has an effect when do_basic_tokenize=True.
         do_word_tokenize (`bool`, *optional*, defaults to `True`):
             Whether to do word tokenization.
@@ -127,6 +127,19 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
             Type of word tokenizer. Choose from ["basic", "mecab", "sudachi", "jumanpp"].
         subword_tokenizer_type (`str`, *optional*, defaults to `"wordpiece"`):
             Type of subword tokenizer. Choose from ["wordpiece", "character", "sentencepiece",].
+        never_split (`List[str]`, *optional*):
+            A list of tokens that should never be split during tokenization.
+        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
+            The separator token used to separate different segments or sequences in the input text when tokenizing.
+        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
+            The classification token often used in sequence classification tasks.
+        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
+            The masked Tokens are predicted by gathering the context from the surrounding Tokens.
         mecab_kwargs (`dict`, *optional*):
             Dictionary passed to the `MecabTokenizer` constructor.
         sudachi_kwargs (`dict`, *optional*):
