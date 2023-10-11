@@ -24,17 +24,17 @@ class SuperPointConfig(PretrainedConfig):
     Args:
         conv_layers_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 128, 256]`):
             The number of channels in each convolutional layer.
-        descriptor_dim (`int`, *optional*, defaults to `256`):
+        descriptor_dim (`int`, *optional*, defaults to 256):
             The dimension of the descriptor.
-        keypoint_threshold (`float`, *optional*, defaults to `0.005`):
+        keypoint_threshold (`float`, *optional*, defaults to 0.005):
             The threshold to use for extracting keypoints.
-        max_keypoints (`int`, *optional*, defaults to `-1`):
+        max_keypoints (`int`, *optional*, defaults to -1):
             The maximum number of keypoints to extract. If `-1`, will extract all keypoints.
-        nms_radius (`int`, *optional*, defaults to `4`):
+        nms_radius (`int`, *optional*, defaults to 4):
             The radius for non-maximum suppression.
-        border_removal_distance (`int`, *optional*, defaults to `4`):
+        border_removal_distance (`int`, *optional*, defaults to 4):
             The distance from the border to remove keypoints.
-        initializer_range (`float`, *optional*, defaults to `0.02`):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
