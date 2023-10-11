@@ -98,8 +98,8 @@ class GatedAttention(nn.Module):
     """GatedAttention
 
     Args:
-        in_size (int): input size
-        out_size (int): output size
+        in_size (`int`): input size
+        out_size (`int`): output size
     """
 
     def __init__(self, in_size: int, out_size: int):
@@ -185,18 +185,18 @@ class ChannelFeatureMixer(nn.Module):
     """ChannelFeatureMixer
 
     Args:
-        num_features (int, optional): Hidden feature size. Defaults to 16.
-        in_channels (int): Number of input channels in the data. Defaults to 3.
-        expansion_factor (int, optional): Expansion factor to use inside MLP. Defaults to 2.
-        dropout (float, optional): Backbone Dropout rate. Defaults to 0.2.
-        mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
+        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
+        in_channels (`int`): Number of input channels in the data. Defaults to 3.
+        expansion_factor (`int`, *optional*): Expansion factor to use inside MLP. Defaults to 2.
+        dropout (`float`, *optional*): Backbone Dropout rate. Defaults to 0.2.
+        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
             Defaults to "common_channel".
-        gated_attn (bool, optional): Enable Gated Attention. Defaults to False.
-        ffn (str, optional): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
-        norm_mlp (str, optional): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
+        gated_attn (bool, *optional*): Enable Gated Attention. Defaults to False.
+        ffn (str, *optional*): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
+        norm_mlp (str, *optional*): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
     """
 
     def __init__(
@@ -247,20 +247,20 @@ class PatchMixer(nn.Module):
     """PatchMixer
 
     Args:
-        num_features (int, optional): Hidden feature size. Defaults to 16.
-        num_patches (int): Number of patches to segment
-        expansion_factor (int, optional): Expansion factor to use inside MLP. Defaults to 2.
-        dropout (float, optional): Backbone Dropout rate. Defaults to 0.2.
-        mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
+        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
+        num_patches (`int`): Number of patches to segment
+        expansion_factor (`int`, *optional*): Expansion factor to use inside MLP. Defaults to 2.
+        dropout (`float`, *optional*): Backbone Dropout rate. Defaults to 0.2.
+        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
             Defaults to "common_channel".
-        gated_attn (bool, optional): Enable Gated Attention. Defaults to False.
-        ffn (str, optional): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
-        self_attn (bool, optional): Enable Tiny self attention in addition to MLP mixing. Defaults to False.
-        self_attn_heads (bool, optional): Self attention heads. Defaults to 1.
-        norm_mlp (str, optional): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
+        gated_attn (bool, *optional*): Enable Gated Attention. Defaults to False.
+        ffn (str, *optional*): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
+        self_attn (bool, *optional*): Enable Tiny self attention in addition to MLP mixing. Defaults to False.
+        self_attn_heads (bool, *optional*): Self attention heads. Defaults to 1.
+        norm_mlp (str, *optional*): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
     """
 
     def __init__(
@@ -366,13 +366,13 @@ class FeatureMixer(nn.Module):
     """FeatureMixer
 
     Args:
-        num_features (int, optional): Hidden feature size. Defaults to 16.
-        expansion_factor (int, optional): Expansion factor to use inside MLP. Defaults to 2.
-        dropout (float, optional): Backbone Dropout rate. Defaults to 0.2.
-        ffn (str, optional): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
-        norm_mlp (str, optional): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
-        gated_attn (bool, optional): Enable Gated Attention. Defaults to False.
-        mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
+        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
+        expansion_factor (`int`, *optional*): Expansion factor to use inside MLP. Defaults to 2.
+        dropout (`float`, *optional*): Backbone Dropout rate. Defaults to 0.2.
+        ffn (str, *optional*): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
+        norm_mlp (str, *optional*): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
+        gated_attn (bool, *optional*): Enable Gated Attention. Defaults to False.
+        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
@@ -427,21 +427,21 @@ class FeatureMixer(nn.Module):
 class PatchTSMixerLayer(nn.Module):
     """
     Args:
-        num_features (int, optional): Hidden feature size. Defaults to 16.
-        num_patches (int): Number of patches to segment
-        in_channels (int, optional): Number of input variables. Defaults to 3.
-        expansion_factor (int, optional): Expansion factor to use inside MLP. Defaults to 2.
-        dropout (float, optional): Backbone Dropout rate. Defaults to 0.2.
-        mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
+        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
+        num_patches (`int`): Number of patches to segment
+        in_channels (`int`, *optional*): Number of input variables. Defaults to 3.
+        expansion_factor (`int`, *optional*): Expansion factor to use inside MLP. Defaults to 2.
+        dropout (`float`, *optional*): Backbone Dropout rate. Defaults to 0.2.
+        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
             Defaults to "common_channel".
-        gated_attn (bool, optional): Enable Gated Attention. Defaults to False.
-        ffn (str, optional): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
-        self_attn (bool, optional): Enable Tiny self attention in addition to MLP mixing. Defaults to False.
-        self_attn_heads (bool, optional): Self attention heads. Defaults to 1.
-        norm_mlp (str, optional): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
+        gated_attn (bool, *optional*): Enable Gated Attention. Defaults to False.
+        ffn (str, *optional*): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
+        self_attn (bool, *optional*): Enable Tiny self attention in addition to MLP mixing. Defaults to False.
+        self_attn_heads (bool, *optional*): Self attention heads. Defaults to 1.
+        norm_mlp (str, *optional*): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
 
     """
 
@@ -512,26 +512,26 @@ class PatchTSMixerBackbone(nn.Module):
     """PatchTSMixerBackbone
 
     Args:
-        num_patches (int): Number of patches to segment
-        patch_size (int, optional): Patch length. Defaults to 16.
-        in_channels (int, optional): Number of input variables. Defaults to 3.
-        num_features (int, optional): Hidden feature size. Defaults to 16.
-        expansion_factor (int, optional): Expansion factor to use inside MLP. Defaults to 2.
-        num_layers (int, optional): Number of layers to use. Defaults to 8.
-        dropout (float, optional): Backbone Dropout rate. Defaults to 0.2.
-        mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
+        num_patches (`int`): Number of patches to segment
+        patch_size (`int`, *optional*): Patch length. Defaults to 16.
+        in_channels (`int`, *optional*): Number of input variables. Defaults to 3.
+        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
+        expansion_factor (`int`, *optional*): Expansion factor to use inside MLP. Defaults to 2.
+        num_layers (`int`, *optional*): Number of layers to use. Defaults to 8.
+        dropout (`float`, *optional*): Backbone Dropout rate. Defaults to 0.2.
+        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
             Defaults to "common_channel".
-        gated_attn (bool, optional): Enable Gated Attention. Defaults to False.
-        ffn (str, optional): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
-        self_attn (bool, optional): Enable Tiny self attention in addition to MLP mixing. Defaults to False.
-        self_attn_heads (bool, optional): Self attention heads. Defaults to 1.
-        mixer_type (str, optional): Mixer Type to use. Allowed values are base, gated.
+        gated_attn (bool, *optional*): Enable Gated Attention. Defaults to False.
+        ffn (str, *optional*): MLP mode. Allowed values: mlp, gmlp. gmlp is not preferred. Defaults to "mlp".
+        self_attn (bool, *optional*): Enable Tiny self attention in addition to MLP mixing. Defaults to False.
+        self_attn_heads (bool, *optional*): Self attention heads. Defaults to 1.
+        mixer_type (str, *optional*): Mixer Type to use. Allowed values are base, gated.
             base follows the MLP-Mixer architecture (https://arxiv.org/abs/2105.01601) gated follows the gMLP
             architecture (https://arxiv.org/pdf/2105.08050.pdf) Defaults to "base".
-        norm_mlp (str, optional): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
+        norm_mlp (str, *optional*): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
     """
 
     def __init__(
@@ -613,22 +613,22 @@ class PatchTSMixer(nn.Module):
     """MLPMixer
 
     Args:
-        num_patches (int): Number of patches to segment
-        patch_size (int, optional): Patch length. Defaults to 16.
-        in_channels (int, optional): Number of input variables. Defaults to 3.
-        num_features (int, optional): Hidden feature size. Defaults to 16.
-        expansion_factor (int, optional): Expansion factor to use inside MLP. Defaults to 2.
-        num_layers (int, optional): Number of layers to use. Defaults to 8.
-        dropout (float, optional): Backbone Dropout rate. Defaults to 0.2.
-        mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
+        num_patches (`int`): Number of patches to segment
+        patch_size (`int`, *optional*): Patch length. Defaults to 16.
+        in_channels (`int`, *optional*): Number of input variables. Defaults to 3.
+        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
+        expansion_factor (`int`, *optional*): Expansion factor to use inside MLP. Defaults to 2.
+        num_layers (`int`, *optional*): Number of layers to use. Defaults to 8.
+        dropout (`float`, *optional*): Backbone Dropout rate. Defaults to 0.2.
+        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
             Defaults to "common_channel".
-        gated_attn (bool, optional): Enable Gated Attention. Defaults to False.
-        self_attn (bool, optional): Enable Tiny self attention in addition to MLP mixing. Defaults to False.
-        self_attn_heads (bool, optional): Self attention heads. Defaults to 1.
-        norm_mlp (str, optional): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
+        gated_attn (bool, *optional*): Enable Gated Attention. Defaults to False.
+        self_attn (bool, *optional*): Enable Tiny self attention in addition to MLP mixing. Defaults to False.
+        self_attn_heads (bool, *optional*): Self attention heads. Defaults to 1.
+        norm_mlp (str, *optional*): Norm layer (BatchNorm or LayerNorm). Defaults to LayerNorm.
     """
 
     # @get_class_params
@@ -730,18 +730,18 @@ class ForecastHead(nn.Module):
     """Forecast Head
 
     Args:
-        num_patches (int): Number of patches to segment
-        patch_size (int, optional): Patch length. Defaults to 16.
-        in_channels (int, optional): Number of input variables. Defaults to 3.
-        num_features (int, optional): Hidden feature size. Defaults to 16.
-        head_dropout (float, optional): Head Dropout rate. Defaults to 0.2.
-        forecast_len (int, optional): Forecast Length. Defaults to 16.
-        mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
+        num_patches (`int`): Number of patches to segment
+        patch_size (`int`, *optional*): Patch length. Defaults to 16.
+        in_channels (`int`, *optional*): Number of input variables. Defaults to 3.
+        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
+        head_dropout (`float`, *optional*): Head Dropout rate. Defaults to 0.2.
+        forecast_len (`int`, *optional*): Forecast Length. Defaults to 16.
+        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
             Defaults to "common_channel".
-        forecast_channel_indices (list, optional):
+        forecast_channel_indices (list, *optional*):
             List of channel indices to forecast. If None, forecast all channels.
     """
 
@@ -838,15 +838,15 @@ class LinearHead(nn.Module):
     """LinearHead for Classification and Regression
 
     Args:
-        num_patches (int): Number of patches to segment
-        patch_size (int, optional): Patch length. Defaults to 16.
-        in_channels (int, optional): Number of input variables. Defaults to 3.
-        num_features (int, optional): Hidden feature size. Defaults to 16.
-        head_dropout (float, optional): Head Dropout rate. Defaults to 0.2.
-        head_agg (str, optional): Aggregation mode. Allowed values are use_last, max_pool, avg_pool.
+        num_patches (`int`): Number of patches to segment
+        patch_size (`int`, *optional*): Patch length. Defaults to 16.
+        in_channels (`int`, *optional*): Number of input variables. Defaults to 3.
+        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
+        head_dropout (`float`, *optional*): Head Dropout rate. Defaults to 0.2.
+        head_agg (str, *optional*): Aggregation mode. Allowed values are use_last, max_pool, avg_pool.
                                 Defaults to max_pool.
-        output_range (list, optional): Output range of [low, high] to restrict sigmoid. Defaults to None.
-        mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
+        output_range (list, *optional*): Output range of [low, high] to restrict sigmoid. Defaults to None.
+        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
@@ -941,7 +941,6 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize weights"""
-        # print("Module = ", module)
         if isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -959,12 +958,12 @@ class PretrainHead(nn.Module):
     """Pretrain head
 
     Args:
-        num_patches (int): Number of patches to segment
-        patch_size (int, optional): Patch length. Defaults to 16.
-        input_size (int, optional): Number of input variables. Defaults to 1.
-        num_features (int, optional): Hidden feature size. Defaults to 16.
-        head_dropout (float, optional): Head Dropout rate. Defaults to 0.2.
-        mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
+        num_patches (`int`): Number of patches to segment
+        patch_size (`int`, *optional*): Patch length. Defaults to 16.
+        input_size (`int`, *optional*): Number of input variables. Defaults to 1.
+        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
+        head_dropout (`float`, *optional*): Head Dropout rate. Defaults to 0.2.
+        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
@@ -1066,14 +1065,14 @@ def random_masking(
     """random_masking: Mask the input considering the control variables.
     Parameters:
         xb (Tensor): Input to mask [ bs x nvars x num_patches x patch_length]
-        mask_ratio (float): Mask ratio.
-        unmasked_channel_indices (list, optional):
+        mask_ratio (`float`): Mask ratio.
+        unmasked_channel_indices (list, *optional*):
             indices of unmasked channels. These channels will not be masked. Defaults to None.
-        channel_consistent_masking (bool, optional):
+        channel_consistent_masking (bool, *optional*):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels. Defaults to True.
-        mask_value (int, optional): Value to use for masking. Defaults to 0.
-        seed_number (int, optional): Value to set for the random seed.
+        mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
+        seed_number (`int`, *optional*): Value to set for the random seed.
     Returns:
         Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [bs x c x n]
     """
@@ -1123,12 +1122,12 @@ def forecast_masking(
         xb (Tensor):
             Input to mask [ bs x nvars x num_patch x patch_len] or [ bs x tsg1 x tag2 x nvars x num_patch x patch_len]
         patch_lengths (list): List of patch lengths to mask in the end of the data.
-        mix_ratio (list, optional): List of weights to use for each patch length. For Ex.
+        mix_ratio (list, *optional*): List of weights to use for each patch length. For Ex.
             if patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to
             None.
-        unmasked_channel_indices (list, optional):
+        unmasked_channel_indices (list, *optional*):
             Control Variable channel indices. These channels will not be masked. Defaults to None.
-        mask_value (int, optional): Value to use for masking. Defaults to 0.
+        mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
 
     Returns:
         Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [bs x c x n] or [bs x tsg1 x
@@ -1183,8 +1182,9 @@ class Patchify(nn.Module):
     """
     Parameters:
     A class to patchify the time series sequence into different patches
-        sequence_length (int, required): input sequence length. patch_length (int, required): patch length. stride
-        (int, required): stride between patches.
+        sequence_length (`int`, required): input sequence length.
+        patch_length (`int`, required): patch length.
+        stride (`int`, required): stride between patches.
     Returns:
         z: output tensor data [bs x num_input_channels x num_patches x patch_length]
     """
@@ -1236,17 +1236,18 @@ class PatchMasking(nn.Module):
     """
     Parameters:
     PatchMasking: Class to random or forcast masking.
-        mask_type (str, optional): Masking type. Allowed values are random, forecast. Defaults to random. mask_ratio
-        (float, optional): Mask ratio. mask_patches (list, optional): List of patch lengths to mask in the end of the
-        data. mask_patch_ratios (list, optional): List of weights to use for each patch length. For Ex. if
-        patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to None.
-        unmasked_channel_indices (list, optional):
+        mask_type (str, *optional*): Masking type. Allowed values are random, forecast. Defaults to random.
+        mask_ratio (`float`, *optional*): Mask ratio.
+        mask_patches (list, *optional*): List of patch lengths to mask in the end of the data.
+        mask_patch_ratios (list, *optional*): List of weights to use for each patch length. For Ex. if
+            patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to None.
+        unmasked_channel_indices (list, *optional*):
             Control Variable channel indices. These channels will not be masked. Defaults to None.
-        channel_consistent_masking (bool, optional):
+        channel_consistent_masking (bool, *optional*):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels. Defaults to True.
-        mask_value (int, optional): Value to use for masking. Defaults to 0. seed_number (int, optional): Random seed,
-        when None seed is not set. Defaults to None.
+        mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
+        seed_number (`int`, *optional*): Random seed, when None seed is not set. Defaults to None.
     """
 
     def __init__(
