@@ -43,7 +43,7 @@ class PatchTSMixerConfig(PretrainedConfig):
     configuration with the defaults will yield a similar configuration to that of the PatchTSMixer
     [ibm/patchtsmixer-etth1-pretrain](https://huggingface.co/ibm/patchtsmixer-etth1-pretrain) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
