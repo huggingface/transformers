@@ -406,6 +406,26 @@ class SuperPointModel(SuperPointPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ImagePointDescriptionOutput]:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModelForInterestPointDescription
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
+        >>> model = AutoModelForInterestPointDescription.from_pretrained("stevenbucaille/superpoint")
+
+        >>> inputs = processor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -491,26 +511,6 @@ class SuperPointModel(SuperPointPreTrainedModel):
     SUPERPOINT_START_DOCSTRING,
 )
 class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
-    """
-    Returns:
-
-    Examples:
-
-    ```python
-    >>> from transformers import AutoImageProcessor, AutoModelForInterestPointDescription
-    >>> import torch
-    >>> from PIL import Image
-    >>> import requests
-
-    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    >>> image = Image.open(requests.get(url, stream=True).raw)
-
-    >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
-    >>> model = AutoModelForInterestPointDescription.from_pretrained("stevenbucaille/superpoint")
-
-    >>> inputs = processor(image, return_tensors="pt")
-    >>> outputs = model(**inputs)
-    ```"""
 
     def __init__(self, config: SuperPointConfig):
         super().__init__(config)
@@ -521,12 +521,39 @@ class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
 
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(SUPERPOINT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=ImagePointDescriptionOutput,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ImagePointDescriptionOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModelForInterestPointDescription
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
+        >>> model = AutoModelForInterestPointDescription.from_pretrained("stevenbucaille/superpoint")
+
+        >>> inputs = processor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
