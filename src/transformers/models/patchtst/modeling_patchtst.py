@@ -1332,8 +1332,8 @@ class MaskPretrainHead(nn.Module):
         """
         Parameters:
             embedding (`torch.Tensor` of shape `(bs, num_channels, num_patches, d_model)`
-                    or `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True
-                Embedding from the model
+                    or `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True, *required*):
+                    Embedding from the model
         Returns:
             `torch.Tensor` of shape `(bs, num_channels, num_patches, d_model)` or
                             `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True
@@ -1346,7 +1346,9 @@ class MaskPretrainHead(nn.Module):
 
 
 class PatchTSTForPretraining(PatchTSTPreTrainedModel):
-    # PatchTSTModel + Pretraining Head
+    """
+    Mask pretrain model: PatchTST model + pretrain head
+    """
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1362,12 +1364,25 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_observed_mask: Optional[torch.Tensor] = None,
-        future_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSTForPretrainingOutput]:
         """
-        past_values (x): tensor [bs x sequence_length x num_input_channels ] future_values (y): labels
+        Parameters:
+            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+                Input sequence to the model
+            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
+
+        Returns:
+            `PatchTSTForPretrainingOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+
         """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1395,7 +1410,9 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
 
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
-    # PatchTST model + classification head
+    """
+    PatchTST model for classification. The model contains PatchTST model + classification head
+    """
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1414,6 +1431,24 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PatchTSTForClassificationOutput]:
+        """
+        Parameters:
+            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+                Input sequence to the model
+            labels (`torch.Tensor`, *optional*): labels associates with the `past_values`
+            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
+
+        Returns:
+            `PatchTSTForClassificationOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1435,6 +1470,9 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
 
 
 class ClassificationHead(nn.Module):
+    """
+    Classification head
+    """
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         self.use_cls_token = config.use_cls_token
@@ -1445,9 +1483,13 @@ class ClassificationHead(nn.Module):
 
     def forward(self, embedding: torch.Tensor):
         """
-        embedding: [bs x num_channels x num_patches x d_model]
-            or [bs x num_channels x (num_patches+1) x d_model] if use cls_token output:
-        [bs x n_classes]
+        Parameters:
+            embedding (`torch.Tensor` of shape `(bs, num_channels, num_patches, d_model)`
+                    or `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True, *required*):
+                    Embedding from the model
+        Returns:
+            `torch.Tensor` of shape `(bs, num_labels)`
+
         """
         if self.use_cls_token:
             x = embedding[:, :, 0, :]  # use the first output token, x: bs x num_channels x d_model
@@ -1483,9 +1525,13 @@ class PredictionHead(nn.Module):
 
     def forward(self, embedding: torch.Tensor):
         """
-        embedding: [bs x num_channels x num_patch x d_model]
-            or [bs x num_channels x (num_patch+1) x d_model] if use cls_token
-        output: [bs x pred_len x num_output_channels]
+        Parameters:
+            embedding (`torch.Tensor` of shape `(bs, num_channels, num_patches, d_model)`
+                    or `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True, *required*):
+                    Embedding from the model
+        Returns:
+            `torch.Tensor` of shape `(bs, pred_len, num_output_channels)`
+
         """
         batch_size = embedding.shape[0]
         if self.use_cls_token:
@@ -1512,9 +1558,9 @@ class PredictionHead(nn.Module):
 
 
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
-    """ """
-
-    # PatchTST model + prediction head
+    """
+    PatchTST model for prediction. The model contains PatchTST model + prediction head
+    """
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1548,6 +1594,25 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSTForPredictionOutput]:
+        """
+        Parameters:
+            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+                Input sequence to the model
+            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            future_values (`torch.Tensor` of shape `(bs, pred_len, num_output_channels)`, *optional*):
+                future target values associates with the `past_values`
+            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
+
+        Returns:
+            `PatchTSTForPredictionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1658,11 +1723,14 @@ class ForecastHead(nn.Module):
 
     def forward(self, embedding: torch.Tensor):
         """
-        embedding: [bs x num_channels x num_patches x d_model]
-            or [bs x num_channels x (num_patches+1) x d_model] if use cls_token
-        output: [bs x forecast_len x num_channels]
-        """
+        Parameters:
+            embedding (`torch.Tensor` of shape `(bs, num_channels, num_patches, d_model)`
+                    or `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True, *required*):
+                    Embedding from the model
+        Returns:
+            `torch.Tensor` of shape `(bs, forecast_len, num_channels)`
 
+        """
         if self.use_cls_token:
             y = embedding[:, :, 0, :]  # y: [bs x num_channels x d_model]
         else:
@@ -1701,10 +1769,8 @@ class ForecastHead(nn.Module):
 
 class PatchTSTForForecasting(PatchTSTPreTrainedModel):
     """
-    PatchTST for forecasting
+    PatchTST for forecasting. The model contains PatchTST model + Forecasting head
     """
-
-    # PatchTST model + Forecasting head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
         self.model = PatchTSTModel(config)
@@ -1736,6 +1802,25 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSTForForecastingOutput]:
+        """
+        Parameters:
+            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+                Input sequence to the model
+            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            future_values (`torch.Tensor` of shape `(bs, forecast_len, num_input_channels)`, *optional*):
+                future target values associates with the `past_values`
+            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
+
+        Returns:
+            `PatchTSTForForecastingOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1828,6 +1913,9 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
 
 
 class RegressionHead(nn.Module):
+    """
+    Regression head
+    """
     def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
         self.y_range = config.prediction_range
@@ -1847,9 +1935,13 @@ class RegressionHead(nn.Module):
 
     def forward(self, embedding: torch.Tensor):
         """
-        embedding: [bs x num_channels x num_patch x d_model]
-            or [bs x num_channels x (num_patch+1) x d_model] if use cls_token
-        output: [bs x output_dim]
+        Parameters:
+            embedding (`torch.Tensor` of shape `(bs, num_channels, num_patches, d_model)`
+                    or `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True, *required*):
+                    Embedding from the model
+        Returns:
+            `torch.Tensor` of shape `(bs, output_dim)`
+
         """
         if self.use_cls_token:
             x = embedding[:, :, 0, :]  # use the first output token, x: [bs x num_channels x d_model]
@@ -1906,6 +1998,25 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PatchTSTForRegressionOutput]:
+        """
+        Parameters:
+            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+                Input sequence to the model
+            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            labels (`torch.Tensor` of shape `(bs, num_input_channels)`, *optional*):
+                target labels associates with the `past_values`
+            output_hidden_states (`bool`, *optional*): Whether or not to return the hidden states of all layers
+            return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
+
+        Returns:
+            `PatchTSTForRegressionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
