@@ -1014,8 +1014,7 @@ class PretrainHead(nn.Module):
             forecast = self.base_pt_block(x)  # [bs x n_vars x num_patch x patch_size]
             return forecast
 
-
-# Copied from transformers.models.patchtst.modeling_patchtst.positional_encoding
+# TODO: add copied from after PatchTST master merge
 def positional_encoding(pe, learn_pe, q_len, d_model):
     # Positional encoding
     if pe is None:
@@ -1046,13 +1045,11 @@ def positional_encoding(pe, learn_pe, q_len, d_model):
         )
     return nn.Parameter(w_pos, requires_grad=learn_pe)
 
-
-# Copied from transformers.models.patchtst.modeling_patchtst.compute_num_patches
+# TODO: add copied from after PatchTST master merge
 def compute_num_patches(sequence_length, patch_length, stride):
     return (max(sequence_length, patch_length) - patch_length) // stride + 1
 
-
-# Copied from transformers.models.patchtst.modeling_patchtst.random_masking
+# TODO: add copied from after PatchTST master merge
 def random_masking(
     xb: torch.Tensor,
     mask_ratio: float,
@@ -1103,8 +1100,7 @@ def random_masking(
     xb_mask = xb.masked_fill(mask.bool(), mask_value)
     return xb_mask, mask[..., 0]
 
-
-# Copied from transformers.models.patchtst.modeling_patchtst.forecast_masking
+# TODO: add copied from after PatchTST master merge
 def forecast_masking(
     xb: torch.Tensor,
     patch_lengths: list,
@@ -1175,8 +1171,7 @@ def forecast_masking(
     xb_mask = xb.masked_fill(mask.bool(), mask_value)
     return xb_mask, mask[..., 0]
 
-
-# Copied from transformers.models.patchtst.modeling_patchtst.Patchify
+# TODO: add copied from after PatchTST master merge
 class Patchify(nn.Module):
     """
     Parameters:
@@ -1229,7 +1224,7 @@ class Patchify(nn.Module):
         return x
 
 
-# Copied from transformers.models.patchtst.modeling_patchtst.PatchMasking
+# TODO: add copied from after PatchTST master merge
 class PatchMasking(nn.Module):
     """
     Parameters:
