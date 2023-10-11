@@ -4030,7 +4030,7 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             special_token = "[SPECIAL_TOKEN]"
-            with self.subTest(f"{tokenizer} ({pretrained_name})"):
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
                 if not tokenizer.is_fast:
@@ -4053,7 +4053,7 @@ class TokenizerTesterMixin:
     def test_added_tokens_serialization(self):
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer} ({pretrained_name})"):
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
                 self.assertEquals(tokenizer._eos_token, new_eos)
@@ -4103,7 +4103,7 @@ class TokenizerTesterMixin:
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         # you CAN'T set the additional special tokens once loaded but can after load
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer} ({pretrained_name})"):
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, additional_special_tokens=[new_eos])
                 self.assertEquals(tokenizer._additional_special_tokens[-1], new_eos)
