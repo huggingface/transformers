@@ -16,6 +16,7 @@
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+import torch
 
 from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -90,9 +91,11 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             `UnivNetModel.config.model_in_channels`.
         pad_end_length (`int`, *optional*, defaults to 10):
             If padding the end of the spectrograms, the number of frames to append to the end of each spectrogram.
+        return_attention_mask (`bool`, *optional*, defaults to `True`):
+            Whether or not [`~UnivNetFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
-    model_input_names = ["input_features", "attention_mask"]
+    model_input_names = ["input_features", "noise_sequence", "padding_mask"]
 
     def __init__(
         self,
@@ -116,12 +119,14 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         normalize_max: float = 2.3143386840820312,
         model_in_channels: int = 64,
         pad_end_length: int = 10,
+        return_attention_mask=True,
         **kwargs,
     ):
         super().__init__(
             feature_size=feature_size,
             sampling_rate=sampling_rate,
             padding_value=padding_value,
+            return_attention_mask=return_attention_mask,
             **kwargs,
         )
 
@@ -245,7 +250,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 new generator with fresh entropy will be created.
 
         Returns:
-            `numpy.ndarray` containing random standard Gaussian noise of shape `(noise_length, model_in_channels)`.
+            `numpy.ndarray`: Array containing random standard Gaussian noise of shape
+            `(noise_length, model_in_channels)`.
         """
         if generator is None:
             generator = np.random.default_rng()
@@ -276,7 +282,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 `self.config.spectrogram_zero`.
 
         Returns:
-            `numpy.ndarray` containing the padded spectrogram of shape `(num_frames + pad_length, num_mel_bins)`.
+            `numpy.ndarray`: NumPy array containing the padded spectrogram of shape
+            `(num_frames + pad_length, num_mel_bins)`.
         """
         if pad_length is None:
             pad_length = self.pad_end_length
@@ -287,6 +294,33 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         padded_spectrogram = np.concatenate([spectrogram, padding_zeros], axis=-2)
 
         return padded_spectrogram
+
+    def batch_decode(
+        self,
+        waveforms: torch.FloatTensor,
+        waveform_lengths: Optional[torch.FloatTensor] = None,
+    ) -> List[torch.FloatTensor]:
+        r"""
+        Removes padding from generated audio after running [`UnivNetModel.forward`]. This returns a ragged list of 1D
+        audio waveform tensors and not a single tensor because in general the waveforms will have different lengths
+        after removing padding.
+
+        Args:
+            waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+                The batched output waveforms from the [`UnivNetModel`].
+            waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+                The batched lengths of each waveform before padding.
+
+        Returns:
+            `List[torch.FloatTensor]`: A ragged list of 1D waveform tensors with padding removed.
+        """
+        # Collapse the batched waveform tensor to a list of 1D audio waveforms
+        waveforms = [torch.tensor(waveform) for waveform in waveforms]
+
+        if waveform_lengths is not None:
+            waveforms = [waveform[:waveform_lengths[i]] for i, waveform in enumerate(waveforms)]
+
+        return waveforms
 
     def __call__(
         self,
@@ -302,6 +336,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         pad_length: Optional[int] = None,
         spectrogram_zero: Optional[float] = None,
         do_normalize: Optional[str] = None,
+        return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
         """
@@ -356,6 +391,12 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             do_normalize (`bool`, *optional*):
                 Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly improve
                 the performance for some models. If not set, this will default to `self.config.do_normalize`.
+            return_attention_mask (`bool`, *optional*):
+                Whether to return the attention mask. If left to the default, will return the attention mask according
+                to the specific feature_extractor's default.
+
+                [What are attention masks?](../glossary#attention-mask)
+
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -396,6 +437,11 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [np.asarray(raw_speech, dtype=np.float32)]
 
+        # Pad end to reduce artifacts
+        if pad_end:
+            pad_length = pad_length if pad_length is not None else self.pad_end_length
+            raw_speech = [np.pad(waveform, (0, pad_length * self.hop_length), constant_values=self.padding_value) for waveform in raw_speech]
+
         batched_speech = BatchFeature({"input_features": raw_speech})
 
         padded_inputs = self.pad(
@@ -404,7 +450,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length is not None else self.num_max_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=False,
+            return_attention_mask=return_attention_mask,
         )
 
         # make sure list is in array format
@@ -418,11 +464,16 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         else:
             batched_speech["input_features"] = [mel.astype(np.float32) for mel in mel_spectrograms]
 
-        if pad_end:
-            batched_speech["input_features"] = [
-                self.pad_spectrogram_end(spectrogram, pad_length, spectrogram_zero)
-                for spectrogram in batched_speech["input_features"]
-            ]
+        # convert attention_mask to correct format
+        attention_mask = padded_inputs.get("attention_mask")
+        if attention_mask is not None:
+            batched_speech["padding_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+
+        # if pad_end:
+        #     batched_speech["input_features"] = [
+        #         self.pad_spectrogram_end(spectrogram, pad_length, spectrogram_zero)
+        #         for spectrogram in batched_speech["input_features"]
+        #     ]
 
         if return_noise:
             noise = [

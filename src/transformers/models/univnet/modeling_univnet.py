@@ -13,22 +13,22 @@
 # limitations under the License.
 """ PyTorch UnivNetModel model."""
 
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    logging,
-)
+from ...modeling_utils import ModelOutput, PreTrainedModel
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_univnet import UnivNetConfig
 
 
 logger = logging.get_logger(__name__)
 
+# General docstring
+_CONFIG_FOR_DOC = "UnivNetConfig"
 
 _CHECKPOINT_FOR_DOC = "dg845/univnet-dev"
 
@@ -36,6 +36,23 @@ UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "dg845/univnet-dev",
     # See all UnivNet models at https://huggingface.co/models?filter=univnet
 ]
+
+
+@dataclass
+class UnivNetModelOutput(ModelOutput):
+    """
+    Output class for the [`UnivNetModel`], which includes the generated audio waveforms and the original unpadded
+    lengths of those waveforms (so that the padding can be removed by [`UnivNetModel.batch_decode`]).
+
+    Args:
+        waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Batched 1D (mono-channel) output audio waveforms.
+        waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
+            The batched length in samples of each unpadded waveform in `waveforms`.
+    """
+
+    waveforms: torch.FloatTensor = None
+    waveform_lengths: torch.FloatTensor = None
 
 
 class UnivNetKernelPredictorResidualBlock(nn.Module):
@@ -421,6 +438,32 @@ UNIVNET_START_DOCSTRING = r"""
 """
 
 
+UNIVNET_INPUTS_DOCSTRING = r"""
+    Converts a noise waveform and a conditioning spectrogram to a speech waveform. Passing a batch of log-mel
+    spectrograms returns a batch of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a
+    single, un-batched speech waveform.
+
+    Args:
+        input_features (`torch.FloatTensor`):
+            Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
+            config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
+        noise_sequence (`torch.FloatTensor`, *optional*):
+            Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape
+            `(batch_size, sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
+            config.model_in_channels)`. If not supplied, will be randomly generated.
+        padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask indicating which parts of each sequence are padded. Mask values are selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**
+            - 0 for tokens that are **masked**
+        generator (`torch.Generator`, *optional*):
+            A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
+            deterministic.
+        return_dict:
+            Whether to return a [`~utils.ModelOutput`] subclass instead of a plain tuple.
+"""
+
+
 @add_start_docstrings(
     """UnivNet GAN vocoder.""",
     UNIVNET_START_DOCSTRING,
@@ -470,32 +513,18 @@ class UnivNetModel(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(UNIVNET_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=UnivNetModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_features: torch.FloatTensor,
         noise_sequence: Optional[torch.FloatTensor] = None,
+        padding_mask: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
-    ):
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], UnivNetModelOutput]:
         r"""
-        Converts a noise waveform and a conditioning spectrogram to a speech waveform. Passing a batch of log-mel
-        spectrograms returns a batch of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a
-        single, un-batched speech waveform.
-
-        Args:
-            input_features (`torch.FloatTensor`):
-                Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-                config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
-            noise_sequence (`torch.FloatTensor`, *optional*):
-                Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape
-                `(batch_size, sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
-                config.model_in_channels)`. If not supplied, will be randomly generated.
-            generator (`torch.Generator`, *optional*):
-                A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
-                deterministic.
-
         Returns:
-            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
-            shape `(batch_size, num_frames)`. If unbatched, will be of shape `(num_frames,)`.
 
         Example:
 
@@ -517,6 +546,8 @@ class UnivNetModel(PreTrainedModel):
          [140288]
          ```
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         # Resolve batch sizes for noise_sequence and spectrogram
         spectrogram_batched = input_features.dim() == 3
         if not spectrogram_batched:
@@ -561,14 +592,30 @@ class UnivNetModel(PreTrainedModel):
         hidden_states = self.conv_post(hidden_states)
         hidden_states = torch.tanh(hidden_states)
 
-        if spectrogram_batch_size > 1:
-            # remove seq-len dim since this collapses to 1
-            waveform = hidden_states.squeeze(1)
-        else:
-            # remove batch dim and collapse tensor to 1-d audio waveform
-            waveform = hidden_states.squeeze(0).transpose(1, 0).view(-1)
+        # Remove sequence length dimension since this collapses to 1
+        # NOTE: keep waveforms batched even if there's only one
+        waveform = hidden_states.squeeze(1)
+        # if spectrogram_batch_size > 1:
+        #     # remove seq-len dim since this collapses to 1
+        #     waveform = hidden_states.squeeze(1)
+        # else:
+        #     # remove batch dim and collapse tensor to 1-d audio waveform
+        #     waveform = hidden_states.squeeze(0).transpose(1, 0).view(-1)
 
-        return waveform
+        # Get sequence lengths for UnivNetFeatureExtractor.batch_decode.
+        waveform_lengths = None
+        if padding_mask is not None:
+            # Padding is always contiguous and added on the right
+            waveform_lengths = torch.sum(padding_mask, dim=1)
+
+        if not return_dict:
+            outputs = (waveform, waveform_lengths)
+            return outputs
+
+        return UnivNetModelOutput(
+            waveforms=waveform,
+            waveform_lengths=waveform_lengths,
+        )
 
     def _init_weights(self, module):
         """Initialize the weights."""

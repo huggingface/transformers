@@ -88,8 +88,8 @@ class UnivNetModelTester:
 
     def create_and_check_model(self, config, spectrogram, noise_sequence):
         model = UnivNetModel(config=config).to(torch_device).eval()
-        result = model(spectrogram, noise_sequence)
-        self.parent.assertEqual(result.shape, (self.seq_length * 256,))
+        result = model(spectrogram, noise_sequence)[0]
+        self.parent.assertEqual(result.shape, (1, self.seq_length * 256))
 
     def prepare_config_and_inputs_for_common(self):
         config, spectrogram, noise_sequence = self.prepare_config_and_inputs()
@@ -178,7 +178,7 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
                 batched_outputs = model(
                     batched_spectrogram.to(torch_device),
                     batched_noise_sequence.to(torch_device),
-                )
+                )[0]
 
             self.assertEqual(
                 batched_spectrogram.shape[0],
@@ -195,8 +195,10 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             with torch.no_grad():
-                outputs = model(inputs["input_features"].to(torch_device), inputs["noise_sequence"].to(torch_device))
-            self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")
+                outputs = model(
+                    inputs["input_features"].to(torch_device), inputs["noise_sequence"].to(torch_device)
+                )[0]
+            self.assertTrue(outputs.shape[0] == 1, msg="Unbatched input should create batched output with bsz = 1")
 
     def test_unbatched_batched_outputs_consistency(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -215,12 +217,12 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
                 unbatched_outputs = model(
                     unbatched_spectrogram.to(torch_device),
                     unbatched_noise_sequence.to(torch_device),
-                )
+                )[0]
 
                 batched_outputs = model(
                     batched_spectrogram.to(torch_device),
                     batched_noise_sequence.to(torch_device),
-                )
+                )[0]
 
             torch.testing.assert_close(unbatched_outputs, batched_outputs)
 
@@ -286,7 +288,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         input_speech = self.get_inputs(torch_device, num_samples=3)
 
         with torch.no_grad():
-            waveform = model(**input_speech)
+            waveform = model(**input_speech)[0]
         waveform = waveform.cpu()
 
         waveform_mean = torch.mean(waveform)
@@ -310,12 +312,12 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         input_speech = self.get_inputs(torch_device, num_samples=1)
 
         with torch.no_grad():
-            waveform = model(**input_speech)
+            waveform = model(**input_speech)[0]
         waveform = waveform.cpu()
 
         waveform_mean = torch.mean(waveform)
         waveform_stddev = torch.std(waveform)
-        waveform_slice = waveform[-9:].flatten()
+        waveform_slice = waveform[-1, -9:].flatten()
 
         EXPECTED_MEAN = torch.tensor(-0.22895093)
         EXPECTED_STDDEV = torch.tensor(0.33986747)
@@ -339,12 +341,12 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         input_speech["input_features"] = input_features
 
         with torch.no_grad():
-            waveform = model(**input_speech)
+            waveform = model(**input_speech)[0]
         waveform = waveform.cpu()
 
         waveform_mean = torch.mean(waveform)
         waveform_stddev = torch.std(waveform)
-        waveform_slice = waveform[-9:].flatten()
+        waveform_slice = waveform[-1, -9:].flatten()
 
         EXPECTED_MEAN = torch.tensor(0.00051374)
         EXPECTED_STDDEV = torch.tensor(0.058105603)
