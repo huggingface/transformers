@@ -1184,7 +1184,7 @@ def forecast_masking(
 
 
 # TODO: add copied from after PatchTST master merge
-class Patchify(nn.Module):
+class PatchTSMixerPatchify(nn.Module):
     """
     Parameters:
     A class to patchify the time series sequence into different patches
@@ -1581,7 +1581,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         super().__init__(config)
 
         self.encoder = PatchTSMixerEncoder(config)
-        self.patching = Patchify(config.seq_len, patch_length=config.patch_len, stride=config.stride)
+        self.patching = PatchTSMixerPatchify(config.seq_len, patch_length=config.patch_len, stride=config.stride)
 
         if mask_input is True:
             self.masking = PatchTSMixerMasking(
