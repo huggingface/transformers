@@ -541,9 +541,9 @@ class UnivNetModel(PreTrainedModel):
          >>> inputs = feature_extractor(
          ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
          ... )
-         >>> audio = model(**inputs)
+         >>> audio = model(**inputs).waveforms
          >>> list(audio.shape)
-         [140288]
+         [1, 140288]
          ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
