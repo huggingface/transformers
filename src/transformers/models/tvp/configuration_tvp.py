@@ -44,9 +44,9 @@ class TvpConfig(PretrainedConfig):
             The weight of distance loss.
         beta (`float`, *optional*, defaults to 0.1):
             The weight of duration loss.
-        vp_type (`str`, *optional*, defaults to `"framepad"`):
+        visual_prompter_type (`str`, *optional*, defaults to `"framepad"`):
             Visual prompt type. The type of padding. Framepad means padding on each frame.
-        vp_apply (`str`, *optional*, defaults to `"replace"`):
+        visual_prompter_apply (`str`, *optional*, defaults to `"replace"`):
             The way of applying visual prompt. Replace means use the value of prompt to change the original value in
             visual inputs.
         max_img_size (`int`, *optional*, defaults to 448):
@@ -95,8 +95,8 @@ class TvpConfig(PretrainedConfig):
         backbone_config=None,
         alpha=1.0,
         beta=0.1,
-        vp_type="framepad",
-        vp_apply="replace",
+        visual_prompter_type="framepad",
+        visual_prompter_apply="replace",
         max_img_size=448,
         pad_size=96,
         num_frm=48,
@@ -130,8 +130,8 @@ class TvpConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.alpha = alpha
         self.beta = beta
-        self.vp_type = vp_type
-        self.vp_apply = vp_apply
+        self.visual_prompter_type = visual_prompter_type
+        self.visual_prompter_apply = visual_prompter_apply
         self.max_img_size = max_img_size
         self.pad_size = pad_size
         self.num_frm = num_frm

@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
+from transformers.image_transforms import PaddingMode
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -31,46 +32,42 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import TVPImageProcessor
+    from transformers import TvpImageProcessor
 
 
-class TVPImageProcessingTester(unittest.TestCase):
+class TvpImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        max_size: int = 448,
+        size: Dict[str, int] = {"shortest_edge": 40},
         do_center_crop: bool = False,
         crop_size: Dict[str, int] = None,
         do_rescale: bool = False,
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
-        padding_size: Dict[str, int] = {"height": 448, "width": 448},
+        pad_size: Dict[str, int] = {"height": 80, "width": 80},
         fill: int = None,
-        padding_mode: str = None,
+        pad_mode: PaddingMode = None,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = [0.48145466, 0.4578275, 0.40821073],
         image_std: Optional[Union[float, List[float]]] = [0.26862954, 0.26130258, 0.27577711],
-        batch_size=7,
-        min_resolution=30,
-        max_resolution=400,
+        batch_size=2,
+        min_resolution=40,
+        max_resolution=80,
         num_channels=3,
-        num_frames=10,
+        num_frames=2,
     ):
-        size = size if size is not None else {"shortest_edge": 224}
-
         self.do_resize = do_resize
         self.size = size
-        self.max_size = max_size
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
-        self.padding_size = padding_size
+        self.pad_size = pad_size
         self.fill = fill
-        self.padding_mode = padding_mode
+        self.pad_mode = pad_mode
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -87,20 +84,19 @@ class TVPImageProcessingTester(unittest.TestCase):
             "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
             "size": self.size,
-            "max_size": self.max_size,
             "do_rescale": self.do_rescale,
             "do_center_crop": self.do_center_crop,
             "do_pad": self.do_pad,
-            "padding_size": self.padding_size,
+            "pad_size": self.pad_size,
         }
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to TVPImageProcessor,
+        This function computes the expected height and width when providing images to TvpImageProcessor,
         assuming do_resize is set to True with a scalar size.
         """
         if not batched:
-            return (int(self.padding_size["height"]), int(self.padding_size["width"]))
+            return (int(self.pad_size["height"]), int(self.pad_size["width"]))
 
         else:
             expected_values = []
@@ -127,11 +123,11 @@ class TVPImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class TVPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = TVPImageProcessor if is_vision_available() else None
+class TvpImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = TvpImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.image_processor_tester = TVPImageProcessingTester(self)
+        self.image_processor_tester = TvpImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -145,20 +141,16 @@ class TVPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "do_center_crop"))
         self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "max_size"))
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "do_pad"))
-        self.assertTrue(hasattr(image_processing, "padding_size"))
+        self.assertTrue(hasattr(image_processing, "pad_size"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 224})
+        self.assertEqual(image_processor.size, {"shortest_edge": 40})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
-
-    def test_batch_feature(self):
-        pass
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size={"shortest_edge": 12})
+        self.assertEqual(image_processor.size, {"shortest_edge": 12})
 
     def test_call_pil(self):
         # Initialize image_processing
@@ -200,6 +192,9 @@ class TVPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_numpy(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
+        print("=" * 3000)
+        print(image_processing)
+        print("=" * 3000)
         # create random numpy tensors
         video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
         for video in video_inputs:

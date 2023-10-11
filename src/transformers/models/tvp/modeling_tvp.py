@@ -641,7 +641,7 @@ class TvpTransformer(TvpPreTrainedModel):
         self.visual_embeddings = TvpVisualInputEmbedding(config)
         self.encoder = TvpEncoder(config)
         self.pooler = TvpPooler(config)
-        self.text_prompt = nn.Parameter(torch.randn([1, 10, 768]))
+        self.text_prompt = nn.Parameter(torch.randn([1, 10, config.hidden_size]))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.init_weights()
 
@@ -1102,6 +1102,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
 
         if labels is None:
             loss = None
+            loss_dict = None
         else:
             losses = ["IoU", "distance", "duration"]
             criterion = TvpLoss(losses)

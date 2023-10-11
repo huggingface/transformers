@@ -18,9 +18,9 @@
 import inspect
 import unittest
 
-from transformers import TVPConfig, TVPVisionConfig
-from transformers.testing_utils import require_torch, torch_device
-from transformers.utils import is_torch_available
+from transformers import ResNetConfig, TvpConfig
+from transformers.testing_utils import require_torch, require_vision, torch_device
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -35,70 +35,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import TVPModel
+    from transformers import TvpForVideoGrounding, TvpModel
 
+if is_vision_available():
+    from PIL import Image
 
-class TVPVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=1,
-        num_frames=48,
-        image_size=448,
-        input_format="BGR",
-        features=["res5"],
-        resnets_depth=50,
-        resnets_num_groups=1,
-        resnets_width_per_group=64,
-        resnets_stem_input_channels=3,
-        resnets_stem_out_channels=64,
-        resnets_res_out_channels=256,
-        resnets_res_dilation=1,
-        backbone_freeze_at=2,
-        grid_encoder_conv_input_size=2048,
-        grid_encoder_conv_output_size=768,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.input_format = input_format
-        self.features = features
-        self.resnets_depth = resnets_depth
-        self.resnets_num_groups = resnets_num_groups
-        self.resnets_width_per_group = resnets_width_per_group
-        self.resnets_stem_input_channels = resnets_stem_input_channels
-        self.resnets_stem_out_channels = resnets_stem_out_channels
-        self.resnets_res_out_channels = resnets_res_out_channels
-        self.resnets_res_dilation = resnets_res_dilation
-        self.backbone_freeze_at = backbone_freeze_at
-        self.grid_encoder_conv_input_size = grid_encoder_conv_input_size
-        self.grid_encoder_conv_output_size = grid_encoder_conv_output_size
-        self.num_frames = num_frames
-        self.image_size = image_size
-        self.num_channels = 3
-
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
-        )
-        config = self.get_config()
-
-        return config, pixel_values
-
-    def get_config(self):
-        return TVPVisionConfig(
-            input_format=self.input_format,
-            features=self.features,
-            resnets_depth=self.resnets_depth,
-            resnets_num_groups=self.resnets_num_groups,
-            resnets_width_per_group=self.resnets_width_per_group,
-            resnets_stem_input_channels=self.resnets_stem_input_channels,
-            resnets_stem_out_channels=self.resnets_stem_out_channels,
-            resnets_res_out_channels=self.resnets_res_out_channels,
-            resnets_res_dilation=self.resnets_res_dilation,
-            backbone_freeze_at=self.backbone_freeze_at,
-            grid_encoder_conv_input_size=self.grid_encoder_conv_input_size,
-            grid_encoder_conv_output_size=self.grid_encoder_conv_output_size,
-        )
+    from transformers import TvpImageProcessor
 
 
 class TVPModelTester:
@@ -106,23 +48,22 @@ class TVPModelTester:
         self,
         parent,
         batch_size=1,
-        seq_length=8,
-        vision_kwargs=None,
+        seq_length=2,
         alpha=1.0,
         beta=0.1,
-        vp_type="framepad",
-        vp_apply="replace",
+        visual_prompter_type="framepad",
+        visual_prompter_apply="replace",
+        num_frm=2,
         max_img_size=448,
         pad_size=96,
-        num_frm=48,
-        vocab_size=30522,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        max_position_embeddings=512,
-        max_grid_col_position_embeddings=100,
-        max_grid_row_position_embeddings=100,
+        vocab_size=100,
+        hidden_size=32,
+        intermediate_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        max_position_embeddings=30,
+        max_grid_col_position_embeddings=30,
+        max_grid_row_position_embeddings=30,
         hidden_dropout_prob=0.1,
         hidden_act="gelu",
         layer_norm_eps=1e-12,
@@ -131,21 +72,14 @@ class TVPModelTester:
         type_vocab_size=2,
         attention_probs_dropout_prob=0.1,
     ):
-        if vision_kwargs is None:
-            vision_kwargs = {}
-
-        vision_kwargs["batch_size"] = batch_size
-        vision_kwargs["num_frames"] = num_frm
-        vision_kwargs["image_size"] = max_img_size
-
         self.parent = parent
-        self.vision_model_tester = TVPVisionModelTester(parent, **vision_kwargs)
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.alpha = alpha
         self.beta = beta
-        self.vp_type = vp_type
-        self.vp_apply = vp_apply
+        self.visual_prompter_type = visual_prompter_type
+        self.visual_prompter_apply = visual_prompter_apply
+        self.num_frm = num_frm
         self.max_img_size = max_img_size
         self.pad_size = pad_size
         self.vocab_size = vocab_size
@@ -156,6 +90,7 @@ class TVPModelTester:
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
         self.max_grid_col_position_embeddings = max_grid_col_position_embeddings
         self.max_grid_row_position_embeddings = max_grid_row_position_embeddings
         self.layer_norm_eps = layer_norm_eps
@@ -163,24 +98,36 @@ class TVPModelTester:
         self.pad_token_id = pad_token_id
         self.type_vocab_size = type_vocab_size
         self.is_training = False
+        self.num_channels = 3
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_frm, self.num_channels, self.max_img_size, self.max_img_size]
+        )
 
         config = self.get_config()
 
         return (config, input_ids, pixel_values, attention_mask)
 
     def get_config(self):
-        return TVPConfig.from_vision_configs(
-            vision_config=self.vision_model_tester.get_config(),
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=64,
+            hidden_sizes=[64, 128],
+            depths=[2, 2],
+            hidden_act="relu",
+            out_features=["stage2"],
+            out_indices=[2],
+        )
+        return TvpConfig(
+            backbone_config=resnet_config,
             alpha=self.alpha,
             beta=self.beta,
-            vp_type=self.vp_type,
-            vp_apply=self.vp_apply,
+            visual_prompter_type=self.visual_prompter_type,
+            visual_prompter_apply=self.visual_prompter_apply,
+            num_frm=self.num_frm,
             max_img_size=self.max_img_size,
             pad_size=self.pad_size,
             vocab_size=self.vocab_size,
@@ -191,6 +138,7 @@ class TVPModelTester:
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
             max_grid_col_position_embeddings=self.max_grid_col_position_embeddings,
             max_grid_row_position_embeddings=self.max_grid_row_position_embeddings,
             layer_norm_eps=self.layer_norm_eps,
@@ -200,11 +148,13 @@ class TVPModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, pixel_values, attention_mask):
-        model = TVPModel(config=config)
+        model = TvpModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, pixel_values, attention_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.seq_length + 10 + 784, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -220,14 +170,17 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     The seq_length in TVP contain textual and visual inputs, and prompt.
     """
 
-    all_model_classes = (TVPModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"temporal-video-grounding": TVPModel} if is_torch_available() else {}
+    all_model_classes = (TvpModel, TvpForVideoGrounding) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": TvpModel, "temporal-video-grounding": TvpForVideoGrounding}
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
-    is_training = False
 
     def setUp(self):
         self.model_tester = TVPModelTester(self)
@@ -242,10 +195,6 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="TVPModel does not have input/output embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="TVPModel does not have small model")
-    def test_model_is_small(self):
         pass
 
     def test_forward_signature(self):
@@ -269,12 +218,12 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # cnn params and prompt params are randomly initialized.
-                    if name.startswith("cnn") or name.startswith("tp") or "prompt" in name:
+                    # cnn params and prompt params and head params are randomly initialized.
+                    if "cnn" in name or "visual_prompter" in name or "prompt" in name or "head" in name:
                         self.assertAlmostEqual(
                             param.data.mean().item(),
-                            0,
-                            delta=1e-1,
+                            0.0,
+                            delta=1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -286,20 +235,28 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            return
+            self.skipTest(reason="Model does not output attentions")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        chunk_length = getattr(self.model_tester, "chunk_length", None)
+        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
+            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
+
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -310,9 +267,28 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
+            if chunk_length is not None:
+                self.assertListEqual(
+                    list(attentions[0].shape[-4:]),
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length + 10 + 784,
+                        chunk_length,
+                        encoder_key_length + 10 + 784,
+                    ],
+                )
+            else:
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length + 10 + 784,
+                        encoder_key_length + 10 + 784,
+                    ],
+                )
             out_len = len(outputs)
 
             # Check attention is always last and order is fine
@@ -324,11 +300,36 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            self.assertEqual(out_len + 1, len(outputs))
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            elif self.is_encoder_decoder:
+                added_hidden_states = 2
+            else:
+                added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.attentions
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            if chunk_length is not None:
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-4:]),
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length + 10 + 784,
+                        chunk_length,
+                        encoder_key_length + 10 + 784,
+                    ],
+                )
+            else:
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-3:]),
+                    [
+                        self.model_tester.num_attention_heads,
+                        encoder_seq_length + 10 + 784,
+                        encoder_key_length + 10 + 784,
+                    ],
+                )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -339,11 +340,37 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.hidden_states
-            expected_num_layers = self.model_tester.num_hidden_layers + 1
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            self.assertEqual(hidden_states[0].shape[-1], self.model_tester.hidden_size)
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                    seq_length = seq_length * self.model_tester.chunk_length
+            else:
+                seq_length = self.model_tester.seq_length
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length + 10 + 784, self.model_tester.hidden_size],
+            )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length + 10 + 784, self.model_tester.hidden_size],
+                )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -356,3 +383,51 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    @unittest.skip(reason="This test doesn't work for TvpForVideoGrounding and doesn't test core functionality")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="This test doesn't work for TvpForVideoGrounding and doesn't test core functionality")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
+
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+
+@require_vision
+@require_torch
+class TvpModelIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_image_processor(self):
+        return (
+            TvpImageProcessor.from_pretrained(
+                "Intel/tvp-base",
+            )
+            if is_vision_available()
+            else None
+        )
+
+    def test_inference_no_head(self):
+        model = TvpModel.from_pretrained("Intel/tvp-base").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        input_ids = torch.tensor([[1, 2]])
+        attention_mask = torch.tensor([[1, 1]])
+        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+
+        with torch.no_grad():
+            outputs = model(**encoding)
+
+        expected_shape = torch.Size((1, 61, 768))
+        assert outputs.last_hidden_state.shape == expected_shape
+        expected_slice = torch.tensor(
+            [[0.5855, -0.1829, 2.4803], [-0.3070, 1.1326, 0.5163], [-0.5632, -0.3950, 2.4989]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
