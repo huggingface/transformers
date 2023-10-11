@@ -159,6 +159,8 @@ class CircleCIJob:
             test_command = f"timeout {self.command_timeout} "
         test_command += f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
 
+        self.tests_to_run = ["tests/models"]
+
         if self.parallelism == 1:
             if self.tests_to_run is None:
                 test_command += " << pipeline.parameters.tests_to_run >>"
