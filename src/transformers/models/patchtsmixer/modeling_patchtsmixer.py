@@ -305,6 +305,7 @@ class PatchMixer(nn.Module):
             self.norm_attn = NormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
     def forward(self, x):
+        
         # x.shape == (batch_size, num_patches, num_features) if flatten
         # x.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
         residual = x
