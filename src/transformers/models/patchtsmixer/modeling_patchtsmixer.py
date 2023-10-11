@@ -115,10 +115,10 @@ class PatchTSMixerGatedAttention(nn.Module):
 
 class PatchTSMixerTranspose(nn.Module):
     """
-    Parameters:
     Transpose the tensor to the dimension defined in **dims**
-        dims (`list`): list of dimensions to be transposed contiguous (`bool`): if True, the transposed tensor is
-        contiguous
+    Parameters:
+        dims (`list`): list of dimensions to be transposed 
+        contiguous (`bool`): if True, the transposed tensor is contiguous
     """
     def __init__(self, *dims, contiguous=False):
         super().__init__()
@@ -1187,8 +1187,8 @@ def forecast_masking(
 # TODO: add copied from after PatchTST master merge
 class PatchTSMixerPatchify(nn.Module):
     """
-    Parameters:
     A class to patchify the time series sequence into different patches
+    Parameters:
         sequence_length (`int`, required): input sequence length.
         patch_length (`int`, required): patch length.
         stride (`int`, required): stride between patches.
