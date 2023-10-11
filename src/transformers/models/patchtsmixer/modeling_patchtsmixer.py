@@ -305,7 +305,6 @@ class PatchMixer(nn.Module):
             self.norm_attn = NormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
     def forward(self, x):
-        
         # x.shape == (batch_size, num_patches, num_features) if flatten
         # x.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
         residual = x
@@ -1617,12 +1616,20 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 
             For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is > 1.
 
+        observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, input_size)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
+            `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers.
 
+        return_dict (`bool`, *optional*)
+            Return dict.
 
         Returns:
-
         """
 
         mask = None
