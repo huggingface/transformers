@@ -115,11 +115,12 @@ class PatchTSMixerGatedAttention(nn.Module):
 
 class PatchTSMixerTranspose(nn.Module):
     """
-    Transpose the tensor to the dimension defined in **dims**
     Parameters:
-        dims (`list`): list of dimensions to be transposed 
+    Transpose the tensor to the dimension defined in **dims**
+        dims (`list`): list of dimensions to be transposed
         contiguous (`bool`): if True, the transposed tensor is contiguous
     """
+
     def __init__(self, *dims, contiguous=False):
         super().__init__()
         self.dims, self.contiguous = dims, contiguous
@@ -143,7 +144,9 @@ class PatchTSMixerNormLayer(nn.Module):
         self.mode = mode
         self.num_features = num_features
         if "batch" in norm_mlp.lower():
-            self.norm = nn.Sequential(PatchTSMixerTranspose(1, 2), nn.BatchNorm1d(num_features), PatchTSMixerTranspose(1, 2))
+            self.norm = nn.Sequential(
+                PatchTSMixerTranspose(1, 2), nn.BatchNorm1d(num_features), PatchTSMixerTranspose(1, 2)
+            )
         else:
             self.norm = nn.LayerNorm(num_features)
 
@@ -1125,9 +1128,8 @@ def forecast_masking(
     cv_channel_indices
 
     Args:
-        xb (`torch.Tensor` of shape `(bs, num_channels, num_patch, patch_len)` or `(bs, tsg1, tag2, num_channels, num_patch,
-            patch_len)`):
-            Input to mask
+        xb (`torch.Tensor` of shape `(bs, num_channels, num_patch, patch_len)` or `(bs, tsg1, tag2, num_channels, num_patch,:
+            patch_len)`): Input to mask
         patch_lengths (`list`): List of patch lengths to mask in the end of the data.
         mix_ratio (`list`, *optional*): List of weights to use for each patch length. For Ex.
             if patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to
@@ -1187,8 +1189,8 @@ def forecast_masking(
 # TODO: add copied from after PatchTST master merge
 class PatchTSMixerPatchify(nn.Module):
     """
-    A class to patchify the time series sequence into different patches
     Parameters:
+    A class to patchify the time series sequence into different patches
         sequence_length (`int`, required): input sequence length.
         patch_length (`int`, required): patch length.
         stride (`int`, required): stride between patches.
@@ -1528,11 +1530,10 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     ) -> Union[Tuple, PatchTSMixerEncoderOutput]:
         r"""
         Args:
-        context_values (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`):
-            Patched input context.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers.
+            context_values (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`):
+                Patched input context.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers.
 
         Returns:
         """
@@ -1618,26 +1619,26 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     ) -> Union[Tuple, PatchTSMixerModelOutput]:
         r"""
         Args:
-        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
-            Context values of the time series. For a pretraining task, this denotes the input time series to predict
-            the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
-            for classification or regression tasks, it denotes the appropriate context values of the time series.
+            context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
+                Context values of the time series. For a pretraining task, this denotes the input time series to
+                predict the masked portion. For a forecasting task, this denotes the history/past time series values.
+                Similarly, for classification or regression tasks, it denotes the appropriate context values of the
+                time series.
 
-            For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is > 1.
+                For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is >
+                1.
 
-        observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, input_size)`, *optional*):
-            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
-            `[0, 1]`:
+            observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, input_size)`, *optional*):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
 
-            - 1 for values that are **observed**,
-            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers.
-
-        return_dict (`bool`, *optional*)
-            Return dict.
-
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers.
+            return_dict (`bool`, *optional*)
+                Return dict.
         Returns:
         """
 
@@ -1732,18 +1733,19 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
     ) -> PatchTSMixerForMaskPreTrainingOutput:
         r"""
         Args:
-        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
-            Context values of the time series. For a pretraining task, this denotes the input time series to predict
-            the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
-            for classification or regression tasks, it denotes the appropriate context values of the time series.
+            context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
+                Context values of the time series. For a pretraining task, this denotes the input time series to
+                predict the masked portion. For a forecasting task, this denotes the history/past time series values.
+                Similarly, for classification or regression tasks, it denotes the appropriate context values of the
+                time series.
 
-            For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is > 1.
+                For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is >
+                1.
 
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers.
-
-        return_loss (`bool`,  *optional*):
-            Whether to return the loss in the `forward` call.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers.
+            return_loss (`bool`,  *optional*):
+                Whether to return the loss in the `forward` call.
 
         Returns:
 
