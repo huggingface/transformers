@@ -187,8 +187,8 @@ class PatchTSMixerMLP(nn.Module):
         return x
 
 
-class ChannelFeatureMixer(nn.Module):
-    """ChannelFeatureMixer
+class ChannelFeatureMixerBlock(nn.Module):
+    """ChannelFeatureMixerBlock
 
     Args:
         num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
@@ -491,7 +491,7 @@ class PatchTSMixerLayer(nn.Module):
 
         self.mode = mode
         if mode == "mix_channel":
-            self.channel_feature_mixer = ChannelFeatureMixer(
+            self.channel_feature_mixer = ChannelFeatureMixerBlock(
                 num_features=num_features,
                 in_channels=in_channels,
                 expansion_factor=expansion_factor,
