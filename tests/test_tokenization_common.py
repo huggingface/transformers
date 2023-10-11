@@ -4060,7 +4060,7 @@ class TokenizerTesterMixin:
                 self.assertEquals(tokenizer._eos_token, new_eos)
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
                 # make sure the exact added token made it to the added tokens decoder
-                self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
+                self.assertIn(new_eos, list(tokenizer.added_tokens_decoder.values()))
 
                 tokenizer.additional_special_tokens = [""]
                 with tempfile.TemporaryDirectory() as tmp_dir_2:
@@ -4099,6 +4099,12 @@ class TokenizerTesterMixin:
                     # Make sure the additional special tokens does not include any special attribute token
                     self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
                     self.assertTrue(new_eos in tokenizer.special_tokens_map)
+
+
+            # make sure the special tokens are marked as special in the fast tokenizer.json and in the slow as well of course. Read the jsons
+            # MAKE SURE THE ONLY WAY TO CHANGE AN ADDEDTOKEN IS THROUGH add_tokens!
+            # Allow re-building the regex?
+            # make sure we don't cast anything in another type,
 
     def test_additional_special_tokens_serialization(self):
         self.maxDiff = None
@@ -4145,6 +4151,7 @@ class TokenizerTesterMixin:
                 self.assertTrue(new_eos not in tokenizer.special_tokens_map)
 
                 if self.rust_tokenizer_class is not None:
+                    # from fast
                     tokenizer = self.tokenizer_class.from_pretrained(pretrained_name)
                     # Make sure the additional special tokens does not include any special attribute token
                     self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)

@@ -460,7 +460,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added_tokens = 0
         if new_tokens is None:
             return added_tokens
-        # TODO this is fairly slow
+        # TODO this is fairly slow to improve!
         current_vocab = self.get_vocab().copy()
         new_idx = len(current_vocab)  # only call this once, len gives the last index + 1
         for token in new_tokens:
@@ -555,7 +555,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             logger.warning(f"Keyword arguments {kwargs} not recognized.")
 
         if hasattr(self, "do_lower_case") and self.do_lower_case:
-            # convert non-special tokens to lowercase
+            # convert non-special tokens to lowercase. Might be super slow as well?
             escaped_special_toks = [re.escape(s_tok) for s_tok in (self.all_special_tokens)]
             escaped_special_toks += [
                 re.escape(s_tok.content)
@@ -569,7 +569,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             no_split_token = []
             tokens = [text]
         else:
-            no_split_token = set(self._added_tokens_encoder.keys())  # don't split on any of the added tokens
+            no_split_token = self._added_tokens_encoder.keys()  # don't split on any of the added tokens
             # "This is something<special_token_1>  else"
             tokens = self.tokens_trie.split(text)
 
@@ -593,7 +593,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     elif tok_extended.single_word and right and right[0] != " ":
                         tokens[i + 1] = token + tokens[i + 1]
                         tokens[i] = ""
-
                 else:
                     raise ValueError(
                         f"{tok_extended} cannot be tokenized because it was not properly added"
