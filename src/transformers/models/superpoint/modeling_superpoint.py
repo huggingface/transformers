@@ -207,7 +207,8 @@ class SuperPointInterestPointDecoder(nn.Module):
 
     @staticmethod
     def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
-        assert nms_radius >= 0
+        if nms_radius < 0 :
+            raise ValueError("Expected positive values for nms_radius")
 
         def max_pool(x):
             return torch.nn.functional.max_pool2d(x, kernel_size=nms_radius * 2 + 1, stride=1, padding=nms_radius)
