@@ -312,7 +312,7 @@ torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager torch==2.0.1 torchaudio==2.0.2 torchvision==0.15.2",
     ],
     parallelism=1,
-    pytest_num_workers=8,
+    pytest_num_workers=1,
 )
 
 
