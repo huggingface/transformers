@@ -397,7 +397,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=ImagePointDescriptionOutput,
-        config_class=_CONFIG_FOR_DOC_,
+        config_class=_CONFIG_FOR_DOC,
         modality="vision",
     )
     def forward(
