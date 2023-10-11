@@ -135,6 +135,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mega", "MegaModel"),
         ("megatron-bert", "MegatronBertModel"),
         ("mgp-str", "MgpstrForSceneTextRecognition"),
+        ("mistral", "MistralModel"),
         ("mobilebert", "MobileBertModel"),
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
@@ -412,6 +413,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForCausalLM"),
         ("mega", "MegaForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
+        ("mistral", "MistralForCausalLM"),
         ("mpt", "MptForCausalLM"),
         ("musicgen", "MusicgenForCausalLM"),
         ("mvp", "MvpForCausalLM"),
@@ -734,6 +736,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForSequenceClassification"),
         ("mega", "MegaForSequenceClassification"),
         ("megatron-bert", "MegatronBertForSequenceClassification"),
+        ("mistral", "MistralForSequenceClassification"),
         ("mobilebert", "MobileBertForSequenceClassification"),
         ("mpnet", "MPNetForSequenceClassification"),
         ("mpt", "MptForSequenceClassification"),
@@ -1114,6 +1117,12 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES = OrderedDict(
+    [
+        ("swin2sr", "Swin2SRForImageSuperResolution"),
+    ]
+)
+
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
@@ -1199,6 +1208,8 @@ MODEL_FOR_MASK_GENERATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL
 
 MODEL_FOR_TEXT_ENCODING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES)
 
+MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
+
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_MASK_GENERATION_MAPPING
@@ -1206,6 +1217,10 @@ class AutoModelForMaskGeneration(_BaseAutoModelClass):
 
 class AutoModelForTextEncoding(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_TEXT_ENCODING_MAPPING
+
+
+class AutoModelForImageToImage(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_IMAGE_TO_IMAGE_MAPPING
 
 
 class AutoModel(_BaseAutoModelClass):

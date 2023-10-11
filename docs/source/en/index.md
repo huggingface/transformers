@@ -48,7 +48,6 @@ The documentation is organized into five sections:
   - **MODELS** details the classes and functions related to each model implemented in the library.
   - **INTERNAL HELPERS** details utility classes and functions used internally.
 
-### Supported models
 
 <!--This list is updated automatically from the README with _make fix-copies_. Do not update manually! -->
 
