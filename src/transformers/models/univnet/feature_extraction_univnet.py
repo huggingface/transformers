@@ -16,7 +16,6 @@
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-import torch
 
 from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -260,15 +259,11 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         return noise
 
-    def batch_decode(
-        self,
-        waveforms: torch.FloatTensor,
-        waveform_lengths: Optional[torch.FloatTensor] = None,
-    ) -> List[torch.FloatTensor]:
+    def batch_decode(self, waveforms, waveform_lengths = None) -> List[np.ndarray]:
         r"""
         Removes padding from generated audio after running [`UnivNetModel.forward`]. This returns a ragged list of 1D
-        audio waveform tensors and not a single tensor because in general the waveforms will have different lengths
-        after removing padding.
+        audio waveform arrays and not a single tensor/array because in general the waveforms will have different
+        lengths after removing padding.
 
         Args:
             waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -277,10 +272,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 The batched lengths of each waveform before padding.
 
         Returns:
-            `List[torch.FloatTensor]`: A ragged list of 1D waveform tensors with padding removed.
+            `List[np.ndarray]`: A ragged list of 1D waveform arrays with padding removed.
         """
         # Collapse the batched waveform tensor to a list of 1D audio waveforms
-        waveforms = [waveform.detach().clone() for waveform in waveforms]
+        waveforms = [waveform.detach().clone().cpu().numpy() for waveform in waveforms]
 
         if waveform_lengths is not None:
             waveforms = [waveform[: waveform_lengths[i]] for i, waveform in enumerate(waveforms)]
