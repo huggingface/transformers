@@ -100,7 +100,7 @@ class SuperPointEncoder(nn.Module):
         input,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ):
+    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
         input = self.relu(self.conv1a(input))
         input = self.relu(self.conv1b(input))
@@ -147,7 +147,7 @@ class SuperPointInterestPointDecoder(nn.Module):
     as to keep only the k keypoints with highest score.
     """
 
-    def __init__(self, config: SuperPointConfig):
+    def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
         self.conv_layers_sizes = config.conv_layers_sizes
         self.descriptor_dim = config.descriptor_dim
@@ -167,7 +167,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         )
         self.convSb = nn.Conv2d(self.conv_layers_sizes[4], 65, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, encoded):
+    def forward(self, encoded: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # Compute the dense keypoint scores
         scores = self.get_scores(encoded)
         # Extract keypoints
@@ -175,26 +175,26 @@ class SuperPointInterestPointDecoder(nn.Module):
 
         return keypoints, scores
 
-    def get_scores(self, encoded):
+    def get_scores(self, encoded: torch.Tensor) -> torch.Tensor:
         """Compute the dense keypoint scores"""
         scores = self.relu(self.convSa(encoded))
         scores = self.convSb(scores)
         scores = torch.nn.functional.softmax(scores, 1)[:, :-1]
-        b, _, h, w = scores.shape
-        scores = scores.permute(0, 2, 3, 1).reshape(b, h, w, 8, 8)
-        scores = scores.permute(0, 1, 3, 2, 4).reshape(b, h * 8, w * 8)
+        batch_size, _, height, width = scores.shape
+        scores = scores.permute(0, 2, 3, 1).reshape(batch_size, height, width, 8, 8)
+        scores = scores.permute(0, 1, 3, 2, 4).reshape(batch_size, height * 8, width * 8)
         scores = self.simple_nms(scores, self.nms_radius)
         return scores
 
-    def extract_keypoints(self, scores):
-        b, h, w = scores.shape
+    def extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        _, height, width = scores.shape
 
         # Threshold keypoints by score value
         keypoints = torch.nonzero(scores[0] > self.keypoint_threshold)
         scores = scores[0][tuple(keypoints.t())]
 
         # Discard keypoints near the image borders
-        keypoints, scores = self.remove_borders(keypoints, scores, self.border_removal_distance, h * 8, w * 8)
+        keypoints, scores = self.remove_borders(keypoints, scores, self.border_removal_distance, height * 8, width * 8)
 
         # Keep the k keypoints with highest score
         if self.max_keypoints >= 0:
@@ -206,7 +206,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         return keypoints, scores
 
     @staticmethod
-    def simple_nms(scores, nms_radius: int):
+    def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
         assert nms_radius >= 0
 
         def max_pool(x):
@@ -222,7 +222,9 @@ class SuperPointInterestPointDecoder(nn.Module):
         return torch.where(max_mask, scores, zeros)
 
     @staticmethod
-    def remove_borders(keypoints, scores, border: int, height: int, width: int):
+    def remove_borders(
+        keypoints: torch.Tensor, scores: torch.Tensor, border: int, height: int, width: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Removes keypoints too close to the border"""
         mask_h = (keypoints[:, 0] >= border) & (keypoints[:, 0] < (height - border))
         mask_w = (keypoints[:, 1] >= border) & (keypoints[:, 1] < (width - border))
@@ -230,7 +232,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         return keypoints[mask], scores[mask]
 
     @staticmethod
-    def top_k_keypoints(keypoints, scores, k: int):
+    def top_k_keypoints(keypoints: torch.Tensor, scores: torch.Tensor, k: int) -> Tuple[torch.Tensor, torch.Tensor]:
         if k >= len(keypoints):
             return keypoints, scores
         scores, indices = torch.topk(scores, k, dim=0)
@@ -246,7 +248,7 @@ class SuperPointDescriptorDecoder(nn.Module):
     are then interpolated at the keypoints locations.
     """
 
-    def __init__(self, config: SuperPointConfig):
+    def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
         self.conv_layers_sizes = config.conv_layers_sizes
         self.descriptor_dim = config.descriptor_dim
@@ -272,7 +274,7 @@ class SuperPointDescriptorDecoder(nn.Module):
             padding=0,
         )
 
-    def forward(self, encoded, keypoints):
+    def forward(self, encoded, keypoints) -> torch.Tensor:
         """Compute the dense descriptors"""
         descriptors = self.convDb(self.relu(self.convDa(encoded)))
         descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
@@ -286,21 +288,21 @@ class SuperPointDescriptorDecoder(nn.Module):
         return descriptors
 
     @staticmethod
-    def sample_descriptors(keypoints, descriptors, s: int = 8):
+    def sample_descriptors(keypoints, descriptors, scale: int = 8) -> torch.Tensor:
         """Interpolate descriptors at keypoint locations"""
-        b, c, h, w = descriptors.shape
-        keypoints = keypoints - s / 2 + 0.5
+        batch_size, num_channels, height, width = descriptors.shape
+        keypoints = keypoints - scale / 2 + 0.5
         keypoints /= torch.tensor(
-            [(w * s - s / 2 - 0.5), (h * s - s / 2 - 0.5)],
+            [(width * scale - scale / 2 - 0.5), (height * scale - scale / 2 - 0.5)],
         ).to(
             keypoints
         )[None]
         keypoints = keypoints * 2 - 1  # normalize to (-1, 1)
         args = {"align_corners": True} if torch.__version__ >= "1.3" else {}
         descriptors = torch.nn.functional.grid_sample(
-            descriptors, keypoints.view(b, 1, -1, 2), mode="bilinear", **args
+            descriptors, keypoints.view(batch_size, 1, -1, 2), mode="bilinear", **args
         )
-        descriptors = torch.nn.functional.normalize(descriptors.reshape(b, c, -1), p=2, dim=1)
+        descriptors = torch.nn.functional.normalize(descriptors.reshape(batch_size, num_channels, -1), p=2, dim=1)
         return descriptors
 
 
@@ -315,7 +317,7 @@ class SuperPointPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
@@ -327,7 +329,7 @@ class SuperPointPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor):
+    def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
         """
         Assuming pixel_values has shape (batch_size, 3, height, width), and that all channels values are the same,
         extract the first channel value to get a tensor of shape (batch_size, 1, height, width) for SuperPoint. This is
@@ -382,7 +384,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
     keypoints. It is made of a convolutional encoder and two decoders: one for keypoints and one for descriptors.
     """
 
-    def __init__(self, config: SuperPointConfig):
+    def __init__(self, config: SuperPointConfig) -> None:
         super().__init__(config)
 
         self.config = config
@@ -511,8 +513,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
     SUPERPOINT_START_DOCSTRING,
 )
 class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
-
-    def __init__(self, config: SuperPointConfig):
+    def __init__(self, config: SuperPointConfig) -> None:
         super().__init__(config)
 
         self.config = config
