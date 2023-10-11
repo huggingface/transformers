@@ -207,7 +207,7 @@ class SuperPointInterestPointDecoder(nn.Module):
 
     @staticmethod
     def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
-        if nms_radius < 0 :
+        if nms_radius < 0:
             raise ValueError("Expected positive values for nms_radius")
 
         def max_pool(x):
@@ -514,7 +514,6 @@ class SuperPointModel(SuperPointPreTrainedModel):
     SUPERPOINT_START_DOCSTRING,
 )
 class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
-
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__(config)
 
