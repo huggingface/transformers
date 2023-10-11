@@ -166,8 +166,9 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*, defaults to `True`):
             File containing the vocabulary.
+        tokenizer_file (`<fill_type>`, *optional*): <fill_docstring>
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
@@ -185,17 +186,12 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        clean_text (`bool`, *optional*, defaults to `True`):
-            Whether or not to clean the text before tokenization by removing any control characters and replacing all
-            whitespaces by the classic one.
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
             issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
-        wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
-            The prefix for subwords.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
