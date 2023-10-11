@@ -500,14 +500,14 @@ class PatchTSTMasking(nn.Module):
 
         super().__init__()
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, patch_input: torch.Tensor):
         """
         Parameters:
-            x (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`, *required*):
+            patch_input (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`, *required*):
                 Patch input
 
         Return:
-            x_mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`)
+            masked_input (`torch.Tensor` of shape `(batch_size, num_channels, num_patches, patch_length)`)
                 Masked patched input
             mask (`torch.Tensor` of shape `(batch_size, num_channels, num_patches)`)
                 Bool tensor indicating True on masked points
@@ -515,8 +515,8 @@ class PatchTSTMasking(nn.Module):
         """
 
         if self.mask_type == "random":
-            x_mask, mask = random_masking(
-                inputs=x,
+            masked_input, mask = random_masking(
+                inputs=patch_input,
                 mask_ratio=self.mask_ratio,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 channel_consistent_masking=self.channel_consistent_masking,
@@ -524,8 +524,8 @@ class PatchTSTMasking(nn.Module):
                 seed_number=self.seed_number,
             )
         elif self.mask_type == "forecast":
-            x_mask, mask = forecast_masking(
-                inputs=x,
+            masked_input, mask = forecast_masking(
+                inputs=patch_input,
                 patch_lengths=self.mask_patches,
                 mix_ratio=self.mask_patch_ratios,
                 unmasked_channel_indices=self.unmasked_channel_indices,
@@ -537,7 +537,7 @@ class PatchTSTMasking(nn.Module):
 
         mask = mask.bool()  # mask: [bs x num_input_channels x num_patch]
 
-        return x_mask, mask
+        return masked_input, mask
 
 
 class PatchTSTEncoderBlock(nn.Module):
