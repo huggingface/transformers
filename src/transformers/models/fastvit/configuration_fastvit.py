@@ -50,9 +50,9 @@ class FastViTConfig(PretrainedConfig):
 
 
     Args:
-        image_size (`int`, *optional*, defaults to `256`):
+        image_size (`int`, *optional*, defaults to 256):
             The size (resolution) of each image.
-        num_channels (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         depths (`List[int]`, *optional*, defaults to `[2, 2, 4, 2]`):
             The number of Token Mixer blocks in each FastViTLayer Block.
@@ -60,10 +60,10 @@ class FastViTConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         hidden_sizes (`List[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
             Dimensionality of the encoder layers in each FastViTLayer Block.
-        pos_embeds (`List[Bool]`, *optional*, defaults to `None`, equivalent to `[None, None, None, None]`)
+        pos_embeds (`List[Bool]`, *optional*):
             Whether to add a Conditional Positional Encoding in each FastViTLayer Block. `"RepCPE"` is the option to
             put CPE in a specific Layer.
-        token_mixers (`List[str]` *optional*, defaults to `["repmixer", "repmixer", "repmixer", "repmixer"]`)
+        token_mixers (`List[str]` *optional*, defaults to `['repmixer', 'repmixer', 'repmixer', 'repmixer']`):
             Whether to use RepMixer block or Attention block per each FastViTLayer Block. `"repmixer"` and
             `"attention"` are supported.
         mlp_ratio (`float`, *optional*, defaults to 3.0):
@@ -77,7 +77,7 @@ class FastViTConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the queries, keys and values.
