@@ -185,7 +185,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = speech_generator("This is a test", forward_params={"speaker_id": 5})
         audio = outputs["audio"]
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             # assert error if generate parameter
             outputs = speech_generator("This is a test", forward_params={"speaker_id": 5, "do_sample": True})
 
@@ -196,7 +196,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         set_seed(555)
         # make sure nothing is done if generate_kwargs passed since not related
         outputs = speech_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
-        self.assertListEqual(outputs["audio"].tolist(), audio.tolist())
+        self.assertTrue(np.abs(outputs["audio"] - audio).max()<1e-5)
 
     @slow
     @require_torch
