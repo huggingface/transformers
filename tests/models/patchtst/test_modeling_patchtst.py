@@ -188,8 +188,11 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        # if classification model:
-        if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
+        #  if PatchTSTForPretraining
+        if model_class == PatchTSTForPretraining:
+            inputs_dict.pop("future_values")
+        # else if classification model:
+        elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
             labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels, rng=rng)
             inputs_dict["labels"] = labels
@@ -272,7 +275,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 "past_observed_mask",
                 "future_values",
             ]
-            if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
+            if model_class == PatchTSTForPretraining:
+                expected_arg_names.remove("future_values")
+            elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
                 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
             ):
                 expected_arg_names.remove("future_values")
@@ -282,6 +287,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             expected_arg_names.extend(
                 [
                     "output_hidden_states",
+                    "return_dict",
                 ]
             )
 

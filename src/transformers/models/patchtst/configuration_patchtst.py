@@ -46,7 +46,7 @@ class PatchTSTConfig(PretrainedConfig):
         distribution_output (`str`, *optional*, defaults to `"student_t"`):
             The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
             "negative_binomial".
-        loss (`str`, *optional*, defaults to `"mse"`): 
+        loss (`str`, *optional*, defaults to `"mse"`):
             The loss function for the model corresponding to the `distribution_output` head. For parametric
             distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
             error "mse".
