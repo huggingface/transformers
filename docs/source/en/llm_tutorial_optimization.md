@@ -22,7 +22,7 @@ The crux of these challenges lies in augmenting the computational and memory cap
 
 In this guide, we will go over the effective techniques for efficient LLM deployment:
 
-1.  **Lower Precision**: Research has shown that operating at reduced numerical precision, namely 8-bit and 4-bit, can achieve computational advantages without a considerable decline in model performance.
+1.  **Lower Precision**: Research has shown that operating at reduced numerical precision, namely [8-bit and 4-bit](./main_classes/quantization.md) can achieve computational advantages without a considerable decline in model performance.
 
 2.  **Flash Attention:** Flash Attention is a variation of the attention algorithm that not only provides a more memory-efficient approach but also realizes increased efficiency due to optimized GPU memory utilization.
 
