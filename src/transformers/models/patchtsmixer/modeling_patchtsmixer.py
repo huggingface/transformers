@@ -747,7 +747,7 @@ class ForecastHead(nn.Module):
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
             we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
             Defaults to "common_channel".
-        forecast_channel_indices (list, *optional*):
+        forecast_channel_indices (`list`, *optional*):
             List of channel indices to forecast. If None, forecast all channels.
     """
 
@@ -851,7 +851,7 @@ class LinearHead(nn.Module):
         head_dropout (`float`, *optional*): Head Dropout rate. Defaults to 0.2.
         head_agg (str, *optional*): Aggregation mode. Allowed values are use_last, max_pool, avg_pool.
                                 Defaults to max_pool.
-        output_range (list, *optional*): Output range of [low, high] to restrict sigmoid. Defaults to None.
+        output_range (`list`, *optional*): Output range of [low, high] to restrict sigmoid. Defaults to None.
         mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
             common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
             In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
@@ -1072,7 +1072,7 @@ def random_masking(
     Parameters:
         xb (Tensor): Input to mask [ bs x nvars x num_patches x patch_length]
         mask_ratio (`float`): Mask ratio.
-        unmasked_channel_indices (list, *optional*):
+        unmasked_channel_indices (`list`, *optional*):
             indices of unmasked channels. These channels will not be masked. Defaults to None.
         channel_consistent_masking (bool, *optional*):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
@@ -1125,13 +1125,14 @@ def forecast_masking(
     cv_channel_indices
 
     Args:
-        xb (Tensor):
-            Input to mask [ bs x nvars x num_patch x patch_len] or [ bs x tsg1 x tag2 x nvars x num_patch x patch_len]
-        patch_lengths (list): List of patch lengths to mask in the end of the data.
-        mix_ratio (list, *optional*): List of weights to use for each patch length. For Ex.
+        xb (`torch.Tensor` of shape `(bs, num_channels, num_patch, patch_len)` or `(bs, tsg1, tag2, num_channels, num_patch,
+            patch_len)`):
+            Input to mask
+        patch_lengths (`list`): List of patch lengths to mask in the end of the data.
+        mix_ratio (`list`, *optional*): List of weights to use for each patch length. For Ex.
             if patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to
             None.
-        unmasked_channel_indices (list, *optional*):
+        unmasked_channel_indices (`list`, *optional*):
             Control Variable channel indices. These channels will not be masked. Defaults to None.
         mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
 
@@ -1245,10 +1246,10 @@ class PatchTSMixerMasking(nn.Module):
     Parameters:
         mask_type (str, *optional*): Masking type. Allowed values are random, forecast. Defaults to random.
         mask_ratio (`float`, *optional*): Mask ratio.
-        mask_patches (list, *optional*): List of patch lengths to mask in the end of the data.
-        mask_patch_ratios (list, *optional*): List of weights to use for each patch length. For Ex. if
+        mask_patches (`list`, *optional*): List of patch lengths to mask in the end of the data.
+        mask_patch_ratios (`list`, *optional*): List of weights to use for each patch length. For Ex. if
             patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to None.
-        unmasked_channel_indices (list, *optional*):
+        unmasked_channel_indices (`list`, *optional*):
             Control Variable channel indices. These channels will not be masked. Defaults to None.
         channel_consistent_masking (bool, *optional*):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
