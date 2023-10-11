@@ -187,7 +187,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BrosSpadeEEForTokenClassification",
     "BrosSpadeELForTokenClassification",
     "Beit3Model",
-    "Beit3ForCaptioning"
+    "Beit3ForCaptioning",
     "Beit3ForImageTextRetrieval",
     "Beit3ForVisualReasoning",
     "TFBlipForConditionalGeneration",
