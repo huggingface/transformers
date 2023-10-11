@@ -62,7 +62,6 @@ A critical aspect of autoregressive generation with LLMs is how to select the ne
     <figcaption>"Autoregressive generation iteratively selects the next token from a probability distribution to generate text"</figcaption>
 </figure>
 
-
 The process depicted above is repeated iteratively until some stopping condition is reached. Ideally, the stopping condition is dictated by the model, which should learn when to output an end-of-sequence (`EOS`) token. If this is not the case, generation stops when some predefined maximum length is reached.
 
 Properly setting up the token selection step and the stopping condition is essential to make your model behave as you'd expect on your task. That is why we have a [`~generation.GenerationConfig`] file associated with each model, which contains a good default generative parameterization and is loaded alongside your model.
