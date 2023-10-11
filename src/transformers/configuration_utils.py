@@ -47,6 +47,7 @@ _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
 class PretrainedConfig(PushToHubMixin):
+    # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
@@ -855,6 +856,9 @@ class PretrainedConfig(PushToHubMixin):
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
+        if "_flash_attn_2_enabled" in serializable_config_dict:
+            del serializable_config_dict["_flash_attn_2_enabled"]
+
         return serializable_config_dict
 
     def to_dict(self) -> Dict[str, Any]:
@@ -871,6 +875,8 @@ class PretrainedConfig(PushToHubMixin):
             del output["_auto_class"]
         if "_commit_hash" in output:
             del output["_commit_hash"]
+        if "_flash_attn_2_enabled" in output:
+            del output["_flash_attn_2_enabled"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__

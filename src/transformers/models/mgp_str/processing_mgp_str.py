@@ -44,9 +44,9 @@ class MgpstrProcessor(ProcessorMixin):
     [`~MgpstrProcessor.__call__`] and [`~MgpstrProcessor.batch_decode`] for more information.
 
     Args:
-        image_processor (`ViTImageProcessor`):
+        image_processor (`ViTImageProcessor`, *optional*):
             An instance of `ViTImageProcessor`. The image processor is a required input.
-        tokenizer ([`MgpstrTokenizer`]):
+        tokenizer ([`MgpstrTokenizer`], *optional*):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "char_tokenizer"]

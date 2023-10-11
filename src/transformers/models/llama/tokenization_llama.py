@@ -125,7 +125,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         if legacy is None:
             logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
+                f"You are using the default legacy behaviour of the {self.__class__}. This is"
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
                 " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
                 " means, and thouroughly read the reason why this was added as explained in"
@@ -138,7 +138,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self.use_default_system_prompt = use_default_system_prompt
-        self.sp_model = self.get_spm_processor()
+        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
 
         super().__init__(
             bos_token=bos_token,
@@ -160,9 +160,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return len(self.sp_model.encode(str(self.unk_token)))
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
-    def get_spm_processor(self):
+    def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if self.legacy:  # no dependency on protobuf
+        if self.legacy or from_slow:  # no dependency on protobuf
             tokenizer.Load(self.vocab_file)
             return tokenizer
 
