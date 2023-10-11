@@ -1049,7 +1049,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
                 semantic_temperature=0.9,
                 coarse_temperature=0.2,
                 fine_temperature=0.1,
-                semantic_min_eos_p=0.1,
+                min_eos_p=0.1,
             )
 
     @require_torch_gpu

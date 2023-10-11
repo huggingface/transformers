@@ -1704,7 +1704,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         return out
 
 
-class BarkEarlyStoppingLogitsProcessor(LogitsProcessor):
+class EarlyStoppingLogitsProcessor(LogitsProcessor):
     r"""This processor ensures that the EOS token is sampled if its probability is greater than the `min_eos_p`.
 
     Args:
