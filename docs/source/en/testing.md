@@ -881,7 +881,7 @@ def test_feature_x():
 ```
 
 
-- テスト内の内部チェックに基づいてテストをスキップする方法は次のとおりです。
+Here's how to skip a test based on internal checks within the test:
 
 ```python
 def test_feature_x():
