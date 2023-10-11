@@ -80,6 +80,10 @@ that has already been deprecated and `DeprecationWarning` to indicate an upcomin
 We use both in the `transformers` library. We leverage and adapt `logging`'s `captureWarning` method to allow
 management of these warning messages by the verbosity setters above.
 
+What does that mean for developers of the library? We should respect the following heuristic:
+- `warnings` should be favored for developers of the library and libraries dependent on `transformers`
+- `logging` should be used for end-users of the library using it in every-day projects
+
 See reference of the `captureWarnings` method below.
 
 [[autodoc]] logging.captureWarnings
