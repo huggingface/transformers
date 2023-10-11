@@ -1764,7 +1764,7 @@ class ImagePointDescriptionOutput(ModelOutput):
 
     Args:
         keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
-            Relative coordinates of predicted keypoints in a given image.
+            Relative (x, y) coordinates of predicted keypoints in a given image.
         scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
             Scores of predicted keypoints.
         descriptors (`torch.FloatTensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
