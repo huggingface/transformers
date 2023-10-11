@@ -1272,11 +1272,7 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> import torch
         >>> from transformers import AutoTokenizer, Blip2Model
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
         >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
-
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> inputs = tokenizer(["a photo of a cat"], padding=True, return_tensors="pt").to(device)
@@ -1333,11 +1329,7 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Blip2Model
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
         >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
-
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1381,11 +1373,8 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> import requests
         >>> from transformers import Blip2Processor, Blip2Model
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
         >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
