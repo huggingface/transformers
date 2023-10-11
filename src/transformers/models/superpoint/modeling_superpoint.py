@@ -513,6 +513,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
     SUPERPOINT_START_DOCSTRING,
 )
 class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
+
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__(config)
 
