@@ -508,7 +508,7 @@
       - local: model_doc/dinat
         title: DiNAT
       - local: model_doc/dinov2
-        title: DINO V2
+        title: DINOV2
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt

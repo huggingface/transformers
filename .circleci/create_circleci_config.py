@@ -312,7 +312,7 @@ torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=8,
+    pytest_num_workers=6,
 )
 
 
@@ -348,6 +348,7 @@ pipelines_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     marker="is_pipeline_test",
+    pytest_num_workers=6,
 )
 
 
