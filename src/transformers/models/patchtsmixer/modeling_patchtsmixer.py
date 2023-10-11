@@ -24,11 +24,11 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn.modules.activation import MultiheadAttention
 
-from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from transformers.modeling_utils import PreTrainedModel
 from transformers.trainer_utils import set_seed
 from transformers.utils import ModelOutput
 
+from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_patchtsmixer import PatchTSMixerConfig
 
@@ -1991,8 +1991,8 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Return:
-            [`SamplePatchTSMixerForecastOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of samples, prediction_length,
-            num_input_channels)`.
+            [`SamplePatchTSMixerForecastOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
+            number of samples, prediction_length, num_input_channels)`.
         """
         # get number of samples
         num_parallel_samples = self.config.num_parallel_samples
@@ -2264,7 +2264,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                 Past values of the time series that serves as context in order to predict the future.
 
         Return:
-            [`SamplePatchTSMixerRegressionOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of samples, n_targets)`.
+            [`SamplePatchTSMixerRegressionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
+            number of samples, n_targets)`.
         """
         # get number of samples
         num_parallel_samples = self.config.num_parallel_samples
