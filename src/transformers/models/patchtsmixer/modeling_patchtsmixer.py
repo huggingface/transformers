@@ -1454,7 +1454,7 @@ class PatchTSMixerNOPScaler(nn.Module):
 
 
 class InjectScalerStatistics4D(nn.Module):
-    def __init__(self, num_features, num_patches, expansion=2):
+    def __init__(self, num_features: int, num_patches: int, expansion: int=2):
         super().__init__()
         self.inverse_transform = nn.Sequential(
             nn.Linear(num_features + 2, expansion * num_features),
@@ -1464,11 +1464,14 @@ class InjectScalerStatistics4D(nn.Module):
         self.map_scale = nn.Sequential(nn.Linear(2, 2 * expansion), nn.Linear(2 * expansion, 2))
         self.num_patches = num_patches
 
-    def forward(self, z, loc, scale):
+    def forward(self, inputs: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
         """
-        # revin_mean,revin_stddev: [batch_size x 1 x n_channels] z: [batch_size x in_channels x num_patch x num_features]
-
-        output: [batch_size x in_channels x num_patch x num_features]
+        Parameters:
+            inputs (`torch.Tensor` of shape `(batch_size, in_channels, num_patch, num_features)`)
+            loc (`torch.Tensor` of shape `(batch_size, 1, in_channels)`)
+            scale (`torch.Tensor` of shape `(batch_size, 1, in_channels)`)
+        Returns:
+            `torch.Tensor` of shape `(batch_size, in_channels, num_patch, num_features)`
         """
 
         mean = loc.transpose(-1, -2)  # [batch_size x n_channels x 1 ]
@@ -1483,10 +1486,10 @@ class InjectScalerStatistics4D(nn.Module):
 
         concat_stats = self.map_scale(concat_stats)  # [batch_size x n_channels x num_patch x 2]
 
-        z = torch.cat([z, concat_stats], dim=-1)  # [batch_size x channels x num_patch x num_features+2]
-        z = self.inverse_transform(z)  # [batch_size x channels x num_patch x num_features]
+        inputs = torch.cat([inputs, concat_stats], dim=-1)  # [batch_size x channels x num_patch x num_features+2]
+        inputs = self.inverse_transform(inputs)  # [batch_size x channels x num_patch x num_features]
 
-        return z
+        return inputs
 
 
 @dataclass
