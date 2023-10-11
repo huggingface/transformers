@@ -22,9 +22,9 @@ from ...utils import (
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC_ = "SuperPointConfig"
+_CONFIG_FOR_DOC = "SuperPointConfig"
 
-_CHECKPOINT_FOR_DOC_ = "stevenbucaille/superpoint"
+_CHECKPOINT_FOR_DOC = "stevenbucaille/superpoint"
 
 
 SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = ["stevenbucaille/superpoint"]
@@ -36,7 +36,7 @@ class SuperPointEncoder(nn.Module):
      dimensionality of the image.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
         self.conv_layers_sizes = config.conv_layers_sizes
         self.descriptor_dim = config.descriptor_dim
@@ -397,9 +397,9 @@ class SuperPointModel(SuperPointPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SUPERPOINT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC_,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=ImagePointDescriptionOutput,
-        config_class=_CONFIG_FOR_DOC_,
+        config_class=_CONFIG_FOR_DOC,
         modality="vision",
     )
     def forward(
