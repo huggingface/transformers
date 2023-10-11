@@ -126,9 +126,18 @@ class SuperPointImageProcessor(BaseImageProcessor):
                 `size["shortest_edge"]` >= 384 image is resized to `(size["shortest_edge"], size["shortest_edge"])`.
                 Otherwise, the smaller edge of the image will be matched to `int(size["shortest_edge"] / crop_pct)`,
                 after which the image is cropped to `(size["shortest_edge"], size["shortest_edge"])`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the output image. If not provided, it will be inferred from the input
+                image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred from the input
-                image.
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         size = get_size_dict(size, default_to_square=False)
 
