@@ -46,7 +46,7 @@ class MgpstrProcessorTest(unittest.TestCase):
 
     @property
     def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+        return self.prepare_image_processor_dict()
 
     def setUp(self):
         self.image_size = (3, 32, 128)
@@ -64,7 +64,7 @@ class MgpstrProcessorTest(unittest.TestCase):
         image_processor_map = {
             "do_normalize": False,
             "do_resize": True,
-            "feature_extractor_type": "ViTFeatureExtractor",
+            "image_processor_type": "ViTImageProcessor",
             "resample": 3,
             "size": {"height": 32, "width": 128},
         }

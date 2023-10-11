@@ -50,10 +50,10 @@ product between the projected image and text features is then used as a similar 
 To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
 which are then linearly embedded. A [CLS] token is added to serve as representation of an entire image. The authors
 also add absolute position embeddings, and feed the resulting sequence of vectors to a standard Transformer encoder.
-The [`CLIPFeatureExtractor`] can be used to resize (or rescale) and normalize images for the model.
+The [`CLIPImageProcessor`] can be used to resize (or rescale) and normalize images for the model.
 
 The [`CLIPTokenizer`] is used to encode the text. The [`CLIPProcessor`] wraps
-[`CLIPFeatureExtractor`] and [`CLIPTokenizer`] into a single instance to both
+[`CLIPImageProcessor`] and [`CLIPTokenizer`] into a single instance to both
 encode the text and prepare the images. The following example shows how to get the image-text similarity scores using
 [`CLIPProcessor`] and [`CLIPModel`].
 
@@ -85,6 +85,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 - A blog post on [How to fine-tune CLIP on 10,000 image-text pairs](https://huggingface.co/blog/fine-tune-clip-rsicd).
 - CLIP is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text).
+- A [notebook](https://colab.research.google.com/drive/1zip3zmrbuKerAfC1d2uS1mqQS-QykXnl?usp=sharing) on how to fine-tune the CLIP model with Korean multimodal dataset. 🌎🇰🇷
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
 The resource should ideally demonstrate something new instead of duplicating an existing resource.
@@ -182,6 +183,11 @@ The resource should ideally demonstrate something new instead of duplicating an 
 ## FlaxCLIPTextModel
 
 [[autodoc]] FlaxCLIPTextModel
+    - __call__
+
+## FlaxCLIPTextModelWithProjection
+
+[[autodoc]] FlaxCLIPTextModelWithProjection
     - __call__
 
 ## FlaxCLIPVisionModel

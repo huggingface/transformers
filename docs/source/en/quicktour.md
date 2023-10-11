@@ -30,11 +30,13 @@ You'll also need to install your preferred machine learning framework:
 
 <frameworkcontent>
 <pt>
+
 ```bash
 pip install torch
 ```
 </pt>
 <tf>
+
 ```bash
 pip install tensorflow
 ```
@@ -64,7 +66,7 @@ For a complete list of available tasks, check out the [pipeline API reference](.
 | Audio classification         | assign a label to some audio data                                                                            | Audio           | pipeline(task=“audio-classification”)         |
 | Automatic speech recognition | transcribe speech into text                                                                                  | Audio           | pipeline(task=“automatic-speech-recognition”) |
 | Visual question answering    | answer a question about the image, given an image and a question                                             | Multimodal      | pipeline(task=“vqa”)                          |
-| Document question answering  | answer a question about a document, given an image and a question                                            | Multimodal      | pipeline(task="document-question-answering")  |
+| Document question answering  | answer a question about the document, given a document and a question                                        | Multimodal      | pipeline(task="document-question-answering")  |
 | Image captioning             | generate a caption for a given image                                                                         | Multimodal      | pipeline(task="image-to-text")                |
 
 Start by creating an instance of [`pipeline`] and specifying a task you want to use it for. In this guide, you'll use the [`pipeline`] for sentiment analysis as an example:
@@ -208,6 +210,7 @@ A tokenizer can also accept a list of inputs, and pad and truncate the text to r
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> pt_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -219,6 +222,7 @@ A tokenizer can also accept a list of inputs, and pad and truncate the text to r
 ```
 </pt>
 <tf>
+
 ```py
 >>> tf_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -289,7 +293,7 @@ See the [task summary](./task_summary) for tasks supported by an [`AutoModel`] c
 
 </Tip>
 
-Now pass your preprocessed batch of inputs directly to the model by passing the dictionary keys directly to the tensors:
+Now pass your preprocessed batch of inputs directly to the model. You can pass the tensors as-is:
 
 ```py
 >>> tf_outputs = tf_model(tf_batch)
@@ -352,6 +356,7 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import AutoModel
 
@@ -360,6 +365,7 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import TFAutoModel
 
@@ -410,7 +416,7 @@ All models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn
 
 Depending on your task, you'll typically pass the following parameters to [`Trainer`]:
 
-1. A [`PreTrainedModel`] or a [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module):
+1. You'll start with a [`PreTrainedModel`] or a [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module):
 
    ```py
    >>> from transformers import AutoModelForSequenceClassification
@@ -432,7 +438,7 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
    ... )
    ```
 
-3. A preprocessing class like a tokenizer, image processor, feature extractor, or processor:
+3. Load a preprocessing class like a tokenizer, image processor, feature extractor, or processor:
 
    ```py
    >>> from transformers import AutoTokenizer
@@ -512,7 +518,7 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
    ```
 
-2. A preprocessing class like a tokenizer, image processor, feature extractor, or processor:
+2. Load a preprocessing class like a tokenizer, image processor, feature extractor, or processor:
 
    ```py
    >>> from transformers import AutoTokenizer

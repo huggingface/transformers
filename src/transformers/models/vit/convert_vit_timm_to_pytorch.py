@@ -25,7 +25,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import DeiTFeatureExtractor, ViTConfig, ViTFeatureExtractor, ViTForImageClassification, ViTModel
+from transformers import DeiTImageProcessor, ViTConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
 from transformers.utils import logging
 
 
@@ -208,12 +208,12 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         model = ViTForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by ViTFeatureExtractor/DeiTFeatureExtractor
+    # Check outputs on an image, prepared by ViTImageProcessor/DeiTImageProcessor
     if "deit" in vit_name:
-        feature_extractor = DeiTFeatureExtractor(size=config.image_size)
+        image_processor = DeiTImageProcessor(size=config.image_size)
     else:
-        feature_extractor = ViTFeatureExtractor(size=config.image_size)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+        image_processor = ViTImageProcessor(size=config.image_size)
+    encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
@@ -229,8 +229,8 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

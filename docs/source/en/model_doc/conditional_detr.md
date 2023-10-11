@@ -43,7 +43,6 @@ This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The o
 
 [[autodoc]] ConditionalDetrImageProcessor
     - preprocess
-    - pad_and_create_pixel_mask
     - post_process_object_detection
     - post_process_instance_segmentation
     - post_process_semantic_segmentation
@@ -53,7 +52,6 @@ This model was contributed by [DepuMeng](https://huggingface.co/DepuMeng). The o
 
 [[autodoc]] ConditionalDetrFeatureExtractor
     - __call__
-    - pad_and_create_pixel_mask
     - post_process_object_detection
     - post_process_instance_segmentation
     - post_process_semantic_segmentation

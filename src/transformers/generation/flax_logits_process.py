@@ -38,7 +38,7 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
         scores (`jnp.ndarray` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional logits processor specific kwargs.
 
     Return:
@@ -120,7 +120,7 @@ class FlaxTopPLogitsWarper(FlaxLogitsWarper):
         top_p (`float`):
             If set to < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or
             higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -163,7 +163,7 @@ class FlaxTopKLogitsWarper(FlaxLogitsWarper):
     Args:
         top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.

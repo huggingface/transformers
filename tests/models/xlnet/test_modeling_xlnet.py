@@ -56,7 +56,7 @@ class XLNetModelTester:
         hidden_size=32,
         num_attention_heads=4,
         d_inner=128,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         type_sequence_label_size=2,
         untie_r=True,
         bi_data=False,

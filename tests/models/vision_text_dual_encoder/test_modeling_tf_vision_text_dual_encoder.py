@@ -398,7 +398,7 @@ class TFVisionTextDualEncoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model = TFVisionTextDualEncoderModel.from_pretrained(
-            "clip-italian/clip-italian", logit_scale_init_value=1, from_pt=True
+            "clip-italian/clip-italian", logit_scale_init_value=1.0, from_pt=True
         )
         processor = VisionTextDualEncoderProcessor.from_pretrained("clip-italian/clip-italian")
 

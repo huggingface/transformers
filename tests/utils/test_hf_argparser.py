@@ -22,20 +22,13 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import yaml
 
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.hf_argparser import make_choice_type_function, string_to_bool
 
-
-try:
-    # For Python versions <3.8, Literal is not in typing: https://peps.python.org/pep-0586/
-    from typing import Literal
-except ImportError:
-    # For Python 3.7
-    from typing_extensions import Literal
 
 # Since Python 3.10, we can use the builtin `|` operator for Union types
 # See PEP 604: https://peps.python.org/pep-0604

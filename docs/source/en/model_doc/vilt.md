@@ -39,7 +39,7 @@ Tips:
 - The quickest way to get started with ViLT is by checking the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ViLT)
   (which showcase both inference and fine-tuning on custom data).
 - ViLT is a model that takes both `pixel_values` and `input_ids` as input. One can use [`ViltProcessor`] to prepare data for the model.
-  This processor wraps a feature extractor (for the image modality) and a tokenizer (for the language modality) into one.
+  This processor wraps a image processor (for the image modality) and a tokenizer (for the language modality) into one.
 - ViLT is trained with images of various sizes: the authors resize the shorter edge of input images to 384 and limit the longer edge to
   under 640 while preserving the aspect ratio. To make batching of images possible, the authors use a `pixel_mask` that indicates
   which pixel values are real and which are padding. [`ViltProcessor`] automatically creates this for you.

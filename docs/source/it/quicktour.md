@@ -68,11 +68,13 @@ Installa le seguenti dipendenze se non lo hai già fatto:
 
 <frameworkcontent>
 <pt>
+
 ```bash
 pip install torch
 ```
 </pt>
 <tf>
+
 ```bash
 pip install tensorflow
 ```
@@ -379,6 +381,7 @@ Una caratteristica particolarmente interessante di 🤗 Transformers è la sua a
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import AutoModel
 
@@ -387,6 +390,7 @@ Una caratteristica particolarmente interessante di 🤗 Transformers è la sua a
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import TFAutoModel
 

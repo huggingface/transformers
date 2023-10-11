@@ -49,7 +49,7 @@ class EfficientNetModelTester:
         num_channels=3,
         kernel_sizes=[3, 3, 5],
         in_channels=[32, 16, 24],
-        out_channels=[16, 24, 40],
+        out_channels=[16, 24, 20],
         strides=[1, 1, 2],
         num_block_repeats=[1, 1, 2],
         expand_ratios=[1, 6, 6],
@@ -265,5 +265,5 @@ class EfficientNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.0001, 0.0002, 0.0002]).to(torch_device)
+        expected_slice = torch.tensor([-0.2962, 0.4487, 0.4499]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

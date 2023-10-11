@@ -296,8 +296,6 @@ class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     config_class = DPRConfig
     load_tf_weights = None
     base_model_prefix = "ctx_encoder"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
 
 class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
@@ -309,8 +307,6 @@ class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     config_class = DPRConfig
     load_tf_weights = None
     base_model_prefix = "question_encoder"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
 
 class DPRPretrainedReader(DPRPreTrainedModel):
@@ -322,7 +318,6 @@ class DPRPretrainedReader(DPRPreTrainedModel):
     config_class = DPRConfig
     load_tf_weights = None
     base_model_prefix = "span_predictor"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
 
 ###############
@@ -459,9 +454,9 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         attention_mask: Optional[Tensor] = None,
         token_type_ids: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[DPRContextEncoderOutput, Tuple[Tensor, ...]]:
         r"""
         Return:
@@ -540,9 +535,9 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         attention_mask: Optional[Tensor] = None,
         token_type_ids: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[DPRQuestionEncoderOutput, Tuple[Tensor, ...]]:
         r"""
         Return:
@@ -567,6 +562,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -620,9 +616,9 @@ class DPRReader(DPRPretrainedReader):
         input_ids: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions: bool = None,
-        output_hidden_states: bool = None,
-        return_dict=None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[DPRReaderOutput, Tuple[Tensor, ...]]:
         r"""
         Return:
@@ -655,6 +651,7 @@ class DPRReader(DPRPretrainedReader):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]

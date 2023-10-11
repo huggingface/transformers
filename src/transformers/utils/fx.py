@@ -1058,7 +1058,7 @@ class HFTracer(Tracer):
             # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
             # be able to use HFTracer._generate_dummy_input.
             if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith(
-                "_deserialize_graph_module"
+                ("_deserialize_graph_module", "_CodeOnlyModule")
             ):
                 inputs.update(self._generate_dummy_input(root, input_name, shape))
             else:

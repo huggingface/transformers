@@ -46,7 +46,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import LevitFeatureExtractor
+    from transformers import LevitImageProcessor
 
 
 class LevitConfigTester(ConfigTester):
@@ -67,10 +67,10 @@ class LevitModelTester:
         stride=2,
         padding=1,
         patch_size=16,
-        hidden_sizes=[128, 256, 384],
-        num_attention_heads=[4, 6, 8],
+        hidden_sizes=[16, 32, 48],
+        num_attention_heads=[1, 2, 3],
         depths=[2, 3, 4],
-        key_dim=[16, 16, 16],
+        key_dim=[8, 8, 8],
         drop_path_rate=0,
         mlp_ratio=[2, 2, 2],
         attention_ratio=[2, 2, 2],
@@ -409,8 +409,8 @@ def prepare_img():
 @require_vision
 class LevitModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return LevitFeatureExtractor.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+    def default_image_processor(self):
+        return LevitImageProcessor.from_pretrained(LEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
 
     @slow
     def test_inference_image_classification_head(self):
@@ -418,9 +418,9 @@ class LevitModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

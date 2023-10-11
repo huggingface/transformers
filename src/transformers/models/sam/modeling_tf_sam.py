@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import collections
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -517,8 +517,8 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         point_embeddings = tf.cast(tokens, self.iou_token.dtype)
 
         image_embeddings = image_embeddings + dense_prompt_embeddings
-        image_embeddings = tf.tile(image_embeddings, [point_batch_size, 1, 1, 1])
-        image_positional_embeddings = tf.tile(image_positional_embeddings, [point_batch_size, 1, 1, 1])
+        image_embeddings = tf.repeat(image_embeddings, point_batch_size, axis=0)
+        image_positional_embeddings = tf.repeat(image_positional_embeddings, point_batch_size, axis=0)
 
         point_embedding, image_embeddings, attentions = self.transformer(
             point_embeddings=point_embeddings,
@@ -1335,12 +1335,12 @@ class TFSamModel(TFSamPreTrainedModel):
         input_masks: tf.Tensor | None = None,
         image_embeddings: tf.Tensor | None = None,
         multimask_output: bool = True,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict=None,
-        training=False,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool = False,
         **kwargs,
-    ) -> List[Dict[str, tf.Tensor]]:
+    ) -> TFSamImageSegmentationOutput | Tuple[tf.Tensor]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

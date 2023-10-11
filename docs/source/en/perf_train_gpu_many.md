@@ -241,7 +241,6 @@ If you pay close attention the way ZeRO partitions the model's weights - it look
 Implementations:
 
 - [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
-- [Fairscale](https://github.com/facebookresearch/fairscale/#optimizer-state-sharding-zero) ZeRO-DP stages 1+2+3
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
 ## Naive Model Parallelism (Vertical) and Pipeline Parallelism
@@ -294,7 +293,6 @@ There are 2 groups of solutions - the traditional Pipeline API and the more mode
 
 Traditional Pipeline API solutions:
 - PyTorch
-- FairScale
 - DeepSpeed
 - Megatron-LM
 
@@ -312,7 +310,6 @@ We are yet to experiment with Varuna and SageMaker but their papers report that 
 
 Implementations:
 - [Pytorch](https://pytorch.org/docs/stable/pipeline.html) (initial support in pytorch-1.8, and progressively getting improved in 1.9 and more so in 1.10). Some [examples](https://github.com/pytorch/pytorch/blob/master/benchmarks/distributed/pipeline/pipe.py)
-- [FairScale](https://fairscale.readthedocs.io/en/latest/tutorials/pipe.html)
 - [DeepSpeed](https://www.deepspeed.ai/tutorials/pipeline/)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation - no API.
 - [Varuna](https://github.com/microsoft/varuna)

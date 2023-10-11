@@ -291,8 +291,10 @@ def get_megatron_sharded_states(args, tp_size, pp_size, pp_rank):
     tp_state_dicts = []
     for i in range(tp_size):
         sub_dir_name = f"mp_rank_{i:02d}" if pp_size == 1 else f"mp_rank_{i:02d}_{pp_rank:03d}"
-        checkpoint_name = os.listdir(os.path.join(args.load_path, sub_dir_name))[0]
-        checkpoint_path = os.path.join(args.load_path, sub_dir_name, checkpoint_name)
+        for checkpoint_name in ["model_optim_rng.pt", "model_rng.pt"]:
+            checkpoint_path = os.path.join(args.load_path, sub_dir_name, checkpoint_name)
+            if os.path.isfile(checkpoint_path):
+                break
         state_dict = torch.load(checkpoint_path, map_location="cpu")
         tp_state_dicts.append(state_dict)
     return tp_state_dicts
@@ -735,15 +737,22 @@ def convert_checkpoint_from_transformers_to_megatron(args):
         word_emb_dict = get_element_from_dict_by_path(
             output_state_dict[i], "model.language_model.embedding.word_embeddings"
         )
-        word_emb_dict["weight"] = out_word_embed[i]
+        word_emb_dict["weight"] = out_word_embed[i].clone()
 
     # Transformer layers
     print("converting transformer layers")
-    if config.num_hidden_layers % args.target_tensor_model_parallel_size != 0:
+    if config.num_attention_heads % args.target_tensor_model_parallel_size != 0:
         raise ValueError(
-            f"Number of layers ({config.num_hidden_layers}) must be divisible by number of tensor parallelism"
+            f"Number of attention heads ({config.num_attention_heads}) must be divisible by number of tensor parallelism"
             f" ({args.target_tensor_model_parallel_size})"
         )
+
+    if config.num_hidden_layers % args.target_pipeline_model_parallel_size != 0:
+        raise ValueError(
+            f"Number of layers ({config.num_hidden_layers}) must be divisible by number of pipeline parallelism"
+            f" ({args.target_pipeline_model_parallel_size})"
+        )
+
     num_layers = config.num_hidden_layers // args.target_pipeline_model_parallel_size
 
     layer_re = re.compile(r"transformer.h\.(\d+)\.([a-z0-9_.]+)\.([a-z]+)")
@@ -836,7 +845,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
                 for i in range(args.target_tensor_model_parallel_size):
                     params_dict = get_element_from_dict_by_path(output_state_dict[i], "model.language_model.encoder")
                     params_dict[layer_name] = (
-                        params[i] if (op_name + "." + weight_or_bias in tensor_parallel_params) else params
+                        params[i].clone() if (op_name + "." + weight_or_bias in tensor_parallel_params) else params
                     )
 
         if pp_rank == args.target_pipeline_model_parallel_size - 1:
@@ -851,7 +860,7 @@ def convert_checkpoint_from_transformers_to_megatron(args):
             # add the LM head
             for i in range(args.target_tensor_model_parallel_size):
                 params_dict = get_element_from_dict_by_path(output_state_dict[i], "model.word_embeddings_for_head")
-                params_dict["weight"] = out_word_embed[i]
+                params_dict["weight"] = out_word_embed[i].clone()
 
         # saving the state dict as per the tp_rank and pp_rank
         for tp_rank in range(args.target_tensor_model_parallel_size):

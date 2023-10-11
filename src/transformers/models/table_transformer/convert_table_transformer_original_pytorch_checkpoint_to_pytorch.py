@@ -27,7 +27,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision.transforms import functional as F
 
-from transformers import DetrFeatureExtractor, TableTransformerConfig, TableTransformerForObjectDetection
+from transformers import DetrImageProcessor, TableTransformerConfig, TableTransformerForObjectDetection
 from transformers.utils import logging
 
 
@@ -242,7 +242,7 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
 
-    feature_extractor = DetrFeatureExtractor(
+    image_processor = DetrImageProcessor(
         format="coco_detection", max_size=800 if "detection" in checkpoint_url else 1000
     )
     model = TableTransformerForObjectDetection(config)
@@ -277,11 +277,11 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        # Save model and feature extractor
-        logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
+        # Save model and image processor
+        logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         # Push model to HF hub
@@ -292,7 +292,7 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
             else "microsoft/table-transformer-structure-recognition"
         )
         model.push_to_hub(model_name)
-        feature_extractor.push_to_hub(model_name)
+        image_processor.push_to_hub(model_name)
 
 
 if __name__ == "__main__":

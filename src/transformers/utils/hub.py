@@ -22,6 +22,7 @@ import sys
 import tempfile
 import traceback
 import warnings
+from concurrent import futures
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
@@ -31,16 +32,17 @@ import huggingface_hub
 import requests
 from huggingface_hub import (
     CommitOperationAdd,
+    create_branch,
     create_commit,
     create_repo,
     get_hf_file_metadata,
     hf_hub_download,
     hf_hub_url,
-    whoami,
 )
 from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
+    GatedRepoError,
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
     RevisionNotFoundError,
@@ -304,7 +306,7 @@ def cached_file(
     force_download: bool = False,
     resume_download: bool = False,
     proxies: Optional[Dict[str, str]] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
+    token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
     subfolder: str = "",
@@ -313,6 +315,7 @@ def cached_file(
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: Optional[str] = None,
+    **deprecated_kwargs,
 ):
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
@@ -336,7 +339,7 @@ def cached_file(
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-        use_auth_token (`str` or *bool*, *optional*):
+        token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
@@ -353,7 +356,7 @@ def cached_file(
 
     <Tip>
 
-    Passing `use_auth_token=True` is required when you want to use a private model.
+    Passing `token=True` is required when you want to use a private model.
 
     </Tip>
 
@@ -366,6 +369,15 @@ def cached_file(
     # Download a model weight from the Hub and cache it.
     model_weights_file = cached_file("bert-base-uncased", "pytorch_model.bin")
     ```"""
+    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
     # Private arguments
     #     _raise_exceptions_for_missing_entries: if False, do not raise an exception for missing entries but return
     #         None.
@@ -425,24 +437,29 @@ def cached_file(
             force_download=force_download,
             proxies=proxies,
             resume_download=resume_download,
-            use_auth_token=use_auth_token,
+            token=token,
             local_files_only=local_files_only,
         )
-
-    except RepositoryNotFoundError:
+    except GatedRepoError as e:
+        raise EnvironmentError(
+            "You are trying to access a gated repo.\nMake sure to request access at "
+            f"https://huggingface.co/{path_or_repo_id} and pass a token having permission to this repo either "
+            "by logging in with `huggingface-cli login` or by passing `token=<your_token>`."
+        ) from e
+    except RepositoryNotFoundError as e:
         raise EnvironmentError(
             f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
-            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
-            "pass a token having permission to this repo with `use_auth_token` or log in with "
-            "`huggingface-cli login` and pass `use_auth_token=True`."
-        )
-    except RevisionNotFoundError:
+            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
+            "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
+            "`token=<your_token>`"
+        ) from e
+    except RevisionNotFoundError as e:
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
             "for this model name. Check the model page at "
             f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
-        )
-    except LocalEntryNotFoundError:
+        ) from e
+    except LocalEntryNotFoundError as e:
         # We try to see if we have a cached version (not up to date):
         resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
         if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
@@ -454,8 +471,8 @@ def cached_file(
             f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
             f" {full_filename}.\nCheckout your internet connection or see how to run the library in offline mode at"
             " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-        )
-    except EntryNotFoundError:
+        ) from e
+    except EntryNotFoundError as e:
         if not _raise_exceptions_for_missing_entries:
             return None
         if revision is None:
@@ -463,7 +480,7 @@ def cached_file(
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
             f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
-        )
+        ) from e
     except HTTPError as err:
         # First we try to see if we have a cached version (not up to date):
         resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
@@ -484,10 +501,11 @@ def get_file_from_repo(
     force_download: bool = False,
     resume_download: bool = False,
     proxies: Optional[Dict[str, str]] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
+    token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
     subfolder: str = "",
+    **deprecated_kwargs,
 ):
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
@@ -511,7 +529,7 @@ def get_file_from_repo(
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-        use_auth_token (`str` or *bool*, *optional*):
+        token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
@@ -526,7 +544,7 @@ def get_file_from_repo(
 
     <Tip>
 
-    Passing `use_auth_token=True` is required when you want to use a private model.
+    Passing `token=True` is required when you want to use a private model.
 
     </Tip>
 
@@ -542,6 +560,15 @@ def get_file_from_repo(
     # This model does not have a tokenizer config so the result will be None.
     tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
     ```"""
+    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
     return cached_file(
         path_or_repo_id=path_or_repo,
         filename=filename,
@@ -549,7 +576,7 @@ def get_file_from_repo(
         force_download=force_download,
         resume_download=resume_download,
         proxies=proxies,
-        use_auth_token=use_auth_token,
+        token=token,
         revision=revision,
         local_files_only=local_files_only,
         subfolder=subfolder,
@@ -589,7 +616,8 @@ def has_file(
     filename: str,
     revision: Optional[str] = None,
     proxies: Optional[Dict[str, str]] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
+    token: Optional[Union[bool, str]] = None,
+    **deprecated_kwargs,
 ):
     """
     Checks if a repo contains a given file without downloading it. Works for remote repos and local folders.
@@ -601,16 +629,32 @@ def has_file(
 
     </Tip>
     """
+    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
     if os.path.isdir(path_or_repo):
         return os.path.isfile(os.path.join(path_or_repo, filename))
 
     url = hf_hub_url(path_or_repo, filename=filename, revision=revision)
-    headers = build_hf_headers(use_auth_token=use_auth_token, user_agent=http_user_agent())
+    headers = build_hf_headers(token=token, user_agent=http_user_agent())
 
     r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
     try:
         hf_raise_for_status(r)
         return True
+    except GatedRepoError as e:
+        logger.error(e)
+        raise EnvironmentError(
+            f"{path_or_repo} is a gated repository. Make sure to request access at "
+            f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
+            "logging in with `huggingface-cli login` or by passing `token=<your_token>`."
+        ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
         raise EnvironmentError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.")
@@ -634,7 +678,7 @@ class PushToHubMixin:
         self,
         repo_id: str,
         private: Optional[bool] = None,
-        use_auth_token: Optional[Union[bool, str]] = None,
+        token: Optional[Union[bool, str]] = None,
         repo_url: Optional[str] = None,
         organization: Optional[str] = None,
     ) -> str:
@@ -647,6 +691,10 @@ class PushToHubMixin:
                 "The `repo_url` argument is deprecated and will be removed in v5 of Transformers. Use `repo_id` "
                 "instead."
             )
+            if repo_id is not None:
+                raise ValueError(
+                    "`repo_id` and `repo_url` are both specified. Please set only the argument `repo_id`."
+                )
             repo_id = repo_url.replace(f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/", "")
         if organization is not None:
             warnings.warn(
@@ -658,12 +706,8 @@ class PushToHubMixin:
                     repo_id = repo_id.split("/")[-1]
                 repo_id = f"{organization}/{repo_id}"
 
-        url = create_repo(repo_id=repo_id, token=use_auth_token, private=private, exist_ok=True)
-
-        # If the namespace is not there, add it or `upload_file` will complain
-        if "/" not in repo_id and url != f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}":
-            repo_id = get_full_repo_name(repo_id, token=use_auth_token)
-        return repo_id
+        url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
+        return url.repo_id
 
     def _get_files_timestamps(self, working_dir: Union[str, os.PathLike]):
         """
@@ -679,6 +723,7 @@ class PushToHubMixin:
         commit_message: Optional[str] = None,
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
+        revision: str = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -725,9 +770,17 @@ class PushToHubMixin:
                     CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file)
                 )
 
+        if revision is not None:
+            create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
-            repo_id=repo_id, operations=operations, commit_message=commit_message, token=token, create_pr=create_pr
+            repo_id=repo_id,
+            operations=operations,
+            commit_message=commit_message,
+            token=token,
+            create_pr=create_pr,
+            revision=revision,
         )
 
     def push_to_hub(
@@ -736,15 +789,15 @@ class PushToHubMixin:
         use_temp_dir: Optional[bool] = None,
         commit_message: Optional[str] = None,
         private: Optional[bool] = None,
-        use_auth_token: Optional[Union[bool, str]] = None,
+        token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
         create_pr: bool = False,
         safe_serialization: bool = False,
+        revision: str = None,
         **deprecated_kwargs,
     ) -> str:
         """
-        Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
-        `repo_path_or_name`.
+        Upload the {object_files} to the 🤗 Model Hub.
 
         Parameters:
             repo_id (`str`):
@@ -757,7 +810,7 @@ class PushToHubMixin:
                 Message to commit while pushing. Will default to `"Upload {object}"`.
             private (`bool`, *optional*):
                 Whether or not the repository created should be private.
-            use_auth_token (`bool` or `str`, *optional*):
+            token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
                 is not specified.
@@ -769,6 +822,8 @@ class PushToHubMixin:
                 Whether or not to create a PR with the uploaded files or directly commit.
             safe_serialization (`bool`, *optional*, defaults to `False`):
                 Whether or not to convert the model weights in safetensors format for safer serialization.
+            revision (`str`, *optional*):
+                Branch to push the uploaded files to.
 
         Examples:
 
@@ -784,24 +839,48 @@ class PushToHubMixin:
         {object}.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
-        if "repo_path_or_name" in deprecated_kwargs:
+        use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        repo_path_or_name = deprecated_kwargs.pop("repo_path_or_name", None)
+        if repo_path_or_name is not None:
+            # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
+            # repo_id from the folder path, if it exists.
             warnings.warn(
                 "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
-                "`repo_id` instead."
+                "`repo_id` instead.",
+                FutureWarning,
             )
-            repo_id = deprecated_kwargs.pop("repo_path_or_name")
+            if repo_id is not None:
+                raise ValueError(
+                    "`repo_id` and `repo_path_or_name` are both specified. Please set only the argument `repo_id`."
+                )
+            if os.path.isdir(repo_path_or_name):
+                # repo_path: infer repo_id from the path
+                repo_id = repo_id.split(os.path.sep)[-1]
+                working_dir = repo_id
+            else:
+                # repo_name: use it as repo_id
+                repo_id = repo_path_or_name
+                working_dir = repo_id.split("/")[-1]
+        else:
+            # Repo_id is passed correctly: infer working_dir from it
+            working_dir = repo_id.split("/")[-1]
+
         # Deprecation warning will be sent after for repo_url and organization
         repo_url = deprecated_kwargs.pop("repo_url", None)
         organization = deprecated_kwargs.pop("organization", None)
 
-        if os.path.isdir(repo_id):
-            working_dir = repo_id
-            repo_id = repo_id.split(os.path.sep)[-1]
-        else:
-            working_dir = repo_id.split("/")[-1]
-
         repo_id = self._create_repo(
-            repo_id, private=private, use_auth_token=use_auth_token, repo_url=repo_url, organization=organization
+            repo_id, private=private, token=token, repo_url=repo_url, organization=organization
         )
 
         if use_temp_dir is None:
@@ -818,17 +897,10 @@ class PushToHubMixin:
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=use_auth_token,
+                token=token,
                 create_pr=create_pr,
+                revision=revision,
             )
-
-
-def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
-    if organization is None:
-        username = whoami(token)["name"]
-        return f"{username}/{model_id}"
-    else:
-        return f"{organization}/{model_id}"
 
 
 def send_example_telemetry(example_name, *example_args, framework="pytorch"):
@@ -910,11 +982,12 @@ def get_checkpoint_shard_files(
     proxies=None,
     resume_download=False,
     local_files_only=False,
-    use_auth_token=None,
+    token=None,
     user_agent=None,
     revision=None,
     subfolder="",
     _commit_hash=None,
+    **deprecated_kwargs,
 ):
     """
     For a given model:
@@ -927,6 +1000,15 @@ def get_checkpoint_shard_files(
     index (downloaded and cached if `pretrained_model_name_or_path` is a model ID on the Hub).
     """
     import json
+
+    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
 
     if not os.path.isfile(index_filename):
         raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
@@ -963,7 +1045,7 @@ def get_checkpoint_shard_files(
                 proxies=proxies,
                 resume_download=resume_download,
                 local_files_only=local_files_only,
-                use_auth_token=use_auth_token,
+                token=token,
                 user_agent=user_agent,
                 revision=revision,
                 subfolder=subfolder,
@@ -1108,6 +1190,29 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
             etag=etag,
             commit_hash=commit_hash,
         )
+
+
+class PushInProgress:
+    """
+    Internal class to keep track of a push in progress (which might contain multiple `Future` jobs).
+    """
+
+    def __init__(self, jobs: Optional[futures.Future] = None) -> None:
+        self.jobs = [] if jobs is None else jobs
+
+    def is_done(self):
+        return all(job.done() for job in self.jobs)
+
+    def wait_until_done(self):
+        futures.wait(self.jobs)
+
+    def cancel(self) -> None:
+        self.jobs = [
+            job
+            for job in self.jobs
+            # Cancel the job if it wasn't started yet and remove cancelled/done jobs from the list
+            if not (job.cancel() or job.done())
+        ]
 
 
 cache_version_file = os.path.join(TRANSFORMERS_CACHE, "version.txt")

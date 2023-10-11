@@ -27,6 +27,7 @@ Let's have a look at some practical advice for GPU setups.
 
 ## GPU
 When you train bigger models you have essentially three options:
+
 - bigger GPUs
 - more GPUs
 - more CPU and NVMe (offloaded to by [DeepSpeed-Infinity](main_classes/deepspeed#nvme-support))

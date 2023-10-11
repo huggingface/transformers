@@ -52,7 +52,7 @@ tokenizer = LayoutXLMTokenizer.from_pretrained("microsoft/layoutxlm-base")
 ```
 
 Similar to LayoutLMv2, you can use [`LayoutXLMProcessor`] (which internally applies
-[`LayoutLMv2FeatureExtractor`] and
+[`LayoutLMv2ImageProcessor`] and
 [`LayoutXLMTokenizer`]/[`LayoutXLMTokenizerFast`] in sequence) to prepare all
 data for the model.
 

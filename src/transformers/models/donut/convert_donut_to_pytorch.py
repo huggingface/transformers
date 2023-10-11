@@ -21,7 +21,7 @@ from datasets import load_dataset
 from donut import DonutModel
 
 from transformers import (
-    DonutFeatureExtractor,
+    DonutImageProcessor,
     DonutProcessor,
     DonutSwinConfig,
     DonutSwinModel,
@@ -152,10 +152,10 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     image = dataset["test"][0]["image"].convert("RGB")
 
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(model_name, from_slow=True)
-    feature_extractor = DonutFeatureExtractor(
+    image_processor = DonutImageProcessor(
         do_align_long_axis=original_model.config.align_long_axis, size=original_model.config.input_size[::-1]
     )
-    processor = DonutProcessor(feature_extractor, tokenizer)
+    processor = DonutProcessor(image_processor, tokenizer)
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
     if model_name == "naver-clova-ix/donut-base-finetuned-docvqa":

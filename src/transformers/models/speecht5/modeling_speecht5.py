@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -97,7 +97,7 @@ def _make_causal_mask(
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -441,7 +441,7 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(position.float() * div_term)
         pe = pe.unsqueeze(0)
         super().__init__()
-        self.register_buffer("pe", pe)
+        self.register_buffer("pe", pe, persistent=False)
         self.dropout = nn.Dropout(p=dropout)
         self.dim = dim
         self.alpha = torch.nn.Parameter(torch.tensor(1.0))
@@ -1250,8 +1250,6 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "speecht5"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -2326,13 +2324,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
-        r"text_decoder_postnet.lm_head.weight",
-    ]
-    _keys_to_ignore_on_save = [
-        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
-    ]
     _tied_weights_keys = ["text_decoder_postnet.lm_head.weight"]
 
     def __init__(self, config: SpeechT5Config):
@@ -2367,10 +2358,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         not be updated during training.
         """
         self.get_encoder().prenet.freeze_feature_encoder()
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
 
     def get_output_embeddings(self):
         return self.text_decoder_postnet.get_output_embeddings()
@@ -2521,7 +2508,16 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "encoder_outputs": encoder_outputs,
@@ -2538,7 +2534,9 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past
 
 
@@ -2638,9 +2636,6 @@ def _generate_speech(
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = []
-    _keys_to_ignore_on_save = []
-
     main_input_name = "input_ids"
 
     def __init__(self, config: SpeechT5Config):
@@ -2729,7 +2724,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         >>> set_seed(555)  # make deterministic
 
         >>> # generate speech
-        >>> speech = model.generate_speech(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
+        >>> speech = model.generate(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
         >>> speech.shape
         torch.Size([15872])
         ```
@@ -2796,6 +2791,65 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         )
 
     @torch.no_grad()
+    def generate(
+        self,
+        input_ids: torch.LongTensor,
+        speaker_embeddings: Optional[torch.FloatTensor] = None,
+        threshold: float = 0.5,
+        minlenratio: float = 0.0,
+        maxlenratio: float = 20.0,
+        vocoder: Optional[nn.Module] = None,
+        output_cross_attentions: bool = False,
+        **kwargs,
+    ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
+        r"""
+        Converts a sequence of input tokens into a sequence of mel spectrograms, which are subsequently turned into a
+        speech waveform using a vocoder.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. The `batch_size` should be 1 currently.
+
+                Indices can be obtained using [`SpeechT5Tokenizer`]. See [`~PreTrainedTokenizer.encode`] and
+                [`~PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
+                Tensor containing the speaker embeddings.
+            threshold (`float`, *optional*, defaults to 0.5):
+                The generated sequence ends when the predicted stop token probability exceeds this value.
+            minlenratio (`float`, *optional*, defaults to 0.0):
+                Used to calculate the minimum required length for the output sequence.
+            maxlenratio (`float`, *optional*, defaults to 20.0):
+                Used to calculate the maximum allowed length for the output sequence.
+            vocoder (`nn.Module`, *optional*):
+                The vocoder that converts the mel spectrogram into a speech waveform. If `None`, the output is the mel
+                spectrogram.
+            output_cross_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of the decoder's cross-attention layers.
+
+        Returns:
+            `tuple(torch.FloatTensor)` comprising various elements depending on the inputs:
+            - **spectrogram** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
+              `(output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrogram.
+            - **waveform** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
+              `(num_frames,)` -- The predicted speech waveform.
+            - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`) `torch.FloatTensor`
+              of shape `(config.decoder_layers, config.decoder_attention_heads, output_sequence_length,
+              input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
+        """
+        return _generate_speech(
+            self,
+            input_ids,
+            speaker_embeddings,
+            threshold,
+            minlenratio,
+            maxlenratio,
+            vocoder,
+            output_cross_attentions,
+        )
+
+    @torch.no_grad()
     def generate_speech(
         self,
         input_ids: torch.LongTensor,
@@ -2859,13 +2913,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
-    ]
-    _keys_to_ignore_on_save = [
-        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
-    ]
-
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
 

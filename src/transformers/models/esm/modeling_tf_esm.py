@@ -667,7 +667,7 @@ class TFEsmEncoder(Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Esm
-class TFEsmPooler(Layer):
+class TFEsmPooler(tf.keras.layers.Layer):
     def __init__(self, config: EsmConfig, **kwargs):
         super().__init__(**kwargs)
 

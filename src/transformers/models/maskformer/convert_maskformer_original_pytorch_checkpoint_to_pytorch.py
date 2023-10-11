@@ -29,7 +29,7 @@ from detectron2.projects.deeplab import add_deeplab_config
 from PIL import Image
 from torch import Tensor, nn
 
-from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
+from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerImageProcessor
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerConfig,
     MaskFormerForInstanceSegmentation,
@@ -164,13 +164,13 @@ class OriginalMaskFormerConfigToOursConverter:
         return config
 
 
-class OriginalMaskFormerConfigToFeatureExtractorConverter:
-    def __call__(self, original_config: object) -> MaskFormerFeatureExtractor:
+class OriginalMaskFormerConfigToImageProcessorConverter:
+    def __call__(self, original_config: object) -> MaskFormerImageProcessor:
         model = original_config.MODEL
         model_input = original_config.INPUT
         dataset_catalog = MetadataCatalog.get(original_config.DATASETS.TEST[0])
 
-        return MaskFormerFeatureExtractor(
+        return MaskFormerImageProcessor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
@@ -554,7 +554,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
             yield config, checkpoint
 
 
-def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_extractor: MaskFormerFeatureExtractor):
+def test(original_model, our_model: MaskFormerForInstanceSegmentation, image_processor: MaskFormerImageProcessor):
     with torch.no_grad():
         original_model = original_model.eval()
         our_model = our_model.eval()
@@ -600,7 +600,7 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_e
 
         our_model_out: MaskFormerForInstanceSegmentationOutput = our_model(x)
 
-        our_segmentation = feature_extractor.post_process_segmentation(our_model_out, target_size=(384, 384))
+        our_segmentation = image_processor.post_process_segmentation(our_model_out, target_size=(384, 384))
 
         assert torch.allclose(
             original_segmentation, our_segmentation, atol=1e-3
@@ -686,9 +686,7 @@ if __name__ == "__main__":
     for config_file, checkpoint_file in OriginalMaskFormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
-        feature_extractor = OriginalMaskFormerConfigToFeatureExtractorConverter()(
-            setup_cfg(Args(config_file=config_file))
-        )
+        image_processor = OriginalMaskFormerConfigToImageProcessorConverter()(setup_cfg(Args(config_file=config_file)))
 
         original_config = setup_cfg(Args(config_file=config_file))
         mask_former_kwargs = OriginalMaskFormer.from_config(original_config)
@@ -712,15 +710,15 @@ if __name__ == "__main__":
             mask_former_for_instance_segmentation
         )
 
-        test(original_model, mask_former_for_instance_segmentation, feature_extractor)
+        test(original_model, mask_former_for_instance_segmentation, image_processor)
 
         model_name = get_name(checkpoint_file)
         logger.info(f"🪄 Saving {model_name}")
 
-        feature_extractor.save_pretrained(save_directory / model_name)
+        image_processor.save_pretrained(save_directory / model_name)
         mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)
 
-        feature_extractor.push_to_hub(
+        image_processor.push_to_hub(
             repo_path_or_name=save_directory / model_name,
             commit_message="Add model",
             use_temp_dir=True,

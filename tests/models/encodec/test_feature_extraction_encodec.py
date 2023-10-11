@@ -20,15 +20,12 @@ import unittest
 
 import numpy as np
 
-from transformers import is_speech_available
+from transformers import EncodecFeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
-
-if is_speech_available():
-    from transformers import EncodecFeatureExtractor
 
 if is_torch_available():
     import torch
@@ -37,6 +34,7 @@ if is_torch_available():
 global_rng = random.Random()
 
 
+# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -103,7 +101,7 @@ class EnCodecFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = EncodecFeatureExtractor if is_speech_available() else None
+    feature_extraction_class = EncodecFeatureExtractor
 
     def setUp(self):
         self.feat_extract_tester = EnCodecFeatureExtractionTester(self)

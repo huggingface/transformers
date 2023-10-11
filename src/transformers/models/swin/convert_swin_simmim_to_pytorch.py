@@ -22,7 +22,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import SwinConfig, SwinForMaskedImageModeling, ViTFeatureExtractor
+from transformers import SwinConfig, SwinForMaskedImageModeling, ViTImageProcessor
 
 
 def get_swin_config(model_name):
@@ -132,9 +132,9 @@ def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    feature_extractor = ViTFeatureExtractor(size={"height": 192, "width": 192})
+    image_processor = ViTImageProcessor(size={"height": 192, "width": 192})
     image = Image.open(requests.get(url, stream=True).raw)
-    inputs = feature_extractor(images=image, return_tensors="pt")
+    inputs = image_processor(images=image, return_tensors="pt")
 
     with torch.no_grad():
         outputs = model(**inputs).logits
@@ -146,13 +146,13 @@ def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_pat
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
 
-        print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and feature extractor for {model_name} to hub")
+        print(f"Pushing model and image processor for {model_name} to hub")
         model.push_to_hub(f"microsoft/{model_name}")
-        feature_extractor.push_to_hub(f"microsoft/{model_name}")
+        image_processor.push_to_hub(f"microsoft/{model_name}")
 
 
 if __name__ == "__main__":

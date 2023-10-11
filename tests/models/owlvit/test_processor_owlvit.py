@@ -120,7 +120,7 @@ class OwlViTProcessorTest(unittest.TestCase):
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False)
 
         processor = OwlViTProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False
+            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", pad_token="!", do_normalize=False
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())

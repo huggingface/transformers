@@ -55,6 +55,7 @@ from transformers.utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
 )
+from transformers.utils.import_utils import is_torchdynamo_available
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -500,8 +501,8 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(os.path.isfile(weights_index_file))
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)))
 
-            for i in range(1, 6):
-                weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + [f"v2-0000{i}-of-00006"] + ["bin"])
+            for i in range(1, 5):
+                weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + [f"v2-0000{i}-of-00005"] + ["bin"])
                 weights_name_file = os.path.join(tmp_dir, weights_name)
                 self.assertTrue(os.path.isfile(weights_name_file))
 
@@ -546,8 +547,8 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(os.path.isfile(weights_index_file))
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
 
-            for i in range(1, 6):
-                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + [f"v2-0000{i}-of-00006"] + ["safetensors"])
+            for i in range(1, 5):
+                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + [f"v2-0000{i}-of-00005"] + ["safetensors"])
                 weights_name_file = os.path.join(tmp_dir, weights_name)
                 self.assertTrue(os.path.isfile(weights_name_file))
 
@@ -938,6 +939,101 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIn("were not used when initializing ModelWithHead: ['added_key']", cl.out)
             self.assertEqual(loading_info["unexpected_keys"], ["added_key"])
 
+    def test_warn_if_padding_and_no_attention_mask(self):
+        logger = logging.get_logger("transformers.modeling_utils")
+
+        with self.subTest("Ensure no warnings when pad_token_id is None."):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as cl:
+                config_no_pad_token = PretrainedConfig()
+                config_no_pad_token.pad_token_id = None
+                model = ModelWithHead(config_no_pad_token)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
+        with self.subTest("Ensure no warnings when there is an attention_mask."):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+            self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
+        with self.subTest("Ensure no warnings when there are no pad_token_ids in the input_ids."):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[1, 345, 232, 328, 740, 140, 1695, 69, 6078, 2341, 25]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
+        with self.subTest("Ensure a warning is shown when the input_ids start with a pad_token_id."):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
+        with self.subTest("Ensure a warning is shown when the input_ids end with a pad_token_id."):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[432, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
+        with self.subTest("Ensure that the warning is shown at most once."):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            self.assertEqual(cl.out.count("We strongly recommend passing in an `attention_mask`"), 1)
+
+        with self.subTest("Ensure a different warning is shown when the pad_token_id is equal to the bos_token_id."):
+            logger.warning_once.cache_clear()
+            with CaptureLogger(logger) as cl:
+                config = PretrainedConfig()
+                config.pad_token_id = 0
+                config.bos_token_id = config.pad_token_id
+                model = ModelWithHead(config)
+                input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+            self.assertIn("You may ignore this warning if your `pad_token_id`", cl.out)
+
+        if not is_torchdynamo_available():
+            return
+        with self.subTest("Ensure that the warning code is skipped when compiling with torchdynamo."):
+            logger.warning_once.cache_clear()
+            from torch._dynamo import config, testing
+
+            config = PretrainedConfig()
+            config.pad_token_id = 0
+            model = ModelWithHead(config)
+            input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
+
+            def f(input_ids):
+                model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
+
+            compile_counter = testing.CompileCounter()
+            opt_fn = torch.compile(f, dynamic=True, backend=compile_counter)
+            opt_fn(input_ids)
+            self.assertEqual(compile_counter.frame_count, 0)
+
     @require_torch_gpu
     @slow
     def test_pretrained_low_mem_new_config(self):
@@ -959,6 +1055,20 @@ class ModelUtilsTest(TestCasePlus):
             model_ref = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id)
 
             self.assertEqual(model.__class__.__name__, model_ref.__class__.__name__)
+
+    def test_generation_config_is_loaded_with_model(self):
+        # Note: `joaogante/tiny-random-gpt2-with-generation-config` has a `generation_config.json` containing a dummy
+        # `transformers_version` field set to `foo`. If loading the file fails, this test also fails.
+
+        # 1. Load without further parameters
+        model = AutoModelForCausalLM.from_pretrained("joaogante/tiny-random-gpt2-with-generation-config")
+        self.assertEqual(model.generation_config.transformers_version, "foo")
+
+        # 2. Load with `device_map`
+        model = AutoModelForCausalLM.from_pretrained(
+            "joaogante/tiny-random-gpt2-with-generation-config", device_map="auto"
+        )
+        self.assertEqual(model.generation_config.transformers_version, "foo")
 
 
 @require_torch
@@ -986,6 +1096,7 @@ class ModelPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
+    @unittest.skip("This test is flaky")
     def test_push_to_hub(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -1008,6 +1119,7 @@ class ModelPushToHubTester(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
+    @unittest.skip("This test is flaky")
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37

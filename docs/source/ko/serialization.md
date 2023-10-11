@@ -14,164 +14,137 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# ONNX로 내보내기[[export-to-onnx]]
+# ONNX로 내보내기 [[export-to-onnx]]
 
-프로덕션 환경에 🤗 Transformers 모델을 배포할 때에는 특수 런타임 및 하드웨어 위에 올리고 실행할 수 있도록 직렬화된 형식으로 내보내기를 권장합니다. 이 가이드에서는 🤗 Transformers 모델을 [ONNX (Open Neural Network eXchange)](http://onnx.ai)로 내보내는 방법을 안내합니다.
+🤗 Transformers 모델을 제품 환경에서 배포하기 위해서는 모델을 직렬화된 형식으로 내보내고 특정 런타임과 하드웨어에서 로드하고 실행할 수 있으면 유용합니다.
 
-ONNX는 딥러닝 모델을 표현하기 위한 공통 파일 형식과 연산자들을 정의하는 개방형 표준으로써 PyTorch, TensorFlow 등 다양한 프레임워크에서 지원됩니다. 모델을 ONNX 형식으로 내보내면, (보통 _중간 표현 (Intermediate Representation; IR)_이라고 불리는) 계산 그래프가 구성됩니다. 계산 그래프는 신경망을 통해 데이터가 흐르는 방식, 즉 어떤 연산이 어느 부분에 사용되었는지를 나타냅니다.
+🤗 Optimum은 Transformers의 확장으로, PyTorch 또는 TensorFlow에서 모델을 ONNX와 TFLite와 같은 직렬화된 형식으로 내보낼 수 있도록 하는 `exporters` 모듈을 통해 제공됩니다. 🤗 Optimum은 또한 성능 최적화 도구 세트를 제공하여 특정 하드웨어에서 모델을 훈련하고 실행할 때 최대 효율성을 달성할 수 있습니다.
 
-표준 연산 및 데이터 형식을 사용하여 그래프를 노출하기 때문에 ONNX를 사용하면 프레임워크 간 전환이 쉬워집니다. 예를 들어, PyTorch에서 훈련된 모델은 ONNX 형식으로 내보낸 뒤, TensorFlow에서 가져올 수 있습니다. 물론 그 반대도 가능합니다.
+이 안내서는 🤗 Optimum을 사용하여 🤗 Transformers 모델을 ONNX로 내보내는 방법을 보여줍니다. TFLite로 모델을 내보내는 안내서는 [TFLite로 내보내기 페이지](tflite)를 참조하세요.
 
-🤗 Transformers는 모델 체크포인트를 ONNX 그래프로 변환할 수 있게 해주는 [`transformers.onnx`](main_classes/onnx) 패키지를 제공합니다. 이걸 가능케 하는 구성 객체는 여러 모델 아키텍처를 대상으로 미리 제작되어 있으며, 다른 아키텍처로도 쉽게 확장할 수 있도록 설계되었습니다.
+## ONNX로 내보내기 [[export-to-onnx]]
 
-<Tip>
+[ONNX (Open Neural Network eXchange)](http://onnx.ai)는 PyTorch와 TensorFlow를 포함한 다양한 프레임워크에서 심층 학습 모델을 나타내는 데 사용되는 공통 연산자 세트와 공통 파일 형식을 정의하는 오픈 표준입니다. 모델이 ONNX 형식으로 내보내지면 이러한 연산자를 사용하여 신경망을 통해 데이터가 흐르는 흐름을 나타내는 계산 그래프(일반적으로 _중간 표현_이라고 함)가 구성됩니다.
 
-🤗 Optimum에서 [`optimum.exporters.onnx` 패키지](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model)를 사용하여 🤗 Transformers 모델을 내보낼 수도 있습니다.
+표준화된 연산자와 데이터 유형을 가진 그래프를 노출함으로써, ONNX는 프레임워크 간에 쉽게 전환할 수 있습니다. 예를 들어, PyTorch에서 훈련된 모델을 ONNX 형식으로 내보내고 TensorFlow에서 가져올 수 있습니다(그 반대도 가능합니다).
 
-모델을 내보낸 후 다음과 같이 사용될 수 있습니다:
+ONNX 형식으로 내보낸 모델은 다음과 같이 사용할 수 있습니다:
+- [그래프 최적화](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/optimization) 및 [양자화](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/quantization)와 같은 기법을 사용하여 추론을 위해 최적화됩니다.
+- ONNX Runtime을 통해 실행할 수 있습니다. [`ORTModelForXXX` 클래스들](https://huggingface.co/docs/optimum/onnxruntime/package_reference/modeling_ort)을 통해 동일한 `AutoModel` API를 따릅니다. 이 API는 🤗 Transformers에서 사용하는 것과 동일합니다.
+- [최적화된 추론 파이프라인](https://huggingface.co/docs/optimum/main/en/onnxruntime/usage_guides/pipelines)을 사용할 수 있습니다. 이는 🤗 Transformers의 [`pipeline`] 함수와 동일한 API를 가지고 있습니다.
 
-- 양자화 및 그래프 최적화와 같은 기술을 통해 추론에 최적화합니다.
-- [`ORTModelForXXX` 클래스](https://huggingface.co/docs/optimum/onnxruntime/package_reference/modeling_ort)를 통해 ONNX 런타임에서 실행합니다. 이 클래스들은 🤗 Transformers에서 사용하는 `AutoModel` API와 동일합니다.
-- [최적화된 추론 파이프라인](https://huggingface.co/docs/optimum/main/en/onnxruntime/usage_guides/pipelines) 위에 실행합니다. 이 파이프라인은 🤗 Transformers의 [`pipeline`] 함수와 동일한 API를 갖습니다.
+🤗 Optimum은 구성 객체를 활용하여 ONNX 내보내기를 지원합니다. 이러한 구성 객체는 여러 모델 아키텍처에 대해 미리 준비되어 있으며 다른 아키텍처에 쉽게 확장할 수 있도록 설계되었습니다.
 
-이러한 기능을 모두 살펴보려면 [🤗 Optimum 라이브러리](https://github.com/huggingface/optimum)를 확인하세요.
+미리 준비된 구성 목록은 [🤗 Optimum 문서](https://huggingface.co/docs/optimum/exporters/onnx/overview)를 참조하세요.
+
+🤗 Transformers 모델을 ONNX로 내보내는 두 가지 방법이 있습니다. 여기에서 두 가지 방법을 모두 보여줍니다:
+
+- 🤗 Optimum을 사용하여 CLI로 내보내기
+- `optimum.onnxruntime`을 사용하여 🤗 Optimum으로 ONNX로 내보내기
+
+### CLI를 사용하여 🤗 Transformers 모델을 ONNX로 내보내기 [[exporting-a-transformers-model-to-onnx-with-cli]]
+
+🤗 Transformers 모델을 ONNX로 내보내려면 먼저 추가 종속성을 설치하세요:
+
+```bash
+pip install optimum[exporters]
+```
+
+사용 가능한 모든 인수를 확인하려면 [🤗 Optimum 문서](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli)를 참조하거나 명령줄에서 도움말을 보세요.
+
+```bash
+optimum-cli export onnx --help
+```
+
+예를 들어, 🤗 Hub에서 `distilbert-base-uncased-distilled-squad`와 같은 모델의 체크포인트를 내보내려면 다음 명령을 실행하세요:
+
+```bash
+optimum-cli export onnx --model distilbert-base-uncased-distilled-squad distilbert_base_uncased_squad_onnx/
+```
+
+위와 같이 진행 상황을 나타내는 로그가 표시되고 결과인 `model.onnx`가 저장된 위치가 표시됩니다.
+
+```bash
+Validating ONNX model distilbert_base_uncased_squad_onnx/model.onnx...
+	-[✓] ONNX model output names match reference model (start_logits, end_logits)
+	- Validating ONNX Model output "start_logits":
+		-[✓] (2, 16) matches (2, 16)
+		-[✓] all values close (atol: 0.0001)
+	- Validating ONNX Model output "end_logits":
+		-[✓] (2, 16) matches (2, 16)
+		-[✓] all values close (atol: 0.0001)
+The ONNX export succeeded and the exported model was saved at: distilbert_base_uncased_squad_onnx
+```
+
+위의 예제는 🤗 Hub에서 체크포인트를 내보내는 것을 설명합니다. 로컬 모델을 내보낼 때에는 모델의 가중치와 토크나이저 파일을 동일한 디렉토리(`local_path`)에 저장했는지 확인하세요. CLI를 사용할 때에는 🤗 Hub의 체크포인트 이름 대신 `model` 인수에 `local_path`를 전달하고 `--task` 인수를 제공하세요. 지원되는 작업의 목록은 [🤗 Optimum 문서](https://huggingface.co/docs/optimum/exporters/task_manager)를 참조하세요. `task` 인수가 제공되지 않으면 작업에 특화된 헤드 없이 모델 아키텍처로 기본 설정됩니다.
+
+```bash
+optimum-cli export onnx --model local_path --task question-answering distilbert_base_uncased_squad_onnx/
+```
+
+그 결과로 생성된 `model.onnx` 파일은 ONNX 표준을 지원하는 많은 [가속기](https://onnx.ai/supported-tools.html#deployModel) 중 하나에서 실행할 수 있습니다. 예를 들어, [ONNX Runtime](https://onnxruntime.ai/)을 사용하여 모델을 로드하고 실행할 수 있습니다:
+
+```python
+>>> from transformers import AutoTokenizer
+>>> from optimum.onnxruntime import ORTModelForQuestionAnswering
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert_base_uncased_squad_onnx")
+>>> model = ORTModelForQuestionAnswering.from_pretrained("distilbert_base_uncased_squad_onnx")
+>>> inputs = tokenizer("What am I using?", "Using DistilBERT with ONNX Runtime!", return_tensors="pt")
+>>> outputs = model(**inputs)
+```
+
+Hub의 TensorFlow 체크포인트에 대해서도 동일한 프로세스가 적용됩니다. 예를 들어, [Keras organization](https://huggingface.co/keras-io)에서 순수한 TensorFlow 체크포인트를 내보내는 방법은 다음과 같습니다:
+
+```bash
+optimum-cli export onnx --model keras-io/transformers-qa distilbert_base_cased_squad_onnx/
+```
+
+### `optimum.onnxruntime`을 사용하여 🤗 Transformers 모델을 ONNX로 내보내기 [[exporting-a-transformers-model-to-onnx-with-optimumonnxruntime]]
+
+CLI 대신에 `optimum.onnxruntime`을 사용하여 프로그래밍 방식으로 🤗 Transformers 모델을 ONNX로 내보낼 수도 있습니다. 다음과 같이 진행하세요:
+
+```python
+>>> from optimum.onnxruntime import ORTModelForSequenceClassification
+>>> from transformers import AutoTokenizer
+
+>>> model_checkpoint = "distilbert_base_uncased_squad"
+>>> save_directory = "onnx/"
+
+>>> # Load a model from transformers and export it to ONNX
+>>> ort_model = ORTModelForSequenceClassification.from_pretrained(model_checkpoint, export=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
+
+>>> # Save the onnx model and tokenizer
+>>> ort_model.save_pretrained(save_directory)
+>>> tokenizer.save_pretrained(save_directory)
+```
+
+### 지원되지 않는 아키텍처의 모델 내보내기 [[exporting-a-model-for-an-unsupported-architecture]]
+
+현재 내보낼 수 없는 모델을 지원하기 위해 기여하려면, 먼저 [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/exporters/onnx/overview)에서 지원되는지 확인한 후 지원되지 않는 경우에는 [🤗 Optimum에 기여](https://huggingface.co/docs/optimum/exporters/onnx/usage_guides/contribute)하세요.
+
+### `transformers.onnx`를 사용하여 모델 내보내기 [[exporting-a-model-with-transformersonnx]]
+
+<Tip warning={true}>
+
+`tranformers.onnx`는 더 이상 유지되지 않습니다. 위에서 설명한 대로 🤗 Optimum을 사용하여 모델을 내보내세요. 이 섹션은 향후 버전에서 제거될 예정입니다.
 
 </Tip>
 
-미리 제작된 구성에는 다음 아키텍처가 포함됩니다:
-
-<!--This table is automatically generated by `make fix-copies`, do not fill manually!-->
-
-- ALBERT
-- BART
-- BEiT
-- BERT
-- BigBird
-- BigBird-Pegasus
-- Blenderbot
-- BlenderbotSmall
-- BLOOM
-- CamemBERT
-- Chinese-CLIP
-- CLIP
-- CodeGen
-- Conditional DETR
-- ConvBERT
-- ConvNeXT
-- Data2VecText
-- Data2VecVision
-- DeBERTa
-- DeBERTa-v2
-- DeiT
-- DETR
-- DistilBERT
-- EfficientNet
-- ELECTRA
-- ERNIE
-- FlauBERT
-- GPT Neo
-- GPT-J
-- GPT-Sw3
-- GroupViT
-- I-BERT
-- ImageGPT
-- LayoutLM
-- LayoutLMv3
-- LeViT
-- Longformer
-- LongT5
-- M2M100
-- Marian
-- mBART
-- MEGA
-- MobileBERT
-- MobileNetV1
-- MobileNetV2
-- MobileViT
-- MT5
-- OpenAI GPT-2
-- OWL-ViT
-- Perceiver
-- PLBart
-- PoolFormer
-- RemBERT
-- ResNet
-- RoBERTa
-- RoBERTa-PreLayerNorm
-- RoFormer
-- SegFormer
-- SqueezeBERT
-- Swin Transformer
-- T5
-- Table Transformer
-- Vision Encoder decoder
-- ViT
-- Whisper
-- X-MOD
-- XLM
-- XLM-RoBERTa
-- XLM-RoBERTa-XL
-- YOLOS
-
-앞으로의 두 섹션에서는 아래 내용을 살펴보겠습니다:
-
-* `transformers.onnx` 패키지를 사용하여 지원되는 모델 내보내기
-* 지원되지 않는 아키텍처를 위해 사용자 정의 모델 내보내기
-
-## 모델을 ONNX로 내보내기[[exporting-a-model-to-onnx]]
-
-<Tip>
-
-이제 모델을 내보낼 때 [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/main/en/exporters/onnx/usage_guides/export_a_model#exporting-a-model-to-onnx-using-the-cli)를 사용하도록 권장합니다. `transformers.onnx`와 매우 유사하니 걱정하지 마세요!
-
-</Tip>
-
-🤗 Transformers 모델을 ONNX로 내보내려면 먼저 몇 가지 추가 종속성을 설치해야합니다:
+🤗 Transformers 모델을 ONNX로 내보내려면 추가 종속성을 설치하세요:
 
 ```bash
 pip install transformers[onnx]
 ```
 
-`transformers.onnx` 패키지는 다음과 같이 Python 모듈로 사용할 수 있습니다:
-
-```bash
-python -m transformers.onnx --help
-
-usage: Hugging Face Transformers ONNX exporter [-h] -m MODEL [--feature {causal-lm, ...}] [--opset OPSET] [--atol ATOL] output
-
-positional arguments:
-  output                Path indicating where to store generated ONNX model.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -m MODEL, --model MODEL
-                        Model ID on huggingface.co or path on disk to load model from.
-  --feature {causal-lm, ...}
-                        The type of features to export the model with.
-  --opset OPSET         ONNX opset version to export the model with.
-  --atol ATOL           Absolute difference tolerance when validating the model.
-```
-
-다음과 같이 미리 제작된 구성을 사용하여 체크포인트를 내보낼 수 있습니다:
+`transformers.onnx` 패키지를 Python 모듈로 사용하여 준비된 구성을 사용하여 체크포인트를 내보냅니다:
 
 ```bash
 python -m transformers.onnx --model=distilbert-base-uncased onnx/
 ```
 
-다음과 같은 로그가 표시되어야합니다:
-
-```bash
-Validating ONNX model...
-        -[✓] ONNX model output names match reference model ({'last_hidden_state'})
-        - Validating ONNX Model output "last_hidden_state":
-                -[✓] (2, 8, 768) matches (2, 8, 768)
-                -[✓] all values close (atol: 1e-05)
-All good, model saved at: onnx/model.onnx
-```
-
-이렇게 `--model` 인수로 정의된 체크포인트의 ONNX 그래프를 내보냅니다. 예시에서는 `distilbert-base-uncased`이지만, Hugging Face Hub에서 가져왔거나 로컬에 저장된 체크포인트들 모두 가능합니다.
-
-결과로 나온 `model.onnx` 파일은 ONNX 표준을 지원하는 [다양한 가속기](https://onnx.ai/supported-tools.html#deployModel) 중 하나에서 실행할 수 있습니다. 예를 들어, 다음과 같이 [ONNX Runtime](https://onnxruntime.ai/)에서 모델을 가져오고 실행할 수 있습니다:
+이렇게 하면 `--model` 인수에 정의된 체크포인트의 ONNX 그래프가 내보내집니다. 🤗 Hub에서 제공하는 체크포인트나 로컬에 저장된 체크포인트를 전달할 수 있습니다. 결과로 생성된 `model.onnx` 파일은 ONNX 표준을 지원하는 많은 가속기 중 하나에서 실행할 수 있습니다. 예를 들어, 다음과 같이 ONNX Runtime을 사용하여 모델을 로드하고 실행할 수 있습니다:
 
 ```python
 >>> from transformers import AutoTokenizer
@@ -184,7 +157,7 @@ All good, model saved at: onnx/model.onnx
 >>> outputs = session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
 ```
 
-`["last_hidden_state"]`와 같은 필요한 출력 이름은 각 모델의 ONNX 구성을 살펴보면 얻을 수 있습니다. 예를 들어, DistilBERT의 경우 다음과 같습니다:
+필요한 출력 이름(예: `["last_hidden_state"]`)은 각 모델의 ONNX 구성을 확인하여 얻을 수 있습니다. 예를 들어, DistilBERT의 경우 다음과 같습니다:
 
 ```python
 >>> from transformers.models.distilbert import DistilBertConfig, DistilBertOnnxConfig
@@ -195,261 +168,14 @@ All good, model saved at: onnx/model.onnx
 ["last_hidden_state"]
 ```
 
-Hub의 TensorFlow 체크포인트의 경우에도 과정은 동일합니다. 예를 들어, 다음과 같이 [Keras organization](https://huggingface.co/keras-io)에서 TensorFlow 체크포인트를 내보낼 수 있습니다:
+Hub의 TensorFlow 체크포인트에 대해서도 동일한 프로세스가 적용됩니다. 예를 들어, 다음과 같이 순수한 TensorFlow 체크포인트를 내보냅니다:
 
 ```bash
 python -m transformers.onnx --model=keras-io/transformers-qa onnx/
 ```
 
-로컬에 저장된 모델을 내보내려면 모델의 가중치 및 토크나이저 파일이 저장된 디렉토리가 필요합니다. 예를 들어, 다음과 같이 체크포인트를 가져오고 저장할 수 있습니다:
-
-<frameworkcontent> <pt>
-```python
->>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
-
->>> # Load tokenizer and PyTorch weights form the Hub
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
->>> pt_model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
->>> # Save to disk
->>> tokenizer.save_pretrained("local-pt-checkpoint")
->>> pt_model.save_pretrained("local-pt-checkpoint")
-```
-
-체크포인트를 저장한 후, `transformers.onnx` 패키지의 `--model` 인수를 원하는 디렉토리로 지정하여 ONNX로 내보낼 수 있습니다:
+로컬에 저장된 모델을 내보내려면 모델의 가중치 파일과 토크나이저 파일을 동일한 디렉토리에 저장한 다음, transformers.onnx 패키지의 --model 인수를 원하는 디렉토리로 지정하여 ONNX로 내보냅니다:
 
 ```bash
 python -m transformers.onnx --model=local-pt-checkpoint onnx/
 ```
-</pt> <tf>
-```python
->>> from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-
->>> # Load tokenizer and TensorFlow weights from the Hub
->>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
->>> # Save to disk
->>> tokenizer.save_pretrained("local-tf-checkpoint")
->>> tf_model.save_pretrained("local-tf-checkpoint")
-```
-
-체크포인트를 저장한 후, `transformers.onnx` 패키지의 `--model` 인수를 원하는 디렉토리로 지정하여 ONNX로 내보낼 수 있습니다:
-
-```bash
-python -m transformers.onnx --model=local-tf-checkpoint onnx/
-```
-</tf> </frameworkcontent>
-
-## 다른 모델 작업에 대한 기능 선택[[selecting-features-for-different-model-tasks]]
-
-<Tip>
-
-이제 모델을 내보낼 때 `optimum.exporters.onnx`를 사용하도록 권장합니다. 작업을 선택하는 방법을 알아보려면 [🤗 Optimum 문서](https://huggingface.co/docs/optimum/main/en/exporters/onnx/usage_guides/export_a_model#selecting-a-task)를 확인하세요.
-
-</Tip>
-
-다른 유형의 태스크에 맞춰서 모델을 내보낼 수 있도록 미리 제작된 구성마다 일련의 _기능_이 포함되어 있습니다. 아래 표에 나와 있는대로 각 기능은 다른 `AutoClass`와 연관되어 있습니다.
-
-| Feature                              | Auto Class                           |
-| ------------------------------------ | ------------------------------------ |
-| `causal-lm`, `causal-lm-with-past`   | `AutoModelForCausalLM`               |
-| `default`, `default-with-past`       | `AutoModel`                          |
-| `masked-lm`                          | `AutoModelForMaskedLM`               |
-| `question-answering`                 | `AutoModelForQuestionAnswering`      |
-| `seq2seq-lm`, `seq2seq-lm-with-past` | `AutoModelForSeq2SeqLM`              |
-| `sequence-classification`            | `AutoModelForSequenceClassification` |
-| `token-classification`               | `AutoModelForTokenClassification`    |
-
-각 구성에서 [`~transformers.onnx.FeaturesManager`]를 통해 지원되는 기능 목록을 찾을 수 있습니다. 예를 들어, DistilBERT의 경우 다음과 같습니다:
-
-```python
->>> from transformers.onnx.features import FeaturesManager
-
->>> distilbert_features = list(FeaturesManager.get_supported_features_for_model_type("distilbert").keys())
->>> print(distilbert_features)
-["default", "masked-lm", "causal-lm", "sequence-classification", "token-classification", "question-answering"]
-```
-
-그런 다음 `transformers.onnx` 패키지의 `--feature` 인수에 이러한 기능 중 하나를 전달할 수 있습니다. 예를 들어, 텍스트 분류 모델을 내보내려면 다음과 같이 Hub에서 미세 조정된 모델을 선택하고 실행할 수 있습니다:
-
-```bash
-python -m transformers.onnx --model=distilbert-base-uncased-finetuned-sst-2-english \
-                            --feature=sequence-classification onnx/
-```
-
-다음과 같은 로그가 표시됩니다:
-
-```bash
-Validating ONNX model...
-        -[✓] ONNX model output names match reference model ({'logits'})
-        - Validating ONNX Model output "logits":
-                -[✓] (2, 2) matches (2, 2)
-                -[✓] all values close (atol: 1e-05)
-All good, model saved at: onnx/model.onnx
-```
-
-이때 미세 조정된 모델의 출력명은 이전의 `distilbert-base-uncased` 체크포인트에서 봤던 `last_hidden_state`와 달리 `logits`입니다. 시퀀스 분류를 위해 미세 조정되었기 때문에 예상대로 입니다.
-
-<Tip>
-
-`with-past` 접미사를 가진 기능(예: `causal-lm-with-past`)은 미리 계산된 숨겨진 상태(hidden states; 어텐션 블록 속 키-값 쌍)를 사용하여 빠른 자기 회귀 디코딩이 가능한 모델 클래스들입니다.
-
-</Tip>
-
-<Tip>
-
-`VisionEncoderDecoder` 유형 모델의 경우, 인코더 및 디코더 부분은 각각 `encoder_model.onnx` 및 `decoder_model.onnx`라는 두 개의 ONNX 파일로 분리하여 내보냅니다.
-
-</Tip>
-
-
-## 지원되지 않는 아키텍처를 위한 모델 내보내기[[exporting-a-model-for-an-unsupported-architecture]]
-
-<Tip>
-
-현재 내보낼 수 없는 모델을 지원하도록 기여하려면 먼저 [`optimum.exporters.onnx`](https://huggingface.co/docs/optimum/main/en/exporters/onnx/package_reference/configuration#supported-architectures)에서 지원되는지 확인하고 지원되지 않는 경우 [🤗 Optimum에 기여](https://huggingface.co/docs/optimum/main/en/exporters/onnx/usage_guides/contribute)하세요.
-
-</Tip>
-
-라이브러리에서 직접 지원하지 않는 아키텍처의 모델을 내보내려면 세 가지 주요 단계를 거쳐야 합니다:
-
-1. 사용자 정의 ONNX 구성을 구현하기
-2. 모델을 ONNX로 내보내기
-3. PyTorch 및 내보낸 모델의 출력 검증하기
-
-이 섹션에서는 DistilBERT가 어떻게 구현되었는지 각 단계마다 자세히 살펴보겠습니다.
-
-### 사용자 정의 ONNX 구성을 구현하기[[implementing-a-custom-onnx-configuration]]
-
-ONNX 구성 객체부터 시작해 봅시다. 내보내려는 모델 아키텍처 유형에 따라 상속해야하는 세 가지 추상 클래스를 제공합니다:
-
-* 인코더 기반 모델은 [`~onnx.config.OnnxConfig`]를 상속합니다.
-* 디코더 기반 모델은 [`~onnx.config.OnnxConfigWithPast`]를 상속합니다.
-* 인코더-디코더 모델은 [`~onnx.config.OnnxSeq2SeqConfigWithPast`]를 상속합니다.
-
-<Tip>
-
-사용자 정의 ONNX 구성을 구현하는 좋은 방법은 비슷한 아키텍처의 `configuration_<model_name>.py` 파일에서 기존 구현을 확인하는 것입니다.
-
-</Tip>
-
-DistilBERT는 인코더 기반 모델이므로 해당 구성은 `OnnxConfig`를 상속합니다.
-
-```python
->>> from typing import Mapping, OrderedDict
->>> from transformers.onnx import OnnxConfig
-
-
->>> class DistilBertOnnxConfig(OnnxConfig):
-...     @property
-...     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-...         return OrderedDict(
-...             [
-...                 ("input_ids", {0: "batch", 1: "sequence"}),
-...                 ("attention_mask", {0: "batch", 1: "sequence"}),
-...             ]
-...         )
-```
-
-각 구성 객체는 `inputs` 속성을 구현하고 매핑을 반환해야 합니다. 매핑의 키는 예상 입력에 해당하고 값은 해당 입력의 축을 나타냅니다. DistilBERT의 경우 `input_ids` 및 `attention_mask` 두 개의 입력이 필요한데요. 두 입력 모두 `(batch_size, sequence_length)`의 동일한 차원이기 때문에 구성에서도 똑같은 축을 사용합니다.
-
-<Tip>
-
-`DistilBertOnnxConfig`의 `inputs` 속성이 `OrderedDict`라는 것에 유의하세요. 이렇게 하면 입력이 그래프를 따라 흐를 때 `PreTrainedModel.forward()` 메소드 속 알맞은 상대적인 위치에 있도록 보장합니다. 사용자 정의 ONNX 구성을 구현할 때도 `inputs` 및 `outputs` 속성으로 `OrderedDict`를 사용하는 것을 권장합니다.
-
-</Tip>
-
-ONNX 구성을 구현한 후에는 다음과 같이 기본 모델의 구성을 제공하여 인스턴스화 할 수 있습니다:
-
-```python
->>> from transformers import AutoConfig
-
->>> config = AutoConfig.from_pretrained("distilbert-base-uncased")
->>> onnx_config = DistilBertOnnxConfig(config)
-```
-
-결과 객체에는 여러 가지 유용한 속성이 있습니다. 예를 들어 ONNX로 내보낼 때 쓰일 ONNX 연산자 집합을 볼 수 있습니다:
-
-```python
->>> print(onnx_config.default_onnx_opset)
-11
-```
-
-다음과 같이 모델에 연결된 출력을 볼 수도 있습니다:
-
-```python
->>> print(onnx_config.outputs)
-OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"})])
-```
-
-출력 속성이 입력과 동일한 구조임을 유의하세요. 각 출력은 이름과 차원이 `OrderedDict`의 키-값으로 저장되어 있습니다. 출력 구조는 구성을 초기화할 때 선택한 기능과 관련이 있습니다. 기본적으로 ONNX 구성은 `AutoModel` 클래스로 가져온 모델을 내보낼 때 쓰이는 `default` 기능으로 초기화됩니다. 다른 태스크를 위해 모델을 내보내려면 ONNX 구성을 초기화할 때 `task` 인수에 다른 기능을 넣으면 됩니다. 예를 들어, 시퀀스 분류 단계를 덧붙인 DistilBERT를 내보내려면, 이렇게 해볼 수 있습니다:
-
-```python
->>> from transformers import AutoConfig
-
->>> config = AutoConfig.from_pretrained("distilbert-base-uncased")
->>> onnx_config_for_seq_clf = DistilBertOnnxConfig(config, task="sequence-classification")
->>> print(onnx_config_for_seq_clf.outputs)
-OrderedDict([('logits', {0: 'batch'})])
-```
-
-<Tip>
-
-[`~onnx.config.OnnxConfig`]나 다른 구성 클래스에 연결된 모든 기본 속성 및 메소드는 필요에 따라 모두 재정의할 수 있습니다. 고급 예제로 [`BartOnnxConfig`]를 확인하세요.
-
-</Tip>
-
-### 모델 내보내기[[exporting-the-model]]
-
-ONNX 구성을 구현했다면, 다음 단계는 모델을 내보내는 것입니다. 이제 `transformers.onnx` 패키지에서 제공하는 `export()` 함수를 살펴보겠습니다. 이 함수는 ONNX 구성, 기본 모델, 토크나이저, 그리고 내보낼 파일의 경로를 입력으로 받습니다:
-
-```python
->>> from pathlib import Path
->>> from transformers.onnx import export
->>> from transformers import AutoTokenizer, AutoModel
-
->>> onnx_path = Path("model.onnx")
->>> model_ckpt = "distilbert-base-uncased"
->>> base_model = AutoModel.from_pretrained(model_ckpt)
->>> tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
-
->>> onnx_inputs, onnx_outputs = export(tokenizer, base_model, onnx_config, onnx_config.default_onnx_opset, onnx_path)
-```
-
-`export()` 함수가 반환하는 `onnx_inputs`와 `onnx_outputs`는 구성의 `inputs`와 `outputs` 속성에서 정의된 키 목록입니다. 모델을 내보낸 후 다음과 같이 모델이 잘 구성되어 있는지 테스트할 수 있습니다:
-
-```python
->>> import onnx
-
->>> onnx_model = onnx.load("model.onnx")
->>> onnx.checker.check_model(onnx_model)
-```
-
-<Tip>
-
-모델 크기가 2GB보다 큰 경우 내보내는 중에 여러 추가 파일들이 생성되는 것을 볼 수 있습니다. 사실 ONNX는 모델을 저장하기 위해 [Protocol Buffers](https://developers.google.com/protocol-buffers/)를 사용하는데, 버퍼는 2GB의 크기 제한이 있기 때문에 _자연스러운_ 일입니다. 외부 데이터를 사용하여 모델을 가져오는 방법은 [ONNX 문서](https://github.com/onnx/onnx/blob/master/docs/ExternalData.md)를 참조하세요.
-
-</Tip>
-
-### 모델의 출력 검증하기[[validating-the-model-outputs]]
-
-마지막 단계는 기존 모델과 내보낸 모델의 출력이 일정한 오차 범위 내에서 동일하다는 것을 검증하는 것입니다. 그러려면 `transformers.onnx` 패키지에서 제공하는 `validate_model_outputs()` 함수를 사용할 수 있습니다:
-
-```python
->>> from transformers.onnx import validate_model_outputs
-
->>> validate_model_outputs(
-...     onnx_config, tokenizer, base_model, onnx_path, onnx_outputs, onnx_config.atol_for_validation
-... )
-```
-
-이 함수는 [`~transformers.onnx.OnnxConfig.generate_dummy_inputs`] 메소드로 기존 및 내보낸 모델의 입력을 생성하며, 검증에 사용될 오차 범위는 구성에서 정의할 수 있습니다. 일반적으로는 1e-6에서 1e-4 범위 내에서 합의하지만, 1e-3보다 작다면 문제 없을 가능성이 높습니다.
-
-## 🤗 Transformers에 새 구성 추가하기[[contributing-a-new-configuration-to-transformers]]
-
-미리 제작된 구성의 숫자를 늘리려고 노력하고 있으며, 커뮤니티의 기여를 환영합니다! 라이브러리에 당신만의 구성을 추가하려면 다음 단계를 기억해주세요:
-
-* `configuration_<model_name>.py` 파일에 ONNX 구성을 구현하세요.
-* [`~onnx.features.FeatureManager`]에 모델 아키텍처 및 해당 기능을 포함하세요.
-* `test_onnx_v2.py`의 테스트에 모델 아키텍처를 추가하세요.
-
-아직 감이 안 잡히신다면, [IBERT 구성](https://github.com/huggingface/transformers/pull/14868/files)이 어떻게 기여되었는지 확인해보세요.

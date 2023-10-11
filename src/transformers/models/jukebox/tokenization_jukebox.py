@@ -128,16 +128,10 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        super().__init__(
-            unk_token=unk_token,
-            n_genres=n_genres,
-            version=version,
-            max_n_lyric_tokens=max_n_lyric_tokens,
-            **kwargs,
-        )
         self.version = version
         self.max_n_lyric_tokens = max_n_lyric_tokens
         self.n_genres = n_genres
+        self._added_tokens_decoder = {0: unk_token}
 
         with open(artists_file, encoding="utf-8") as vocab_handle:
             self.artists_encoder = json.load(vocab_handle)
@@ -157,13 +151,24 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         self.artists_decoder = {v: k for k, v in self.artists_encoder.items()}
         self.genres_decoder = {v: k for k, v in self.genres_encoder.items()}
         self.lyrics_decoder = {v: k for k, v in self.lyrics_encoder.items()}
+        super().__init__(
+            unk_token=unk_token,
+            n_genres=n_genres,
+            version=version,
+            max_n_lyric_tokens=max_n_lyric_tokens,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self):
         return len(self.artists_encoder) + len(self.genres_encoder) + len(self.lyrics_encoder)
 
     def get_vocab(self):
-        return dict(self.artists_encoder, self.genres_encoder, self.lyrics_encoder)
+        return {
+            "artists_encoder": self.artists_encoder,
+            "genres_encoder": self.genres_encoder,
+            "lyrics_encoder": self.lyrics_encoder,
+        }
 
     def _convert_token_to_id(self, list_artists, list_genres, list_lyrics):
         """Converts the artist, genre and lyrics tokens to their index using the vocabulary.
@@ -202,9 +207,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         Performs any necessary transformations before tokenization.
 
-        This method should pop the arguments from kwargs and return the remaining `kwargs` as well. We test the
-        `kwargs` at the end of the encoding process to be sure all the arguments have been used.
-
         Args:
             artist (`str`):
                 The artist name to prepare. This will mostly lower the string
@@ -216,8 +218,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
-            kwargs:
-                Keyword arguments to use for the tokenization.
         """
         for idx in range(len(self.version)):
             if self.version[idx] == "v3":

@@ -1818,12 +1818,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         batch_size, seq_len = input_shape[:2]
         padding_len = (attention_window - seq_len % attention_window) % attention_window
 
-        if padding_len > 0:
-            logger.info(
-                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
-                f"`config.attention_window`: {attention_window}"
-            )
-
         paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
 
         if input_ids is not None:

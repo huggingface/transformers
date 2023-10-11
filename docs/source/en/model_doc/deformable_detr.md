@@ -52,14 +52,12 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DeformableDetrImageProcessor
     - preprocess
-    - pad_and_create_pixel_mask
     - post_process_object_detection
 
 ## DeformableDetrFeatureExtractor
 
 [[autodoc]] DeformableDetrFeatureExtractor
     - __call__
-    - pad_and_create_pixel_mask
     - post_process_object_detection
 
 ## DeformableDetrConfig

@@ -32,9 +32,9 @@ class ViltProcessor(ProcessorMixin):
     docstring of [`~ViltProcessor.__call__`] and [`~ViltProcessor.decode`] for more information.
 
     Args:
-        image_processor (`ViltImageProcessor`):
+        image_processor (`ViltImageProcessor`, *optional*):
             An instance of [`ViltImageProcessor`]. The image processor is a required input.
-        tokenizer (`BertTokenizerFast`):
+        tokenizer (`BertTokenizerFast`, *optional*):
             An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
@@ -42,6 +42,7 @@ class ViltProcessor(ProcessorMixin):
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
         if "feature_extractor" in kwargs:
             warnings.warn(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"

@@ -20,8 +20,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as sp
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...utils import logging
 
+
+logger = logging.get_logger(__name__)
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -124,6 +127,18 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        if not os.path.isfile(vocab_file):
+            raise ValueError(
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+            )
+        self.do_lower_case = do_lower_case
+        self.split_by_punct = split_by_punct
+        self.vocab_file = vocab_file
+        self._tokenizer = SPMTokenizer(
+            vocab_file, None, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
+        )
+        unk_token = AddedToken(unk_token, normalized=True, lstrip=False, rstrip=False)
         super().__init__(
             do_lower_case=do_lower_case,
             bos_token=bos_token,
@@ -137,18 +152,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-        if not os.path.isfile(vocab_file):
-            raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
-            )
-        self.do_lower_case = do_lower_case
-        self.split_by_punct = split_by_punct
-        self.vocab_file = vocab_file
-        self._tokenizer = SPMTokenizer(
-            vocab_file, self.all_special_tokens, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
-        )
+        self._tokenizer.special_tokens = self.all_special_tokens
 
     @property
     def vocab_size(self):
@@ -374,6 +378,7 @@ class SPMTokenizer:
             text = "".join(words[word_start:word_end])
             return text
 
+    # TODO add a deprecation cycle as this can have different behaviour from our API
     def add_special_token(self, token):
         if token not in self.special_tokens:
             self.special_tokens.append(token)
@@ -383,6 +388,9 @@ class SPMTokenizer:
         return self.id(token)
 
     def part_of_whole_word(self, token, is_bos=False):
+        logger.warning_once(
+            "The `DebertaTokenizer.part_of_whole_word` method is deprecated and will be removed in `transformers==4.35`"
+        )
         if is_bos:
             return True
         if (
@@ -413,6 +421,9 @@ class SPMTokenizer:
         return self.ids_to_tokens[id]
 
     def id(self, sym):
+        logger.warning_once(
+            "The `DebertaTokenizer.id` method is deprecated and will be removed in `transformers==4.35`"
+        )
         return self.vocab[sym] if sym in self.vocab else 1
 
     def _encode_as_pieces(self, text):
@@ -459,17 +470,6 @@ class SPMTokenizer:
             words.append(text[prev_end:offset])
 
         return words
-
-    def _run_strip_accents(self, text):
-        """Strips accents from a piece of text."""
-        text = unicodedata.normalize("NFD", text)
-        output = []
-        for char in text:
-            cat = unicodedata.category(char)
-            if cat == "Mn":
-                continue
-            output.append(char)
-        return "".join(output)
 
     def _run_split_on_punc(self, text):
         """Splits punctuation on a piece of text."""

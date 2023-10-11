@@ -17,9 +17,9 @@ from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline, Dataset
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
 
 
 class TokenClassificationArgumentHandler(ArgumentHandler):
@@ -135,9 +135,9 @@ class TokenClassificationPipeline(ChunkPipeline):
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(
-            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
             if self.framework == "tf"
-            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)

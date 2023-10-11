@@ -45,7 +45,7 @@ if is_tf_available():
 
     from transformers import (
         AutoConfig,
-        AutoFeatureExtractor,
+        AutoImageProcessor,
         AutoTokenizer,
         TFAutoModel,
         TFAutoModelForCausalLM,
@@ -64,7 +64,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 @require_tf
@@ -828,11 +828,11 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         load_weight_prefix = TFVisionEncoderDecoderModel.load_weight_prefix
 
         config = self.get_encoder_decoder_config()
-        feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+        image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
         decoder_tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
         img = prepare_img()
-        pixel_values = feature_extractor(images=img, return_tensors="tf").pixel_values
+        pixel_values = image_processor(images=img, return_tensors="tf").pixel_values
         decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
         with tempfile.TemporaryDirectory() as tmp_dirname:
@@ -893,13 +893,13 @@ class TFViT2GPT2ModelIntegrationTest(unittest.TestCase):
     def test_inference_coco_en(self):
         loc = "ydshieh/vit-gpt2-coco-en"
 
-        feature_extractor = ViTFeatureExtractor.from_pretrained(loc)
+        image_processor = ViTImageProcessor.from_pretrained(loc)
         tokenizer = AutoTokenizer.from_pretrained(loc)
         model = TFVisionEncoderDecoderModel.from_pretrained(loc)
 
         # We will verify our results on an image of cute cats
         img = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        pixel_values = feature_extractor(images=img, return_tensors="tf").pixel_values
+        pixel_values = image_processor(images=img, return_tensors="tf").pixel_values
 
         decoder_input_ids = tf.constant([[model.config.decoder_start_token_id]])
 

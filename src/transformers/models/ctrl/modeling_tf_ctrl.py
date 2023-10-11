@@ -39,11 +39,11 @@ from .configuration_ctrl import CTRLConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ctrl"
+_CHECKPOINT_FOR_DOC = "Salesforce/ctrl"
 _CONFIG_FOR_DOC = "CTRLConfig"
 
 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ctrl"
+    "Salesforce/ctrl"
     # See all CTRL models at https://huggingface.co/models?filter=ctrl
 ]
 
@@ -798,16 +798,10 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
         else:
             if input_ids is not None:
                 sequence_lengths = (
-                    tf.reduce_sum(
-                        tf.cast(
-                            tf.math.not_equal(input_ids, self.config.pad_token_id),
-                            dtype=input_ids.dtype,
-                        ),
-                        -1,
-                        keepdims=False,
-                    )
+                    tf.argmax(tf.cast(tf.math.equal(input_ids, self.config.pad_token_id), input_ids.dtype), axis=-1)
                     - 1
                 )
+                sequence_lengths = tf.where(sequence_lengths >= 0, sequence_lengths, input_ids.shape[-1] - 1)
                 in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
             else:
                 sequence_lengths = -1

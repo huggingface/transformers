@@ -391,8 +391,6 @@ XLM_INPUTS_DOCSTRING = r"""
     XLM_START_DOCSTRING,
 )
 class XLMModel(XLMPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -461,7 +459,9 @@ class XLMModel(XLMPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -670,7 +670,6 @@ class XLMPredLayer(nn.Module):
     XLM_START_DOCSTRING,
 )
 class XLMWithLMHeadModel(XLMPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["pred_layer.proj.weight"]
     _tied_weights_keys = ["pred_layer.proj.weight"]
 
     def __init__(self, config):

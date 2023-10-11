@@ -57,6 +57,17 @@ class ImageProcessorUtilTester(unittest.TestCase):
             "https://huggingface.co/hf-internal-testing/tiny-random-vit/resolve/main/preprocessor_config.json"
         )
 
+    def test_image_processor_from_pretrained_subfolder(self):
+        with self.assertRaises(OSError):
+            # config is in subfolder, the following should not work without specifying the subfolder
+            _ = AutoImageProcessor.from_pretrained("hf-internal-testing/stable-diffusion-all-variants")
+
+        config = AutoImageProcessor.from_pretrained(
+            "hf-internal-testing/stable-diffusion-all-variants", subfolder="feature_extractor"
+        )
+
+        self.assertIsNotNone(config)
+
 
 @is_staging_test
 class ImageProcessorPushToHubTester(unittest.TestCase):
@@ -133,7 +144,7 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
         # This has added the proper auto_map field to the config
         self.assertDictEqual(
             image_processor.auto_map,
-            {"ImageProcessor": "custom_image_processing.CustomImageProcessor"},
+            {"AutoImageProcessor": "custom_image_processing.CustomImageProcessor"},
         )
 
         new_image_processor = AutoImageProcessor.from_pretrained(
@@ -141,14 +152,3 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
         )
         # Can't make an isinstance check because the new_image_processor is from the CustomImageProcessor class of a dynamic module
         self.assertEqual(new_image_processor.__class__.__name__, "CustomImageProcessor")
-
-    def test_image_processor_from_pretrained_subfolder(self):
-        with self.assertRaises(OSError):
-            # config is in subfolder, the following should not work without specifying the subfolder
-            _ = AutoImageProcessor.from_pretrained("hf-internal-testing/stable-diffusion-all-variants")
-
-        config = AutoImageProcessor.from_pretrained(
-            "hf-internal-testing/stable-diffusion-all-variants", subfolder="feature_extractor"
-        )
-
-        self.assertIsNotNone(config)

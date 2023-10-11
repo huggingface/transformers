@@ -63,7 +63,7 @@ TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LARGE_NEGATIVE = -1e8
 
 
-def create_sinusiodal_positions(num_positions: int, embedding_dim: int, padding_idx: Optional[int]) -> tf.Tensor:
+def create_sinusoidal_positions(num_positions: int, embedding_dim: int, padding_idx: Optional[int]) -> tf.Tensor:
     half_dim = embedding_dim // 2
     emb = math.log(10000) / (half_dim - 1)
     emb = tf.exp(tf.range(half_dim, dtype=tf.float32) * -emb)
@@ -83,7 +83,7 @@ def create_sinusiodal_positions(num_positions: int, embedding_dim: int, padding_
         )
         emb *= _padding_mask
 
-    return tf.Variable(emb, trainable=False, name="model.embed_positions.weights")
+    return tf.constant(emb, name="embed_positions")
 
 
 def _create_position_ids_from_input_ids(
@@ -135,7 +135,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -348,11 +348,11 @@ class TFXGLMDecoderLayer(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`tf.Tensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
             attention_mask (`tf.Tensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             encoder_hidden_states (`tf.Tensor`):
-                cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+                cross attention input to the layer of shape *(batch, seq_len, embed_dim)*
             encoder_attention_mask (`tf.Tensor`): encoder attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
@@ -438,7 +438,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
             )
 
         self.offset = 2
-        self._embed_positions_weights = create_sinusiodal_positions(
+        self._embed_positions_weights = create_sinusoidal_positions(
             num_positions=config.max_position_embeddings + self.offset,
             embedding_dim=config.d_model,
             padding_idx=config.pad_token_id,

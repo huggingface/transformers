@@ -23,8 +23,8 @@ python run_generation_contrastive_search.py --model_name_or_path=gpt2-large --pe
 import argparse
 import logging
 
-import numpy as np
-import torch
+from accelerate import PartialState
+from accelerate.utils import set_seed
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -35,13 +35,6 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
-
-
-def set_seed(args):
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
 
 
 def main():
@@ -73,7 +66,11 @@ def main():
     parser.add_argument("--xlm_language", type=str, default="", help="Optional language when used with the XLM model.")
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-    parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
+    parser.add_argument(
+        "--use_cpu",
+        action="store_true",
+        help="Whether or not to use cpu. If set to False, " "we will use gpu/npu or mps device if available",
+    )
     parser.add_argument(
         "--fp16",
         action="store_true",
@@ -81,12 +78,13 @@ def main():
     )
     args = parser.parse_args()
 
-    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
+    # Initialize the distributed state.
+    distributed_state = PartialState(cpu=args.use_cpu)
 
-    logger.warning(f"device: {args.device}, n_gpu: {args.n_gpu}, 16-bits training: {args.fp16}")
+    logger.warning(f"device: {distributed_state.device}, 16-bits inference: {args.fp16}")
 
-    set_seed(args)
+    if args.seed is not None:
+        set_seed(args.seed)
 
     # Initialize the model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
@@ -94,7 +92,8 @@ def main():
 
     # tokenizer = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
     # model = OPTForCausalLM.from_pretrained(args.model_name_or_path)
-    model.to(args.device)
+    # Set the model to the right device
+    model.to(distributed_state.device)
 
     if args.fp16:
         model.half()
@@ -103,7 +102,7 @@ def main():
     prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
 
     inputs = tokenizer(prompt_text, return_tensors="pt", add_special_tokens=False)
-    inputs = {key: value.to(args.device) for key, value in inputs.items()}
+    inputs = {key: value.to(distributed_state.device) for key, value in inputs.items()}
 
     output_sequences = model.generate(
         **inputs,

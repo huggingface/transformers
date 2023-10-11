@@ -190,7 +190,6 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] DetrFeatureExtractor
     - __call__
-    - pad_and_create_pixel_mask
     - post_process_object_detection
     - post_process_semantic_segmentation
     - post_process_instance_segmentation
