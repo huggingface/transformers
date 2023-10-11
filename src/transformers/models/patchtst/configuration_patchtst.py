@@ -41,12 +41,12 @@ class PatchTSTConfig(PretrainedConfig):
         num_input_channels (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
-        context_length (`int`, defaults to 32, *optional*, defaults to 32):
+        context_length (`int`, *optional*, defaults to 32):
             The context length for the encoder.
-        distribution_output (`string`, *optional*, defaults to `"student_t"`):
+        distribution_output (`str`, *optional*, defaults to `"student_t"`):
             The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
             "negative_binomial".
-        loss (`string`, *optional*, defaults to `"mse"`):
+        loss (`str`, *optional*, defaults to `"mse"`): 
             The loss function for the model corresponding to the `distribution_output` head. For parametric
             distributions it is the negative log likelihood ("nll") and for point estimates it is the mean squared
             error "mse".
@@ -94,9 +94,9 @@ class PatchTSTConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         shared_projection (`bool`, *optional*, defaults to `True`):
             Sharing the projection layer across different channels in the forecast head.
-        seed_number (`int`, *optional*):
+        seed_number (`Optional`, *optional*):
             Use seed number for random masking.
-        scaling (`string` or `bool`, *optional*, defaults to `"mean"`):
+        scaling (`Union`, *optional*, defaults to `"mean"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
         mask_input (`bool`, *optional*, defaults to False):
@@ -128,7 +128,6 @@ class PatchTSTConfig(PretrainedConfig):
         num_parallel_samples (`int`, *optional*, defaults to 100):
             The number of samples to generate in parallel for probablistic forecast.
 
-        Example:
 
     ```python
     >>> from transformers import PatchTSTConfig, PatchTSTModel
