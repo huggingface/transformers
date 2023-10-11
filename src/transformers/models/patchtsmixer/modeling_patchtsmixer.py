@@ -168,7 +168,7 @@ class PatchTSMixerNormLayer(nn.Module):
         return x
 
 
-class MLP(nn.Module):
+class PatchTSMixerMLP(nn.Module):
     def __init__(self, in_features, out_features, expansion_factor, dropout, last_dropout=True):
         super().__init__()
         num_hidden = in_features * expansion_factor
@@ -221,7 +221,7 @@ class ChannelFeatureMixer(nn.Module):
         self.norm = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
         if ffn == "mlp":
-            self.mlp = MLP(in_channels, in_channels, expansion_factor, dropout)
+            self.mlp = PatchTSMixerMLP(in_channels, in_channels, expansion_factor, dropout)
         else:
             raise Exception("Invalid ffn %s" % (ffn))
 
@@ -291,7 +291,7 @@ class PatchMixer(nn.Module):
         self.self_attn = self_attn
 
         if ffn == "mlp":
-            self.mlp = MLP(num_patches, num_patches, expansion_factor, dropout)
+            self.mlp = PatchTSMixerMLP(num_patches, num_patches, expansion_factor, dropout)
         else:
             raise Exception("Invalid ffn %s" % (ffn))
 
@@ -401,7 +401,7 @@ class FeatureMixer(nn.Module):
         self.mode = mode
         self.norm = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
-        self.mlp = MLP(num_features, num_features, expansion_factor, dropout)
+        self.mlp = PatchTSMixerMLP(num_features, num_features, expansion_factor, dropout)
 
         self.gated_attn = gated_attn
 
