@@ -1297,21 +1297,22 @@ class PatchTSMixerMasking(nn.Module):
 
         super().__init__()
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, patch_input: torch.Tensor):
         """
-        Input:
-            x: patched input
-                4D: [batch_size x num_input_channels x num_patches x patch_length]
-        Output:
-            x_mask: Masked patched input
-                4D: [batch_size x num_input_channels x num_patches x patch_length]
-            mask: bool tensor indicating True on masked points
-                4D: [batch_size x num_input_channels x num_patch]
+        Parameters:
+            patch_input (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patches, patch_length)`):
+                patched input
+        Returns:
+            x_mask (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patches, patch_length)`) :
+                Masked patched input
+            mask (`torch.Tensor` of shape `(batch_size, num_input_channels, num_patches)`):
+                Bool tensor indicating True on masked points
+
         """
 
         if self.mask_type == "random":
             x_mask, mask = random_masking(
-                xb=x,
+                inputs=patch_input,
                 mask_ratio=self.mask_ratio,
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 channel_consistent_masking=self.channel_consistent_masking,
@@ -1320,7 +1321,7 @@ class PatchTSMixerMasking(nn.Module):
             )
         elif self.mask_type == "forecast":
             x_mask, mask = forecast_masking(
-                xb=x,
+                inputs=patch_input,
                 patch_lengths=self.mask_patches,
                 mix_ratio=self.mask_patch_ratios,
                 unmasked_channel_indices=self.unmasked_channel_indices,
