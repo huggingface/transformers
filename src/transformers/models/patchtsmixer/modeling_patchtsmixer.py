@@ -804,38 +804,38 @@ class ForecastHead(nn.Module):
 
     def forward(self, x, y=None):
         """
-        # x: [bs x num_patch x num_features] flatten mode or
-            [bs x n_vars x num_patch x num_features] common_channel/mix_channel
+        # x: [batch_size x num_patch x num_features] flatten mode or
+            [batch_size x n_vars x num_patch x num_features] common_channel/mix_channel
 
-        Output: [bs x forecast_len x nvars]
+        Output: [batch_size x forecast_len x nvars]
 
         """
         if self.mode in ["common_channel", "mix_channel"]:
-            x = self.flatten(x)  # [bs x n_vars x num_patch * num_features]
+            x = self.flatten(x)  # [batch_size x n_vars x num_patch * num_features]
             # x = torch.reshape(
             #     x, (x.shape[0], x.shape[1], x.shape[2] * x.shape[3])
-            # )  # [bs x n_vars x num_patch * num_features]
+            # )  # [batch_size x n_vars x num_patch * num_features]
 
-            forecast = self.base_forecast_block(x)  # [bs x n_vars x forecast_len]
+            forecast = self.base_forecast_block(x)  # [batch_size x n_vars x forecast_len]
             if isinstance(forecast, tuple):
                 forecast = tuple(z.transpose(-1, -2) for z in forecast)
             else:
-                forecast = forecast.transpose(-1, -2)  # [bs x forecast_len x n_vars]
+                forecast = forecast.transpose(-1, -2)  # [batch_size x forecast_len x n_vars]
 
         else:
-            x = self.flatten(x)  # x: [bs x num_patches*num_features]
-            forecast = self.base_forecast_block(x)  # [bs x forecast_len * self.nvars]
+            x = self.flatten(x)  # x: [batch_size x num_patches*num_features]
+            forecast = self.base_forecast_block(x)  # [batch_size x forecast_len * self.nvars]
 
             if isinstance(forecast, tuple):
                 forecast = tuple(z.reshape(-1, self.forecast_len, self.nvars) for z in forecast)
             else:
-                forecast = forecast.reshape(-1, self.forecast_len, self.nvars)  # [bs x forecast_len x n_vars]
+                forecast = forecast.reshape(-1, self.forecast_len, self.nvars)  # [batch_size x forecast_len x n_vars]
 
         if self.forecast_channel_indices is not None:
             if isinstance(forecast, tuple):
                 forecast = tuple(z[..., self.forecast_channel_indices] for z in forecast)
             else:
-                forecast = forecast[..., self.forecast_channel_indices]  # [bs x forecast_len x n_vars]
+                forecast = forecast[..., self.forecast_channel_indices]  # [batch_size x forecast_len x n_vars]
 
         return forecast
 
@@ -912,26 +912,26 @@ class LinearHead(nn.Module):
 
     def forward(self, x, y=None):
         """
-        # x: [bs x num_patch x num_features] flatten mode or
-            [bs x n_vars x num_patch x num_features] common_channel/mix_channel
-        Output: [bs x output_dim]
+        # x: [batch_size x num_patch x num_features] flatten mode or
+            [batch_size x n_vars x num_patch x num_features] common_channel/mix_channel
+        Output: [batch_size x output_dim]
         """
-        x = x.transpose(-1, -2)  # bs x num_features x num_patch or bs x n_vars x num_features x num_patch
+        x = x.transpose(-1, -2)  # batch_size x num_features x num_patch or batch_size x n_vars x num_features x num_patch
         if self.head_agg == "use_last":
-            x = x[..., -1]  # # bs x num_features (flatten) or # bs x n_vars x num_features (common_channel)
+            x = x[..., -1]  # # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
             # if self.mode  == "flatten":
-            #     x = x[:,:,-1] # bs x num_features
+            #     x = x[:,:,-1] # batch_size x num_features
             # else:
-            #     x = x[:,:,:,-1] # bs x n_vars x num_features
+            #     x = x[:,:,:,-1] # batch_size x n_vars x num_features
         elif self.head_agg == "max_pool":
-            x = x.max(dim=-1).values  # bs x n_vars x num_features or bs x num_features
+            x = x.max(dim=-1).values  # batch_size x n_vars x num_features or batch_size x num_features
         elif self.head_agg == "avg_pool":
-            x = x.mean(dim=-1)  # bs x n_vars x num_features or bs x num_features
+            x = x.mean(dim=-1)  # batch_size x n_vars x num_features or batch_size x num_features
 
         if self.flatten:
             x = self.flatten(x)
         x = self.dropout(x)
-        x = self.projection(x)  # bs x output_dim
+        x = self.projection(x)  # batch_size x output_dim
 
         if (self.distribution_output is None) and (self.output_range is not None):
             x = torch.sigmoid(x) * (self.output_range[1] - self.output_range[0]) + self.output_range[0]
@@ -1004,21 +1004,21 @@ class PretrainHead(nn.Module):
 
     def forward(self, x, y=None):
         """
-        # flatten mode: [bs x num_patch x num_features] or common_channel/mix_channel mode: [bs x n_vars x num_patch x
-        num_features]
+        # flatten mode: [batch_size x num_patch x num_features] or
+            common_channel/mix_channel mode: [batch_size x n_vars x num_patch x num_features]
 
-        Output: z: [bs x n_vars x num_patch x patch_len]
+        Output: z: [batch_size x n_vars x num_patch x patch_len]
         """
 
         if self.mode == "flatten":
-            x = self.base_pt_block(x)  # x: [bs x num_patch x n_vars*patch_size]
+            x = self.base_pt_block(x)  # x: [batch_size x num_patch x n_vars*patch_size]
             x = torch.reshape(
                 x, (x.shape[0], x.shape[1], self.patch_size, self.input_size)
-            )  # [bs x num_patch x patch_size x n_vars]
-            x = x.permute(0, 3, 1, 2)  # [bs x nvars x num_patch  x patch_len]
+            )  # [batch_size x num_patch x patch_size x n_vars]
+            x = x.permute(0, 3, 1, 2)  # [batch_size x nvars x num_patch  x patch_len]
             return x
         elif self.mode in ["common_channel", "mix_channel"]:
-            forecast = self.base_pt_block(x)  # [bs x n_vars x num_patch x patch_size]
+            forecast = self.base_pt_block(x)  # [batch_size x n_vars x num_patch x patch_size]
             return forecast
 
 
@@ -1070,7 +1070,7 @@ def random_masking(
 ):
     """random_masking: Mask the input considering the control variables.
     Parameters:
-        xb (Tensor): Input to mask [ bs x nvars x num_patches x patch_length]
+        xb (Tensor): Input to mask [ batch_size x nvars x num_patches x patch_length]
         mask_ratio (`float`): Mask ratio.
         unmasked_channel_indices (`list`, *optional*):
             indices of unmasked channels. These channels will not be masked. Defaults to None.
@@ -1080,30 +1080,30 @@ def random_masking(
         mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
         seed_number (`int`, *optional*): Value to set for the random seed.
     Returns:
-        Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [bs x c x n]
+        Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [batch_size x c x n]
     """
     if seed_number:
         set_seed(seed_number)
 
-    bs, nvars, L, D = xb.shape
+    batch_size, nvars, L, D = xb.shape
 
     len_keep = int(L * (1 - mask_ratio))
 
     if channel_consistent_masking:
-        noise = torch.rand(bs, 1, L, device=xb.device)  # noise in [0, 1], bs x 1 x  L
-        noise = noise.repeat(1, nvars, 1)  # bs x nvars x L
+        noise = torch.rand(batch_size, 1, L, device=xb.device)  # noise in [0, 1], batch_size x 1 x  L
+        noise = noise.repeat(1, nvars, 1)  # batch_size x nvars x L
     else:
-        noise = torch.rand(bs, nvars, L, device=xb.device)  # noise in [0, 1], bs x nvars x L
+        noise = torch.rand(batch_size, nvars, L, device=xb.device)  # noise in [0, 1], batch_size x nvars x L
 
-    mask = torch.ones(bs, nvars, L, device=xb.device)  # mask: [bs x nvars x num_patch]
+    mask = torch.ones(batch_size, nvars, L, device=xb.device)  # mask: [batch_size x nvars x num_patch]
     mask[:, :, :len_keep] = 0
 
     # sort noise for each sample
     ids_shuffle = torch.argsort(noise, dim=-1)  # ascend: small is keep, large is remove
-    ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [bs x nvars x L]
+    ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [batch_size x nvars x L]
 
     mask = torch.gather(mask, dim=-1, index=ids_restore)
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [bs x nvars x num_patches x patch_length]
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [batch_size x nvars x num_patches x patch_length]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
@@ -1113,7 +1113,7 @@ def random_masking(
 
 # TODO: add copied from after PatchTST master merge
 def forecast_masking(
-    xb: torch.Tensor,
+    inputs: torch.Tensor,
     patch_lengths: list,
     mix_ratio: list = None,
     unmasked_channel_indices: list = None,
@@ -1125,8 +1125,8 @@ def forecast_masking(
     cv_channel_indices
 
     Args:
-        xb (`torch.Tensor` of shape `(bs, num_channels, num_patch, patch_len)` or `(bs, tsg1, tag2, num_channels, num_patch,
-            patch_len)`):
+        inputs (`torch.Tensor` of shape `(batch_size, num_channels, num_patch, patch_len)` or
+                    `(batch_size, tsg1, tag2, num_channels, num_patch, patch_len)`):
             Input to mask
         patch_lengths (`list`): List of patch lengths to mask in the end of the data.
         mix_ratio (`list`, *optional*): List of weights to use for each patch length. For Ex.
@@ -1137,8 +1137,8 @@ def forecast_masking(
         mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
 
     Returns:
-        Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [bs x c x n] or [bs x tsg1 x
-        tsg2 x c x n]
+        `tuple(torch.Tensor)`: inputs_mask of the same shape as inputs Tensor and Mask tensor of shape `(batch_size,
+        num_channels , num_patch)` or `(batch_size, tsg1, tsg2, num_channels, num_patch)`
     """
     if seed_number:
         set_seed(seed_number)
@@ -1146,26 +1146,26 @@ def forecast_masking(
     if mix_ratio is None:
         mix_ratio = [1 for t in patch_lengths]
 
-    bs, nvars, L, D = xb.shape
-    mask = torch.zeros(bs, nvars, L, device=xb.device)
+    batch_size, num_channels, sequence_length, num_features = inputs.shape
+    mask = torch.zeros(batch_size, num_channels, sequence_length, device=inputs.device)
 
     t_list = []
     total_length = 0
     total_ratio = sum(mix_ratio)
 
     for i, j in zip(patch_lengths, mix_ratio):
-        if i <= 0 or i >= L:
+        if i <= 0 or i >= sequence_length:
             raise Exception("masked_patch_len should be greater than 0 and less than total patches.")
-        temp_len = int(bs * j / total_ratio)
+        temp_len = int(batch_size * j / total_ratio)
         t_list.append([i, j, temp_len])
         total_length += temp_len
 
     t_list = sorted(t_list, key=lambda x: x[2])
 
-    if total_length < bs:
-        t_list[0][2] = t_list[0][2] + (bs - total_length)
-    elif total_length > bs:
-        t_list[-1][2] = t_list[-1][2] + (total_length - bs)
+    if total_length < batch_size:
+        t_list[0][2] = t_list[0][2] + (batch_size - total_length)
+    elif total_length > batch_size:
+        t_list[-1][2] = t_list[-1][2] + (total_length - batch_size)
 
     b1 = 0
     for p, r, l in t_list:
@@ -1176,12 +1176,12 @@ def forecast_masking(
     perm = torch.randperm(mask.shape[0])
     mask = mask[perm]
 
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [bs x nvars x num_patch x patch_len]
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, num_features)  # mask: [batch_size x num_channels x num_patch x patch_len]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
-    xb_mask = xb.masked_fill(mask.bool(), mask_value)
-    return xb_mask, mask[..., 0]
+    inputs_mask = inputs.masked_fill(mask.bool(), mask_value)
+    return inputs_mask, mask[..., 0]
 
 
 # TODO: add copied from after PatchTST master merge
@@ -1193,7 +1193,7 @@ class PatchTSMixerPatchify(nn.Module):
         patch_length (`int`, required): patch length.
         stride (`int`, required): stride between patches.
     Returns:
-        z: output tensor data [bs x num_input_channels x num_patches x patch_length]
+        z: output tensor data [batch_size x num_input_channels x num_patches x patch_length]
     """
 
     def __init__(
@@ -1221,20 +1221,20 @@ class PatchTSMixerPatchify(nn.Module):
     def forward(self, past_values: torch.Tensor):
         """
         Parameters:
-            past_values (torch.Tensor, required): Input of shape [bs x sequence_length x num_input_channels]
+            past_values (torch.Tensor, required): Input of shape [batch_size x sequence_length x num_input_channels]
         Returns:
-            x: output tensor data [bs x num_input_channels x num_patches x patch_length]
+            x: output tensor data [batch_size x num_input_channels x num_patches x patch_length]
         """
         sequence_length = past_values.shape[-2]
         assert (
             sequence_length == self.sequence_length
         ), f"Input sequence length ({sequence_length}) doesn't match model configuration ({self.sequence_length})."
 
-        x = past_values[:, self.s_begin :, :]  # x: [bs x new_sequence_length x nvars]
+        x = past_values[:, self.s_begin :, :]  # x: [batch_size x new_sequence_length x num_channels]
         x = x.unfold(
             dimension=-2, size=self.patch_length, step=self.stride
-        )  # x: [bs x num_patches x num_input_channels x patch_length]
-        x = x.transpose(-2, -3).contiguous()  # xb: [bs x num_input_channels x num_patches x patch_length]
+        )  # x: [batch_size x num_patches x num_input_channels x patch_length]
+        x = x.transpose(-2, -3).contiguous()  # xb: [batch_size x num_input_channels x num_patches x patch_length]
         return x
 
 
@@ -1286,12 +1286,12 @@ class PatchTSMixerMasking(nn.Module):
         """
         Input:
             x: patched input
-                4D: [bs x num_input_channels x num_patches x patch_length]
+                4D: [batch_size x num_input_channels x num_patches x patch_length]
         Output:
             x_mask: Masked patched input
-                4D: [bs x num_input_channels x num_patches x patch_length]
+                4D: [batch_size x num_input_channels x num_patches x patch_length]
             mask: bool tensor indicating True on masked points
-                4D: [bs x num_input_channels x num_patch]
+                4D: [batch_size x num_input_channels x num_patch]
         """
 
         if self.mask_type == "random":
@@ -1315,7 +1315,7 @@ class PatchTSMixerMasking(nn.Module):
         else:
             raise ValueError("Invalid mask type")
 
-        mask = mask.bool()  # mask: [bs x num_input_channels x num_patch]
+        mask = mask.bool()  # mask: [batch_size x num_input_channels x num_patch]
 
         return x_mask, mask
 
@@ -1450,25 +1450,25 @@ class InjectScalerStatistics4D(nn.Module):
 
     def forward(self, z, loc, scale):
         """
-        # revin_mean,revin_stddev: [bs x 1 x n_channels] z: [bs x in_channels x num_patch x num_features]
+        # revin_mean,revin_stddev: [batch_size x 1 x n_channels] z: [batch_size x in_channels x num_patch x num_features]
 
-        output: [bs x in_channels x num_patch x num_features]
+        output: [batch_size x in_channels x num_patch x num_features]
         """
 
-        mean = loc.transpose(-1, -2)  # [bs x n_channels x 1 ]
-        mean = mean.unsqueeze(-2)  # [bs x n_channels x 1 x 1]
-        mean = mean.repeat(1, 1, self.num_patches, 1)  # [bs x n_channels x num_patch x 1]
+        mean = loc.transpose(-1, -2)  # [batch_size x n_channels x 1 ]
+        mean = mean.unsqueeze(-2)  # [batch_size x n_channels x 1 x 1]
+        mean = mean.repeat(1, 1, self.num_patches, 1)  # [batch_size x n_channels x num_patch x 1]
 
-        stdev = scale.transpose(-1, -2)  # [bs x n_channels x 1 ]
-        stdev = stdev.unsqueeze(-2)  # [bs x n_channels x 1 x 1]
-        stdev = stdev.repeat(1, 1, self.num_patches, 1)  # [bs x n_channels x num_patch x 1]
+        stdev = scale.transpose(-1, -2)  # [batch_size x n_channels x 1 ]
+        stdev = stdev.unsqueeze(-2)  # [batch_size x n_channels x 1 x 1]
+        stdev = stdev.repeat(1, 1, self.num_patches, 1)  # [batch_size x n_channels x num_patch x 1]
 
-        concat_stats = torch.cat([mean, stdev], dim=-1)  # [bs x n_channels x num_patch x 2]
+        concat_stats = torch.cat([mean, stdev], dim=-1)  # [batch_size x n_channels x num_patch x 2]
 
-        concat_stats = self.map_scale(concat_stats)  # [bs x n_channels x num_patch x 2]
+        concat_stats = self.map_scale(concat_stats)  # [batch_size x n_channels x num_patch x 2]
 
-        z = torch.cat([z, concat_stats], dim=-1)  # [bs x channels x num_patch x num_features+2]
-        z = self.inverse_transform(z)  # [bs x channels x num_patch x num_features]
+        z = torch.cat([z, concat_stats], dim=-1)  # [batch_size x channels x num_patch x num_features+2]
+        z = self.inverse_transform(z)  # [batch_size x channels x num_patch x num_features]
 
         return z
 
@@ -1537,8 +1537,8 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         Returns:
         """
 
-        # context_values: [bs  x n_vars x num_patches x patch_len]
-        # return: [bs x n_vars x num_patches x num_features]
+        # context_values: [batch_size  x n_vars x num_patches x patch_len]
+        # return: [batch_size x n_vars x num_patches x num_features]
         last_hidden_state, hidden_states = self.encoder(context_values, output_hidden_states=output_hidden_states)
         return PatchTSMixerEncoderOutput(last_hidden_state=last_hidden_state, hidden_states=hidden_states)
 
@@ -1646,13 +1646,13 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
             observed_mask = torch.ones_like(context_values)
         scaled_context_values, loc, scale = self.scaler(context_values, observed_mask)
 
-        patched_x = self.patching(scaled_context_values)  # [bs x input_size x num_patch x patch_len
+        patched_x = self.patching(scaled_context_values)  # [batch_size x input_size x num_patch x patch_len
 
         enc_input = patched_x
         if self.masking is not None:
             enc_input, mask = self.masking(patched_x)
-            # enc_input: [bs x input_size x num_patch x patch_len]
-            # mask: [bs x input_size x num_patch]
+            # enc_input: [batch_size x input_size x num_patch x patch_len]
+            # mask: [batch_size x input_size x num_patch]
 
         encoder_output = self.encoder(enc_input, output_hidden_states=output_hidden_states)
 
@@ -1749,11 +1749,11 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
 
         """
 
-        # context_values: tensor [bs x seq_len x input_size]
+        # context_values: tensor [batch_size x seq_len x input_size]
         model_output = self.model(
             context_values, observed_mask=observed_mask, output_hidden_states=output_hidden_states
-        )  # x.last_hidden_state: [bs x nvars x num_patch x num_features]
-        x_hat = self.head(model_output.last_hidden_state)  # tensor [bs x nvars x num_patch x patch_len]
+        )  # x.last_hidden_state: [batch_size x nvars x num_patch x num_features]
+        x_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x nvars x num_patch x patch_len]
 
         if return_loss is True:
             loss_val = self.loss(x_hat, model_output.patched_input)
@@ -1765,8 +1765,8 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
             loss_val = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
 
         return PatchTSMixerForMaskPreTrainingOutput(
-            prediction_logits=x_hat,  # tensor [bs x nvars x num_patch x patch_len]
-            last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            prediction_logits=x_hat,  # tensor [batch_size x nvars x num_patch x patch_len]
+            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
         )
@@ -1929,16 +1929,16 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         """
 
-        # context_values: tensor [bs x seq_len x input_size]
+        # context_values: tensor [batch_size x seq_len x input_size]
         model_output = self.model(
             context_values,
             observed_mask=observed_mask,
             output_hidden_states=output_hidden_states,
-        )  # model_output: [bs x nvars x num_patch x num_features]
+        )  # model_output: [batch_size x nvars x num_patch x num_features]
 
         y_hat = self.head(
             model_output.last_hidden_state,
-        )  # tensor [bs x forecast_len x input_size]
+        )  # tensor [batch_size x forecast_len x input_size]
 
         if target_values is not None and return_loss is True:
             if self.config.forecast_channel_indices is not None:
@@ -1982,8 +1982,8 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             scale = model_output.scale
 
         return PatchTSMixerForForecastOutput(
-            prediction_logits=y_hat,  # tensor [bs x forecast_len x input_size]
-            last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            prediction_logits=y_hat,  # tensor [batch_size x forecast_len x input_size]
+            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
             loc=loc,
@@ -2033,9 +2033,9 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         # get samples
         samples = [
             distribution.sample() for _ in range(num_parallel_samples)
-        ]  # samples: list of [bs x forecast_len x num_channels]
+        ]  # samples: list of [batch_size x forecast_len x num_channels]
         # stack tensors
-        samples = torch.stack(samples, dim=1)  # [bs x num_samples x forecast_len x num_channels]
+        samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x forecast_len x num_channels]
         return SamplePatchTSMixerForecastOutput(sequences=samples)
 
 
@@ -2120,14 +2120,14 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         model_output = self.model(
             context_values,
             output_hidden_states=output_hidden_states,
-        )  # x: [bs x nvars x num_patch x num_features]
+        )  # x: [batch_size x nvars x num_patch x num_features]
 
         if self.inject_scale is not None:
             model_output.last_hidden_state = self.inject_scale(
                 model_output.last_hidden_state, loc=model_output.loc, scale=model_output.scale
-            )  # x: [bs x nvars x num_patch x num_features]
+            )  # x: [batch_size x nvars x num_patch x num_features]
 
-        y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_labels]
+        y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x n_labels]
 
         if target_values is not None and return_loss is True:
             loss_val = self.loss(y_hat, target_values)
@@ -2135,8 +2135,8 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             loss_val = None
 
         return PatchTSMixerForClassificationOutput(
-            prediction_logits=y_hat,  # tensor [bs x n_labels]
-            last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            prediction_logits=y_hat,  # tensor [batch_size x n_labels]
+            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
         )
@@ -2236,20 +2236,20 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         """
 
-        # context_values: tensor [bs x seq_len x input_size]
-        # target_values: tensor [bs x n_targets]
+        # context_values: tensor [batch_size x seq_len x input_size]
+        # target_values: tensor [batch_size x n_targets]
 
         model_output = self.model(
             context_values,
             output_hidden_states=output_hidden_states,
-        )  # model_output: [bs x nvars x num_patch x num_features]
+        )  # model_output: [batch_size x nvars x num_patch x num_features]
 
         if self.inject_scale is not None:
             model_output.last_hidden_state = self.inject_scale(
                 model_output.last_hidden_state, loc=model_output.loc, scale=model_output.scale
-            )  # x: [bs x nvars x num_patch x num_features]
+            )  # x: [batch_size x nvars x num_patch x num_features]
 
-        y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_targets]
+        y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x n_targets]
 
         if target_values is not None and return_loss is True:
             if self.distribution_output:
@@ -2265,8 +2265,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             loss_val = None
 
         return PatchTSMixerForRegressionOutput(
-            prediction_logits=y_hat,  # tensor [bs x n_targets]
-            last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            prediction_logits=y_hat,  # tensor [batch_size x n_targets]
+            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x num_features]
             hidden_states=model_output.hidden_states,
             loss=loss_val,
         )
@@ -2300,7 +2300,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         distribution = self.distribution_output.distribution(outputs.prediction_logits)
 
         # get samples
-        samples = [distribution.sample() for _ in range(num_parallel_samples)]  # samples: list of [bs x n_targets]
+        samples = [distribution.sample() for _ in range(num_parallel_samples)]  # samples: list of [batch_size x n_targets]
         # stack tensors
-        samples = torch.stack(samples, dim=1)  # [bs x num_samples x n_targets]
+        samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x n_targets]
         return SamplePatchTSMixerRegressionOutput(sequences=samples)
