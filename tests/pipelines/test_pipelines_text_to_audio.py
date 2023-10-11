@@ -196,7 +196,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         set_seed(555)
         # make sure nothing is done if generate_kwargs passed since not related
         outputs = speech_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
-        self.assertTrue(np.abs(outputs["audio"] - audio).max()<1e-5)
+        self.assertTrue(np.abs(outputs["audio"] - audio).max() < 1e-5)
 
     @slow
     @require_torch
