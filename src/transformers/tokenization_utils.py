@@ -460,6 +460,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added_tokens = 0
         if new_tokens is None:
             return added_tokens
+        # TODO this is fairly slow
         current_vocab = self.get_vocab().copy()
         new_idx = len(current_vocab)  # only call this once, len gives the last index + 1
         for token in new_tokens:

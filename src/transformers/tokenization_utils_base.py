@@ -2212,10 +2212,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             continue
                         if isinstance(value, dict):
                             value = AddedToken(**value)
+                            value.special = True
                             init_kwargs[key] = value
                         elif key == "additional_special_tokens" and isinstance(value, list):
                             for token in value:
-                                token = AddedToken(**token) if isinstance(token, dict) else token
+                                token = AddedToken(**token, special=True) if isinstance(token, dict) else token
                                 if token not in additional_special_tokens:
                                     additional_special_tokens.append(token)
                         else:
@@ -2225,7 +2226,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             all_special_strings += [
                 str(init_kwargs.get(key, ""))
                 for key in cls.SPECIAL_TOKENS_ATTRIBUTES
-                if init_kwargs.get(key, "") not in all_special_strings
+                if init_kwargs.get(key, None) not in all_special_strings
             ]
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
             if added_tokens_file is not None:
@@ -2270,9 +2271,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             for serialized_tokens in added_tokens:
                 serialized_tokens.pop("id")
                 # for legacy purpose, we ignore whether or not these tokens are special.
-                serialized_tokens.pop("special")
+                # serialized_tokens.pop("special")
                 # however we check the additional_special_tokens
-                tokens_to_add_from_fast.append(AddedToken(**serialized_tokens, special=token in all_special_strings))
+                token = AddedToken(**serialized_tokens)
+                # token.special = str(token) in all_special_strings
+                tokens_to_add_from_fast.append(token)
             tokenizer.add_tokens(tokens_to_add_from_fast)
 
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
