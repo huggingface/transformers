@@ -499,7 +499,6 @@ OBJECTS_TO_IGNORE = [
     "SqueezeBertTokenizerFast",
     "SummarizationPipeline",
     "Swin2SRImageProcessor",
-    "SwinModel",
     "Swinv2Model",
     "SwitchTransformersConfig",
     "T5Config",
