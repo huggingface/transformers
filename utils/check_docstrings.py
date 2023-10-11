@@ -361,8 +361,6 @@ OBJECTS_TO_IGNORE = [
     "LevitConfig",
     "LiltConfig",
     "LiltModel",
-    "LlamaTokenizer",
-    "LlamaTokenizerFast",
     "LongT5Config",
     "LongformerConfig",
     "LongformerModel",
