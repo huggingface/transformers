@@ -319,6 +319,7 @@ class MistralAttention(nn.Module):
 
 class FlashAttentionMixin(torch.nn.Module):
     def to(self, *args, **kwargs):
+        print("Called to")
         target_dtype = None
 
         if "dtype" not in kwargs:
