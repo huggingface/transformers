@@ -80,7 +80,7 @@ TensorFlowの[model.save](https://www.tensorflow.org/tutorials/keras/save_and_lo
 >>> model = TFPreTrainedModel.from_pretrained("path_to/model")
 ```
 
-# ImportError
+## ImportError
 
 もう一つよくあるエラーは、特に新しくリリースされたモデルの場合に遭遇することがある `ImportError` です：
 
