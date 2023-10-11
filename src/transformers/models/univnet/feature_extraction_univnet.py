@@ -249,8 +249,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 new generator with fresh entropy will be created.
 
         Returns:
-            `numpy.ndarray`: Array containing random standard Gaussian noise of shape
-            `(noise_length, model_in_channels)`.
+            `numpy.ndarray`: Array containing random standard Gaussian noise of shape `(noise_length,
+            model_in_channels)`.
         """
         if generator is None:
             generator = np.random.default_rng()
@@ -283,7 +283,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         waveforms = [waveform.detach().clone() for waveform in waveforms]
 
         if waveform_lengths is not None:
-            waveforms = [waveform[:waveform_lengths[i]] for i, waveform in enumerate(waveforms)]
+            waveforms = [waveform[: waveform_lengths[i]] for i, waveform in enumerate(waveforms)]
 
         return waveforms
 
@@ -342,9 +342,9 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             generator (`numpy.random.Generator`, *optional*, defaults to `None`):
                 An optional `numpy.random.Generator` random number generator to use when generating noise.
             pad_end (`bool`, *optional*, defaults to `False`):
-                Whether to pad the end of each waveform with silence. This can help reduce artifacts at the
-                end of the generated audio sample; see https://github.com/seungwonpark/melgan/issues/8 for more
-                details. This padding will be done before the padding strategy specified in `padding` is performed.
+                Whether to pad the end of each waveform with silence. This can help reduce artifacts at the end of the
+                generated audio sample; see https://github.com/seungwonpark/melgan/issues/8 for more details. This
+                padding will be done before the padding strategy specified in `padding` is performed.
             pad_length (`int`, *optional*, defaults to `None`):
                 If padding the end of each waveform, the length of the padding in spectrogram frames. If not set, this
                 will default to `self.config.pad_end_length`.
@@ -400,7 +400,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         # Pad end to reduce artifacts
         if pad_end:
             pad_length = pad_length if pad_length is not None else self.pad_end_length
-            raw_speech = [np.pad(waveform, (0, pad_length * self.hop_length), constant_values=self.padding_value) for waveform in raw_speech]
+            raw_speech = [
+                np.pad(waveform, (0, pad_length * self.hop_length), constant_values=self.padding_value)
+                for waveform in raw_speech
+            ]
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 

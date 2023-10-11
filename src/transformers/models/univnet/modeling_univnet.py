@@ -448,8 +448,8 @@ UNIVNET_INPUTS_DOCSTRING = r"""
             Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
             config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
         noise_sequence (`torch.FloatTensor`, *optional*):
-            Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape
-            `(batch_size, sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
+            Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
+            sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
             config.model_in_channels)`. If not supplied, will be randomly generated.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask indicating which parts of each sequence are padded. Mask values are selected in `[0, 1]`:

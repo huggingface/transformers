@@ -195,9 +195,9 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             with torch.no_grad():
-                outputs = model(
-                    inputs["input_features"].to(torch_device), inputs["noise_sequence"].to(torch_device)
-                )[0]
+                outputs = model(inputs["input_features"].to(torch_device), inputs["noise_sequence"].to(torch_device))[
+                    0
+                ]
             self.assertTrue(outputs.shape[0] == 1, msg="Unbatched input should create batched output with bsz = 1")
 
     def test_unbatched_batched_outputs_consistency(self):
