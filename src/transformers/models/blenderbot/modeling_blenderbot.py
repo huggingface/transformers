@@ -1392,7 +1392,16 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1622,7 +1631,16 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
             attention_mask = input_ids.new_ones(input_ids.shape)
 
         if past_key_values:
-            input_ids = input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed

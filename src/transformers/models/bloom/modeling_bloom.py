@@ -844,9 +844,18 @@ class BloomForCausalLM(BloomPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
-        # only last token for input_ids if past is not None
-        if past_key_values:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
+        # only last tokens for input_ids if past is not None
+        if past_key_values is not None:
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
             # the cache may be in the stardard format (e.g. in contrastive search), convert to bloom's format if needed
             if past_key_values[0][0].shape[0] == input_ids.shape[0]:
