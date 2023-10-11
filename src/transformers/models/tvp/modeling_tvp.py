@@ -953,7 +953,6 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         Examples:
         ```python
         >>> import av
-        >>> import cv2
         >>> import numpy as np
         >>> import torch
         >>> from huggingface_hub import hf_hub_download
@@ -1066,22 +1065,10 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         >>> data["labels"] = torch.tensor([30.96, 24.3, 30.4])
         >>> output = model(**data)
 
-
-        >>> def get_video_duration(filename):
-        ...     cap = cv2.VideoCapture(filename)
-        ...     if cap.isOpened():
-        ...         rate = cap.get(5)
-        ...         frame_num = cap.get(7)
-        ...         duration = frame_num / rate
-        ...         return duration
-        ...     return -1
-
-
-        >>> duration = get_video_duration(file)
         >>> timestamp = output["logits"].tolist()
-        >>> start, end = round(timestamp[0][0] * duration, 1), round(timestamp[0][1] * duration, 1)
-        >>> print(f'The time slot of the video corresponding to the text "{text}" is from {start}s to {end}s')
-        The time slot of the video corresponding to the text "person turn a light on." is from 13.5s to 28.4s
+        >>> start, end = timestamp[0][0] * 100, timestamp[0][1] * 100
+        >>> print(f'The time slot of the video corresponding to the text "{text}" is from {start}% to {end}%')
+        The time slot of the video corresponding to the text "person turn a light on." is from 48.02% to 51.19%
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.model(
