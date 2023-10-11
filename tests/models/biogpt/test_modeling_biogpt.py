@@ -386,7 +386,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             model = BioGptModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    # Copied from tests.models.opt.test_modeling_opt.OPTModelTest with OPT->BioGpt, prepare_config_and_inputs-> prepare_config_and_inputs_for_common
+    # Copied from tests.models.opt.test_modeling_opt.OPTModelTest.test_opt_sequence_classification_model with OPT->BioGpt,opt->biogpt,prepare_config_and_inputs->prepare_config_and_inputs_for_common
     def test_biogpt_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -399,7 +399,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.opt.test_modeling_opt.OPTModelTest with OPT->BioGpt, prepare_config_and_inputs-> prepare_config_and_inputs_for_common
+    # Copied from tests.models.opt.test_modeling_opt.OPTModelTest.test_opt_sequence_classification_model_for_multi_label with OPT->BioGpt,opt->biogpt,prepare_config_and_inputs->prepare_config_and_inputs_for_common
     def test_biogpt_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
