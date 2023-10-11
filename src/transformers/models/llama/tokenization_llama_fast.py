@@ -60,12 +60,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
     This uses notably ByteFallback and no normalization.
 
-    ```
-    from transformers import LlamaTokenizerFast
+    ```python
+    >>> from transformers import LlamaTokenizerFast
 
-    tokenizer = LlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
-    tokenizer.encode("Hello this is a test")
-    >>> [1, 15043, 445, 338, 263, 1243]
+    >>> tokenizer = LlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
+    >>> tokenizer.encode("Hello this is a test")
+    [1, 15043, 445, 338, 263, 1243]
     ```
 
     If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
@@ -78,26 +78,28 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .model extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        tokenizer_file (`str`):
+        tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
-
-        clean_up_tokenization_spaces (`str`, *optional*, defaults to `False`):
-            Wether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
-            spaces.
-
-        bos_token (`str`, *optional*, defaults to `"<s>"`):
-            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
+        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
+        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
+        add_bos_token (`bool`, *optional*, defaults to `True`):
+            Whether or not to add an `bos_token` at the start of sequences.
+        add_eos_token (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an `eos_token` at the end of sequences.
+        use_default_system_prompt (`bool`, *optional*, defaults to `True`):
+            Whether or not the default system prompt for Llama should be used.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
