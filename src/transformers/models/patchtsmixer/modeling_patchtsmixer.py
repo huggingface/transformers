@@ -249,8 +249,8 @@ class ChannelFeatureMixer(nn.Module):
         return out
 
 
-class PatchMixer(nn.Module):
-    """PatchMixer
+class PatchMixerBlock(nn.Module):
+    """PatchMixerBlock
 
     Args:
         num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
@@ -368,8 +368,8 @@ class PatchMixer(nn.Module):
         return out
 
 
-class FeatureMixer(nn.Module):
-    """FeatureMixer
+class FeatureMixerBlock(nn.Module):
+    """FeatureMixerBlock
 
     Args:
         num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
@@ -466,7 +466,7 @@ class PatchTSMixerLayer(nn.Module):
         norm_mlp: str = "LayerNorm",
     ):
         super().__init__()
-        self.patch_mixer = PatchMixer(
+        self.patch_mixer = PatchMixerBlock(
             num_patches=num_patches,
             num_features=num_features,
             expansion_factor=expansion_factor,
@@ -478,7 +478,7 @@ class PatchTSMixerLayer(nn.Module):
             self_attn_heads=self_attn_heads,
             norm_mlp=norm_mlp,
         )
-        self.feature_mixer = FeatureMixer(
+        self.feature_mixer = FeatureMixerBlock(
             num_features=num_features,
             expansion_factor=expansion_factor,
             dropout=dropout,
