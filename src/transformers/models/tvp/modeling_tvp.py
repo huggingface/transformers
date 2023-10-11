@@ -643,7 +643,6 @@ class TvpTransformer(TvpPreTrainedModel):
         self.pooler = TvpPooler(config)
         self.text_prompt = nn.Parameter(torch.randn([1, 10, config.hidden_size]))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
