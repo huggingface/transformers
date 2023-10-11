@@ -365,7 +365,7 @@ class RobertaPreLayerNormModelTester:
 
 
 @require_torch
-# Copied from tests.models.roberta.test_modeling_roberta.RobertaPreLayerNormModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
+# Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
 class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
