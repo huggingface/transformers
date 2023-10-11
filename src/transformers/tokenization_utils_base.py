@@ -2274,8 +2274,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokens_to_add_from_slow = list(added_tokens_decoder.values())
             # finally we add all the special_tokens to make sure eveything is initialized
             tokenizer.add_tokens(tokens_to_add_from_slow, special_tokens=True)
-            # This is slow...
-            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
+            # This is slow... + this messes up the previous import because tokenizers seems to cast the tokens instead of checking before casting.
+            tokenizer.add_tokens([ token for token in tokenizer.all_special_tokens_extended if str(token) not in list(map(str, tokens_to_add_from_slow))] , special_tokens=True)
 
         if len(added_tokens_decoder) > 0:
             logger.warning_advice(
