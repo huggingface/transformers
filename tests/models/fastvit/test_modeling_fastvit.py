@@ -43,7 +43,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import BitImageProcessor
 
 
 class FastViTConfigTester(ConfigTester):
@@ -322,7 +322,7 @@ class FastViTModelIntegrationTest(unittest.TestCase):
     def default_feature_extractor(self):
         return (
             # TODO update org
-            ViTFeatureExtractor.from_pretrained("jorgeav/fastvit_t8")
+            BitImageProcessor.from_pretrained("jorgeav/fastvit_t8")
             if is_vision_available()
             else None
         )
@@ -343,6 +343,6 @@ class FastViTModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-5.6952, -4.7814, -5.7661]).to(torch_device)
+        expected_slice = torch.tensor([-5.5468, -4.7925, -5.9041]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-2))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

@@ -37,11 +37,37 @@ and corruptions, improving over competing robust models.*
 Tips:
 
 - One can use the [`AutoImageProcessor`] class to prepare images for the model.
+- When variable `inference` in [`FastViTConfig`] is set to True, batchnorms and residual connections are removed to speed up inference.
 
 
-Example of use:
+There are 3 ways to instantiate a FastViT model (depending on what you prefer):
 
-```python
+Option 1: Instantiate FastViT with pre-trained weights for entire model
+```py
+>>> from transformers import FastViTModelForImageClassification
+
+>>> model = FastViTModelForImageClassification.from_pretrained("JorgeAV/fastvit_t8")
+```
+
+Option 2: Instantiate FastViT with randomly initialized weights
+```py
+>>> from transformers import FastViTConfig, FastViTModelForImageClassification
+
+>>> config = FastViTConfig()
+>>> model = FastViTModelForImageClassification(config)
+```
+
+Option 3: Instantiate FastViT only for inference (faster) with randomly initialized weights
+```py
+>>> from transformers import FastViTConfig, FastViTModelForImageClassification
+
+>>> config = FastViTConfig(inference=True)
+>>> model = FastViTModelForImageClassification(config)
+```
+
+Complete example showcasing the use of FastViT model with pre-trained weights:
+
+```py
 >>> from transformers import AutoImageProcessor, FastViTModel
 >>> from PIL import Image
 >>> import requests
