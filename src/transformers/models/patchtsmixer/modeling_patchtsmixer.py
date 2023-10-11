@@ -253,23 +253,29 @@ class ChannelFeatureMixerBlock(nn.Module):
         if gated_attn:
             self.gab = PatchTSMixerGatedAttention(in_size=in_channels, out_size=in_channels)
 
-    def forward(self, x):
-        # x.shape == (batch_size, n_vars, num_patches, num_features)
-        residual = x
-        x = self.norm(x)
+    def forward(self, inputs: torch.Tensor):
+        """
+        Parameters:
+            inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`):
+                input to the MLP layer
+        Returns:
+            `torch.Tensor` of the same shape as `inputs`
+        """
+        residual = inputs
+        inputs = self.norm(inputs)
 
-        # x.shape == (batch_size, num_features, num_patches, n_vars)
-        x = x.permute(0, 3, 2, 1)
+        # inputs.shape == (batch_size, num_features, num_patches, num_channels)
+        inputs = inputs.permute(0, 3, 2, 1)
 
         if self.gated_attn:
-            x = self.gab(x)
+            inputs = self.gab(inputs)
 
-        x = self.mlp(x)
+        inputs = self.mlp(inputs)
 
-        # x.shape == (batch_size, n_vars, num_patches, num_features)
-        x = x.permute(0, 3, 2, 1)
+        # inputs.shape == (batch_size, num_channels, num_patches, num_features)
+        inputs = inputs.permute(0, 3, 2, 1)
 
-        out = x + residual
+        out = inputs + residual
         return out
 
 
