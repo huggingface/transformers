@@ -107,7 +107,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         channel_consistent_masking (`bool`, *optional*, defaults to `True`):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels.
-        scaling (`string` or `bool`, *optional* defaults to `"std"`):
+        scaling (`string` or `bool`, *optional*, defaults to `"std"`):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
         head_dropout (`float`, *optional*, defaults to 0.2):
@@ -128,12 +128,12 @@ class PatchTSMixerConfig(PretrainedConfig):
             "max_pool", "avg_pool".
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
-        seed_number (`int`, *optional*, defaults to None):
+        seed_number (`int`, *optional*):
             Random seed for masking.
         post_init (`bool`, *optional*, defaults to `False`):
             Whether to use custom weight initialization from `transformers` library, or the default initialization in
             `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
-        distribution_output (`string`, *optional*, defaults to `student_t`):
+        distribution_output (`string`, *optional*, defaults to `"student_t"`):
             The distribution emission head for the model when loss is "nll". Could be either "student_t", "normal" or
             "negative_binomial".
         loss (`string`, *optional*, defaults to `"mse"`):
