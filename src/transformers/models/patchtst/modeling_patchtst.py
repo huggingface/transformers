@@ -328,8 +328,8 @@ def forecast_masking(
 
     Parameters:
         inputs (`torch.Tensor`):
-            Input of shape `(bs, num_channels, num_patch, patch_len)`
-            or `(bs, tsg1, tag2, num_channels, num_patch, patch_len)`
+            Input of shape `(bs, num_channels, num_patch, patch_len)` or `(bs, tsg1, tag2, num_channels, num_patch,
+            patch_len)`
         patch_lengths (`list`):
             List of patch lengths to mask in the end of the data.
         mix_ratio (`list`, *optional*):
@@ -343,8 +343,8 @@ def forecast_masking(
             Value to set for the random seed.
 
     Returns:
-        `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as inputs Tensor and Mask tensor of shape `(bs, num_channels
-        , num_patch)` or `(bs, tsg1, tsg2, num_channels, num_patch)`
+        `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as inputs Tensor and Mask tensor of shape `(bs,
+        num_channels , num_patch)` or `(bs, tsg1, tsg2, num_channels, num_patch)`
     """
     if seed_number:
         set_seed(seed_number)
@@ -444,7 +444,9 @@ class PatchTSTPatchify(nn.Module):
         output = output.unfold(
             dimension=-2, size=self.patch_length, step=self.stride
         )  # output: [bs x num_patches x num_input_channels x patch_length]
-        output = output.transpose(-2, -3).contiguous()  # output: [bs x num_input_channels x num_patches x patch_length]
+        output = output.transpose(
+            -2, -3
+        ).contiguous()  # output: [bs x num_input_channels x num_patches x patch_length]
         return output
 
 
@@ -558,7 +560,8 @@ class PatchTSTEncoderBlock(nn.Module):
         Return:
             hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`)
 
-            all_hidden_states (*optional*, returned when `output_hidden_states` is set to True, tuple of `torch.Tensor` of shapes `(batch_size, num_channels, sequence_length, d_model)`)
+            all_hidden_states (*optional*, returned when `output_hidden_states` is set to True, tuple of `torch.Tensor`
+            of shapes `(batch_size, num_channels, sequence_length, d_model)`)
 
         """
         all_hidden_states = []
@@ -725,6 +728,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
     """
     PatchTST Encoder
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
         self.num_input_channels = config.num_input_channels
@@ -1323,6 +1327,7 @@ class MaskPretrainHead(nn.Module):
     """
     Pretraining head for mask modelling
     """
+
     def __init__(self, config):
         super().__init__()
         self.dropout = nn.Dropout(config.dropout)
@@ -1350,6 +1355,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     """
     Mask pretrain model: PatchTST model + pretrain head
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1382,7 +1388,8 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
-            `PatchTSTForPretrainingOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+            `PatchTSTForPretrainingOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
+            `config.return_dict`=False)
 
         """
         output_hidden_states = (
@@ -1414,6 +1421,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
     """
     PatchTST model for classification. The model contains PatchTST model + classification head
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1447,7 +1455,8 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
-            `PatchTSTForClassificationOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+            `PatchTSTForClassificationOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
+            `config.return_dict`=False)
 
         """
         output_hidden_states = (
@@ -1474,6 +1483,7 @@ class PatchTSTClassificationHead(nn.Module):
     """
     Classification head
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
         self.use_cls_token = config.use_cls_token
@@ -1562,6 +1572,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     """
     PatchTST model for prediction. The model contains PatchTST model + prediction head
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1611,7 +1622,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
-            `PatchTSTForPredictionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+            `PatchTSTForPredictionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
+            `config.return_dict`=False)
 
         """
         output_hidden_states = (
@@ -1772,6 +1784,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
     """
     PatchTST for forecasting. The model contains PatchTST model + Forecasting head
     """
+
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
         self.model = PatchTSTModel(config)
@@ -1819,7 +1832,8 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
-            `PatchTSTForForecastingOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+            `PatchTSTForForecastingOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
+            `config.return_dict`=False)
 
         """
         output_hidden_states = (
@@ -1917,6 +1931,7 @@ class PatchTSTRegressionHead(nn.Module):
     """
     Regression head
     """
+
     def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
         self.y_range = config.prediction_range
@@ -2015,7 +2030,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             return_dict (`bool`, *optional*): Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Returns:
-            `PatchTSTForRegressionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or `config.return_dict`=False)
+            `PatchTSTForRegressionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
+            `config.return_dict`=False)
 
         """
         output_hidden_states = (
