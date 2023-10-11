@@ -1279,7 +1279,7 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/blip2-opt-2.7b")
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt").to(device)
+        >>> inputs = tokenizer(["a photo of a cat"], padding=True, return_tensors="pt").to(device)
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
