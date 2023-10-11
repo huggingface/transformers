@@ -29,9 +29,9 @@ from transformers.testing_utils import (
     require_torch_or_tf,
     slow,
 )
+from transformers.trainer_utils import set_seed
 
 from .test_pipelines_common import ANY
-from transformers.trainer_utils import set_seed
 
 
 @is_pipeline_test
@@ -173,31 +173,31 @@ class TextToAudioPipelineTests(unittest.TestCase):
         # test batching
         outputs = speech_generator(["This is a test", "This is a second test"], batch_size=2)
         self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
-  
+
     @slow
     @require_torch
     def test_forward_model_kwargs(self):
         # use vits - a forward model
         speech_generator = pipeline(task="text-to-audio", model="kakao-enterprise/vits-vctk", framework="pt")
-                
+
         # for reproducibility
         set_seed(555)
-        outputs = speech_generator("This is a test",  forward_params={"speaker_id":5})
+        outputs = speech_generator("This is a test", forward_params={"speaker_id": 5})
         audio = outputs["audio"]
-                
+
         with self.assertRaises(ValueError):
             # assert error if generate parameter
-            outputs = speech_generator("This is a test",  forward_params={"speaker_id":5, "do_sample":True})
+            outputs = speech_generator("This is a test", forward_params={"speaker_id": 5, "do_sample": True})
 
-        forward_params = {"speaker_id":5}
-        generate_kwargs={"do_sample":True}
-        
+        forward_params = {"speaker_id": 5}
+        generate_kwargs = {"do_sample": True}
+
         # for reproducibility
         set_seed(555)
         # make sure nothing is done if generate_kwargs passed since not related
-        outputs = speech_generator("This is a test",  forward_params=forward_params, generate_kwargs=generate_kwargs)
-        self.assertListEqual(outputs["audio"].tolist(),audio.tolist())
-        
+        outputs = speech_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
+        self.assertListEqual(outputs["audio"].tolist(), audio.tolist())
+
     @slow
     @require_torch
     def test_generative_model_kwargs(self):
@@ -208,26 +208,26 @@ class TextToAudioPipelineTests(unittest.TestCase):
             "do_sample": True,
             "max_new_tokens": 250,
         }
-                
+
         # for reproducibility
         set_seed(555)
-        outputs = music_generator("This is a test",  forward_params=forward_params)
+        outputs = music_generator("This is a test", forward_params=forward_params)
         audio = outputs["audio"]
         self.assertEqual(ANY(np.ndarray), audio)
-        
+
         # make sure generate kwargs get priority over forward params
         forward_params = {
             "do_sample": False,
             "max_new_tokens": 250,
         }
-        generate_kwargs={"do_sample":True}
-        
+        generate_kwargs = {"do_sample": True}
+
         # for reproducibility
         set_seed(555)
         # make sure nothing is done if generate_kwargs passed since not related
-        outputs = music_generator("This is a test",  forward_params=forward_params, generate_kwargs=generate_kwargs)
-        self.assertListEqual(outputs["audio"].tolist(),audio.tolist())
-        
+        outputs = music_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
+        self.assertListEqual(outputs["audio"].tolist(), audio.tolist())
+
     def get_test_pipeline(self, model, tokenizer, processor):
         speech_generator = TextToAudioPipeline(model=model, tokenizer=tokenizer)
         return speech_generator, ["This is a test", "Another test"]

@@ -45,8 +45,8 @@ class TextToAudioPipeline(Pipeline):
 
     <Tip>
 
-    You can specify parameters passed to the model generation/forward method by using
-    [`TextToAudioPipeline.__call__.forward_params`].
+    You can specify parameters passed to the model by using [`TextToAudioPipeline.__call__.forward_params`] or
+    [`TextToAudioPipeline.__call__.generate_kwargs`].
 
     Example:
 
@@ -56,13 +56,13 @@ class TextToAudioPipeline(Pipeline):
     >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
 
     >>> # diversify the music generation by adding randomness with a high temperature and set a maximum music length
-    >>> forward_params = {
+    >>> generate_kwargs = {
     ...     "do_sample": True,
     ...     "temperature": 0.7,
     ...     "max_new_tokens": 35,
     ... }
 
-    >>> outputs = music_generator("This is a test", forward_params=forward_params)
+    >>> outputs = music_generator("This is a test", generate_kwargs=generate_kwargs)
     ```
 
     </Tip>
@@ -130,17 +130,17 @@ class TextToAudioPipeline(Pipeline):
     def _forward(self, model_inputs, **kwargs):
         forward_params = kwargs["forward_params"]
         generate_kwargs = kwargs["generate_kwargs"]
-        
+
         # we expect some kwargs to be additional tensors which need to be on the right device
         forward_params = self._ensure_tensor_on_device(forward_params, device=self.device)
 
         if self.model.can_generate():
             # we expect some kwargs to be additional tensors which need to be on the right device
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
-            
+
             # generate_kwargs get priority over forward_params
             forward_params.update(generate_kwargs)
-            
+
             output = self.model.generate(**model_inputs, **forward_params)
         else:
             output = self.model(**model_inputs, **forward_params)[0]
@@ -159,12 +159,13 @@ class TextToAudioPipeline(Pipeline):
             text_inputs (`str` or `List[str]`):
                 The text(s) to generate.
             forward_params (`dict`, *optional*):
-                Parameters passed to the model generation/forward method. `forward_params` are always passed to the underlying model.
+                Parameters passed to the model generation/forward method. `forward_params` are always passed to the
+                underlying model.
             generate_kwargs (`dict`, *optional*):
                 The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
                 complete overview of generate, check the [following
-                guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation).
-                `generate_kwargs` are only passed to the underlying model if the latter is a generative model.
+                guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation). `generate_kwargs` are
+                only passed to the underlying model if the latter is a generative model.
 
         Return:
             A `dict` or a list of `dict`: The dictionaries have two keys:
@@ -178,11 +179,13 @@ class TextToAudioPipeline(Pipeline):
         self,
         preprocess_params=None,
         forward_params=None,
-        generate_kwargs=None, 
+        generate_kwargs=None,
     ):
-        params = {"forward_params": forward_params if forward_params else {},
-                  "generate_kwargs": generate_kwargs if generate_kwargs else {}}
-        
+        params = {
+            "forward_params": forward_params if forward_params else {},
+            "generate_kwargs": generate_kwargs if generate_kwargs else {},
+        }
+
         if preprocess_params is None:
             preprocess_params = {}
         postprocess_params = {}
