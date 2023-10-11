@@ -4068,7 +4068,7 @@ class TokenizerTesterMixin:
                     tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_2)
                     # Make sure the additional special tokens does not include any special attribute token
                     self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
-                    self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
+                    self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
                     if self.rust_tokenizer_class is not None:
                         tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
                         self.asserEquals(tokenizer._eos_token, new_eos)
