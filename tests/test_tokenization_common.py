@@ -4071,10 +4071,12 @@ class TokenizerTesterMixin:
                     self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
                     self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
                     if self.rust_tokenizer_class is not None:
+                        # AddedToken("[NEW_EOS]", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True) was save it see=s
+                        # fast from pretrained ignore the lstrip rstrip
                         tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
-                        self.assertEquals(tokenizer._eos_token, new_eos)
-                        self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
-                        self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
+                        self.assertEquals(tokenizer_fast._eos_token, str(new_eos))
+                        self.assertIn(new_eos, tokenizer_fast.added_tokens_decoder.values())
+                        self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
 
                 if self.rust_tokenizer_class is not None:
                     tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
