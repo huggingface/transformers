@@ -44,25 +44,25 @@ There are 3 ways to instantiate a FastViT model (depending on what you prefer):
 
 Option 1: Instantiate FastViT with pre-trained weights for entire model
 ```py
->>> from transformers import FastViTModelForImageClassification
+>>> from transformers import FastViTForImageClassification
 
->>> model = FastViTModelForImageClassification.from_pretrained("JorgeAV/fastvit_t8")
+>>> model = FastViTForImageClassification.from_pretrained("JorgeAV/fastvit_t8")
 ```
 
 Option 2: Instantiate FastViT with randomly initialized weights
 ```py
->>> from transformers import FastViTConfig, FastViTModelForImageClassification
+>>> from transformers import FastViTConfig, FastViTForImageClassification
 
 >>> config = FastViTConfig()
->>> model = FastViTModelForImageClassification(config)
+>>> model = FastViTForImageClassification(config)
 ```
 
 Option 3: Instantiate FastViT only for inference (faster) with randomly initialized weights
 ```py
->>> from transformers import FastViTConfig, FastViTModelForImageClassification
+>>> from transformers import FastViTConfig, FastViTForImageClassification
 
 >>> config = FastViTConfig(inference=True)
->>> model = FastViTModelForImageClassification(config)
+>>> model = FastViTForImageClassification(config)
 ```
 
 Complete example showcasing the use of FastViT model with pre-trained weights:
