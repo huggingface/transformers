@@ -173,7 +173,7 @@ agent.run("Draw me a picture of the `prompt`", prompt="a capybara swimming in th
 </Tip>
 
 
-# Chat-based execution (チャット)
+### Chat-based execution (チャット)
 
 エージェントは、[`~Agent.chat`] メソッドを使用することで、チャットベースのアプローチも可能です。
 
