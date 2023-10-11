@@ -196,12 +196,19 @@ class PatchTSMixerMLP(nn.Module):
         if last_dropout:
             self.dropout2 = nn.Dropout(dropout)
 
-    def forward(self, x):
-        x = self.dropout1(F.gelu(self.fc1(x)))
-        x = self.fc2(x)
+    def forward(self, inputs: torch.Tensor):
+        """
+        Parameters:
+            inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`):
+                input to the MLP layer
+        Returns:
+            `torch.Tensor` of the same shape as `inputs`
+        """
+        inputs = self.dropout1(F.gelu(self.fc1(inputs)))
+        inputs = self.fc2(inputs)
         if self.last_dropout:
-            x = self.dropout2(x)
-        return x
+            inputs = self.dropout2(inputs)
+        return inputs
 
 
 class ChannelFeatureMixerBlock(nn.Module):
