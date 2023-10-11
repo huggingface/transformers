@@ -224,32 +224,31 @@ def positional_encoding(position_embedding_type, learned, q_len, d_model):
     # Positional encoding
     if position_embedding_type is None:
         # position_embedding_type = None and learned = False can be used to measure impact of positional encoding
-        w_pos = torch.empty((q_len, d_model))
-        nn.init.uniform_(w_pos, -0.02, 0.02)
+        position_enc = torch.empty((q_len, d_model))
+        nn.init.uniform_(position_enc, -0.02, 0.02)
         learned = False
     elif position_embedding_type == "zeros":
-        w_pos = torch.empty((q_len, d_model))
-        nn.init.uniform_(w_pos, -0.02, 0.02)
+        position_enc = torch.empty((q_len, d_model))
+        nn.init.uniform_(position_enc, -0.02, 0.02)
     elif position_embedding_type == "normal":
-        w_pos = torch.zeros((q_len, 1))
-        torch.nn.init.normal_(w_pos, mean=0.0, std=0.1)
+        position_enc = torch.zeros((q_len, 1))
+        torch.nn.init.normal_(position_enc, mean=0.0, std=0.1)
     elif position_embedding_type == "uniform":
-        w_pos = torch.zeros((q_len, 1))
-        nn.init.uniform_(w_pos, a=0.0, b=0.1)
+        position_enc = torch.zeros((q_len, 1))
+        nn.init.uniform_(position_enc, a=0.0, b=0.1)
     elif position_embedding_type == "sincos":
-        pos_enc = torch.zeros(q_len, d_model)
+        position_enc = torch.zeros(q_len, d_model)
         position = torch.arange(0, q_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
-        pos_enc[:, 0::2] = torch.sin(position * div_term)
-        pos_enc[:, 1::2] = torch.cos(position * div_term)
-        pos_enc = pos_enc - pos_enc.mean()
-        pos_enc = pos_enc / (pos_enc.std() * 10)
-        w_pos = pos_enc
+        position_enc[:, 0::2] = torch.sin(position * div_term)
+        position_enc[:, 1::2] = torch.cos(position * div_term)
+        position_enc = position_enc - position_enc.mean()
+        position_enc = position_enc / (position_enc.std() * 10)
     else:
         raise ValueError(
             f"{position_embedding_type} is not a valid positional encoder. Available types are 'normal', 'zeros', 'zero', uniform', 'sincos', None."
         )
-    return nn.Parameter(w_pos, requires_grad=learned)
+    return nn.Parameter(position_enc, requires_grad=learned)
 
 
 def random_masking(
@@ -628,19 +627,19 @@ class PatchTSTEncoderLayer(nn.Module):
 
         self.pre_norm = config.pre_norm
 
-    def forward(self, src: torch.Tensor):
+    def forward(self, hidden_state: torch.Tensor):
         """
         Parameters:
-            src (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`, *required*):
+            hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`, *required*):
                 Past values of the time series
         Return:
             `torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`
 
         """
-        batch_size, num_input_channels, sequence_length, d_model = src.shape
+        batch_size, num_input_channels, sequence_length, d_model = hidden_state.shape
 
         # First sublayer: attention across time
-        src = src.view(
+        src = hidden_state.view(
             batch_size * num_input_channels, sequence_length, d_model
         )  # src: [(bs*num_channels) x sequence_length x d_model]
         if self.pre_norm:
@@ -723,6 +722,9 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
 
 
 class PatchTSTEncoder(PatchTSTPreTrainedModel):
+    """
+    PatchTST Encoder
+    """
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
         self.num_input_channels = config.num_input_channels
@@ -735,20 +737,20 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
 
         # Input encoding: projection of feature vectors onto a d-dim vector space
         if not config.shared_embedding:
-            self.w_p = nn.ModuleList()
+            self.input_embedding = nn.ModuleList()
             for _ in range(self.num_input_channels):
-                self.w_p.append(nn.Linear(config.patch_length, config.d_model))
+                self.input_embedding.append(nn.Linear(config.patch_length, config.d_model))
         else:
-            self.w_p = nn.Linear(config.patch_length, config.d_model)
+            self.input_embedding = nn.Linear(config.patch_length, config.d_model)
 
         # Positional encoding
         if config.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
-            self.w_pos = positional_encoding(
+            self.position_enc = positional_encoding(
                 config.positional_encoding, config.learn_pe, config.num_patches + 1, config.d_model
             )
         else:
-            self.w_pos = positional_encoding(
+            self.position_enc = positional_encoding(
                 config.positional_encoding, config.learn_pe, config.num_patches, config.d_model
             )
 
@@ -773,8 +775,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             output_hidden_states (bool, optional): Indicates if hidden states should be output.
 
         return:
-            `torch.Tensor` of shape `(batch_size, num_channels, num_patches, d_model)` or `(batch_size, num_channels,
-            num_patches+1, d_model)` if cls_token is used
+            `BaseModelOutputWithNoAttention`
         """
         _, num_input_channels, _, _ = past_values.shape
 
@@ -785,24 +786,24 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         if not self.shared_embedding:
             x_out = []
             for i in range(num_input_channels):
-                z = self.w_p[i](past_values[:, i, :, :])
+                z = self.input_embedding[i](past_values[:, i, :, :])
                 x_out.append(z)
             past_values = torch.stack(x_out, dim=1)
         else:
-            past_values = self.w_p(past_values)  # x: [bs x num_channels  x num_patches x d_model]
+            past_values = self.input_embedding(past_values)  # x: [bs x num_channels  x num_patches x d_model]
 
         if self.use_cls_token:
             # x: [bs x num_channels x num_patches x d_model]
-            past_values = self.positional_dropout(past_values + self.w_pos[1:, :])
+            past_values = self.positional_dropout(past_values + self.position_enc[1:, :])
             # append cls token
-            cls_token = self.cls_token + self.w_pos[:1, :]  # cls_token: [1 x 1 x 1 x d_model]
+            cls_token = self.cls_token + self.position_enc[:1, :]  # cls_token: [1 x 1 x 1 x d_model]
             cls_tokens = cls_token.expand(past_values.shape[0], -1, -1)  # get the same copy for all the batch samples
             past_values = torch.cat(
                 (cls_tokens, past_values), dim=1
             )  # x: [bs x num_channels x (num_patches+1) x d_model]
         else:
             past_values = self.positional_dropout(
-                past_values + self.w_pos
+                past_values + self.position_enc
             )  # x: [bs x num_channels x num_patches x d_model]
 
         # Encoder
@@ -1417,7 +1418,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         super().__init__(config)
 
         self.model = PatchTSTModel(config)
-        self.head = ClassificationHead(config)
+        self.head = PatchTSTClassificationHead(config)
         self.loss = nn.CrossEntropyLoss()
 
         # Initialize weights and apply final processing
@@ -1469,7 +1470,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         return PatchTSTForClassificationOutput(loss=loss_val, prediction_logits=y_hat, hidden_states=encoder_states)
 
 
-class ClassificationHead(nn.Module):
+class PatchTSTClassificationHead(nn.Module):
     """
     Classification head
     """
@@ -1505,7 +1506,7 @@ class ClassificationHead(nn.Module):
         return y
 
 
-class PredictionHead(nn.Module):
+class PatchTSTPredictionHead(nn.Module):
     def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
 
@@ -1581,7 +1582,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
-        self.head = PredictionHead(config, self.distribution_output)
+        self.head = PatchTSTPredictionHead(config, self.distribution_output)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1686,7 +1687,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         return SamplePatchTSTPredictionOutput(sequences=samples)
 
 
-class ForecastHead(nn.Module):
+class PatchTSTForecastHead(nn.Module):
     def __init__(self, config: PatchTSTConfig, distribution_output=None):
         super().__init__()
 
@@ -1789,7 +1790,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
-        self.head = ForecastHead(config, self.distribution_output)
+        self.head = PatchTSTForecastHead(config, self.distribution_output)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1912,7 +1913,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         return SamplePatchTSTForecastOutput(sequences=samples)
 
 
-class RegressionHead(nn.Module):
+class PatchTSTRegressionHead(nn.Module):
     """
     Regression head
     """
@@ -1985,7 +1986,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
-        self.head = RegressionHead(config, self.distribution_output)
+        self.head = PatchTSTRegressionHead(config, self.distribution_output)
 
         # Initialize weights and apply final processing
         self.post_init()
