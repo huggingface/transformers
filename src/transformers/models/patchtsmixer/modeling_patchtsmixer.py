@@ -1064,54 +1064,66 @@ def compute_num_patches(sequence_length, patch_length, stride):
 
 # TODO: add copied from after PatchTST master merge
 def random_masking(
-    xb: torch.Tensor,
+    inputs: torch.Tensor,
     mask_ratio: float,
     unmasked_channel_indices: list = None,
     channel_consistent_masking: bool = False,
-    mask_value=0,
+    mask_value: int = 0,
     seed_number: Optional[int] = None,
 ):
     """random_masking: Mask the input considering the control variables.
-    Parameters:
-        xb (Tensor): Input to mask [ batch_size x nvars x num_patches x patch_length]
-        mask_ratio (`float`): Mask ratio.
-        unmasked_channel_indices (`list`, *optional*):
+
+    Args:
+        inputs (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, num_features)`):
+            The input tensor to mask.
+        mask_ratio (`float`):
+            Mask ratio.
+        unmasked_channel_indices (list, *optional*):
             indices of unmasked channels. These channels will not be masked. Defaults to None.
-        channel_consistent_masking (bool, *optional*):
+        channel_consistent_masking (bool, *optional* defaults to False):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
-            across channels. Defaults to True.
-        mask_value (`int`, *optional*): Value to use for masking. Defaults to 0.
-        seed_number (`int`, *optional*): Value to set for the random seed.
+            across channels. Defaults to False.
+        mask_value (int, *optional* defaults to 0):
+            Value to use for masking.
+        seed_number (int, *optional*):
+            Value to set for the random seed.
+
     Returns:
-        Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [batch_size x c x n]
+        `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as input Tensor and mask tensor of shape [bs x c x
+        n]
     """
     if seed_number:
         set_seed(seed_number)
 
-    batch_size, nvars, L, D = xb.shape
+    batch_size, num_channels, sequence_length, num_features = inputs.shape
+    device = inputs.device
 
-    len_keep = int(L * (1 - mask_ratio))
+    len_keep = int(sequence_length * (1 - mask_ratio))
 
     if channel_consistent_masking:
-        noise = torch.rand(batch_size, 1, L, device=xb.device)  # noise in [0, 1], batch_size x 1 x  L
-        noise = noise.repeat(1, nvars, 1)  # batch_size x nvars x L
+        noise = torch.rand(batch_size, 1, sequence_length, device=device)  # noise in [0, 1], bs x 1 x  L
+        noise = noise.repeat(1, num_channels, 1)  # bs x num_channels x time
     else:
-        noise = torch.rand(batch_size, nvars, L, device=xb.device)  # noise in [0, 1], batch_size x nvars x L
+        noise = torch.rand(
+            batch_size, num_channels, sequence_length, device=device
+        )  # noise in [0, 1], bs x num_channels x L
 
-    mask = torch.ones(batch_size, nvars, L, device=xb.device)  # mask: [batch_size x nvars x num_patch]
+    mask = torch.ones(
+        batch_size, num_channels, sequence_length, device=device
+    )  # mask: [bs x num_channels x num_patch]
     mask[:, :, :len_keep] = 0
 
     # sort noise for each sample
     ids_shuffle = torch.argsort(noise, dim=-1)  # ascend: small is keep, large is remove
-    ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [batch_size x nvars x L]
+    ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [bs x num_channels x L]
 
     mask = torch.gather(mask, dim=-1, index=ids_restore)
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [batch_size x nvars x num_patches x patch_length]
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, num_features)  # mask: [bs x num_channels x num_patches x patch_length]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
-    xb_mask = xb.masked_fill(mask.bool(), mask_value)
-    return xb_mask, mask[..., 0]
+    inputs_mask = inputs.masked_fill(mask.bool(), mask_value)
+    return inputs_mask, mask[..., 0]
 
 
 # TODO: add copied from after PatchTST master merge
@@ -1237,7 +1249,7 @@ class PatchTSMixerPatchify(nn.Module):
         x = x.unfold(
             dimension=-2, size=self.patch_length, step=self.stride
         )  # x: [batch_size x num_patches x num_input_channels x patch_length]
-        x = x.transpose(-2, -3).contiguous()  # xb: [batch_size x num_input_channels x num_patches x patch_length]
+        x = x.transpose(-2, -3).contiguous()  # x: [batch_size x num_input_channels x num_patches x patch_length]
         return x
 
 
