@@ -131,7 +131,7 @@ class PatchTSMixerTranspose(nn.Module):
             return x.transpose(*self.dims)
 
 
-class NormLayer(nn.Module):
+class PatchTSMixerNormLayer(nn.Module):
     def __init__(
         self,
         norm_mlp="LayerNorm",
@@ -218,7 +218,7 @@ class ChannelFeatureMixer(nn.Module):
     ):
         super().__init__()
         self.mode = mode
-        self.norm = NormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
+        self.norm = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
         if ffn == "mlp":
             self.mlp = MLP(in_channels, in_channels, expansion_factor, dropout)
@@ -286,7 +286,7 @@ class PatchMixer(nn.Module):
 
         self.norm_mlp = norm_mlp
         self.mode = mode
-        self.norm = NormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
+        self.norm = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
         self.self_attn = self_attn
 
@@ -308,7 +308,7 @@ class PatchMixer(nn.Module):
                 add_zero_attn=False,
                 batch_first=True,
             )
-            self.norm_attn = NormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
+            self.norm_attn = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
     def forward(self, x):
         # x.shape == (batch_size, num_patches, num_features) if flatten
@@ -399,7 +399,7 @@ class FeatureMixer(nn.Module):
         super().__init__()
         self.norm_mlp = norm_mlp
         self.mode = mode
-        self.norm = NormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
+        self.norm = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
         self.mlp = MLP(num_features, num_features, expansion_factor, dropout)
 
