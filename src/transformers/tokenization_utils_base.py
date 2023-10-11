@@ -2261,6 +2261,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
         # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
         if legacy_saved and "Fast" not in cls.__name__ and added_tokens_file is None and tokenizer_file is not None:
+            # This is for slow so can be done before
             all_special_strings = [str(token) for token in tokenizer.all_special_tokens]
             tokens_to_add_from_fast = []
             with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:

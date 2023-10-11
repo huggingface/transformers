@@ -4030,7 +4030,7 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             special_token = "[SPECIAL_TOKEN]"
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+            with self.subTest(f"{tokenizer} ({pretrained_name})"):
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
                 if not tokenizer.is_fast:
@@ -4103,7 +4103,7 @@ class TokenizerTesterMixin:
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         # you CAN'T set the additional special tokens once loaded but can after load
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+            with self.subTest(f"{tokenizer} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, additional_special_tokens=[new_eos])
                 self.assertEquals(tokenizer._additional_special_tokens[-1], new_eos)
@@ -4128,7 +4128,6 @@ class TokenizerTesterMixin:
                         self.asserEquals(tokenizer._eos_token, new_eos)
                         self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
 
-
                 if self.rust_tokenizer_class is not None:
                     tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
                         pretrained_name, eos_token=new_eos, use_fast=True
@@ -4136,12 +4135,10 @@ class TokenizerTesterMixin:
                     self.asserEquals(tokenizer._eos_token, new_eos)
                     self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
 
-
                     with tempfile.TemporaryDirectory() as tmp_dir_2:
                         tokenizer_fast.save_pretrained(tmp_dir_2, legacy_format=False)  # save only fast version
                         # New format, additional_special_tokens
                         tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_2)
-
 
                 # Make sure the additional special tokens does not include any special attribute token
                 self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
