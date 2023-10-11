@@ -336,7 +336,7 @@ class FlashAttentionMixin(torch.nn.Module):
         return super().to(*args, **kwargs)
 
 
-class MistralFlashAttention2(MistralAttention, FlashAttentionMixin):
+class MistralFlashAttention2(FlashAttentionMixin, MistralAttention):
     """
     Mistral flash attention module. This module inherits from `MistralAttention` as the weights of the module stays
     untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
