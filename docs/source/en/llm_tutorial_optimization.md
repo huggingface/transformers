@@ -287,7 +287,7 @@ If GPU memory is not a constraint for your use case, there is often no need to l
 For more in-detail usage information, we strongly recommend taking a look at the [Transformers Quantization Docs](https://huggingface.co/docs/transformers/main_classes/quantization#general-usage).
 Next, let's look into how we can improve computational and memory efficiency by using better algorithms and an improved model architecture.
 
-# 2. Flash Attention: A Leap Forward
+# 2. Flash Attention
 
 Today's top-performing LLMs share more or less the same fundamental architecture that consists of feed-forward layers, activation layers, layer normalization layers, and most crucially, self-attention layers.
 
