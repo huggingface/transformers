@@ -37,6 +37,7 @@ from transformers.utils import is_essentia_available, is_librosa_available, is_s
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -509,9 +510,12 @@ class Pop2PianoModelTester:
 
 
 @require_torch
-class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pop2PianoForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {"automatic-speech-recognition": Pop2PianoForConditionalGeneration} if is_torch_available() else {}
+    )
     all_parallelizable_model_classes = ()
     fx_compatible = False
     test_pruning = False
