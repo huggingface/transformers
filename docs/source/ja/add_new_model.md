@@ -66,7 +66,7 @@ Hugging Faceチームのメンバーがサポートを提供するので、一�
 
 ご覧のように、🤗 Transformersでは継承を使用していますが、抽象化のレベルを最小限に保っています。
 ライブラリ内のどのモデルにも、抽象化のレベルが2つを超えることはありません。
-「BrandNewBertModel」は「BrandNewBertPreTrainedModel」を継承し、さらに[`PreTrainedModel`]を継承しています。
+`BrandNewBertModel` は `BrandNewBertPreTrainedModel` を継承し、さらに[`PreTrainedModel`]を継承しています。
 これだけです。
 一般的なルールとして、新しいモデルは[`PreTrainedModel`]にのみ依存するようにしたいと考えています。
 すべての新しいモデルに自動的に提供される重要な機能は、[`~PreTrainedModel.from_pretrained`]および
