@@ -175,7 +175,7 @@ Once you are satisfied with your model configuration, you can save it with [`Pre
 </frameworkcontent>
 
 
-## Model heads
+### Model heads
 
 この時点で、ベースのDistilBERTモデルがあり、これは隠れた状態を出力します。隠れた状態はモデルのヘッドへの入力として渡され、最終的な出力を生成します。🤗 Transformersは、モデルがそのタスクをサポートしている限り、各タスクに対応する異なるモデルヘッドを提供します（つまり、DistilBERTを翻訳のようなシーケンス対シーケンスタスクに使用することはできません）。
 
