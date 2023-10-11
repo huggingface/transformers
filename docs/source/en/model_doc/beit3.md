@@ -99,9 +99,9 @@ The original code can be found [here](https://github.com/microsoft/unilm/tree/ma
 [[autodoc]] Beit3ForImageTextRetrieval
     - forward
 
-## Beit3ForVisualQuestionAnswering
+## Beit3ForQuestionAnswering
 
-[[autodoc]] Beit3ForVisualQuestionAnswering
+[[autodoc]] Beit3ForQuestionAnswering
     - forward
 
 ## Beit3ForVisualReasoning

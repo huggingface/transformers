@@ -537,7 +537,7 @@ class Beit3PreTrainedModel(PreTrainedModel):
             (
                 Beit3ForVisualReasoning,
                 Beit3ForImageTextRetrieval,
-                Beit3ForVisualQuestionAnswering,
+                Beit3ForQuestionAnswering,
                 Beit3ForImageClassification,
                 Beit3ForCaptioning,
             ),
@@ -1163,12 +1163,12 @@ class Beit3Pooler(nn.Module):
 
 
 @add_start_docstrings(
-    """Beit3ForVisualQuestionAnswering has a Linear head on top of Beit3Model for visual question answering . Beit3 is a
+    """Beit3ForQuestionAnswering has a Linear head on top of Beit3Model for visual question answering . Beit3 is a
     multimodal foundation model.The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway
     Transformers architecture which uses a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
-class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
+class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         embed_dim = config.embed_dim
@@ -1201,7 +1201,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Beit3ForVisualQuestionAnswering, Beit3Processor
+        >>> from transformers import Beit3ForQuestionAnswering, Beit3Processor
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -1209,7 +1209,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> model = Beit3ForVisualQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
+        >>> model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
 
         >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
         >>> input = beit3_processor(text=["This is photo of a cat"], images=image)

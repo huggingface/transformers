@@ -39,7 +39,7 @@ if is_torch_available():
         Beit3ForCaptioning,
         Beit3ForImageClassification,
         Beit3ForImageTextRetrieval,
-        Beit3ForVisualQuestionAnswering,
+        Beit3ForQuestionAnswering,
         Beit3ForVisualReasoning,
         Beit3Model,
     )
@@ -223,7 +223,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             Beit3Model,
             Beit3ForVisualReasoning,
             Beit3ForImageTextRetrieval,
-            Beit3ForVisualQuestionAnswering,
+            Beit3ForQuestionAnswering,
             Beit3ForImageClassification,
             Beit3ForCaptioning,
         )
@@ -234,7 +234,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": Beit3Model,
             "image-classification": Beit3ForImageClassification,
-            "visual-question-answering": Beit3ForVisualQuestionAnswering,
+            "visual-question-answering": Beit3ForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -273,7 +273,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             return inputs_dict_to_return
         elif model_class.__name__ == "Beit3ForImageTextRetrieval":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_text_retrieval()[1]
-        elif model_class.__name__ == "Beit3ForVisualQuestionAnswering":
+        elif model_class.__name__ == "Beit3ForQuestionAnswering":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_visual_question_answering()[1]
             inputs_dict_to_return["labels"] = torch.ones(
                 (self.model_tester.batch_size, self.model_tester.num_labels),
@@ -504,7 +504,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_beit3_vqa(self):
-        model = Beit3ForVisualQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa").to(torch_device)
+        model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa").to(torch_device)
         tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
 
         image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")

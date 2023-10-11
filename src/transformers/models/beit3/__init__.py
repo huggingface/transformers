@@ -33,7 +33,7 @@ else:
         "Beit3ForVisualReasoning",
         "Beit3ForImageClassification",
         "Beit3ForCaptioning",
-        "Beit3ForVisualQuestionAnswering",
+        "Beit3ForQuestionAnswering",
         "Beit3ForImageTextRetrieval",
         "Beit3PreTrainedModel",
     ]
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
             Beit3ForCaptioning,
             Beit3ForImageClassification,
             Beit3ForImageTextRetrieval,
-            Beit3ForVisualQuestionAnswering,
+            Beit3ForQuestionAnswering,
             Beit3ForVisualReasoning,
             Beit3Model,
             Beit3PreTrainedModel,

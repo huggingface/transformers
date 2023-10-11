@@ -408,7 +408,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
         ("bart", "BartForCausalLM"),
-        ("beit3", "Beit3ForCaptioning"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
         ("big_bird", "BigBirdForCausalLM"),
@@ -903,7 +902,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
-        ("beit3", "Beit3ForVisualQuestionAnswering"),
+        ("beit3", "Beit3ForQuestionAnswering"),
         ("blip-2", "Blip2ForConditionalGeneration"),
         ("vilt", "ViltForQuestionAnswering"),
     ]

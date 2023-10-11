@@ -30,7 +30,7 @@ from transformers import (
     Beit3ForCaptioning,
     Beit3ForImageClassification,
     Beit3ForImageTextRetrieval,
-    Beit3ForVisualQuestionAnswering,
+    Beit3ForQuestionAnswering,
     Beit3ForVisualReasoning,
     Beit3Processor,
     BeitImageProcessor,
@@ -41,7 +41,7 @@ from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 model_type_to_class_mapping = {
     "image_classification": Beit3ForImageClassification,
-    "vqa": Beit3ForVisualQuestionAnswering,
+    "vqa": Beit3ForQuestionAnswering,
     "visual_reasoning": Beit3ForVisualReasoning,
     "image_captioning": Beit3ForCaptioning,
     "image_text_retrieval": Beit3ForImageTextRetrieval,
