@@ -78,8 +78,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
             by `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
-            Resolution of the output image after `resize` is applied. Only has an effect if `do_resize` is set to `True`. Can
-            be overriden by `size` in the `preprocess` method.
+            Resolution of the output image after `resize` is applied. Only has an effect if `do_resize` is set to
+            `True`. Can be overriden by `size` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
             the `preprocess` method.
