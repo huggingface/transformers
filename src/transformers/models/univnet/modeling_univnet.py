@@ -595,12 +595,6 @@ class UnivNetModel(PreTrainedModel):
         # Remove sequence length dimension since this collapses to 1
         # NOTE: keep waveforms batched even if there's only one
         waveform = hidden_states.squeeze(1)
-        # if spectrogram_batch_size > 1:
-        #     # remove seq-len dim since this collapses to 1
-        #     waveform = hidden_states.squeeze(1)
-        # else:
-        #     # remove batch dim and collapse tensor to 1-d audio waveform
-        #     waveform = hidden_states.squeeze(0).transpose(1, 0).view(-1)
 
         # Get sequence lengths for UnivNetFeatureExtractor.batch_decode.
         waveform_lengths = None

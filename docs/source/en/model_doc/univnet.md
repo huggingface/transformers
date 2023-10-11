@@ -27,8 +27,9 @@ The abstract from the paper is the following:
 
 Tips:
 
-- The `noise_sequence` argument for [`UnivNetModel.forward`] should be standard Gaussian noise (such as from `torch.randn`) of shape `([batch_size], noise_length, model.config.model_in_channels)`, where `noise_length` should match the length dimension (dimension 1) of the `input_features`. If not supplied, it will be randomly generated; a `torch.Generator` can be supplied to the `generator` argument so that the forward pass can be reproduced. (Note that [`UnivNetFeatureExtractor`] will return generated noise by default, so it shouldn't be necessary to generate `noise_sequence` manually.)
-- Padding the end of `input_features` with spectrogram silence can be used to reduce artifacts at the end of the generated audio sample. This can be done by supplying `pad_end = True` to [`UnivNetFeatureExtractor.__call__`]; the part of the output corresponding to the padding should then be removed (see the usage example below). See [this issue](https://github.com/seungwonpark/melgan/issues/8) for more details.
+- The `noise_sequence` argument for [`UnivNetModel.forward`] should be standard Gaussian noise (such as from `torch.randn`) of shape `([batch_size], noise_length, model.config.model_in_channels)`, where `noise_length` should match the length dimension (dimension 1) of the `input_features` argument. If not supplied, it will be randomly generated; a `torch.Generator` can be supplied to the `generator` argument so that the forward pass can be reproduced. (Note that [`UnivNetFeatureExtractor`] will return generated noise by default, so it shouldn't be necessary to generate `noise_sequence` manually.)
+- Padding added by [`UnivNetFeatureExtractor`] can be removed from the [`UnivNetModel`] output through the [`UnivNetFeatureExtractor.batch_decode`] method, as shown in the usage example below.
+- Padding the end of each waveform with silence can reduce artifacts at the end of the generated audio sample. This can be done by supplying `pad_end = True` to [`UnivNetFeatureExtractor.__call__`]. See [this issue](https://github.com/seungwonpark/melgan/issues/8) for more details.
 
 Usage Example:
 
@@ -55,7 +56,7 @@ with torch.no_grad():
     audio = model(**inputs)
 
 # Remove the extra padding at the end of the output.
-audio = audio[:-(feature_extractor.pad_end_length * feature_extractor.hop_length)]
+audio = feature_extractor.batch_decode(**audio)[0]
 # Convert to wav file
 audio = audio.cpu().numpy()
 write("sample_audio.wav", feature_extractor.sampling_rate, audio)

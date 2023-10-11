@@ -90,7 +90,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             The number of input channels to the [`UnivNetModel`] model. This should match
             `UnivNetModel.config.model_in_channels`.
         pad_end_length (`int`, *optional*, defaults to 10):
-            If padding the end of the spectrograms, the number of frames to append to the end of each spectrogram.
+            If padding the end of each waveform, the number of spectrogram frames worth of samples to append. The
+            number of appended samples will be `pad_end_length * hop_length`.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether or not [`~UnivNetFeatureExtractor.__call__`] should return `attention_mask`.
     """
@@ -172,8 +173,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_max = normalize_max
         self.model_in_channels = model_in_channels
         self.pad_end_length = pad_end_length
-        # Minimum value in spectrogram after dynamic_range_compression
-        self.spectrogram_zero = np.log(self.compression_clip_val * self.compression_factor)
 
     def normalize(self, spectrogram):
         return 2 * ((spectrogram - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
@@ -261,40 +260,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         return noise
 
-    def pad_spectrogram_end(
-        self,
-        spectrogram: np.ndarray,
-        pad_length: Optional[int] = None,
-        spectrogram_zero: Optional[float] = None,
-    ) -> np.ndarray:
-        """
-        Pads the end of a spectrogram with spectrogram zeros. This can help reduce artifacts at the end of the
-        generated audio sample; see https://github.com/seungwonpark/melgan/issues/8 for more details.
-
-        Args:
-            spectrogram (`numpy.ndarray`):
-                A spectrogram of shape (num_frames, num_mel_bins).
-            pad_length (`int`, *optional*, defaults to `None`):
-                The length in frames to pad to the end of the length dimension (dim 0) of the spectrogram. If not set,
-                this will default to `self.config.pad_end_length`.
-            spectrogram_zero (`float`, *optional*, defaults to `None`):
-                The "zero" value of the spectrogram to pad with. If not set, this will default to
-                `self.config.spectrogram_zero`.
-
-        Returns:
-            `numpy.ndarray`: NumPy array containing the padded spectrogram of shape
-            `(num_frames + pad_length, num_mel_bins)`.
-        """
-        if pad_length is None:
-            pad_length = self.pad_end_length
-        if spectrogram_zero is None:
-            spectrogram_zero = self.spectrogram_zero
-
-        padding_zeros = np.full((pad_length, spectrogram.shape[-1]), spectrogram_zero, dtype=np.float32)
-        padded_spectrogram = np.concatenate([spectrogram, padding_zeros], axis=-2)
-
-        return padded_spectrogram
-
     def batch_decode(
         self,
         waveforms: torch.FloatTensor,
@@ -315,7 +280,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             `List[torch.FloatTensor]`: A ragged list of 1D waveform tensors with padding removed.
         """
         # Collapse the batched waveform tensor to a list of 1D audio waveforms
-        waveforms = [torch.tensor(waveform) for waveform in waveforms]
+        waveforms = [waveform.detach().clone() for waveform in waveforms]
 
         if waveform_lengths is not None:
             waveforms = [waveform[:waveform_lengths[i]] for i, waveform in enumerate(waveforms)]
@@ -334,7 +299,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         generator: Optional[np.random.Generator] = None,
         pad_end: bool = False,
         pad_length: Optional[int] = None,
-        spectrogram_zero: Optional[float] = None,
         do_normalize: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -378,16 +342,12 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             generator (`numpy.random.Generator`, *optional*, defaults to `None`):
                 An optional `numpy.random.Generator` random number generator to use when generating noise.
             pad_end (`bool`, *optional*, defaults to `False`):
-                Whether to pad the end of each spectrogram with "zero" values. This can help reduce artifacts at the
+                Whether to pad the end of each waveform with silence. This can help reduce artifacts at the
                 end of the generated audio sample; see https://github.com/seungwonpark/melgan/issues/8 for more
-                details. Note that the spectrograms may already contain padding based on the padding strategy set in
-                `padding`.
+                details. This padding will be done before the padding strategy specified in `padding` is performed.
             pad_length (`int`, *optional*, defaults to `None`):
-                If padding the end of each spectrogram, the length of the padding. If not set, this will default to
-                `self.config.pad_end_length`.
-            spectrogram_zero (`float`, *optional*, defaults to `None`):
-                If padding the end of each spectrogram, the "zero" value to pad with. If not set, this will default to
-                `self.config.spectrogram_zero`.
+                If padding the end of each waveform, the length of the padding in spectrogram frames. If not set, this
+                will default to `self.config.pad_end_length`.
             do_normalize (`bool`, *optional*):
                 Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly improve
                 the performance for some models. If not set, this will default to `self.config.do_normalize`.
@@ -496,7 +456,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         output = super().to_dict()
 
         # Don't serialize these as they are derived from the other properties.
-        names = ["window", "mel_filters", "n_fft", "n_freqs", "num_max_samples", "spectrogram_zero"]
+        names = ["window", "mel_filters", "n_fft", "n_freqs", "num_max_samples"]
         for name in names:
             if name in output:
                 del output[name]
