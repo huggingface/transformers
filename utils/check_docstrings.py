@@ -132,7 +132,6 @@ OBJECTS_TO_IGNORE = [
     "CodeGenConfig",
     "CodeGenTokenizer",
     "CodeGenTokenizerFast",
-    "CodeLlamaTokenizer",
     "CodeLlamaTokenizerFast",
     "ConditionalDetrConfig",
     "ConditionalDetrImageProcessor",
