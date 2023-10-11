@@ -218,8 +218,8 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # cnn params and prompt params and head params are randomly initialized.
-                    if "cnn" in name or "visual_prompter" in name or "prompt" in name or "head" in name:
+                    # cnn params and transformer params and head params are randomly initialized.
+                    if "cnn" in name or "visual_prompter" in name or "transformer" in name or "head" in name:
                         self.assertAlmostEqual(
                             param.data.mean().item(),
                             0.0,
@@ -428,6 +428,6 @@ class TvpModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 61, 768))
         assert outputs.last_hidden_state.shape == expected_shape
         expected_slice = torch.tensor(
-            [[0.5855, -0.1829, 2.4803], [-0.3070, 1.1326, 0.5163], [-0.5632, -0.3950, 2.4989]]
+            [[1.4481, 1.6407, 1.8388], [0.3341, 1.5929, 0.2725], [1.5129, 0.8059, -0.1604]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
