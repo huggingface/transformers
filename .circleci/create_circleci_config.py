@@ -151,10 +151,13 @@ class CircleCIJob:
         pytest_flags.append(
             f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
         )
+
+        steps.append({"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}})
+
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
-        test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+        test_command += f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
 
         if self.parallelism == 1:
             if self.tests_to_run is None:
@@ -256,6 +259,8 @@ class CircleCIJob:
 
         steps.append({"run": {"name": "Check test results", "command": check_test_command}})
 
+        steps.append({"store_test_results": {"path": "test-results"}})
+
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
         job["steps"] = steps
@@ -306,7 +311,7 @@ torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=8,
+    pytest_num_workers=6,
 )
 
 
@@ -342,6 +347,7 @@ pipelines_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     marker="is_pipeline_test",
+    pytest_num_workers=6,
 )
 
 
@@ -461,13 +467,15 @@ exotic_models_job = CircleCIJob(
         "sudo apt install tesseract-ocr",
         "pip install -U --upgrade-strategy eager pytesseract",
         "pip install -U --upgrade-strategy eager natten",
-        # TODO (ydshieh): Remove this line once `https://github.com/facebookresearch/detectron2/issues/5010` is resolved
-        'pip install -U --upgrade-strategy eager "Pillow<10.0.0"',
+        "pip install -U --upgrade-strategy eager python-Levenshtein",
+        "pip install -U --upgrade-strategy eager opencv-python",
+        "pip install -U --upgrade-strategy eager nltk",
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
         "tests/models/deta",
+        "tests/models/nougat",
     ],
     pytest_num_workers=1,
     pytest_options={"durations": 100},

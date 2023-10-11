@@ -33,8 +33,8 @@ class FlavaProcessor(ProcessorMixin):
     [`~FlavaProcessor.__call__`] and [`~FlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`FlavaImageProcessor`]): The image processor is a required input.
-        tokenizer ([`BertTokenizerFast`]): The tokenizer is a required input.
+        image_processor ([`FlavaImageProcessor`], *optional*): The image processor is a required input.
+        tokenizer ([`BertTokenizerFast`], *optional*): The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "FlavaImageProcessor"

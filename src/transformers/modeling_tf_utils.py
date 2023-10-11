@@ -2645,6 +2645,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         commit_hash = kwargs.pop("_commit_hash", None)
         tf_to_pt_weight_rename = kwargs.pop("tf_to_pt_weight_rename", None)
 
+        # Not relevant for TF models
+        _ = kwargs.pop("adapter_kwargs", None)
+
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning

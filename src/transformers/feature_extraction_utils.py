@@ -65,7 +65,7 @@ class BatchFeature(UserDict):
     This class is derived from a python dictionary and can be used as a dictionary.
 
     Args:
-        data (`dict`):
+        data (`dict`, *optional*):
             Dictionary of lists/arrays/tensors returned by the __call__/pad methods ('input_values', 'attention_mask',
             etc.).
         tensor_type (`Union[None, str, TensorType]`, *optional*):

@@ -65,7 +65,7 @@ class PerceiverConfig(PretrainedConfig):
         v_channels (`int`, *optional*):
             Dimension to project the values before applying attention in the cross-attention and self-attention layers
             of the encoder. Will default to preserving the dimension of the queries if not specified.
-        cross_attention_shape_for_attention (`str`, *optional*, defaults to `'kv'`):
+        cross_attention_shape_for_attention (`str`, *optional*, defaults to `"kv"`):
             Dimension to use when downsampling the queries and keys in the cross-attention layer of the encoder.
         self_attention_widening_factor (`int`, *optional*, defaults to 1):
             Dimension of the feed-forward layer in the cross-attention layer of the Transformer encoder.
@@ -89,7 +89,7 @@ class PerceiverConfig(PretrainedConfig):
             this to something large just in case (e.g., 512 or 1024 or 2048).
         image_size (`int`, *optional*, defaults to 56):
             Size of the images after preprocessing, for [`PerceiverForImageClassificationLearned`].
-        train_size (`List[int]`, *optional*, defaults to [368, 496]):
+        train_size (`List[int]`, *optional*, defaults to `[368, 496]`):
             Training size of the images for the optical flow model.
         num_frames (`int`, *optional*, defaults to 16):
             Number of video frames used for the multimodal autoencoding model.
@@ -97,11 +97,11 @@ class PerceiverConfig(PretrainedConfig):
             Number of audio samples per frame for the multimodal autoencoding model.
         samples_per_patch (`int`, *optional*, defaults to 16):
             Number of audio samples per patch when preprocessing the audio for the multimodal autoencoding model.
-        output_num_channels (`int`, *optional*, defaults to 512):
-            Number of output channels for each modalitiy decoder.
         output_shape (`List[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
             Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
             autoencoding model. This excludes the channel dimension.
+        output_num_channels (`int`, *optional*, defaults to 512):
+            Number of output channels for each modalitiy decoder.
 
     Example:
 

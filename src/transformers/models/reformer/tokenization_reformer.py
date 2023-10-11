@@ -69,9 +69,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        additional_special_tokens (`List[str]`, *optional*):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `[]`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
