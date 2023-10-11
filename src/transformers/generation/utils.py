@@ -4351,14 +4351,14 @@ class GenerationMixin:
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
         # Assistant: initialize assistant-related variables
-        if hasattr(assistant_model, "max_assistant_tokens"):
+        if hasattr(assistant_model, "num_assistant_tokens"):
             warnings.warn(
-                "Setting `max_assistant_tokens` via `assistant_model.max_assistant_tokens` is deprecated and will be removed in v5. Make sure to set `max_assistant_tokens` via the generation_config instead.",
+                "Setting `num_assistant_tokens` via `assistant_model.num_assistant_tokens` is deprecated and will be removed in v.37. Make sure to set `num_assistant_tokens` via the generation_config instead.",
                 FutureWarning,
             )
-            max_assistant_tokens = assistant_model.max_assistant_tokens
+            num_assistant_tokens = assistant_model.num_assistant_tokens
         else:
-            max_assistant_tokens = assistant_model.generation_config.max_assistant_tokens
+            num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
 
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -4431,7 +4431,7 @@ class GenerationMixin:
             # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
             # need access to the assistant cache to secure strong speedups.
             candidate_input_ids = input_ids
-            for _ in range(int(max_assistant_tokens)):
+            for _ in range(int(num_assistant_tokens)):
                 # 1.1. use the assistant model to obtain the next candidate logits
                 if "assistant_past_key_values" in model_kwargs:
                     prev_seq_len = model_kwargs["assistant_past_key_values"][0][assistant_kv_indexing].shape[-2]
@@ -4547,11 +4547,11 @@ class GenerationMixin:
             # 6. Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
             # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
             # cost of forecasting incorrect assistant tokens.
-            if assistant_model.generation_config.max_assistant_tokens_schedule == "heuristic":
-                if n_matches == int(max_assistant_tokens):
-                    max_assistant_tokens += 2.0
+            if assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic":
+                if n_matches == int(num_assistant_tokens):
+                    num_assistant_tokens += 2.0
                 else:
-                    max_assistant_tokens = max(1.0, max_assistant_tokens - 1.0)
+                    num_assistant_tokens = max(1.0, num_assistant_tokens - 1.0)
 
             # Assistant: main logic end
             if synced_gpus and this_peer_finished:
