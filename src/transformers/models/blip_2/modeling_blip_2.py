@@ -1329,12 +1329,12 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Blip2Model
 
-        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
 
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = processor(images=image, return_tensors="pt").to(torch.float16)
+        >>> inputs = processor(images=image, return_tensors="pt")
         >>> image_outputs = model.get_image_features(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1374,11 +1374,11 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> from transformers import Blip2Processor, Blip2Model
 
         >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = processor(images=image, return_tensors="pt").to(torch.float16)
+        >>> inputs = processor(images=image, return_tensors="pt")
         >>> qformer_outputs = model.get_qformer_features(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
