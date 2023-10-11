@@ -36,7 +36,7 @@ class SuperPointEncoder(nn.Module):
      dimensionality of the image.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
         self.conv_layers_sizes = config.conv_layers_sizes
         self.descriptor_dim = config.descriptor_dim
