@@ -6,3 +6,7 @@
   - local: installation
     title: 安装
   title: 开始使用
+- sections:
+  - local: accelerate
+    title: 加速分布式训练
+  title: 教程
