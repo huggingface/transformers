@@ -107,10 +107,10 @@ class PatchTSMixerGatedAttention(nn.Module):
         self.attn_layer = nn.Linear(in_size, out_size)
         self.attn_softmax = nn.Softmax(dim=-1)
 
-    def forward(self, x):
-        attn_weight = self.attn_softmax(self.attn_layer(x))
-        x = x * attn_weight
-        return x
+    def forward(self, inputs):
+        attn_weight = self.attn_softmax(self.attn_layer(inputs))
+        inputs = inputs * attn_weight
+        return inputs
 
 
 class PatchTSMixerTranspose(nn.Module):
@@ -125,11 +125,18 @@ class PatchTSMixerTranspose(nn.Module):
         super().__init__()
         self.dims, self.contiguous = dims, contiguous
 
-    def forward(self, x):
+    def forward(self, inputs: torch.Tensor):
+        """
+        Parameters:
+            inputs (`torch.Tensor`): input to be transposed
+        Returns:
+            `torch.Tensor`: transposed tensor
+        """
         if self.contiguous:
-            return x.transpose(*self.dims).contiguous()
+            return inputs.transpose(*self.dims).contiguous()
         else:
-            return x.transpose(*self.dims)
+            return inputs.transpose(*self.dims)
+
 
 
 class PatchTSMixerNormLayer(nn.Module):
