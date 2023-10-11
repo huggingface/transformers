@@ -1223,8 +1223,9 @@ class DummyObject(type):
 
 
 def torch_required(func):
+    warnings.warn("The method `torch_required` is deprecated and will be removed in v4.36. Use `requires_backends` instead.", FutureWarning)
+
     # Chose a different decorator name than in tests so it's clear they are not the same.
-    warnings.warn("The method `torch_required` is deprecated and will be removed in v4.36.", FutureWarning)
     @wraps(func)
     def wrapper(*args, **kwargs):
         if is_torch_available():
@@ -1236,8 +1237,9 @@ def torch_required(func):
 
 
 def tf_required(func):
+    warnings.warn("The method `tf_required` is deprecated and will be removed in v4.36. Use `requires_backends` instead.", FutureWarning)
+
     # Chose a different decorator name than in tests so it's clear they are not the same.
-    warnings.warn("The method `tf_required` is deprecated and will be removed in v4.36.", FutureWarning)
     @wraps(func)
     def wrapper(*args, **kwargs):
         if is_tf_available():
