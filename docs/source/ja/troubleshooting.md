@@ -26,6 +26,8 @@ rendered properly in your Markdown viewer.
 
 1. [フォーラム](https://discuss.huggingface.co/)で助けを求める。 [初心者向け](https://discuss.huggingface.co/c/beginners/5) または [🤗 Transformers](https://discuss.huggingface.co/c/transformers/9) など、質問を投稿できる特定のカテゴリがあります。問題が解決される可能性を最大限にするために、再現可能なコードを含む良い説明的なフォーラム投稿を書くことを確認してください！
 
+<Youtube id="_PAli-V4wj0"/>
+
 2. バグがライブラリに関連する場合は、🤗 Transformers リポジトリで [Issue](https://github.com/huggingface/transformers/issues/new/choose) を作成してください。バグを説明するためのできるだけ多くの情報を含めるように心がけ、何が問題で、どのように修正できるかをより良く理解できるようにしてください。
 
 3. より古いバージョンの 🤗 Transformers を使用している場合は、[Migration](migration) ガイドを確認してください。バージョン間で重要な変更が導入されているためです。
