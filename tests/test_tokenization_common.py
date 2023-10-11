@@ -4053,7 +4053,7 @@ class TokenizerTesterMixin:
     def test_added_tokens_serialization(self):
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+            with self.subTest(f"{tokenizer} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
                 self.assertEquals(tokenizer._eos_token, new_eos)
