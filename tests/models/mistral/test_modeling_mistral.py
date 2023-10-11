@@ -39,7 +39,6 @@ if is_torch_available():
     )
 
 
-# Copied from transformers.tests.mistral.test_modelling_mistral.MistralModelTest with Llama->Mistral
 class MistralModelTester:
     def __init__(
         self,
@@ -93,6 +92,7 @@ class MistralModelTester:
         self.pad_token_id = pad_token_id
         self.scope = scope
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -134,6 +134,7 @@ class MistralModelTester:
             pad_token_id=self.pad_token_id,
         )
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Mistral
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -144,6 +145,7 @@ class MistralModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Mistral
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -174,6 +176,7 @@ class MistralModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Mistral
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -192,6 +195,7 @@ class MistralModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Mistral
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -254,6 +258,7 @@ class MistralModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
