@@ -4110,7 +4110,7 @@ class TokenizerTesterMixin:
 
                 # make sure the token was added
                 self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
-                self.assertEqual(new_eos, tokenizer.added_tokens_decoder[self.added_tokens_encoder[str(new_eos)]])
+                self.assertEqual(new_eos, tokenizer.added_tokens_decoder[tokenizer.added_tokens_encoder[str(new_eos)]])
 
                 # At this point if you save the tokenizer and reload it, the token will be saved as special
                 # it does not matter if you set the attribute
