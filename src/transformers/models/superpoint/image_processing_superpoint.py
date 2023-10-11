@@ -77,11 +77,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
             by `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
-            Resolution of the output image after `resize` is applied. If `size["shortest_edge"]` >= 384, the image is
-            resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the image will
-            be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
-            `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
+            Resolution of the output image after `resize` is applied. Only has an effect if `do_resize` is set to `True`. Can
             be overriden by `size` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
