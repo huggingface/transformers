@@ -4051,6 +4051,7 @@ class TokenizerTesterMixin:
                         self.assertTrue(len(encoded_split_special_token) > 1)
 
     def test_added_tokens_serialization(self):
+        self.maxDiff = None
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -4100,6 +4101,7 @@ class TokenizerTesterMixin:
                     self.assertTrue(new_eos in tokenizer.special_tokens_map)
 
     def test_additional_special_tokens_serialization(self):
+        self.maxDiff = None
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         # you CAN'T set the additional special tokens once loaded but can after load
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
