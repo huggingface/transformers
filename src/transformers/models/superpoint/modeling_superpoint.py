@@ -22,7 +22,7 @@ from ...utils import (
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC_ = "SuperPointConfig"
+_CONFIG_FOR_DOC = "SuperPointConfig"
 
 _CHECKPOINT_FOR_DOC_ = "stevenbucaille/superpoint"
 
