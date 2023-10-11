@@ -473,7 +473,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 # for legacy AddedTokens strip left and right by default
                 # TODO this will be remove to have the same default behavior as rust
                 else:
-                    token = AddedToken(token, normalized=not special_tokens, rstrip=True, lstrip=True)
+                    token = AddedToken(token, normalized=False, rstrip=True, lstrip=True)
             if special_tokens:
                 token.special = True
             if token in self._added_tokens_decoder:
