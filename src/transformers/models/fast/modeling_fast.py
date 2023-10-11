@@ -1,5 +1,4 @@
 import math
-import unittest
 from collections import OrderedDict
 
 import cv2
@@ -130,40 +129,6 @@ class My2DLayer(nn.Module):
     @staticmethod
     def is_zero_layer():
         return False
-
-
-def generate_bbox(keys, label, score, scales, cfg):
-    label_num = len(keys)
-    bboxes = []
-    scores = []
-    for index in range(1, label_num):
-        i = keys[index]
-        ind = label == i
-        ind_np = ind.data.cpu().numpy()
-        points = np.array(np.where(ind_np)).transpose((1, 0))
-        if points.shape[0] < cfg.test_cfg.min_area:
-            label[ind] = 0
-            continue
-        score_i = score[ind].mean().item()
-        if score_i < cfg.test_cfg.min_score:
-            label[ind] = 0
-            continue
-
-        if cfg.test_cfg.bbox_type == "rect":
-            rect = cv2.minAreaRect(points[:, ::-1])
-            alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
-            rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
-            bbox = cv2.boxPoints(rect) * scales
-
-        elif cfg.test_cfg.bbox_type == "poly":
-            binary = np.zeros(label.shape, dtype="uint8")
-            binary[ind_np] = 1
-            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            bbox = contours[0] * scales
-        bbox = bbox.astype("int32")
-        bboxes.append(bbox.reshape(-1).tolist())
-        scores.append(score_i)
-    return bboxes, scores
 
 
 class FalsePreTrainedModel(PreTrainedModel):
@@ -460,10 +425,10 @@ class TextNet(PreTrainedModel):
         for stage_config in zip(
                 config.backbone_stage1_in_channels,
                 config.backbone_stage1_out_channels,
-                config.backbone_stage1_kernel_size[0],
-                config.backbone_stage1_stride[0],
-                config.backbone_stage1_dilation[0],
-                config.backbone_stage1_groups[0],
+                config.backbone_stage1_kernel_size,
+                config.backbone_stage1_stride,
+                config.backbone_stage1_dilation,
+                config.backbone_stage1_groups,
         ):
             stage1.append(RepConvLayer(*stage_config))
         self.stage1 = nn.ModuleList(stage1)
@@ -472,10 +437,10 @@ class TextNet(PreTrainedModel):
         for stage_config in zip(
                 config.backbone_stage2_in_channels,
                 config.backbone_stage2_out_channels,
-                config.backbone_stage2_kernel_size[0],
-                config.backbone_stage2_stride[0],
-                config.backbone_stage2_dilation[0],
-                config.backbone_stage2_groups[0],
+                config.backbone_stage2_kernel_size,
+                config.backbone_stage2_stride,
+                config.backbone_stage2_dilation,
+                config.backbone_stage2_groups,
         ):
             stage2.append(RepConvLayer(*stage_config))
         self.stage2 = nn.ModuleList(stage2)
@@ -484,10 +449,10 @@ class TextNet(PreTrainedModel):
         for stage_config in zip(
                 config.backbone_stage3_in_channels,
                 config.backbone_stage3_out_channels,
-                config.backbone_stage3_kernel_size[0],
-                config.backbone_stage3_stride[0],
-                config.backbone_stage3_dilation[0],
-                config.backbone_stage3_groups[0],
+                config.backbone_stage3_kernel_size,
+                config.backbone_stage3_stride,
+                config.backbone_stage3_dilation,
+                config.backbone_stage3_groups,
         ):
             stage3.append(RepConvLayer(*stage_config))
         self.stage3 = nn.ModuleList(stage3)
@@ -496,10 +461,10 @@ class TextNet(PreTrainedModel):
         for stage_config in zip(
                 config.backbone_stage4_in_channels,
                 config.backbone_stage4_out_channels,
-                config.backbone_stage4_kernel_size[0],
-                config.backbone_stage4_stride[0],
-                config.backbone_stage4_dilation[0],
-                config.backbone_stage4_groups[0],
+                config.backbone_stage4_kernel_size,
+                config.backbone_stage4_stride,
+                config.backbone_stage4_dilation,
+                config.backbone_stage4_groups,
         ):
             stage4.append(RepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
@@ -542,12 +507,12 @@ class FASTNeck(PreTrainedModel):
         super().__init__(config)
         reduce_layer_configs = list(
             zip(
-                config.neck_in_channels[0],
-                config.neck_out_channels[0],
-                config.neck_kernel_size[0],
-                config.neck_stride[0],
-                config.neck_dilation[0],
-                config.neck_groups[0],
+                config.neck_in_channels,
+                config.neck_out_channels,
+                config.neck_kernel_size,
+                config.neck_stride,
+                config.neck_dilation,
+                config.neck_groups,
             )
         )
 
@@ -597,29 +562,33 @@ class FASTHead(nn.Module):
         )
 
         self.final = ConvLayer(
-            config.head_final_in_channels[0],
-            config.head_final_out_channels[0],
-            config.head_final_kernel_size[0],
-            config.head_final_stride[0],
-            config.head_final_dilation[0],
-            config.head_final_groups[0],
-            config.head_final_bias[0],
-            config.head_final_has_shuffle[0],
-            config.head_final_use_bn[0],
-            config.head_final_act_func[0],
-            config.head_final_dropout_rate[0],
+            config.head_final_in_channels,
+            config.head_final_out_channels,
+            config.head_final_kernel_size,
+            config.head_final_stride,
+            config.head_final_dilation,
+            config.head_final_groups,
+            config.head_final_bias,
+            config.head_final_has_shuffle,
+            config.head_final_use_bn,
+            config.head_final_act_func,
+            config.head_final_dropout_rate,
             config.head_final_ops_order,
         )
 
-        self.pooling_size = config.head_pooling_size[0]
+        self.min_area = config.min_area
+        self.min_score = config.min_score
+        self.bbox_type = config.bbox_type
+
+        self.pooling_size = config.head_pooling_size
 
         self.pooling_1s = nn.MaxPool2d(kernel_size=self.pooling_size, stride=1, padding=(self.pooling_size - 1) // 2)
         self.pooling_2s = nn.MaxPool2d(
             kernel_size=self.pooling_size // 2 + 1, stride=1, padding=(self.pooling_size // 2) // 2
         )
 
-        if config.head_dropout_ratio[0] > 0:
-            self.dropout = nn.Dropout2d(config.head_dropout_ratio[0])
+        if config.head_dropout_ratio > 0:
+            self.dropout = nn.Dropout2d(config.head_dropout_ratio)
         else:
             self.dropout = None
 
@@ -640,9 +609,9 @@ class FASTHead(nn.Module):
         x = self.final(x)
         return x
 
-    def get_results(self, out, img_meta, cfg, scale=2):
-        org_img_size = img_meta["org_img_size"][0]
-        img_size = img_meta["img_size"][0]  # 640*640
+    def get_results(self, out, img_meta, scale=2):
+        org_img_size = img_meta["org_img_size"]
+        img_size = img_meta["img_size"]  # 640*640
         batch_size = out.size(0)
         outputs = {}
 
@@ -650,7 +619,7 @@ class FASTHead(nn.Module):
             out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
         )  # B*1*320*320
         texts = self._max_pooling(texts, scale=scale)  # B*1*320*320
-        score_maps = torch.sigmoid_(texts)  # B*1*320*320
+        score_maps = torch.sigmoid_(texts)  # B*1*320*320~
         score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
         score_maps = score_maps.squeeze(1)  # B*640*640
 
@@ -677,7 +646,7 @@ class FASTHead(nn.Module):
 
         results = []
         for i in range(batch_size):
-            bboxes, scores = generate_bbox(keys[i], labels[i], score_maps[i], scales, cfg)
+            bboxes, scores = self.generate_bbox(keys[i], labels[i], score_maps[i], scales)
             results.append({"bboxes": bboxes, "scores": scores})
         outputs.update({"results": results})
 
@@ -689,6 +658,39 @@ class FASTHead(nn.Module):
         elif scale == 2:
             x = self.pooling_2s(x)
         return x
+
+    def generate_bbox(self, keys, label, score, scales):
+        label_num = len(keys)
+        bboxes = []
+        scores = []
+        for index in range(1, label_num):
+            i = keys[index]
+            ind = label == i
+            ind_np = ind.data.cpu().numpy()
+            points = np.array(np.where(ind_np)).transpose((1, 0))
+            if points.shape[0] < self.min_area:
+                label[ind] = 0
+                continue
+            score_i = score[ind].mean().item()
+            if score_i < self.min_score:
+                label[ind] = 0
+                continue
+
+            if self.bbox_type == "rect":
+                rect = cv2.minAreaRect(points[:, ::-1])
+                alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
+                rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
+                bbox = cv2.boxPoints(rect) * scales
+            else:
+                binary = np.zeros(label.shape, dtype="uint8")
+                binary[ind_np] = 1
+                contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                bbox = contours[0] * scales
+
+            bbox = bbox.astype("int32")
+            bboxes.append(bbox.reshape(-1).tolist())
+            scores.append(score_i)
+        return bboxes, scores
 
 
 class FASTForImageCaptioning(PreTrainedModel):
@@ -702,7 +704,7 @@ class FASTForImageCaptioning(PreTrainedModel):
         _, _, H, W = size
         return F.interpolate(x, size=(H // scale, W // scale), mode="bilinear")
 
-    def forward(self, imgs, img_metas=None, cfg=None):
+    def forward(self, imgs, img_metas=None):
         outputs = {}
 
         f = self.backbone(imgs)
@@ -712,7 +714,7 @@ class FASTForImageCaptioning(PreTrainedModel):
         det_out = self.det_head(f)
 
         det_out = self._upsample(det_out, imgs.size(), scale=4)
-        det_res = self.det_head.get_results(det_out, img_metas, cfg, scale=2)
+        det_res = self.det_head.get_results(det_out, img_metas, scale=2)
         outputs.update(det_res)
 
         return outputs
