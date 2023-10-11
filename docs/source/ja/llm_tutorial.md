@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Generation with LLMs
 
-[[oen-in-colab]]
+[[open-in-colab]]
 
 LLM、またはLarge Language Models（大規模言語モデル）は、テキスト生成の鍵となる要素です。要するに、これらは大規模な事前訓練済みトランスフォーマーモデルで、与えられた入力テキストに基づいて次の単語（または、より正確にはトークン）を予測するように訓練されています。トークンを1つずつ予測するため、モデルを呼び出すだけでは新しい文を生成するために何かより精巧なことをする必要があります。自己回帰生成を行う必要があります。
 
