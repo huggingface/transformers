@@ -42,7 +42,8 @@ model = AutoModelForImageClassification.from_pretrained(MODEL_ID).to("cuda")
 
 ### Image Classification with ViT
 
-PIL import Image
+```
+from PIL import Image
 import requests
 import numpy as np
 from transformers import AutoImageProcessor, AutoModelForImageClassification
@@ -58,7 +59,6 @@ processed_input = processor(image, return_tensors='pt').to(device="cuda")
 
 with torch.no_grad():
     _ = model(**processed_input)
-
 ```
 
 #### Object Detection with DETR
