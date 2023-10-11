@@ -833,7 +833,7 @@ class T5PreTrainedModel(PreTrainedModel):
             if hasattr(module, "qa_outputs"):
                 module.qa_outputs.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
                 module.qa_outputs.bias.data.zero_()
-        elif isinstance(module, EncT5):
+        elif isinstance(module, EncT5ForSequenceClassification):
             module.decoder_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, T5ClassificationHead):
             module.dense.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
@@ -2299,17 +2299,23 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
 
 @add_start_docstrings(
     """
-    Model for non-autoregressive tasks (regression and single-label classification) based on fine-tuning pre-trained T5
-    encoder layers with a re-initialized decoder layer and classification head(s). Research has shown that EncT5 may
-    improve efficiency and usability over T5 and BERT for non-autoregressive tasks.
+    Model for non-autoregressive tasks based on fine-tuning pre-trained T5encoder layers with a single re-initialized
+    decoder layer and classification head(s). Research has shown that EncT5 can improve efficiency and usability over T5
+    and BERT for non-autoregressive tasks.
     """,
     T5_START_DOCSTRING,
 )
-class EncT5(T5PreTrainedModel):
+class EncT5ForSequenceClassification(T5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
 
     def __init__(self, config: T5Config):
         super().__init__(config)
+
+        # The paper uses a different approach to multi-label classification. The approach involves utilizing one
+        # classification head per label, which could work better with large output spaces (for when there are a lot of
+        # labels).
+        if config.problem_type == "multi_label_classification":
+            raise ValueError("Multi-label classification is currently not supported.")
 
         # Set number of decoders to 1.
         single_decoder_layer_config = copy.deepcopy(config)
