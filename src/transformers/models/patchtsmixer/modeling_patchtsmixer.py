@@ -94,8 +94,8 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
 """
 
 
-class GatedAttention(nn.Module):
-    """GatedAttention
+class PatchTSMixerGatedAttention(nn.Module):
+    """PatchTSMixerGatedAttention
 
     Args:
         in_size (`int`): input size
@@ -113,7 +113,13 @@ class GatedAttention(nn.Module):
         return x
 
 
-class Transpose(nn.Module):
+class PatchTSMixerTranspose(nn.Module):
+    """
+    Parameters:
+    Transpose the tensor to the dimension defined in **dims**
+        dims (`list`): list of dimensions to be transposed contiguous (`bool`): if True, the transposed tensor is
+        contiguous
+    """
     def __init__(self, *dims, contiguous=False):
         super().__init__()
         self.dims, self.contiguous = dims, contiguous
@@ -137,7 +143,7 @@ class NormLayer(nn.Module):
         self.mode = mode
         self.num_features = num_features
         if "batch" in norm_mlp.lower():
-            self.norm = nn.Sequential(Transpose(1, 2), nn.BatchNorm1d(num_features), Transpose(1, 2))
+            self.norm = nn.Sequential(PatchTSMixerTranspose(1, 2), nn.BatchNorm1d(num_features), PatchTSMixerTranspose(1, 2))
         else:
             self.norm = nn.LayerNorm(num_features)
 
@@ -221,7 +227,7 @@ class ChannelFeatureMixer(nn.Module):
 
         self.gated_attn = gated_attn
         if gated_attn:
-            self.gab = GatedAttention(in_size=in_channels, out_size=in_channels)
+            self.gab = PatchTSMixerGatedAttention(in_size=in_channels, out_size=in_channels)
 
     def forward(self, x):
         # x.shape == (batch_size, n_vars, num_patches, num_features)
@@ -291,7 +297,7 @@ class PatchMixer(nn.Module):
 
         self.gated_attn = gated_attn
         if gated_attn:
-            self.gab = GatedAttention(in_size=num_patches, out_size=num_patches)
+            self.gab = PatchTSMixerGatedAttention(in_size=num_patches, out_size=num_patches)
 
         if self_attn:
             self.self_attn_layer = MultiheadAttention(
@@ -400,7 +406,7 @@ class FeatureMixer(nn.Module):
         self.gated_attn = gated_attn
 
         if self.gated_attn:
-            self.gab = GatedAttention(in_size=num_features, out_size=num_features)
+            self.gab = PatchTSMixerGatedAttention(in_size=num_features, out_size=num_features)
 
     def forward(self, x):
         # x.shape == (batch_size, num_patches, num_features) if flatten
