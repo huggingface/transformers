@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import io
 import json
 import os
 import warnings
@@ -19,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from huggingface_hub import model_info
+from numpy import isin
 
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
@@ -87,6 +89,8 @@ from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
 
 if is_tf_available():
+    import tensorflow as tf
+
     from ..models.auto.modeling_tf_auto import (
         TFAutoModel,
         TFAutoModelForCausalLM,
