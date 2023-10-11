@@ -190,10 +190,6 @@ class SuperPointInterestPointDecoder(nn.Module):
         b, h, w = scores.shape
 
         # Threshold keypoints by score value
-        # The following lines are the original code made to handle batch sizes > 1
-        # keypoints = [torch.nonzero(s > self.keypoint_threshold) for s in scores]
-        # scores = [s[tuple(k.t())] for s, k in zip(scores, keypoints)]
-
         keypoints = torch.nonzero(scores[0] > self.keypoint_threshold)
         scores = scores[0][tuple(keypoints.t())]
 
@@ -282,8 +278,6 @@ class SuperPointDescriptorDecoder(nn.Module):
         descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
 
         # Extract descriptors
-        # The following line was the original code made to handle batch sizes > 1
-        # descriptors = self.sample_descriptors(k[None], d[None], 8)[0] for k, d in zip(keypoints, descriptors)]
         descriptors = self.sample_descriptors(keypoints[None], descriptors[0][None], 8)[0]
 
         # From [descriptor_dim, num_keypoints] to [num_keypoints, descriptor_dim]
