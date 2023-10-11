@@ -1238,10 +1238,11 @@ class Patchify(nn.Module):
 
 
 # TODO: add copied from after PatchTST master merge
-class PatchMasking(nn.Module):
+class PatchTSMixerMasking(nn.Module):
     """
+    Class to random or forcast masking.
+
     Parameters:
-    PatchMasking: Class to random or forcast masking.
         mask_type (str, *optional*): Masking type. Allowed values are random, forecast. Defaults to random.
         mask_ratio (`float`, *optional*): Mask ratio.
         mask_patches (list, *optional*): List of patch lengths to mask in the end of the data.
@@ -1583,7 +1584,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         self.patching = Patchify(config.seq_len, patch_length=config.patch_len, stride=config.stride)
 
         if mask_input is True:
-            self.masking = PatchMasking(
+            self.masking = PatchTSMixerMasking(
                 mask_type=config.mask_type,
                 mask_ratio=config.mask_ratio,
                 mask_patches=config.mask_patches,
