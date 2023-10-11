@@ -128,13 +128,22 @@ class TextToAudioPipeline(Pipeline):
         return output
 
     def _forward(self, model_inputs, **kwargs):
+        forward_params = kwargs["forward_params"]
+        generate_kwargs = kwargs["generate_kwargs"]
+        
         # we expect some kwargs to be additional tensors which need to be on the right device
-        kwargs = self._ensure_tensor_on_device(kwargs, device=self.device)
+        forward_params = self._ensure_tensor_on_device(forward_params, device=self.device)
 
         if self.model.can_generate():
-            output = self.model.generate(**model_inputs, **kwargs)
+            # we expect some kwargs to be additional tensors which need to be on the right device
+            generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
+            
+            # generate_kwargs get priority over forward_params
+            forward_params.update(generate_kwargs)
+            
+            output = self.model.generate(**model_inputs, **forward_params)
         else:
-            output = self.model(**model_inputs, **kwargs)[0]
+            output = self.model(**model_inputs, **forward_params)[0]
 
         if self.vocoder is not None:
             # in that case, the output is a spectrogram that needs to be converted into a waveform
@@ -149,8 +158,13 @@ class TextToAudioPipeline(Pipeline):
         Args:
             text_inputs (`str` or `List[str]`):
                 The text(s) to generate.
-            forward_params (*optional*):
-                Parameters passed to the model generation/forward method.
+            forward_params (`dict`, *optional*):
+                Parameters passed to the model generation/forward method. `forward_params` are always passed to the underlying model.
+            generate_kwargs (`dict`, *optional*):
+                The dictionary of ad-hoc parametrization of `generate_config` to be used for the generation call. For a
+                complete overview of generate, check the [following
+                guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation).
+                `generate_kwargs` are only passed to the underlying model if the latter is a generative model.
 
         Return:
             A `dict` or a list of `dict`: The dictionaries have two keys:
@@ -164,14 +178,16 @@ class TextToAudioPipeline(Pipeline):
         self,
         preprocess_params=None,
         forward_params=None,
+        generate_kwargs=None, 
     ):
+        params = {"forward_params": forward_params if forward_params else {},
+                  "generate_kwargs": generate_kwargs if generate_kwargs else {}}
+        
         if preprocess_params is None:
             preprocess_params = {}
-        if forward_params is None:
-            forward_params = {}
         postprocess_params = {}
 
-        return preprocess_params, forward_params, postprocess_params
+        return preprocess_params, params, postprocess_params
 
     def postprocess(self, waveform):
         output_dict = {}
