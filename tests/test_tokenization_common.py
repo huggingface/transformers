@@ -4071,7 +4071,7 @@ class TokenizerTesterMixin:
                     self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
                     if self.rust_tokenizer_class is not None:
                         tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
-                        self.asserEquals(tokenizer._eos_token, new_eos)
+                        self.assertEquals(tokenizer._eos_token, new_eos)
                         self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
                         self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
 
@@ -4079,7 +4079,7 @@ class TokenizerTesterMixin:
                     tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
                         pretrained_name, eos_token=new_eos, use_fast=True
                     )
-                    self.asserEquals(tokenizer._eos_token, new_eos)
+                    self.assertEquals(tokenizer._eos_token, new_eos)
                     self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
                     self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
 
@@ -4125,14 +4125,14 @@ class TokenizerTesterMixin:
 
                     if self.rust_tokenizer_class is not None:
                         tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
-                        self.asserEquals(tokenizer._eos_token, new_eos)
+                        self.assertEquals(tokenizer._eos_token, new_eos)
                         self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
 
                 if self.rust_tokenizer_class is not None:
                     tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
                         pretrained_name, eos_token=new_eos, use_fast=True
                     )
-                    self.asserEquals(tokenizer._eos_token, new_eos)
+                    self.assertEquals(tokenizer._eos_token, new_eos)
                     self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
 
                     with tempfile.TemporaryDirectory() as tmp_dir_2:
