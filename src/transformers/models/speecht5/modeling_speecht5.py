@@ -2542,9 +2542,8 @@ def _generate_speech(
     output_cross_attentions: bool = False,
 ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
     if speaker_embeddings is None:
-        logger.warning_once(
-            """`speaker_embeddings` is not specified, which will probably generate unintelligible speech.
-                    Please, specify a `speaker_embeddings`. For example, you can use a speaker embeddings by following
+        raise ValueError(
+            """`speaker_embeddings` must be specified. For example, you can use a speaker embeddings by following
                     the code snippet provided in this link:
                     https://huggingface.co/datasets/Matthijs/cmu-arctic-xvectors
                     """
