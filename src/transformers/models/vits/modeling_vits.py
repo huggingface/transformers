@@ -527,12 +527,12 @@ class HifiGanDiscriminatorScaleResidualBlock(nn.Module):
     def apply_weight_norm(self):
         for layer in self.convs:
             nn.utils.weight_norm(layer)
-        nn.utils.weight_norm(self.conv_post)
+        nn.utils.weight_norm(self.final_conv)
 
     def remove_weight_norm(self):
         for layer in self.convs:
             nn.utils.remove_weight_norm(layer)
-        nn.utils.remove_weight_norm(self.conv_post)
+        nn.utils.remove_weight_norm(self.final_conv)
 
     def forward(self, hidden_states):
         fmap = []
@@ -566,7 +566,7 @@ class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
                     padding=(self.get_padding(kernel_size, 1), 0),
                 )
             )
-        self.final_conv = nn.Conv2d(1024, 1, (stride, 1), 1, padding=(1, 0))
+        self.final_conv = nn.Conv2d(1024, 1, (3, 1), 1, padding=(1, 0))
 
     def get_padding(self, kernel_size, dilation=1):
         return (kernel_size * dilation - dilation) // 2
@@ -574,12 +574,12 @@ class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
     def apply_weight_norm(self):
         for layer in self.convs:
             nn.utils.weight_norm(layer)
-        nn.utils.weight_norm(self.conv_post)
+        nn.utils.weight_norm(self.final_conv)
 
     def remove_weight_norm(self):
         for layer in self.convs:
             nn.utils.remove_weight_norm(layer)
-        nn.utils.remove_weight_norm(self.conv_post)
+        nn.utils.remove_weight_norm(self.final_conv)
 
     def forward(self, hidden_states):
         fmap = []
