@@ -1717,9 +1717,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
         >>> import torch
 
-        >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
+        >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> model = Blip2ForConditionalGeneration.from_pretrained(
-        ...     "Salesforce/blip2-flan-t5-xl", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.bfloat16
+        ...     "Salesforce/blip2-opt-2.7b", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.bfloat16
         ... )  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
