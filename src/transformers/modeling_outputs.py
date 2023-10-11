@@ -1784,5 +1784,5 @@ class ImagePointDescriptionOutput(ModelOutput):
     scores: Optional[torch.FloatTensor] = None
     descriptors: Optional[torch.FloatTensor] = None
     mask: Optional[torch.BoolTensor] = None
-    last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor = None
