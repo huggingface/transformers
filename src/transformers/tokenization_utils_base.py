@@ -1117,43 +1117,43 @@ class SpecialTokensMixin:
 
     @bos_token.setter
     def bos_token(self, value):
-        if not isinstance(value, (str,AddedToken)) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the BOS token")
         self._bos_token = value
 
     @eos_token.setter
     def eos_token(self, value):
-        if not isinstance(value, (str,AddedToken)) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the EOS token")
         self._eos_token = value
 
     @unk_token.setter
     def unk_token(self, value):
-        if not isinstance(value, (str,AddedToken)) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the UNK token")
         self._unk_token = value
 
     @sep_token.setter
     def sep_token(self, value):
-        if not isinstance(value, (str,AddedToken)) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the SEP token")
         self._sep_token = value
 
     @pad_token.setter
     def pad_token(self, value):
-        if not isinstance(value, (str,AddedToken)) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the PAD token")
         self._pad_token = value
 
     @cls_token.setter
     def cls_token(self, value):
-        if not isinstance(value, (str,AddedToken)) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the CLS token")
         self._cls_token = value
 
     @mask_token.setter
     def mask_token(self, value):
-        if not isinstance(value, (str,AddedToken)) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the MASK token")
         self._mask_token = value
 
@@ -2275,7 +2275,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # finally we add all the special_tokens to make sure eveything is initialized
             tokenizer.add_tokens(tokens_to_add_from_slow, special_tokens=True)
             # This is slow... + this messes up the previous import because tokenizers seems to cast the tokens instead of checking before casting.
-            tokenizer.add_tokens([ token for token in tokenizer.all_special_tokens_extended if str(token) not in list(map(str, tokens_to_add_from_slow))] , special_tokens=True)
+            tokenizer.add_tokens(
+                [
+                    token
+                    for token in tokenizer.all_special_tokens_extended
+                    if str(token) not in list(map(str, tokens_to_add_from_slow))
+                ],
+                special_tokens=True,
+            )
 
         if len(added_tokens_decoder) > 0:
             logger.warning_advice(

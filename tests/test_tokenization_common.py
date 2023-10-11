@@ -4088,7 +4088,6 @@ class TokenizerTesterMixin:
                             self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
                             self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
 
-
             # make sure the special tokens are marked as special in the fast tokenizer.json and in the slow as well of course. Read the jsons
             # MAKE SURE THE ONLY WAY TO CHANGE AN ADDEDTOKEN IS THROUGH add_tokens!
             # Allow re-building the regex?
