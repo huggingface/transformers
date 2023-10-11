@@ -2953,7 +2953,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
                 return outs
 
-            def prepare_inputs_for_generation(self, *args, foo=False, **kwargs):
+            def prepare_inputs_for_generation(self, *args, foo=False, encoder_outputs=None, **kwargs):
+                kwargs["encoder_outputs"] = encoder_outputs
                 inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
                 inputs["foo"] = foo
@@ -2990,5 +2991,16 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             input_ids,
             foo=True,
             assistant_model=assistant,
+        )
+        self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
+
+        # Check that passing encoder_outputs directly also works as expected
+        encoder_outputs = assistant.get_encoder()(input_ids)
+
+        outputs_assisted = model.generate(
+            foo=True,
+            assistant_model=assistant,
+            encoder_outputs=encoder_outputs,
+            assistant_encoder_outputs=encoder_outputs,
         )
         self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
