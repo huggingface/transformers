@@ -73,7 +73,8 @@ class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
         self.assertTrue(hasattr(image_processing, "do_rescale"))
-
+        self.assertTrue(hasattr(image_processing, "rescale_factor"))
+        
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"height": 480, "width": 640})
