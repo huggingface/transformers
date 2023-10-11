@@ -28,7 +28,7 @@
   - local: llm_tutorial
     title: Generation with LLMs
   - local: llm_tutorial_optimization
-    title: Getting the most out of LLMs
+    title: Optimizing LLMs for Speed and Memory
   title: Tutorials
 - sections:
   - isExpanded: false
