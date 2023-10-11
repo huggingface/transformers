@@ -4071,7 +4071,7 @@ class TokenizerTesterMixin:
                     if self.rust_tokenizer_class is not None:
                         # fast from pretrained ignore the lstrip rstrip
                         tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
-                        self.assertEquals(tokenizer_fast._eos_token, str(new_eos))
+                        self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
                         self.assertIn(new_eos, tokenizer_fast.added_tokens_decoder.values())
                         self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
                         with tempfile.TemporaryDirectory() as tmp_dir_3:
@@ -4079,12 +4079,12 @@ class TokenizerTesterMixin:
                             tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
                                 pretrained_name, eos_token=new_eos, use_fast=True
                             )
-                            self.assertEquals(tokenizer._eos_token, new_eos)
+                            self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
                             self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
                             self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
 
                             tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_2)
-                            self.assertEquals(tokenizer._eos_token, new_eos)
+                            self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
                             self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
                             self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
 

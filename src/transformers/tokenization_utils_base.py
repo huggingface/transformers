@@ -2172,7 +2172,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         additional_special_tokens = init_kwargs.pop("additional_special_tokens", None) or []
         added_tokens_decoder = {}
-        # added_tokens_map = {}
         legacy_saved = "added_tokens_decoder" not in init_kwargs
         if not legacy_saved:
             for idx, token in init_kwargs["added_tokens_decoder"].items():
@@ -2180,14 +2179,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     token = AddedToken(**token)
                 if isinstance(token, AddedToken):
                     added_tokens_decoder[int(idx)] = token
-                    # added_tokens_map[str(token)] = token
                 else:
                     raise ValueError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
                     )
-            # for key in cls.SPECIAL_TOKENS_ATTRIBUTES:
-            #     if key in init_kwargs:
-            #         init_kwargs[key] = added_tokens_map[init_kwargs[key]]
         else:
             # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
             if special_tokens_map_file is not None:
@@ -2200,22 +2195,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             continue
                         if isinstance(value, dict):
                             value = AddedToken(**value)
-                            value.special = True
                             init_kwargs[key] = value
                         elif key == "additional_special_tokens" and isinstance(value, list):
                             for token in value:
-                                token = AddedToken(**token, special=True) if isinstance(token, dict) else token
+                                token = AddedToken(**token) if isinstance(token, dict) else token
                                 if token not in additional_special_tokens:
                                     additional_special_tokens.append(token)
                         else:
                             init_kwargs[key] = value
             all_special_strings = [str(token) for token in additional_special_tokens]
             # also add the other special tokens
-            all_special_strings += [
-                str(init_kwargs.get(key, ""))
-                for key in cls.SPECIAL_TOKENS_ATTRIBUTES
-                if init_kwargs.get(key, None) not in all_special_strings
-            ]
+            all_special_strings += [str(init_kwargs[key]) for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys()]
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
             if added_tokens_file is not None:
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
