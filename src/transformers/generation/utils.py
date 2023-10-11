@@ -1297,6 +1297,43 @@ class GenerationMixin:
                     UserWarning,
                 )
 
+    def _extend_attention_mask(self, model_kwargs: Dict[str, Any], new_mask_length: int) -> Dict[str, Any]:
+        if self.config.is_encoder_decoder:
+            key = "decoder_attention_mask"
+        else:
+            key = "attention_mask"
+
+        if key not in model_kwargs:
+            return model_kwargs
+
+        mask = model_kwargs[key]
+        mask_extension_length = new_mask_length - mask.shape[1]
+
+        if mask_extension_length < 0:
+            raise ValueError("Cannot extend attention mask to a length less than it already is")
+
+        model_kwargs[key] = torch.cat(
+            [mask, mask.new_ones((mask.shape[0], mask_extension_length))],
+            dim=-1,
+        )
+
+        return model_kwargs
+
+    def _extend_token_type_ids(self, model_kwargs: Dict[str, Any], new_length: int) -> Dict[str, Any]:
+        if "token_type_ids" not in model_kwargs or model_kwargs["token_type_ids"] is None:
+            return model_kwargs
+
+        token_type_ids = model_kwargs["token_type_ids"]
+        final_token_type = token_type_ids[:, -1].unsqueeze(-1)
+        extension_length = new_length - token_type_ids.shape[1]
+        token_type_copies = final_token_type.repeat(1, extension_length)
+        model_kwargs["token_type_ids"] = torch.cat(
+            [model_kwargs["token_type_ids"], token_type_copies],
+            dim=-1,
+        )
+
+        return model_kwargs
+
     @torch.no_grad()
     def generate(
         self,
@@ -4441,47 +4478,21 @@ class GenerationMixin:
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
             # we use this forward pass to also pick the subsequent logits in the original model.
 
-            # 2.1. Run a forward pass on the candidate sequence
-            if "past_key_values" in model_kwargs:
-                model_attn = torch.ones_like(candidate_input_ids)
-                model_input_ids = candidate_input_ids[:, -candidate_length - 1 :]
-                if self.config.is_encoder_decoder:
-                    outputs = self(
-                        decoder_input_ids=model_input_ids,
-                        decoder_attention_mask=model_attn,
-                        past_key_values=model_kwargs["past_key_values"],
-                        encoder_outputs=model_kwargs["encoder_outputs"],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
-                else:
-                    outputs = self(
-                        model_input_ids,
-                        attention_mask=model_attn,
-                        past_key_values=model_kwargs["past_key_values"],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
-            else:
-                if self.config.is_encoder_decoder:
-                    outputs = self(
-                        decoder_input_ids=candidate_input_ids,
-                        encoder_outputs=model_kwargs["encoder_outputs"],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
-                else:
-                    outputs = self(
-                        candidate_input_ids,
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
+            # 2.1. Prepare the model inputs
+            candidate_kwargs = copy.copy(model_kwargs)
+            candidate_kwargs = self._extend_attention_mask(candidate_kwargs, candidate_input_ids.shape[1])
+            candidate_kwargs = self._extend_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
 
-            # 2.2. Process the new logits
+            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
+
+            # 2.2. Run a forward pass on the candidate sequence
+            outputs = self(
+                **model_inputs,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+
+            # 2.3. Process the new logits
             new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
             if len(logits_processor) > 0:
                 for i in range(candidate_length):
