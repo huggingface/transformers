@@ -84,7 +84,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         tokenizer_file (`str`, *optional*):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
-        clean_up_tokenization_spaces (`str`, *optional*, defaults to `False`):
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
             extra spaces.
         unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):

@@ -72,11 +72,12 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             Path to the vocabulary file.
         unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
-            A special token representing an out-of-vocabulary token.
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
         bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<s>"`):
-            A special token representing the beginning of a sentence.
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
         eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"</s>"`):
-            A special token representing the end of a sentence.
+            The end of sequence token.
         pad_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
             attention mechanisms or loss computation.
