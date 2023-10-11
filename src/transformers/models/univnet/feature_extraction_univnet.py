@@ -259,7 +259,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         return noise
 
-    def batch_decode(self, waveforms, waveform_lengths = None) -> List[np.ndarray]:
+    def batch_decode(self, waveforms, waveform_lengths=None) -> List[np.ndarray]:
         r"""
         Removes padding from generated audio after running [`UnivNetModel.forward`]. This returns a ragged list of 1D
         audio waveform arrays and not a single tensor/array because in general the waveforms will have different
