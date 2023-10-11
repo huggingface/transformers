@@ -157,25 +157,32 @@ class PatchTSMixerNormLayer(nn.Module):
         else:
             self.norm = nn.LayerNorm(num_features)
 
-    def forward(self, x):
+    def forward(self, inputs: torch.Tensor):
+        """
+        Parameters:
+            inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`):
+                input to the normalization layer
+        Returns:
+            `torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`
+        """
         if "batch" in self.norm_mlp.lower():
             if self.mode in ["common_channel", "mix_channel"]:
                 # reshape the data
                 x_tmp = torch.reshape(
-                    x, (x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
-                )  # x_tmp: [batch_size*n_vars, num_patches, num_features]
+                    inputs, (inputs.shape[0] * inputs.shape[1], inputs.shape[2], inputs.shape[3])
+                )  # x_tmp: [batch_size*num_channels, num_patches, num_features]
             else:
-                x_tmp = x
-            x_tmp = self.norm(x_tmp)  # x_tmp: [batch_size*n_vars, num_patches, num_features]
+                x_tmp = inputs
+            x_tmp = self.norm(x_tmp)  # x_tmp: [batch_size*num_channels, num_patches, num_features]
             # put back data to the original shape
             if self.mode in ["common_channel", "mix_channel"]:
-                x = torch.reshape(x_tmp, (x.shape[0], x.shape[1], x.shape[2], x.shape[3]))
+                inputs = torch.reshape(x_tmp, (inputs.shape[0], inputs.shape[1], inputs.shape[2], inputs.shape[3]))
             else:
-                x = x_tmp
+                inputs = x_tmp
         else:
-            x = self.norm(x)
+            inputs = self.norm(inputs)
 
-        return x
+        return inputs
 
 
 class PatchTSMixerMLP(nn.Module):
