@@ -186,7 +186,7 @@ class ChannelFeatureMixer(nn.Module):
 
     Args:
         num_features (int, optional): Hidden feature size. Defaults to 16.
-        in_channels (int): Number of input channels. Defaults to 3.
+        in_channels (int): Number of input channels in the data. Defaults to 3.
         expansion_factor (int, optional): Expansion factor to use inside MLP. Defaults to 2.
         dropout (float, optional): Backbone Dropout rate. Defaults to 0.2.
         mode (str, optional): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
