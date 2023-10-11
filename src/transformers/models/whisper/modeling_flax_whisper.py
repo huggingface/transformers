@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Flax whisper model."""
 
+import math
 import random
 from functools import partial
 from typing import Optional, Tuple
@@ -56,6 +57,19 @@ _CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
 _CONFIG_FOR_DOC = "WhisperConfig"
 
 remat = nn_partitioning.remat
+
+
+def sinusoidal_embedding_init(key, shape, dtype=jnp.float_) -> jax.Array:
+    """Returns sinusoids for positional embedding"""
+    length, channels = shape
+    if channels % 2 != 0:
+        raise ValueError(
+            f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
+        )
+    log_timescale_increment = math.log(10000) / (channels // 2 - 1)
+    inv_timescales = jnp.exp(-log_timescale_increment * jnp.arange(channels // 2))
+    scaled_time = jnp.arange(length).reshape(-1, 1) * inv_timescales.reshape(1, -1)
+    return jnp.concatenate([jnp.sin(scaled_time), jnp.cos(scaled_time)], axis=1).astype(dtype)
 
 
 WHISPER_START_DOCSTRING = r"""
@@ -649,7 +663,13 @@ class FlaxWhisperEncoder(nn.Module):
             dtype=self.dtype,
             gradient_checkpointing=self.gradient_checkpointing,
         )
-        self.embed_positions = nn.Embed(self.config.max_source_positions, self.config.d_model, dtype=self.dtype)
+
+        self.embed_positions = nn.Embed(
+            self.config.max_source_positions,
+            self.config.d_model,
+            dtype=self.dtype,
+            embedding_init=sinusoidal_embedding_init,
+        )
 
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
@@ -673,6 +693,8 @@ class FlaxWhisperEncoder(nn.Module):
         hidden_states = jax.nn.gelu(self.conv2(hidden_states), approximate=False)
 
         embed_positions = self.embed_positions(jnp.arange(self.config.max_source_positions))
+        # freeze the sinusoidal embeddings by stopping the back-prop
+        embed_positions = jax.lax.stop_gradient(embed_positions)
         hidden_states = hidden_states + embed_positions
 
         hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
