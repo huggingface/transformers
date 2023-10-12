@@ -1029,7 +1029,7 @@ def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language,
     if previous_tokens:
         if return_timestamps:
             logger.warning(
-                "Whisper did not predict an ending timestamp, which can happen if audio is cut off in the middle of a word. " 
+                "Whisper did not predict an ending timestamp, which can happen if audio is cut off in the middle of a word. "
                 "Also make sure WhisperTimeStampLogitsProcessor was used during generation."
             )
         # Happens when we don't use timestamps
