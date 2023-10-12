@@ -109,7 +109,6 @@ _deps = [
     "diffusers",
     "dill<0.3.5",
     "evaluate>=0.2.0",
-    "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
@@ -275,7 +274,6 @@ extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
-extras["fairscale"] = deps_list("fairscale")
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
 extras["sigopt"] = deps_list("sigopt")

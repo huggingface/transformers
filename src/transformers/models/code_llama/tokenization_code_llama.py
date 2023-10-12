@@ -68,6 +68,11 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
@@ -78,23 +83,18 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
             </Tip>
 
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
         prefix_token (`str`, *optional*, defaults to `"▁<PRE>"`):
             Prefix token used for infilling.
-        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
-            Suffix token used for infilling.
         middle_token (`str`, *optional*, defaults to `"▁<MID>"`):
             Middle token used for infilling.
+        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
+            Suffix token used for infilling.
         eot_token (`str`, *optional*, defaults to `"▁<EOT>"`):
             End of text token used for infilling.
         fill_token (`str`, *optional*, defaults to `"<FILL_ME>"`):
             The token used to split the input between the prefix and suffix.
-        suffix_first (`bool`, *optional*, default to `False`):
+        suffix_first (`bool`, *optional*, defaults to `False`):
             Whether the input prompt and suffix should be formatted with the suffix first.
-        additional_special_tokens (`List[str]`, *optional*):
-            Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -110,6 +110,14 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
+        add_bos_token (`bool`, *optional*, defaults to `True`):
+            Whether to add a beginning of sequence token at the start of sequences.
+        add_eos_token (`bool`, *optional*, defaults to `False`):
+            Whether to add an end of sequence token at the end of sequences.
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            Whether or not to clean up the tokenization spaces.
+        additional_special_tokens (`List[str]`, *optional*):
+            Additional special tokens used by the tokenizer.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
     """
