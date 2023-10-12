@@ -2526,7 +2526,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
         )
         # the new get_added_vocab() also returns special tokens and tokens that have an index < vocab_size
-        added_vocab = {tok: index for tok, index in self.added_tokens_encoder.items() if index > self.vocab_size}
+        added_vocab = {tok: index for tok, index in self.added_tokens_encoder.items() if index >= self.vocab_size}
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
