@@ -1684,7 +1684,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 
                 For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is
                 greater than 1.
-            observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, input_size)`, *optional*):
+            observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, input_size)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
                 in `[0, 1]`:
                     - 1 for values that are **observed**,
