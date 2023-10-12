@@ -58,7 +58,7 @@ limitations under the License.
 </h4>
 
 <h3 align="center">
-    <p>State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow</p>
+    <p>Aprendizado de máquina de última geração para JAX, PyTorch e TensorFlow</p>
 </h3>
 
 <h3 align="center">
