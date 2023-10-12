@@ -698,7 +698,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         if bool_masked_pos is not None and (self.config.patch_size != self.config.encoder_stride):
             raise ValueError(
                 "When `bool_masked_pos` is provided, `patch_size` must be equal to `encoder_stride` to ensure that "
-                "the reconstructed image has the same dimensions as the input."
+                "the reconstructed image has the same dimensions as the input. "
                 f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
             )
 
