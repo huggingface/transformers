@@ -1485,13 +1485,6 @@ class ClearMLCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model, tokenizer, **kwargs)
 
-    def on_train_end(self, args, state, control, model=None, tokenizer=None, metrics=None, logs=None, **kwargs):
-        if self._clearml is None:
-            return
-        if self._clearml_task and state.is_world_process_zero and not self._initialized_externally:
-            # Close ClearML Task at the end end of training
-            self._clearml_task.close()
-
     def on_log(self, args, state, control, model=None, tokenizer=None, logs=None, **kwargs):
         if self._clearml is None:
             return
