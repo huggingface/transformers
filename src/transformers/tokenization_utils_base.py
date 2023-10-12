@@ -2175,9 +2175,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_tokens_decoder: Dict[int, AddedToken] = {}
         added_tokens_map: Dict[str, AddedToken] = {}
 
-        # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
-        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
-        
+
         legacy_saved = "added_tokens_decoder" not in init_kwargs
         if not legacy_saved:
             for idx, token in init_kwargs["added_tokens_decoder"].items():
@@ -2194,9 +2192,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # Make sure the default string init_kwargs are overwritten! Simulates passing kwargs :) Everything is added_token.  But not additional special tokens because class does no overwrite?
             # If we save the eos etc as added tokens we don't have this, but this is fool proof
             for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
+
                 if added_tokens_map != {}:
                     if key == "additional_special_tokens":
                         init_kwargs[key] = [added_tokens_map[token] if token in added_tokens_map.keys() else token for token in init_kwargs[key]]
+                    if isinstance(init_kwargs[key], dict):
+                        init_kwargs[key] = cls.convert_added_tokens(init_kwargs[key], save=False)
                     elif init_kwargs[key] in added_tokens_map.keys():
                         init_kwargs[key] = added_tokens_map[init_kwargs.get(key)]
 
@@ -2221,6 +2222,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         else:
                             init_kwargs[key] = value
             
+
+
             # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
             # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
             if "Fast" not in cls.__name__ and tokenizer_file is not None:
@@ -2245,6 +2248,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             init_kwargs["additional_special_tokens"] = additional_special_tokens
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
 
+        # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
+        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
 
         # Instantiate the tokenizer.
         try:
