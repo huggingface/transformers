@@ -273,7 +273,7 @@ pip install transformers
 ```
 Se você deseja experimentar com os exemplos ou precisa da versão mais recente do código e não pode esperar por um novo lançamento, você deve instalar a [biblioteca a partir do código-fonte](https://huggingface.co/docs/transformers/installation#installing-from-source).
 
-## Com conda
+### Com conda
 
 Desde a versão v4.0.0 do Transformers, agora temos um canal conda: `huggingface`.
 
