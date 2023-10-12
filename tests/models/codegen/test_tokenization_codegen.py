@@ -247,7 +247,7 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(decode_s.startswith(bos_token))
         self.assertTrue(all(d.startswith(bos_token) for d in decode_s2))
 
-    @slow
+    # @slow
     def test_truncation(self):
         tokenizer = CodeGenTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
 
