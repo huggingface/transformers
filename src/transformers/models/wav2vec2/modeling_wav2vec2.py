@@ -1874,8 +1874,8 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     """
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
-            adapter.<lang>.bin. Only relevant when using an instance of [`Wav2Vec2ForCTC`] with adapters. Uses 'eng'
-            by default.
+            adapter.<lang>.bin. Only relevant when using an instance of [`Wav2Vec2ForCTC`] with adapters. Uses 'eng' by
+            default.
     """,
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
