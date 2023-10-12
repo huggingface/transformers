@@ -2175,7 +2175,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_tokens_decoder: Dict[int, AddedToken] = {}
         added_tokens_map: Dict[str, AddedToken] = {}
 
-
         legacy_saved = "added_tokens_decoder" not in init_kwargs
         if not legacy_saved:
             for idx, token in init_kwargs["added_tokens_decoder"].items():
@@ -2192,10 +2191,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # Make sure the default string init_kwargs are overwritten! Simulates passing kwargs :) Everything is added_token.  But not additional special tokens because class does no overwrite?
             # If we save the eos etc as added tokens we don't have this, but this is fool proof
             for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
-
                 if added_tokens_map != {}:
                     if key == "additional_special_tokens":
-                        init_kwargs[key] = [added_tokens_map[token] if token in added_tokens_map.keys() else token for token in init_kwargs[key]]
+                        init_kwargs[key] = [
+                            added_tokens_map[token] if token in added_tokens_map.keys() else token
+                            for token in init_kwargs[key]
+                        ]
                     if isinstance(init_kwargs[key], dict):
                         init_kwargs[key] = cls.convert_added_tokens(init_kwargs[key], save=False)
                     elif init_kwargs[key] in added_tokens_map.keys():
@@ -2216,13 +2217,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             init_kwargs[key] = value
                         elif key == "additional_special_tokens" and isinstance(value, list):
                             for token in value:
-                                token = AddedToken(**token, special = True) if isinstance(token, dict) else token
+                                token = AddedToken(**token, special=True) if isinstance(token, dict) else token
                                 if token not in additional_special_tokens:
                                     additional_special_tokens.append(token)
                         else:
                             init_kwargs[key] = value
-            
-
 
             # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
             # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
@@ -2237,7 +2236,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     # serialized_tokens.pop("special")
                     added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
                     # TODO special is wrong here?
-
 
             # end legacy
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens if the `fast` was not properly saved!
@@ -2266,22 +2264,30 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if added_tokens_file is not None and legacy_saved:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                 added_tok_encoder = json.load(added_tokens_handle)
-            tokens_to_add += [ k for k,v in sorted(added_tok_encoder.items(), key = lambda x:x[1]) if token not in tokenizer.added_tokens_encoder]
-        
+            tokens_to_add += [
+                k
+                for k, v in sorted(added_tok_encoder.items(), key=lambda x: x[1])
+                if token not in tokenizer.added_tokens_encoder
+            ]
+
         # This is slow... if the added tokens decoder was not used (we are fast) use it
         if tokenizer_file is None and not legacy_saved and init_kwargs.get("slow_to_fast", False):
             tokens_to_add += list(added_tokens_decoder.values())
 
         if len(tokens_to_add) > 1:
             # super hack: if a token.special is set, tokenizer ignores it for now so FIXME:
-            if  "Fast" in cls.__name__:
+            if "Fast" in cls.__name__:
                 # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
                 # individual tokens would repeatedly rebuild a trie, which can be slow.
                 is_last_special = None
                 tokens = []
 
                 for token in tokens_to_add:
-                    is_special = token.special if isinstance(token, AddedToken) else token in tokenizer.additional_special_tokens
+                    is_special = (
+                        token.special
+                        if isinstance(token, AddedToken)
+                        else token in tokenizer.additional_special_tokens
+                    )
                     if is_last_special is None or is_last_special == is_special:
                         tokens.append(token)
                     else:
@@ -2294,7 +2300,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             else:
                 tokenizer.add_tokens(tokens_to_add)
-            
+
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
         # uses the information stored in `added_tokens_decoder`.
         if init_kwargs.get("slow_to_fast", False):
