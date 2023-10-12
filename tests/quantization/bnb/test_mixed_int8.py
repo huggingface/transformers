@@ -191,7 +191,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         A simple test to check if the model succesfully stores the original dtype
         """
         self.assertTrue(hasattr(self.model_8bit.config, "_quantization_original_dtype"))
-        self.assertFalse(hasattr(self.model_16bit.config, "_quantization_original_dtype"))
+        self.assertFalse(hasattr(self.model_fp16.config, "_quantization_original_dtype"))
         self.assertTrue(self.model_8bit.config._quantization_original_dtype == torch.float16)
 
     def test_memory_footprint(self):
