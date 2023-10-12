@@ -33,6 +33,7 @@ from torchvision.transforms import (
     CenterCrop,
     Compose,
     Normalize,
+    Lambda,
     RandomHorizontalFlip,
     RandomResizedCrop,
     Resize,
@@ -332,16 +333,16 @@ def main():
     else:
         size = (image_processor.size["height"], image_processor.size["width"])
     normalize = (
-        [Normalize(mean=image_processor.image_mean, std=image_processor.image_std)]
+        Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
         if hasattr(image_processor, "image_mean")
-        else []
+        else Lambda(lambda x: x)
     )
     train_transforms = Compose(
         [
             RandomResizedCrop(size),
             RandomHorizontalFlip(),
             ToTensor(),
-            *normalize,
+            normalize,
         ]
     )
     val_transforms = Compose(
@@ -349,7 +350,7 @@ def main():
             Resize(size),
             CenterCrop(size),
             ToTensor(),
-            *normalize,
+            normalize,
         ]
     )
 
