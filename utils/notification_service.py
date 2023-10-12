@@ -20,7 +20,7 @@ import operator
 import os
 import re
 import sys
-import time
+from time import sleep
 from typing import Dict, List, Optional, Union
 
 import requests
@@ -649,7 +649,7 @@ class Message:
                         thread_ts=self.thread_ts["ts"],
                     )
 
-                    time.sleep(1)
+                    sleep(1)
 
         for job, job_result in self.additional_results.items():
             if len(job_result["failures"]):
@@ -672,7 +672,7 @@ class Message:
                         thread_ts=self.thread_ts["ts"],
                     )
 
-                    time.sleep(1)
+                    sleep(1)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):

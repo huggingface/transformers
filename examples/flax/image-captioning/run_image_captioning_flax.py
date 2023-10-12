@@ -1174,7 +1174,7 @@ def main():
                 with open(output_file, "w", encoding="UTF-8") as fp:
                     json.dump(generations, fp, ensure_ascii=False, indent=4)
 
-    def evaluate(rng: jax.random.PRNGKey, dataset: Dataset, ckpt_dir: str = ""):
+    def evaluation(rng: jax.random.PRNGKey, dataset: Dataset, ckpt_dir: str = ""):
         evaluation_loop(rng, dataset, metric_key_prefix="eval", ckpt_dir=ckpt_dir)
 
     def predict(rng: jax.random.PRNGKey, dataset: Dataset):
@@ -1247,7 +1247,7 @@ def main():
                 ):
                     ckpt_dir = f"ckpt_epoch_{epoch + 1}_step_{cur_step}"
                     commit_msg = f"Saving weights and logs of epoch {epoch + 1} - step {cur_step}"
-                    evaluate(input_rng, eval_dataset, ckpt_dir)
+                    evaluation(input_rng, eval_dataset, ckpt_dir)
                     save_ckpt(ckpt_dir=ckpt_dir, commit_msg=commit_msg)
 
             # ======================== Epoch End ==============================
@@ -1270,7 +1270,7 @@ def main():
             if training_args.do_eval and (training_args.eval_steps is None or training_args.eval_steps <= 0):
                 ckpt_dir = f"ckpt_epoch_{epoch + 1}_step_{cur_step}"
                 commit_msg = f"Saving weights and logs of epoch {epoch + 1} - step {cur_step}"
-                evaluate(input_rng, eval_dataset, ckpt_dir)
+                evaluation(input_rng, eval_dataset, ckpt_dir)
                 save_ckpt(ckpt_dir=ckpt_dir, commit_msg=commit_msg)
 
     # ======================== Evaluating | Predicting ==============================

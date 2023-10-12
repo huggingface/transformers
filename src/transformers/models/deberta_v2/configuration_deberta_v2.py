@@ -150,7 +150,7 @@ class DebertaV2Config(PretrainedConfig):
         self.position_biased_input = position_biased_input
 
         # Backwards compatibility
-        if type(pos_att_type) == str:
+        if isinstance(pos_att_type, str):
             pos_att_type = [x.strip() for x in pos_att_type.lower().split("|")]
 
         self.pos_att_type = pos_att_type

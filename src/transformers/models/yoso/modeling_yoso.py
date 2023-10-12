@@ -88,7 +88,7 @@ def to_contiguous(input_tensors):
 
 
 def normalize(input_tensors):
-    if type(input_tensors) is list:
+    if isinstance(input_tensors, list):
         out = []
         for tensor in input_tensors:
             out.append(nn.functional.normalize(tensor, p=2, dim=-1))

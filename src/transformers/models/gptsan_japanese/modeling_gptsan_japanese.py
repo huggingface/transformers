@@ -1288,7 +1288,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         **kwargs,
     ):
-        if type(spout) is list:
+        if isinstance(spout, list):
             spout = torch.tensor(spout).float()
             if input_ids is not None:
                 spout = spout.to(input_ids.device)

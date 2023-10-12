@@ -17,8 +17,8 @@ import json
 import math
 import os
 import re
-import time
 from fnmatch import fnmatch
+from time import sleep
 from typing import Dict
 
 import requests
@@ -258,7 +258,7 @@ class Message:
                     thread_ts=self.thread_ts["ts"],
                 )
 
-                time.sleep(1)
+                sleep(1)
 
 
 def get_job_links():
