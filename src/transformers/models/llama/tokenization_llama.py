@@ -104,7 +104,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
             extra spaces.
-        use_default_system_prompt (`bool`, *optional*, defaults to `True`):
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
         spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
             Whether or not to add spaces between special tokens.
@@ -149,7 +149,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        use_default_system_prompt=True,
+        use_default_system_prompt=False,
         spaces_between_special_tokens=False,
         legacy=None,
         **kwargs,
