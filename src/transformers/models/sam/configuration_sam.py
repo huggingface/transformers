@@ -104,7 +104,7 @@ class SamMaskDecoderConfig(PretrainedConfig):
             The number of layers in the IoU head module.
         iou_head_hidden_dim (`int`, *optional*, defaults to 256):
             The dimensionality of the hidden states in the IoU head module.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
 
     """
@@ -163,7 +163,7 @@ class SamVisionConfig(PretrainedConfig):
             Size of the patches to be extracted from the input image.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string)
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -173,9 +173,9 @@ class SamVisionConfig(PretrainedConfig):
             Whether to add a bias to query, key, value projections.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of mlp hidden dim to embedding dim.
-        use_abs_pos (`bool`, *optional*, defaults to True):
+        use_abs_pos (`bool`, *optional*, defaults to `True`):
             Whether to use absolute position embedding.
-        use_rel_pos (`bool`, *optional*, defaults to True):
+        use_rel_pos (`bool`, *optional*, defaults to `True`):
             Whether to use relative position embedding.
         window_size (`int`, *optional*, defaults to 14):
             Window size for relative position.
@@ -183,7 +183,7 @@ class SamVisionConfig(PretrainedConfig):
             The indexes of the global attention layers.
         num_pos_feats (`int`, *optional*, defaults to 128):
             The dimensionality of the position embedding.
-        mlp_dim (`int`, *optional*, defaults to None):
+        mlp_dim (`int`, *optional*):
             The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
             hidden_size`.
     """

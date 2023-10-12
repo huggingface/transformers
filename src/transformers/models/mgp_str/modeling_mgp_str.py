@@ -380,7 +380,13 @@ class MgpstrModel(MgpstrPreTrainedModel):
         return self.embeddings.proj
 
     @add_start_docstrings_to_model_forward(MGP_STR_INPUTS_DOCSTRING)
-    def forward(self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None):
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -437,12 +443,12 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
     @replace_return_docstrings(output_type=MgpstrModelOutput, config_class=MgpstrConfig)
     def forward(
         self,
-        pixel_values,
-        output_attentions=None,
-        output_a3_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_a3_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], MgpstrModelOutput]:
         r"""
         output_a3_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors

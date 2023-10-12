@@ -34,6 +34,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
+    is_scaled_image,
     is_valid_image,
     to_numpy_array,
     valid_images,
@@ -72,7 +73,7 @@ class VivitImageProcessor(BaseImageProcessor):
             Size of the output image after resizing. The shortest edge of the image will be resized to
             `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
             `size` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
@@ -84,7 +85,7 @@ class VivitImageProcessor(BaseImageProcessor):
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to 1/127.5):
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/127.5`):
             Defines the scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter
             in the `preprocess` method.
         offset (`bool`, *optional*, defaults to `True`):
@@ -257,6 +258,12 @@ class VivitImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
+        if is_scaled_image(image) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -299,7 +306,8 @@ class VivitImageProcessor(BaseImageProcessor):
 
         Args:
             videos (`ImageInput`):
-                Video frames to preprocess.
+                Video frames to preprocess. Expects a single or batch of video frames with pixel values ranging from 0
+                to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):

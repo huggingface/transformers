@@ -53,18 +53,12 @@ Important note: you need to be able to host the whole model in RAM to execute th
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
 """
 
-INTERMEDIATE_SIZE_MAP = {
-    "7B": 11008,
-    "13B": 13824,
-    "30B": 17920,
-    "65B": 22016,
-    "70B": 28672,
-}
 NUM_SHARDS = {
     "7B": 1,
     "7Bf": 1,
     "13B": 2,
     "13Bf": 2,
+    "34B": 4,
     "30B": 4,
     "65B": 8,
     "70B": 8,
@@ -86,7 +80,11 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, model_size, safe_serialization=True):
+def write_model(model_path, input_base_path, model_size, tokenizer_path=None, safe_serialization=True):
+    # for backward compatibility, before you needed the repo to be called `my_repo/model_size`
+    if not os.path.isfile(os.path.join(input_base_path, "params.json")):
+        input_base_path = os.path.join(input_base_path, model_size)
+
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
@@ -98,8 +96,18 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     n_heads_per_shard = n_heads // num_shards
     dim = params["dim"]
     dims_per_head = dim // n_heads
-    base = 10000.0
+    base = params.get("rope_theta", 10000.0)
     inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
+    if base > 10000.0:
+        max_position_embeddings = 16384
+    else:
+        max_position_embeddings = 2048
+
+    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    if tokenizer_path is not None:
+        tokenizer = tokenizer_class(tokenizer_path)
+        tokenizer.save_pretrained(model_path)
+    vocab_size = tokenizer.vocab_size if tokenizer_path is not None else 32000
 
     if "n_kv_heads" in params:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
@@ -247,6 +255,9 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         num_hidden_layers=params["n_layers"],
         rms_norm_eps=params["norm_eps"],
         num_key_value_heads=num_key_value_heads,
+        vocab_size=vocab_size,
+        rope_theta=base,
+        max_position_embeddings=max_position_embeddings,
     )
     config.save_pretrained(tmp_model_path)
 
@@ -256,10 +267,10 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     gc.collect()
 
     print("Loading the checkpoint in a Llama model.")
-    model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.float16, low_cpu_mem_usage=True)
+    model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
-
+    model.config.torch_dtype = torch.float16
     print("Saving in the Transformers format.")
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
     shutil.rmtree(tmp_model_path)
@@ -281,7 +292,7 @@ def main():
     )
     parser.add_argument(
         "--model_size",
-        choices=["7B", "7Bf", "13B", "13Bf", "30B", "65B", "70B", "70Bf", "tokenizer_only"],
+        choices=["7B", "7Bf", "13B", "13Bf", "30B", "34B", "65B", "70B", "70Bf", "tokenizer_only"],
         help="'f' models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, checkout the original repo: https://huggingface.co/meta-llama",
     )
     parser.add_argument(
@@ -290,15 +301,17 @@ def main():
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
+    spm_path = os.path.join(args.input_dir, "tokenizer.model")
     if args.model_size != "tokenizer_only":
         write_model(
             model_path=args.output_dir,
-            input_base_path=os.path.join(args.input_dir, args.model_size),
+            input_base_path=args.input_dir,
             model_size=args.model_size,
             safe_serialization=args.safe_serialization,
+            tokenizer_path=spm_path,
         )
-    spm_path = os.path.join(args.input_dir, "tokenizer.model")
-    write_tokenizer(args.output_dir, spm_path)
+    else:
+        write_tokenizer(args.output_dir, spm_path)
 
 
 if __name__ == "__main__":

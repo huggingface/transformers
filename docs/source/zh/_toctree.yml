@@ -1,6 +1,12 @@
 - sections:
   - local: index
-    title: 🤗 Transformers简介
+    title: 🤗 Transformers 简介
   - local: quicktour
     title: 快速上手
+  - local: installation
+    title: 安装
   title: 开始使用
+- sections:
+  - local: accelerate
+    title: 加速分布式训练
+  title: 教程

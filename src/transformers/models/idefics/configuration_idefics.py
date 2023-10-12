@@ -57,7 +57,7 @@ class IdeficsVisionConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         image_num_channels (`int`, *optional*, defaults to `3`):
             Number of image channels.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
@@ -86,7 +86,7 @@ class IdeficsVisionConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=16,
         num_channels=3,
-        hidden_act="quick_gelu",
+        hidden_act="gelu",
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,

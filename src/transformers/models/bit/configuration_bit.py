@@ -52,7 +52,7 @@ class BitConfig(BackboneConfigMixin, PretrainedConfig):
             are supported.
         global_padding (`str`, *optional*):
             Padding strategy to use for the convolutional layers. Can be either `"valid"`, `"same"`, or `None`.
-        num_groups (`int`, *optional*, defaults to `32`):
+        num_groups (`int`, *optional*, defaults to 32):
             Number of groups used for the `BitGroupNormActivation` layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop path rate for the stochastic depth.

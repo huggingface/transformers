@@ -21,7 +21,6 @@ https://huggingface.co/models?filter=fill-mask
 """
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 
-import dataclasses
 import json
 import logging
 import math
@@ -63,7 +62,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
@@ -315,7 +314,7 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, **tokenizer_kwargs)
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
@@ -367,7 +366,7 @@ def main():
     # If we have ref files, need to avoid it removed by trainer
     has_ref = data_args.train_ref_file or data_args.validation_ref_file
     if has_ref:
-        training_args = dataclasses.replace(training_args, remove_unused_columns=False)
+        training_args.remove_unused_columns = False
 
     # Data collator
     # This one will take care of randomly masking the tokens.

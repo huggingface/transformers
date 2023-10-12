@@ -717,18 +717,23 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # check that penalty is not applied before start
         scores = self._get_uniform_logits(batch_size, vocab_size)
-        scores_before_start = length_decay_processor(input_ids, scores)
+        scores_before_start = torch.clone(scores)  # clone scores as precessor updates them inplace
+        scores_before_start = length_decay_processor(input_ids, scores_before_start)
         self.assertListEqual(scores_before_start[:, eos_token_id].tolist(), scores[:, eos_token_id].tolist())
 
         # check that penalty is applied after start
         input_ids = ids_tensor((batch_size, 20), vocab_size=vocab_size)
         scores = self._get_uniform_logits(batch_size, vocab_size)
-        scores_after_start = length_decay_processor(input_ids, scores)
-        self.assertTrue(
-            torch.gt(
-                scores_after_start[penalty_start + 1 :, eos_token_id], scores[penalty_start + 1 :, eos_token_id]
-            ).all()
-        )
+        scores_after_start = torch.clone(scores)  # clone scores as precessor updates them inplace
+        scores_after_start = length_decay_processor(input_ids, scores_after_start)
+        self.assertTrue(torch.gt(scores_after_start[:, eos_token_id], scores[:, eos_token_id]).all())
+
+        # check the penalty increases negative scores
+        input_ids = ids_tensor((batch_size, 20), vocab_size=vocab_size)
+        scores = torch.neg(self._get_uniform_logits(batch_size, vocab_size))
+        scores_after_start = torch.clone(scores)  # clone scores as precessor updates them inplace
+        scores_after_start = length_decay_processor(input_ids, scores_after_start)
+        self.assertTrue(torch.gt(scores_after_start[:, eos_token_id], scores[:, eos_token_id]).all())
 
     def test_normalization(self):
         input_ids = None
