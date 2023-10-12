@@ -447,6 +447,11 @@ class MistralIntegrationTest(unittest.TestCase):
         print(out[0, 0, :30])
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
+        del model
+        torch.cuda.empty_cache()
+        import gc
+        gc.collect()
+
     @slow
     def test_model_7b_generation(self):
         EXPECTED_TEXT_COMPLETION = (
@@ -455,9 +460,14 @@ class MistralIntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
-        model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1").to(torch_device)
+        model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+        del model
+        torch.cuda.empty_cache()
+        import gc
+        gc.collect()
