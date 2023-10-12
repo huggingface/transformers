@@ -28,6 +28,7 @@ from PIL import Image
 from torchvision.transforms import (
     CenterCrop,
     Compose,
+    Lambda,
     Normalize,
     RandomHorizontalFlip,
     RandomResizedCrop,
@@ -325,16 +326,13 @@ def main():
         size = image_processor.size["shortest_edge"]
     else:
         size = (image_processor.size["height"], image_processor.size["width"])
-    if hasattr(image_processor, "image_mean"):
-        normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
-    else:
-        normalize = transforms.Lambda(lambda x: x)
+    normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std) if hasattr(image_processor, "image_mean") else Lambda(lambda x: x)
     _train_transforms = Compose(
         [
             RandomResizedCrop(size),
             RandomHorizontalFlip(),
             ToTensor(),
-            *normalize,
+            normalize,
         ]
     )
     _val_transforms = Compose(
@@ -342,7 +340,7 @@ def main():
             Resize(size),
             CenterCrop(size),
             ToTensor(),
-            *normalize,
+            normalize,
         ]
     )
 
