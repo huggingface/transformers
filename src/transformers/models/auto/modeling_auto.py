@@ -74,6 +74,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTModel"),
         ("deta", "DetaModel"),
         ("detr", "DetrModel"),
+        ("rt_detr", "RT_DETRModel"),
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
         ("distilbert", "DistilBertModel"),
@@ -518,6 +519,7 @@ MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Do not add new models here, this class will be deprecated in the future.
         # Model for Image Segmentation mapping
         ("detr", "DetrForSegmentation"),
+        ("rt_detr", "RT_DETRForSegmentation"),
     ]
 )
 
@@ -547,6 +549,7 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Universal Segmentation mapping
         ("detr", "DetrForSegmentation"),
+        ("rt_detr", "RT_DETRForSegmentation"),
         ("mask2former", "Mask2FormerForUniversalSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("oneformer", "OneFormerForUniversalSegmentation"),
@@ -630,6 +633,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("deta", "DetaForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
+        ("rt_detr", "RT_DETRForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
