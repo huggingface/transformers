@@ -100,7 +100,7 @@ class RoFormerConfig(PretrainedConfig):
     >>> # Initializing a RoFormer junnyu/roformer_chinese_base style configuration
     >>> configuration = RoFormerConfig()
 
-    >>> # Initializing a model from the junnyu/roformer_chinese_base style configuration
+    >>> # Initializing a model (with random weights) from the junnyu/roformer_chinese_base style configuration
     >>> model = RoFormerModel(configuration)
 
     >>> # Accessing the model configuration

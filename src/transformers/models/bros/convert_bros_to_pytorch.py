@@ -123,7 +123,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="naver-clova-ocr/bros-base-uncased",
+        default="jinho8345/bros-base-uncased",
         required=False,
         type=str,
         help="Name of the original model you'd like to convert.",

@@ -1231,7 +1231,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         if annotations is not None:
             if format == AnnotionFormat.COCO_DETECTION and not valid_coco_detection_annotations(annotations):
                 raise ValueError(
-                    "Invalid COCO detection annotations. Annotations must a dict (single image) of list of dicts"
+                    "Invalid COCO detection annotations. Annotations must a dict (single image) of list of dicts "
                     "(batch of images) with the following keys: `image_id` and `annotations`, with the latter "
                     "being a list of annotations in the COCO format."
                 )
