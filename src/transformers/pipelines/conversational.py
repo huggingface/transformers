@@ -165,7 +165,7 @@ class Conversation:
         # This is a legacy property for backwards compatibility. It is recommended to just directly access
         # conversation.messages instead.
         return self._user_messages[:-1]
-    
+
     @property
     def generated_responses(self):
         # This is a legacy property for backwards compatibility. It is recommended to just directly access
@@ -177,6 +177,7 @@ class Conversation:
         # This is a legacy property for backwards compatibility. It is recommended to just directly access
         # conversation.messages instead.
         return self._user_messages[-1]
+
 
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
