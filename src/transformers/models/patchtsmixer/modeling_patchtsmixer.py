@@ -58,12 +58,13 @@ PATCHTSMIXER_START_DOCSTRING = r"""
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        mask_input (bool):
+        
+        mask_input (`bool`, *optional*):
             If True, Masking will be enabled. False otherwise.
 """
 
 PATCHTSMIXER_INPUTS_DOCSTRING = r"""
-    Args:
+    Parameters:
         context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
             Context values of the time series. For a pretraining task, this denotes the input time series to predict
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
@@ -117,8 +118,8 @@ class PatchTSMixerTranspose(nn.Module):
     """
     Parameters:
     Transpose the tensor to the dimension defined in **dims**
-        dims (`list`): list of dimensions to be transposed
-        contiguous (`bool`): if True, the transposed tensor is contiguous
+        dims (`list`): list of dimensions to be transposed contiguous (`bool`): if True, the transposed tensor is
+        contiguous
     """
 
     def __init__(self, *dims, contiguous=False):
@@ -136,7 +137,6 @@ class PatchTSMixerTranspose(nn.Module):
             return inputs.transpose(*self.dims).contiguous()
         else:
             return inputs.transpose(*self.dims)
-
 
 
 class PatchTSMixerNormLayer(nn.Module):
@@ -946,9 +946,13 @@ class LinearHead(nn.Module):
             [batch_size x n_vars x num_patch x num_features] common_channel/mix_channel
         Output: [batch_size x output_dim]
         """
-        x = x.transpose(-1, -2)  # batch_size x num_features x num_patch or batch_size x n_vars x num_features x num_patch
+        x = x.transpose(
+            -1, -2
+        )  # batch_size x num_features x num_patch or batch_size x n_vars x num_features x num_patch
         if self.head_agg == "use_last":
-            x = x[..., -1]  # # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
+            x = x[
+                ..., -1
+            ]  # # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
             # if self.mode  == "flatten":
             #     x = x[:,:,-1] # batch_size x num_features
             # else:
@@ -1218,7 +1222,9 @@ def forecast_masking(
     perm = torch.randperm(mask.shape[0])
     mask = mask[perm]
 
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, num_features)  # mask: [batch_size x num_channels x num_patch x patch_len]
+    mask = mask.unsqueeze(-1).repeat(
+        1, 1, 1, num_features
+    )  # mask: [batch_size x num_channels x num_patch x patch_len]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
@@ -1231,9 +1237,8 @@ class PatchTSMixerPatchify(nn.Module):
     """
     Parameters:
     A class to patchify the time series sequence into different patches
-        sequence_length (`int`, required): input sequence length.
-        patch_length (`int`, required): patch length.
-        stride (`int`, required): stride between patches.
+        sequence_length (`int`, required): input sequence length. patch_length (`int`, required): patch length. stride
+        (`int`, required): stride between patches.
     Returns:
         z: output tensor data [batch_size x num_input_channels x num_patches x patch_length]
     """
@@ -1481,7 +1486,7 @@ class PatchTSMixerNOPScaler(nn.Module):
 
 
 class InjectScalerStatistics4D(nn.Module):
-    def __init__(self, num_features: int, num_patches: int, expansion: int=2):
+    def __init__(self, num_features: int, num_patches: int, expansion: int = 2):
         super().__init__()
         self.inverse_transform = nn.Sequential(
             nn.Linear(num_features + 2, expansion * num_features),
@@ -2346,7 +2351,9 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         distribution = self.distribution_output.distribution(outputs.prediction_logits)
 
         # get samples
-        samples = [distribution.sample() for _ in range(num_parallel_samples)]  # samples: list of [batch_size x n_targets]
+        samples = [
+            distribution.sample() for _ in range(num_parallel_samples)
+        ]  # samples: list of [batch_size x n_targets]
         # stack tensors
         samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x n_targets]
         return SamplePatchTSMixerRegressionOutput(sequences=samples)
