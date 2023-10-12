@@ -224,7 +224,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
-        normalizer_file (`str`, *optional*, defaults to `None`):
+        normalizer_file (`str`, *optional*):
             Path to the normalizer_file file.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
@@ -237,6 +237,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             `"<|startoftranscript|>"` when generating.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
+        pad_token (`str`, *optional*):
+            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
