@@ -550,10 +550,7 @@ class PatchTSTEncoderBlock(nn.Module):
 
         self.layers = nn.ModuleList([PatchTSTEncoderLayer(config) for i in range(config.encoder_layers)])
 
-    def forward(self,
-                hidden_state: torch.Tensor,
-                output_hidden_states: Optional[bool] = None
-                ):
+    def forward(self, hidden_state: torch.Tensor, output_hidden_states: Optional[bool] = None):
         """
         Parameters:
             hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, sequence_length, d_model)`, *required*):
@@ -773,9 +770,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         self.post_init()
 
     def forward(
-        self,
-        past_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None
+        self, past_values: torch.Tensor, output_hidden_states: Optional[bool] = None
     ) -> BaseModelOutputWithNoAttention:
         """
         Parameters:
@@ -1153,10 +1148,7 @@ class PatchTSTStdScaler(nn.Module):
         self.minimum_scale = minimum_scale
 
     @torch.no_grad()
-    def forward(self,
-                data: torch.Tensor,
-                weights: torch.Tensor
-                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         denominator = weights.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
         loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
@@ -1193,10 +1185,9 @@ class PatchTSTMeanScaler(nn.Module):
         self.default_scale = default_scale
 
     @torch.no_grad()
-    def forward(self,
-                data: torch.Tensor,
-                observed_indicator: torch.Tensor
-                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # shape: (N, [C], T=1)
         ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
         num_observed = observed_indicator.sum(self.dim, keepdim=True)
@@ -1242,10 +1233,9 @@ class PatchTSTNOPScaler(nn.Module):
         self.dim = dim
         self.keepdim = keepdim
 
-    def forward(self,
-                data: torch.Tensor,
-                observed_indicator: torch.Tensor
-                ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         return data, loc, scale
