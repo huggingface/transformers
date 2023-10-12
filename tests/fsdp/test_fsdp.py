@@ -14,8 +14,8 @@
 
 import itertools
 import os
-from functools import partial
 import unittest
+from functools import partial
 
 from parameterized import parameterized
 
