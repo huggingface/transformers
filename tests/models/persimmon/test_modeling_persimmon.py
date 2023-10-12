@@ -412,6 +412,10 @@ class PersimmonIntegrationTest(unittest.TestCase):
         # fmt: on
         torch.testing.assert_close(out.cpu()[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
+        torch.cuda.empty_cache()
+        del model
+        gc.collect()
+
     @slow
     @require_torch_gpu
     def test_model_8b_chat_greedy_generation(self):
@@ -427,3 +431,7 @@ class PersimmonIntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=64)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+        torch.cuda.empty_cache()
+        del model
+        gc.collect()
