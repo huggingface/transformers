@@ -455,7 +455,7 @@ class MistralIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            """My favourite condiment is mayonnaise. I love it on sandwiches, in salads, on burgers"""
+            """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
