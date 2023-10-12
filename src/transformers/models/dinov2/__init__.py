@@ -35,6 +35,7 @@ else:
         "Dinov2ForImageClassification",
         "Dinov2Model",
         "Dinov2PreTrainedModel",
+        "Dinov2Backbone",
     ]
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_dinov2 import (
             DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Dinov2Backbone,
             Dinov2ForImageClassification,
             Dinov2Model,
             Dinov2PreTrainedModel,

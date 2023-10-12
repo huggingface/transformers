@@ -382,7 +382,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                Image to preprocess. Expects a single or batch of images.
             header_text (`Union[List[str], str]`, *optional*):
                 Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):

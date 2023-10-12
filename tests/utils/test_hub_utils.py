@@ -131,9 +131,11 @@ class GetFromCacheTests(unittest.TestCase):
     def test_get_file_gated_repo(self):
         """Test download file from a gated repo fails with correct message when not authenticated."""
         with self.assertRaisesRegex(EnvironmentError, "You are trying to access a gated repo."):
-            cached_file(GATED_REPO, README_FILE, use_auth_token=False)
+            # All files except README.md are protected on a gated repo.
+            cached_file(GATED_REPO, "gated_file.txt", use_auth_token=False)
 
     def test_has_file_gated_repo(self):
         """Test check file existence from a gated repo fails with correct message when not authenticated."""
         with self.assertRaisesRegex(EnvironmentError, "is a gated repository"):
-            has_file(GATED_REPO, README_FILE, use_auth_token=False)
+            # All files except README.md are protected on a gated repo.
+            has_file(GATED_REPO, "gated_file.txt", use_auth_token=False)

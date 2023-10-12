@@ -26,6 +26,7 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -47,7 +48,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor (`int`, *optional*, defaults to 32):
             When `do_resize` is `True`, images are resized so their height and width are rounded down to the closest
             multiple of `size_divisor`. Can be overridden by `size_divisor` in `preprocess`.
-        resample (`PIL.Image` resampling filter, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PIL.Image` resampling filter, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Can be
@@ -137,7 +138,8 @@ class GLPNImageProcessor(BaseImageProcessor):
 
         Args:
             images (`PIL.Image.Image` or `TensorType` or `List[np.ndarray]` or `List[TensorType]`):
-                The image or images to preprocess.
+                Images to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_normalize=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the input such that the (height, width) dimensions are a multiple of `size_divisor`.
             size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
@@ -181,6 +183,12 @@ class GLPNImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(img) for img in images]
+
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.

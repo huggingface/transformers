@@ -19,7 +19,12 @@ if is_flax_available():
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
-    from transformers.models.clip.modeling_flax_clip import FlaxCLIPModel, FlaxCLIPTextModel, FlaxCLIPVisionModel
+    from transformers.models.clip.modeling_flax_clip import (
+        FlaxCLIPModel,
+        FlaxCLIPTextModel,
+        FlaxCLIPTextModelWithProjection,
+        FlaxCLIPVisionModel,
+    )
 
 if is_torch_available():
     import torch
@@ -315,7 +320,7 @@ class FlaxCLIPTextModelTester:
 
 @require_flax
 class FlaxCLIPTextModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxCLIPTextModel,) if is_flax_available() else ()
+    all_model_classes = (FlaxCLIPTextModel, FlaxCLIPTextModelWithProjection) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxCLIPTextModelTester(self)

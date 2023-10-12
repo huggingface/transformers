@@ -36,6 +36,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_batched,
+    is_scaled_image,
     to_numpy_array,
     valid_images,
 )
@@ -355,20 +356,17 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
             the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
             height / width, size)`.
-        max_size (`int`, *optional*, defaults to 1333):
-            The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
-            set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+        size_divisor (`int`, *optional*, defaults to 32):
+            Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
+            Swin Transformer.
+        resample (`int`, *optional*, defaults to `Resampling.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
             `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
             `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
             to `True`.
-        size_divisor (`int`, *optional*, defaults to 32):
-            Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-            Swin Transformer.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the input to a certain `scale`.
-        rescale_factor (`float`, *optional*, defaults to 1/ 255):
+        rescale_factor (`float`, *optional*, defaults to `1/ 255`):
             Rescale the input by the given factor. Only has an effect if `do_rescale` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
@@ -606,6 +604,11 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
+        if is_scaled_image(image) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
         image = self._preprocess(

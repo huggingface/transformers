@@ -56,8 +56,6 @@ class TextToAudioPipeline(Pipeline):
         if self.framework == "tf":
             raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
 
-        self.forward_method = self.model.generate if self.model.can_generate() else self.model
-
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():
             self.vocoder = (
@@ -73,13 +71,13 @@ class TextToAudioPipeline(Pipeline):
         if self.sampling_rate is None:
             # get sampling_rate from config and generation config
 
-            config = self.model.config.to_dict()
+            config = self.model.config
             gen_config = self.model.__dict__.get("generation_config", None)
             if gen_config is not None:
                 config.update(gen_config.to_dict())
 
             for sampling_rate_name in ["sample_rate", "sampling_rate"]:
-                sampling_rate = config.get(sampling_rate_name, None)
+                sampling_rate = getattr(config, sampling_rate_name, None)
                 if sampling_rate is not None:
                     self.sampling_rate = sampling_rate
 
@@ -110,8 +108,10 @@ class TextToAudioPipeline(Pipeline):
         # we expect some kwargs to be additional tensors which need to be on the right device
         kwargs = self._ensure_tensor_on_device(kwargs, device=self.device)
 
-        # call the generate by defaults or the forward method if the model cannot generate
-        output = self.forward_method(**model_inputs, **kwargs)
+        if self.model.can_generate():
+            output = self.model.generate(**model_inputs, **kwargs)
+        else:
+            output = self.model(**model_inputs, **kwargs)[0]
 
         if self.vocoder is not None:
             # in that case, the output is a spectrogram that needs to be converted into a waveform

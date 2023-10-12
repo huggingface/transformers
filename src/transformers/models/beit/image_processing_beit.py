@@ -28,6 +28,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -56,7 +57,7 @@ class BeitImageProcessor(BaseImageProcessor):
         size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):
@@ -66,12 +67,12 @@ class BeitImageProcessor(BaseImageProcessor):
         crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
             Can be overridden by the `crop_size` parameter in the `preprocess` method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
@@ -236,6 +237,11 @@ class BeitImageProcessor(BaseImageProcessor):
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
+        if is_scaled_image(image) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
         image = self._preprocess(
@@ -328,7 +334,8 @@ class BeitImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):

@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.0.1'
+ARG PYTORCH='2.1.0'
 # (not always a valid torch version)
 ARG INTEL_TORCH_EXT='1.11.0'
 # Example: `cu102`, `cu113`, etc.
@@ -50,7 +50,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
 # Add auto-gptq for gtpq quantization testing
-RUN python3 -m pip install --no-cache-dir auto-gptq 
+RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
 
 # Add einops for additional model testing
 RUN python3 -m pip install --no-cache-dir einops

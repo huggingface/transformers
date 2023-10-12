@@ -57,10 +57,8 @@ When you load a model explicitly, you can inspect the generation configuration t
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
 >>> model.generation_config
 GenerationConfig {
-    "_from_model_config": true,
     "bos_token_id": 50256,
     "eos_token_id": 50256,
-    "transformers_version": "4.26.0.dev0"
 }
 ```
 
@@ -77,14 +75,15 @@ producing highly repetitive results.
 You can override any `generation_config` by passing the parameters and their values directly to the [`generate`] method:
 
 ```python
->>> my_model.generate(**inputs, num_beams=4, do_sample=True)
+>>> my_model.generate(**inputs, num_beams=4, do_sample=True)  # doctest: +SKIP
 ```
 
 Even if the default decoding strategy mostly works for your task, you can still tweak a few things. Some of the
 commonly adjusted parameters include:
 
 - `max_new_tokens`: the maximum number of tokens to generate. In other words, the size of the output sequence, not
-including the tokens in the prompt.
+including the tokens in the prompt. As an alternative to using the output's length as a stopping criteria, you can choose 
+to stop generation whenever the full generation exceeds some amount of time. To learn more, check [`StoppingCriteria`].
 - `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
 beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
 has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
@@ -92,7 +91,7 @@ sequences that start with a lower probability initial tokens and would've been i
 - `do_sample`: if set to `True`, this parameter enables decoding strategies such as multinomial sampling, beam-search
 multinomial sampling, Top-K sampling and Top-p sampling. All these strategies select the next token from the probability
 distribution over the entire vocabulary with various strategy-specific adjustments.
-- `num_return_sequences`: the number of sequence candidates to return for each input. This options is only available for
+- `num_return_sequences`: the number of sequence candidates to return for each input. This option is only available for
 the decoding strategies that support multiple sequence candidates, e.g. variations of beam search and sampling. Decoding
 strategies like greedy search and contrastive search return a single output sequence.
 
@@ -107,11 +106,11 @@ If you would like to share your fine-tuned model with a specific generation conf
 ```python
 >>> from transformers import AutoModelForCausalLM, GenerationConfig
 
->>> model = AutoModelForCausalLM.from_pretrained("my_account/my_model")
+>>> model = AutoModelForCausalLM.from_pretrained("my_account/my_model")  # doctest: +SKIP
 >>> generation_config = GenerationConfig(
 ...     max_new_tokens=50, do_sample=True, top_k=50, eos_token_id=model.config.eos_token_id
 ... )
->>> generation_config.save_pretrained("my_account/my_model", push_to_hub=True)
+>>> generation_config.save_pretrained("my_account/my_model", push_to_hub=True)  # doctest: +SKIP
 ```
 
 You can also store several generation configurations in a single directory, making use of the `config_file_name`
@@ -133,19 +132,20 @@ one for summarization with beam search). You must have the right Hub permissions
 ...     pad_token=model.config.pad_token_id,
 ... )
 
->>> translation_generation_config.save_pretrained("t5-small", "translation_generation_config.json", push_to_hub=True)
+>>> # Tip: add `push_to_hub=True` to push to the Hub
+>>> translation_generation_config.save_pretrained("/tmp", "translation_generation_config.json")
 
 >>> # You could then use the named generation config file to parameterize generation
->>> generation_config = GenerationConfig.from_pretrained("t5-small", "translation_generation_config.json")
+>>> generation_config = GenerationConfig.from_pretrained("/tmp", "translation_generation_config.json")
 >>> inputs = tokenizer("translate English to French: Configuration files are easy to use!", return_tensors="pt")
 >>> outputs = model.generate(**inputs, generation_config=generation_config)
 >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['Les fichiers de configuration sont faciles à utiliser !']
+['Les fichiers de configuration sont faciles à utiliser!']
 ```
 
 ## Streaming
 
-The `generate()` supports streaming, through its `streamer` input. The `streamer` input is compatible any instance
+The `generate()` supports streaming, through its `streamer` input. The `streamer` input is compatible with any instance
 from a class that has the following methods: `put()` and `end()`. Internally, `put()` is used to push new tokens and
 `end()` is used to flag the end of text generation.
 
@@ -217,10 +217,9 @@ The two main parameters that enable and control the behavior of contrastive sear
 
 >>> outputs = model.generate(**inputs, penalty_alpha=0.6, top_k=4, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Hugging Face Company is a family owned and operated business. \
-We pride ourselves on being the best in the business and our customer service is second to none.\
-\n\nIf you have any questions about our products or services, feel free to contact us at any time.\
- We look forward to hearing from you!']
+['Hugging Face Company is a family owned and operated business. We pride ourselves on being the best
+in the business and our customer service is second to none.\n\nIf you have any questions about our
+products or services, feel free to contact us at any time. We look forward to hearing from you!']
 ```
 
 ### Multinomial sampling
@@ -233,7 +232,8 @@ risk of repetition.
 To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 
 ```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+>>> set_seed(0)  # For reproducibility
 
 >>> checkpoint = "gpt2-large"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
@@ -244,11 +244,8 @@ To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 
 >>> outputs = model.generate(**inputs, do_sample=True, num_beams=1, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Today was an amazing day because we are now in the final stages of our trip to New York City which was very tough. \
-It is a difficult schedule and a challenging part of the year but still worth it. I have been taking things easier and \
-I feel stronger and more motivated to be out there on their tour. Hopefully, that experience is going to help them with \
-their upcoming events which are currently scheduled in Australia.\n\nWe love that they are here. They want to make a \
-name for themselves and become famous for what they']
+['Today was an amazing day because when you go to the World Cup and you don\'t, or when you don\'t get invited,
+that\'s a terrible feeling."']
 ```
 
 ### Beam-search decoding
@@ -272,7 +269,7 @@ To enable this decoding strategy, specify the `num_beams` (aka number of hypothe
 
 >>> outputs = model.generate(**inputs, num_beams=5, max_new_tokens=50)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['It is astonishing how one can have such a profound impact on the lives of so many people in such a short period of \
+['It is astonishing how one can have such a profound impact on the lives of so many people in such a short period of
 time."\n\nHe added: "I am very proud of the work I have been able to do in the last few years.\n\n"I have']
 ```
 
@@ -282,7 +279,8 @@ As the name implies, this decoding strategy combines beam search with multinomia
 the `num_beams` greater than 1, and set `do_sample=True` to use this decoding strategy.
 
 ```python
->>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+>>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, set_seed
+>>> set_seed(0)  # For reproducibility
 
 >>> prompt = "translate English to German: The house is wonderful."
 >>> checkpoint = "t5-small"
@@ -302,27 +300,29 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 The diverse beam search decoding strategy is an extension of the beam search strategy that allows for generating a more diverse
 set of beam sequences to choose from. To learn how it works, refer to [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
 This approach has three main parameters: `num_beams`, `num_beam_groups`, and `diversity_penalty`.
-The diversily penalty ensures the outputs are distinct across groups, and beam search is used within each group.
+The diversity penalty ensures the outputs are distinct across groups, and beam search is used within each group.
 
 
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 >>> checkpoint = "google/pegasus-xsum"
->>> prompt = "The Permaculture Design Principles are a set of universal design principles \
->>> that can be applied to any location, climate and culture, and they allow us to design \
->>> the most efficient and sustainable human habitation and food production systems. \
->>> Permaculture is a design system that encompasses a wide variety of disciplines, such \
->>> as ecology, landscape design, environmental science and energy conservation, and the \
->>> Permaculture design principles are drawn from these various disciplines. Each individual \
->>> design principle itself embodies a complete conceptual framework based on sound \
->>> scientific principles. When we bring all these separate  principles together, we can \
->>> create a design system that both looks at whole systems, the parts that these systems \
->>> consist of, and how those parts interact with each other to create a complex, dynamic, \
->>> living system. Each design principle serves as a tool that allows us to integrate all \
->>> the separate parts of a design, referred to as elements, into a functional, synergistic, \
->>> whole system, where the elements harmoniously interact and work together in the most \
->>> efficient way possible."
+>>> prompt = (
+...     "The Permaculture Design Principles are a set of universal design principles "
+...     "that can be applied to any location, climate and culture, and they allow us to design "
+...     "the most efficient and sustainable human habitation and food production systems. "
+...     "Permaculture is a design system that encompasses a wide variety of disciplines, such "
+...     "as ecology, landscape design, environmental science and energy conservation, and the "
+...     "Permaculture design principles are drawn from these various disciplines. Each individual "
+...     "design principle itself embodies a complete conceptual framework based on sound "
+...     "scientific principles. When we bring all these separate  principles together, we can "
+...     "create a design system that both looks at whole systems, the parts that these systems "
+...     "consist of, and how those parts interact with each other to create a complex, dynamic, "
+...     "living system. Each design principle serves as a tool that allows us to integrate all "
+...     "the separate parts of a design, referred to as elements, into a functional, synergistic, "
+...     "whole system, where the elements harmoniously interact and work together in the most "
+...     "efficient way possible."
+... )
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -331,7 +331,8 @@ The diversily penalty ensures the outputs are distinct across groups, and beam s
 
 >>> outputs = model.generate(**inputs, num_beams=5, num_beam_groups=5, max_new_tokens=30, diversity_penalty=1.0)
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'The aim of this project is to create a new type of living system, one that is more sustainable and efficient than the current one.'
+'The Design Principles are a set of universal design principles that can be applied to any location, climate and
+culture, and they allow us to design the'
 ```
 
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
@@ -365,11 +366,12 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
-When using assisted decoding with sampling methods, you can use the `temperarure` argument to control the randomness
+When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness
 just like in multinomial sampling. However, in assisted decoding, reducing the temperature will help improving latency.
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+>>> set_seed(42)  # For reproducibility
 
 >>> prompt = "Alice and Bob"
 >>> checkpoint = "EleutherAI/pythia-1.4b-deduped"
@@ -382,5 +384,5 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-["Alice and Bob are sitting on the sofa. Alice says, 'I'm going to my room"]
+['Alice and Bob are going to the same party. It is a small party, in a small']
 ```

@@ -326,28 +326,6 @@ class LukeTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        super().__init__(
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            task=task,
-            max_entity_length=32,
-            max_mention_length=30,
-            entity_token_1="<ent>",
-            entity_token_2="<ent2>",
-            entity_unk_token=entity_unk_token,
-            entity_pad_token=entity_pad_token,
-            entity_mask_token=entity_mask_token,
-            entity_mask2_token=entity_mask2_token,
-            **kwargs,
-        )
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -407,6 +385,28 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         self.max_mention_length = max_mention_length
 
+        super().__init__(
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            task=task,
+            max_entity_length=32,
+            max_mention_length=30,
+            entity_token_1="<ent>",
+            entity_token_2="<ent2>",
+            entity_unk_token=entity_unk_token,
+            entity_pad_token=entity_pad_token,
+            entity_mask_token=entity_mask_token,
+            entity_mask2_token=entity_mask2_token,
+            **kwargs,
+        )
+
     @property
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.vocab_size with Roberta->Luke, RoBERTa->LUKE
     def vocab_size(self):
@@ -414,7 +414,9 @@ class LukeTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_vocab with Roberta->Luke, RoBERTa->LUKE
     def get_vocab(self):
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = dict(self.encoder).copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.bpe with Roberta->Luke, RoBERTa->LUKE
     def bpe(self, token):

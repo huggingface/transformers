@@ -271,6 +271,41 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 input_names=["input_ids", "attention_mask"],
             )
 
+    def test_ensure_weights_are_shared(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+
+        config.tie_word_embeddings = True
+        model = FSMTForConditionalGeneration(config)
+
+        # FSMT shares three weights.
+        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
+        self.assertEqual(
+            len(
+                {
+                    model.get_output_embeddings().weight.data_ptr(),
+                    model.get_input_embeddings().weight.data_ptr(),
+                    model.base_model.decoder.output_projection.weight.data_ptr(),
+                }
+            ),
+            1,
+        )
+
+        config.tie_word_embeddings = False
+        model = FSMTForConditionalGeneration(config)
+
+        # FSMT shares three weights.
+        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
+        self.assertEqual(
+            len(
+                {
+                    model.get_output_embeddings().weight.data_ptr(),
+                    model.get_input_embeddings().weight.data_ptr(),
+                    model.base_model.decoder.output_projection.weight.data_ptr(),
+                }
+            ),
+            2,
+        )
+
     @unittest.skip("can't be implemented for FSMT due to dual vocab.")
     def test_resize_tokens_embeddings(self):
         pass

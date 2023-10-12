@@ -32,6 +32,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -63,7 +64,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         crop_pct (`float` *optional*, defaults to 224 / 256):
             Percentage of the image to crop. Only has an effect if `do_resize` is `True` and size < 384. Can be
             overriden by `crop_pct` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
@@ -203,7 +204,8 @@ class ConvNextImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -279,6 +281,12 @@ class ConvNextImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
