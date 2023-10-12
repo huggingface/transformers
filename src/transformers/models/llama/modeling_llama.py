@@ -264,9 +264,10 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
+        self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
@@ -327,6 +328,8 @@ class LlamaAttention(nn.Module):
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
+        if not isinstance(past_key_value, Cache):
+            past_key_value = DynamicCache.from_past_key_value(past_key_value)
 
         if self.config.pretraining_tp > 1:
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
@@ -354,24 +357,11 @@ class LlamaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if isinstance(past_key_value, Cache):
-            past_key_value.update_pre_rotation(key_states, value_states)
-
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value:
-            kv_seq_len += past_key_value[0].shape[-2]
+        kv_seq_len = key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        if past_key_value:
-            # reuse k, v, self_attention
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-
-        if isinstance(past_key_value, Cache):
-            past_key_value.update(key_states, value_states)
-        elif past_key_value is not None:
-            past_key_value = (key_states, value_states)
+        key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -597,11 +587,11 @@ class LlamaFlashAttention2(LlamaAttention):
 
 
 class LlamaDecoderLayer(nn.Module):
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = (
-            LlamaAttention(config=config)
+            LlamaAttention(config=config, layer_idx=layer_idx)
             if not getattr(config, "_flash_attn_2_enabled", False)
             else LlamaFlashAttention2(config=config)
         )
@@ -793,7 +783,9 @@ class LlamaModel(LlamaPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -842,6 +834,7 @@ class LlamaModel(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_legacy_cache: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -864,17 +857,10 @@ class LlamaModel(LlamaPreTrainedModel):
         seq_length_with_past = seq_length
         past_key_values_length = 0
 
-        # If not None and not Cache, set to Dynamic Cache
         if use_cache:
-            if past_key_values is None:
-                past_key_values = DynamicCache()
-
-            elif not isinstance(past_key_values, Cache):
+            if not isinstance(past_key_values, Cache):
                 past_key_values = DynamicCache.from_past_key_values(past_key_values)
-                # TODO: Remove this code duplication
-                past_key_values_length = past_key_values[0].shape[2]
-            else:
-                past_key_values_length = past_key_values[0].shape[2]
+            past_key_values_length = past_key_values.get_seq_length()
             seq_length_with_past += past_key_values_length
 
         if position_ids is None:
@@ -914,13 +900,11 @@ class LlamaModel(LlamaPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = None
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-
-            past_key_values.set_layer_idx(idx)
 
             if self.gradient_checkpointing and self.training:
 
@@ -948,11 +932,7 @@ class LlamaModel(LlamaPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                present_key_values = layer_outputs[2 if output_attentions else 1]
-                if isinstance(present_key_values, Cache):
-                    next_decoder_cache = present_key_values
-                else:
-                    next_decoder_cache += (present_key_values,)
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -963,7 +943,9 @@ class LlamaModel(LlamaPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        next_cache = None
+        if use_cache:
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -1018,6 +1000,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_legacy_cache: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1062,6 +1045,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_legacy_cache=use_legacy_cache,
         )
 
         hidden_states = outputs[0]
@@ -1099,7 +1083,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, use_legacy_cache=None, **kwargs
     ):
         if past_key_values:
             input_ids = input_ids[:, -1:]
@@ -1124,6 +1108,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
+                "use_legacy_cache": use_legacy_cache,
             }
         )
         return model_inputs
@@ -1182,6 +1167,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        use_legacy_cache: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1201,6 +1187,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            use_legacy_cache=use_legacy_cache,
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
