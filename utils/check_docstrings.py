@@ -120,7 +120,6 @@ OBJECTS_TO_IGNORE = [
     "CamembertConfig",
     "CamembertModel",
     "CamembertTokenizerFast",
-    "CanineConfig",
     "CanineModel",
     "CanineTokenizer",
     "ChineseCLIPImageProcessor",
