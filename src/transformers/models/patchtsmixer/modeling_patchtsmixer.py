@@ -58,7 +58,6 @@ PATCHTSMIXER_START_DOCSTRING = r"""
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        
         mask_input (`bool`, *optional*):
             If True, Masking will be enabled. False otherwise.
 """
@@ -70,7 +69,8 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
             for classification or regression tasks, it denotes the appropriate context values of the time series.
 
-            For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is > 1.
+            For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is greater
+            than 1.
 
         target_values (`torch.FloatTensor` of shape `(batch_size, target_len, input_size)` for forecasting,
             `(batch_size, n_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target values
@@ -1674,8 +1674,8 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
                 Similarly, for classification or regression tasks, it denotes the appropriate context values of the
                 time series.
 
-                For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is >
-                1.
+                For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is
+                greater than 1.
 
             observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, input_size)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
@@ -1788,8 +1788,8 @@ class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
                 Similarly, for classification or regression tasks, it denotes the appropriate context values of the
                 time series.
 
-                For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is >
-                1.
+                For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is
+                greater than 1.
 
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
