@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 Knowledge distillation is a technique used to transfer knowledge from a larger, more complex model (teacher) to a smaller, simpler model (student). In the context of image classification, the goal is to train a student model that mimics the behavior of the teacher model. It was first introduced in [Distilling the Knowledge in a Neural Network by Hinton et al](https://arxiv.org/abs/1503.02531). In this guide, we will do task-specific knowledge distillation. We will use the [beans dataset](https://huggingface.co/datasets/beans) for this.
 
-This guide demonstrates how you can distill a [ResNet](https://huggingface.co/microsoft/resnet-50) (teacher model) to a [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (student model) using the `Trainer` API of 🤗 Transformers. 
+This guide demonstrates how you can distill a [fine-tuned ViT model]([https://huggingface.co/microsoft/resnet-50](https://huggingface.co/merve/vit-mobilenet-beans-224)) (teacher model) to a [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (student model) using the `Trainer` API of 🤗 Transformers. 
 
 Let's install the libraries needed for distillation and evaluating the process. 
 
@@ -27,18 +27,9 @@ Let's install the libraries needed for distillation and evaluating the process.
 pip install transformers datasets accelerate tensorboard evaluate --upgrade
 ```
 
-In this example, we are using the `microsoft/resnet-50` model, trained on the [ImageNet-1k dataset](https://huggingface.co/datasets/imagenet-1k) with a resolution of 224x224.
+In this example, we are using the `merve/beans-vit-224` model. It's an image classification model, based on `google/vit-base-patch16-224-in21k` fine-tuned on beans dataset.
 
-```python
-from PIL import Image
-import requests
-import numpy as np
-
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-sample = Image.open(requests.get(url, stream=True).raw)
-```
-
-We will now load and pre-process the dataset. 
+We will now load the dataset. 
 
 ```python
 from datasets import load_dataset
@@ -46,11 +37,11 @@ from datasets import load_dataset
 dataset = load_dataset("beans")
 ```
 
-We can use an image processor from either of the models, as in this case they return the same output. We will use the `map()` method of `dataset` to apply the preprocessing to every split of the dataset.
+We can use an image processor from either of the models, as in this case they return the same output with same resolution. We will use the `map()` method of `dataset` to apply the preprocessing to every split of the dataset. 
 
 ```python
 from transformers import AutoImageProcessor
-teacher_processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+teacher_processor = AutoImageProcessor.from_pretrained("merve/beans-vit-224")
 
 def process(examples):
     processed_inputs = teacher_processor(examples["image"])
@@ -59,7 +50,7 @@ def process(examples):
 processed_datasets = dataset.map(process, batched=True)
 ```
 
-Essentially, we want the student model (a randomly initialized MobileNet) to mimic the teacher model (pre-trained ResNet). To achieve this, we first get the logits output by the teacher and the student. Then, we divide each of them by the parameter `temperature`, which controls the importance of each soft target. We will use the KL loss to compute the divergence between the student and teacher. A parameter called `lambda` weighs the importance of the distillation loss. In this example, we will use `temperature=5` and `lambda=0.5`.
+Essentially, we want the student model (a randomly initialized MobileNet) to mimic the teacher model (fine-tuned vision transformer). To achieve this, we first get the logits output from the teacher and the student. Then, we divide each of them by the parameter `temperature` which controls the importance of each soft target. We will use the KL loss to compute the divergence between the student and teacher. A parameter called `lambda` weighs the importance of the distillation loss. In this example, we will use `temperature=5` and `lambda=0.5`.
 
 
 ```python
@@ -110,10 +101,10 @@ from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-Let's initialize the data collator and `Trainer`. We will use `DefaultDataCollator` for this. 
+Let's set the `TrainingArguments`, the teacher model and the student model. 
 
 ```python
-from transformers import AutoModelForImageClassification, DefaultDataCollator, MobileNetV2Config, MobileNetV2ForImageClassification
+from transformers import AutoModelForImageClassification, MobileNetV2Config, MobileNetV2ForImageClassification
 
 training_args = TrainingArguments(
     output_dir="my-awesome-model",
@@ -135,7 +126,7 @@ num_labels = len(processed_datasets["train"].features["labels"].names)
 
 # initialize models
 teacher_model = AutoModelForImageClassification.from_pretrained(
-    "microsoft/resnet-50",
+    "merve/beans-vit-224",
     num_labels=num_labels,
     ignore_mismatched_sizes=True
 )
@@ -160,9 +151,11 @@ def compute_metrics(eval_pred):
     return {"accuracy": acc["accuracy"]}
 ```
 
-Let's initialize the `Trainer` with the training arguments we defined. 
+Let's initialize the `Trainer` with the training arguments we defined. We will also initialize our data collator.
 
 ```python
+from transformers import DefaultDataCollator
+
 data_collator = DefaultDataCollator()
 trainer = ImageDistilTrainer(
     student_model=student_model,
@@ -190,4 +183,4 @@ We can evaluate the model on the test set.
 trainer.evaluate(processed_datasets["test"])
 ```
 
-On test set, our model reaches 65 percent accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on the beans dataset from scratch with the same hyperparameters and observed 63 percent accuracy on the test set. We invite the readers to try different pre-trained teacher models, student architectures, distillation parameters and report their findings. The training logs can be found in [this repository](https://huggingface.co/merve/resnet-mobilenet-beans).
+On test set, our model reaches 72 percent accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on the beans dataset from scratch with the same hyperparameters and observed 63 percent accuracy on the test set. We invite the readers to try different pre-trained teacher models, student architectures, distillation parameters and report their findings. The training logs can be found in [this repository](https://huggingface.co/merve/resnet-mobilenet-beans).
