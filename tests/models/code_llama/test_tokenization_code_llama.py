@@ -559,6 +559,36 @@ class LlamaIntegrationTest(unittest.TestCase):
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
+    def test_fill_token(self):
+        tokenizer = CodeLlamaTokenizerFast.from_pretrained(
+            "codellama/CodeLlama-7b-hf", fill_token=None, prefix_token=None, suffix_token=None, middle_token=None
+        )
+        tokenizer.encode_plus("Hey how are you").input_ids
+        tokenizer.fill_token = "<FILL_ME>"
+        with self.assertRaises(ValueError):
+            tokenizer.encode("Hey how <FILL_ME> are you")
+            tokenizer.encode_plus("Hey how <FILL_ME> are you", "mne too")
+            tokenizer.tokenize("Hey how are you", "mne too")
+
+        tokenizer = CodeLlamaTokenizerFast.from_pretrained(
+            "codellama/CodeLlama-7b-hf", revision="3773f63b4511b9e47a9a7ffc765eed7eb0169486"
+        )
+        tokenizer.encode("Hey how <FILL_ME> are you")
+        tokenizer.encode_plus("Hey how <FILL_ME> are you", "mne too")
+        tokenizer.tokenize("Hey how are you", "mne too")
+
+    def test_spm_edge_cases(self):
+        # the word inform should be split as ['in', 'form']
+        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
+        tokens = tokenizer.tokenize("[INST] How are you doing?<s>[/INST]")
+        self.assertEqual(
+            tokens, ["▁[", "INST", "]", "▁How", "▁are", "▁you", "▁doing", "?", "<s>", "[", "/", "INST", "]"]
+        )
+        inputs_ids = tokenizer.encode("[INST] How are you doing?<s>[/INST]")
+        self.assertEqual(
+            inputs_ids, [1, 518, 25580, 29962, 1128, 526, 366, 2599, 29973, 1, 29961, 29914, 25580, 29962]
+        )
+
     def test_infilling_tokenization(self):
         PROMPTS = [
             '''def remove_non_ascii(s: str) -> str:
@@ -613,3 +643,15 @@ end
         input_ids = tokenizer.encode(PROMPTS[0])
         self.assertEqual(input_ids, tokenizer.encode(prefix, suffix=suffix))
         self.assertEqual(tokenizer.encode(prefix, suffix=suffix), tokenizer_fast.encode(prefix, suffix=suffix))
+
+        # Adding suffix_first check for infilling tasks
+        suffix_first_formatted_prompt = tokenizer.tokenize(PROMPTS[0], suffix_first=True)
+        self.assertEqual(suffix_first_formatted_prompt, tokenizer_fast.tokenize(PROMPTS[0], suffix_first=True))
+        prefix, suffix = PROMPTS[0].split("<FILL_ME>")
+        self.assertEqual(suffix_first_formatted_prompt, tokenizer.tokenize(prefix, suffix, suffix_first=True))
+        self.assertEqual(suffix_first_formatted_prompt, tokenizer_fast.tokenize(prefix, suffix, suffix_first=True))
+
+        prefix, suffix = PROMPTS[0].split("<FILL_ME>")
+        suffix_first_input_ids = tokenizer.encode(PROMPTS[0], suffix_first=True)
+        self.assertEqual(suffix_first_input_ids, tokenizer.encode(prefix, suffix=suffix, suffix_first=True))
+        self.assertEqual(suffix_first_input_ids, tokenizer_fast.encode(prefix, suffix=suffix, suffix_first=True))

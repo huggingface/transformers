@@ -55,7 +55,7 @@ class MobileNetV1Config(PretrainedConfig):
             All layers will have at least this many channels.
         hidden_act (`str` or `function`, *optional*, defaults to `"relu6"`):
             The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
-        tf_padding (`bool`, `optional`, defaults to `True`):
+        tf_padding (`bool`, *optional*, defaults to `True`):
             Whether to use TensorFlow padding rules on the convolution layers.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.999):
             The dropout ratio for attached classifiers.

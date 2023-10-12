@@ -22,6 +22,10 @@ Note: A multi GPU setup can use the majority of the strategies described in the 
 
 </Tip>
 
+## Flash Attention 2
+
+Flash Attention 2 integration also works in a multi-GPU setup, check out the appropriate section in the [single GPU section](./perf_infer_gpu_one#Flash-Attention-2)
+
 ## BetterTransformer
 
 [BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview) converts 🤗 Transformers models to use the PyTorch-native fastpath execution, which calls optimized kernels like Flash Attention under the hood.  

@@ -178,7 +178,7 @@ class GPTQTest(unittest.TestCase):
 
     def test_generate_quality(self):
         """
-        Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
+        Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
         """
         if self.device_map is None:
             self.check_inference_correctness(self.quantized_model.to(0))
@@ -290,7 +290,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
 
     def test_generate_quality(self):
         """
-        Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
+        Simple test to check the quality of the model by comparing the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model)
 
