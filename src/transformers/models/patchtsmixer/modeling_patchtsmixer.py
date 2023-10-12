@@ -1665,7 +1665,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PatchTSMixerModelOutput]:
+    ) -> PatchTSMixerModelOutput:
         r"""
         Args:
             context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
