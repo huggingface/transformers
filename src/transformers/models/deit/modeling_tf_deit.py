@@ -787,7 +787,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         # Reconstruct pixel values
         reconstructed_pixel_values = self.decoder(sequence_output, training=training)
         # TF 2.0 image layers can't use NCHW format when running on CPU, so intermediate layers use NHWC,
-        # including the The decoder. We transpose to compute the loss against the pixel values
+        # including the decoder. We transpose to compute the loss against the pixel values
         # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
         reconstructed_pixel_values = tf.transpose(reconstructed_pixel_values, (0, 3, 1, 2))
 
