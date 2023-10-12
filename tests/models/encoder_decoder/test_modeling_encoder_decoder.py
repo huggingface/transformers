@@ -766,7 +766,7 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
         self.assertEqual(summary, [EXPECTED_SUMMARY_SIGMA, EXPECTED_SUMMARY_AMERICA])
 
-    def test_bert2bert_training_loss(self):
+    def test_bert2bert_default_decoder_attention_mask(self):
         torch.manual_seed(0)
         test_dict = self.prepare_config_and_inputs()
         encoder_config, decoder_config = test_dict["config"], test_dict["decoder_config"]
@@ -801,12 +801,24 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         logger.warning_once.cache_clear()
 
         with CaptureLogger(logger) as cl:
+            torch.manual_seed(0)
             output = model(input_ids, attention_mask, labels=labels)
+            loss_for_default_decoder_attention_mask = output[0]
+
+        # Assert that the warning does not show up since a default decoder_attention_mask should have been created.
         self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
-        # Check the approximate value of the loss
-        loss = output[0]
-        self.assertAlmostEqual(loss.item(), 4.586653232574463)
+        # Create a new attention mask that ignores padding, and test that the loss differs for this new attention mask
+        # and the default attention mask.
+        attention_mask_ignoring_padding = torch.ones(labels.shape, dtype=torch.long)
+        torch.manual_seed(0)
+        output = model(
+            input_ids, attention_mask, labels=labels, decoder_attention_mask=attention_mask_ignoring_padding
+        )
+        loss_for_attention_mask_ignoring_padding = output[0]
+        self.assertNotAlmostEqual(
+            loss_for_default_decoder_attention_mask.item(), loss_for_attention_mask_ignoring_padding.item()
+        )
 
 
 @require_torch
