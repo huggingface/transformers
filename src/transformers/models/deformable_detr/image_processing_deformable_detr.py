@@ -337,7 +337,7 @@ def prepare_coco_detection_annotation(
         keypoints = np.asarray(keypoints, dtype=np.float32)
         num_keypoints = keypoints.shape[0]
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
-        new_target["keypoints"] = keypoints  # We no longer apply keep mask here
+        new_target["keypoints"] = keypoints  
 
     if return_segmentation_masks:
         segmentation_masks = [obj["segmentation"] for obj in annotations]
