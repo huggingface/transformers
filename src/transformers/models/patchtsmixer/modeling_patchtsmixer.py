@@ -1628,6 +1628,14 @@ class PatchTSMixerModelOutput(ModelOutput):
     PATCHTSMIXER_START_DOCSTRING,
 )
 class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
+    """
+    PatchTSMixer model.
+
+    Args:
+        config: PatchTSMixerConfig
+        mask_input (`bool`, *optional*): Whether to mask the input or not. Defaults to False.
+    """
+
     def __init__(self, config: PatchTSMixerConfig, mask_input: bool = False):
         super().__init__(config)
 
@@ -1676,19 +1684,19 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 
                 For univariate time series, `input_size` dimension should be 1. For multivariate time series, it is
                 greater than 1.
-
-            observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, input_size)`, *optional*):
+            observed_mask (`torch.Tensor` of shape `(batch_size, sequence_length, input_size)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
                 in `[0, 1]`:
-
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+                    - 1 for values that are **observed**,
+                    - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            return_dict (`bool`, *optional*)
+            return_dict (`bool`, *optional*):
                 Return dict.
+        
         Returns:
+            [`PatchTSMixerModelOutput`]
         """
 
         mask = None
