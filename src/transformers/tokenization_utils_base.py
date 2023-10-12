@@ -2175,6 +2175,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_tokens_decoder: Dict[int, AddedToken] = {}
         added_tokens_map: Dict[str, AddedToken] = {}
 
+        # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
+        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
+        
         legacy_saved = "added_tokens_decoder" not in init_kwargs
         if not legacy_saved:
             for idx, token in init_kwargs["added_tokens_decoder"].items():
@@ -2242,8 +2245,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             init_kwargs["additional_special_tokens"] = additional_special_tokens
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
 
-        # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
-        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
+
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
