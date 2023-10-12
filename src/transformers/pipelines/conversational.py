@@ -155,16 +155,28 @@ class Conversation:
             yield message["role"] == "user", message["content"]
 
     @property
-    def past_user_inputs(self):
+    def _user_messages(self):
         # This is a legacy property for backwards compatibility. It is recommended to just directly access
         # conversation.messages instead.
         return [message["content"] for message in self.messages if message["role"] == "user"]
+
+    @property
+    def past_user_inputs(self):
+        # This is a legacy property for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead.
+        return self._user_messages[:-1]
 
     @property
     def generated_responses(self):
         # This is a legacy property for backwards compatibility. It is recommended to just directly access
         # conversation.messages instead.
         return [message["content"] for message in self.messages if message["role"] == "assistant"]
+
+    @property
+    def new_user_input(self):
+        # This is a legacy property for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead.
+        return self._user_messages[-1]
 
 
 @add_end_docstrings(
