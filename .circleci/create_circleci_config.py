@@ -164,7 +164,7 @@ class CircleCIJob:
         tests_to_run = os.listdir("src/transformers/models/")
         start = 0
         end = 64
-        self.tests_to_run = tests_to_run[start:end]
+        self.tests_to_run = [f"tests/models/{x}" for x in tests_to_run[start:end]]
 
         if self.parallelism == 1:
             if self.tests_to_run is None:
