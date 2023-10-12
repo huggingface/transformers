@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch Mistral model. """
 
 
+import gc
 import tempfile
 import unittest
 
@@ -449,14 +450,11 @@ class MistralIntegrationTest(unittest.TestCase):
 
         del model
         torch.cuda.empty_cache()
-        import gc
         gc.collect()
 
     @slow
     def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        )
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
@@ -469,5 +467,4 @@ class MistralIntegrationTest(unittest.TestCase):
 
         del model
         torch.cuda.empty_cache()
-        import gc
         gc.collect()
