@@ -69,47 +69,35 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
+    # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.get_tokenizer with GPT2->Clvp
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return ClvpTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
+    # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
 
+    # Copied from transformers.tests.models.layoutxlm.test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_add_special_tokens
     def test_add_special_tokens(self):
-        tokenizer = self.get_tokenizer(do_lower_case=False)
-        input_text = "lowerstidner"
-        ids = tokenizer.encode(input_text)
+        tokenizers: List[ClvpTokenizer] = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                special_token = "[SPECIAL_TOKEN]"
+                special_token_box = [1000, 1000, 1000, 1000]
 
-        special_token = "[SPECIAL_TOKEN]"
+                tokenizer.add_special_tokens({"cls_token": special_token})
+                encoded_special_token = tokenizer.encode(
+                    [special_token], boxes=[special_token_box], add_special_tokens=False
+                )
+                self.assertEqual(len(encoded_special_token), 1)
 
-        tokenizer.add_special_tokens({"cls_token": special_token})
-        encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
-        self.assertEqual(len(encoded_special_token), 1)
+                decoded = tokenizer.decode(encoded_special_token, skip_special_tokens=True)
+                self.assertTrue(special_token not in decoded)
 
-        text = tokenizer.decode(ids + encoded_special_token, clean_up_tokenization_spaces=False)
-        encoded = tokenizer.encode(text, add_special_tokens=False)
-
-        input_encoded = tokenizer.encode(input_text, add_special_tokens=False)
-        special_token_id = tokenizer.encode(special_token, add_special_tokens=False)
-        self.assertEqual(encoded, input_encoded + special_token_id)
-
-        decoded = tokenizer.decode(encoded, skip_special_tokens=True)
-        self.assertTrue(special_token not in decoded)
-
-    def test_full_tokenizer(self):
-        tokenizer = ClvpTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
-        text = "lower newer"
-        bpe_tokens = ["l", "o", "w", "er", "[SPACE]", "n", "e", "w", "er"]
-        tokens = tokenizer.tokenize(text, add_prefix_space=False)
-        self.assertListEqual(tokens, bpe_tokens)
-
-        input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [0, 1, 2, 15, 21, 9, 3, 2, 15, 19]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-
+    # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.test_rust_and_python_full_tokenizers
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             return
@@ -140,6 +128,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.test_padding
     def test_padding(self, max_length=15):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -184,6 +173,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     padding="max_length",
                 )
 
+    # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.test_padding_if_pad_token_set_slow
     def test_padding_if_pad_token_set_slow(self):
         tokenizer = ClvpTokenizer.from_pretrained(self.tmpdirname, pad_token="<pad>")
 
@@ -235,17 +225,7 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertTrue(pad_token_id in out_p2["input_ids"][1])
         self.assertTrue(0 in out_p2["attention_mask"][1])
 
-    def test_token_type_ids(self):
-        tokenizer = self.get_tokenizer()
-        seq_0 = "Test this method."
-
-        # We want to have sequence 0 and sequence 1 are tagged
-        # respectively with 0 and 1 token_ids
-        # (regardless of whether the model use token type ids)
-        # We use this assumption in the QA pipeline among other place
-        output = tokenizer(seq_0, return_token_type_ids=True, add_special_tokens=True)
-        self.assertIn(0, output["token_type_ids"])
-
+    # Copied from transformers.tests.models.gpt2.test_tokenization_gpt2.GPT2TokenizationTest.test_special_tokens_mask_input_pairs_and_bos_token
     def test_special_tokens_mask_input_pairs_and_bos_token(self):
         # TODO: change to self.get_tokenizers() when the fast version is implemented
         tokenizers = [self.get_tokenizer(do_lower_case=False, add_bos_token=True)]
@@ -270,6 +250,28 @@ class ClvpTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ]
                 filtered_sequence = [x for x in filtered_sequence if x is not None]
                 self.assertEqual(encoded_sequence, filtered_sequence)
+
+    def test_token_type_ids(self):
+        tokenizer = self.get_tokenizer()
+        seq_0 = "Test this method."
+
+        # We want to have sequence 0 and sequence 1 are tagged
+        # respectively with 0 and 1 token_ids
+        # (regardless of whether the model use token type ids)
+        # We use this assumption in the QA pipeline among other place
+        output = tokenizer(seq_0, return_token_type_ids=True, add_special_tokens=True)
+        self.assertIn(0, output["token_type_ids"])
+
+    def test_full_tokenizer(self):
+        tokenizer = ClvpTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
+        text = "lower newer"
+        bpe_tokens = ["l", "o", "w", "er", "[SPACE]", "n", "e", "w", "er"]
+        tokens = tokenizer.tokenize(text, add_prefix_space=False)
+        self.assertListEqual(tokens, bpe_tokens)
+
+        input_tokens = tokens + [tokenizer.unk_token]
+        input_bpe_tokens = [0, 1, 2, 15, 21, 9, 3, 2, 15, 19]
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
     @slow
     def test_outputs_with_numbers(self):

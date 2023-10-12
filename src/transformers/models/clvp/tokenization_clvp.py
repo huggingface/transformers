@@ -156,7 +156,7 @@ class ClvpTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names = ["input_ids", "attention_mask", "input_ids_with_special_tokens", "attention_mask_with_special_tokens"]
 
     def __init__(
         self,
@@ -265,23 +265,14 @@ class ClvpTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        if self.add_bos_token:
-            bos_token_ids = [self.bos_token_id]
-        else:
-            bos_token_ids = []
-
-        if self.add_eos_token:
-            eos_token_ids = [self.eos_token_id]
-        else:
-            eos_token_ids = []
-
-        output = bos_token_ids + token_ids_0
-
-        if token_ids_1 is None:
-            return output + eos_token_ids
-
-        return output + bos_token_ids + token_ids_1 + eos_token_ids
+        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
+        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
+        output = bos_token_id + token_ids_0 + eos_token_id
+        if token_ids_1 is not None:
+            output = output + bos_token_id + token_ids_1 + eos_token_id
+        return output
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
@@ -316,23 +307,10 @@ class ClvpTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0))
         return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
 
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if is_split_into_words or add_prefix_space:
-            text = " " + text
-
-        text = self.tokens_trie.split(text)
-        unique_no_split_tokens = [token.content for token in self._added_tokens_decoder.values()]
-        # ignore normalizing `unique_no_split_tokens`.
-        text = " ".join(
-            [self.normalizer(sub_text) if sub_text not in unique_no_split_tokens else sub_text for sub_text in text]
-        )
-
-        return (text, kwargs)
-
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
+        text = self.normalizer(text)
         for token in re.findall(self.pat, text):
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
@@ -471,17 +449,12 @@ class ClvpTokenizer(PreTrainedTokenizer):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: bool = True,
         spaces_between_special_tokens: bool = True,
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
-        if spaces_between_special_tokens:
-            logger.warning_once(
-                "spaces_between_special_tokens is deprecated and will be removed in transformers v5. It was adding spaces between `added_tokens`, not special tokens, "
-                "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
-            )
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
         legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
             token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
@@ -515,15 +488,13 @@ class ClvpTokenizer(PreTrainedTokenizer):
             else self.clean_up_tokenization_spaces
         )
 
-        text = self.postprocess(text)
-
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
             return clean_text
         else:
             return text
 
-    def postprocess(self, text):
+    def clean_up_tokenization(self, text):
         text = "".join(text)
         text = (
             text.replace("[SPACE]", " ")

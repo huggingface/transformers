@@ -36,7 +36,7 @@ class ClvpProcessor(ProcessorMixin):
     """
     feature_extractor_class = "ClvpFeatureExtractor"
     tokenizer_class = "ClvpTokenizer"
-    model_input_names = ["input_ids", "input_features", "attention_mask"]
+    model_input_names = ["input_ids", "input_features", "attention_mask", "input_ids_with_special_tokens", "attention_mask_with_special_tokens"]
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
