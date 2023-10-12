@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch Persimmon model. """
 
 
+import gc
 import unittest
 
 from parameterized import parameterized
