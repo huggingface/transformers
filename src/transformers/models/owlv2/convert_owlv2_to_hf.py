@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert OWL-ViT checkpoints from the original repository.
+"""Convert OWLv2 checkpoints from the original repository.
 
 URL: https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit"""
 
@@ -210,7 +210,6 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # Load original state dict based on model name
     model_name_to_checkpoint_path = {
-        "owlvit-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/clip_vit_b16_6171dab",
         "owlv2-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams_c7e1b9a",
         "owlv2-base-patch16-ensemble": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams-curated-ft-lvisbase-ens-cold-weight-05_209b65b",
     }
