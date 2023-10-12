@@ -145,6 +145,14 @@ class GPTQTest(unittest.TestCase):
 
         self.assertAlmostEqual(self.mem_fp16 / mem_quantized, self.EXPECTED_RELATIVE_DIFFERENCE)
 
+    def test_original_dtype(self):
+        r"""
+        A simple test to check if the model succesfully stores the original dtype
+        """
+        self.assertTrue(hasattr(self.quantized_model.config, "_quantization_original_dtype"))
+        self.assertFalse(hasattr(self.model_fp16.config, "_quantization_original_dtype"))
+        self.assertTrue(self.quantized_model.config._quantization_original_dtype == torch.float16)
+
     def test_quantized_layers_class(self):
         """
         Simple test to check if the model conversion has been done correctly by checking on

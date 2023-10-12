@@ -3164,6 +3164,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(model, "quantization_method"):
             model.is_quantized = True
 
+            # We store the original dtype for quantized models as we cannot easily retrieve them
+            # one the weights have been quantized
+            # Note that once you have loaded a quantized model, you can't change its dtype so this will
+            # remain a single source of truth
+            config._quantization_original_dtype = torch_dtype
+
         if isinstance(device_map, str):
             special_dtypes = {}
             if load_in_8bit or load_in_4bit:
