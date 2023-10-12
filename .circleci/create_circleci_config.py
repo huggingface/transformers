@@ -161,7 +161,6 @@ class CircleCIJob:
 
         self.tests_to_run = ["tests/models"]
 
-        import os
         tests_to_run = os.listdir("src/transformers/models/")
         start = 0
         end = 64
