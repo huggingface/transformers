@@ -2172,6 +2172,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         additional_special_tokens = init_kwargs.pop("additional_special_tokens", None) or []
         added_tokens_decoder = {}
+        added_token_map = {}
+
         legacy_saved = "added_tokens_decoder" not in init_kwargs
         if not legacy_saved:
             for idx, token in init_kwargs["added_tokens_decoder"].items():
@@ -2179,6 +2181,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     token = AddedToken(**token)
                 if isinstance(token, AddedToken):
                     added_tokens_decoder[int(idx)] = token
+                    added_token_map[str(token)] = token
                 else:
                     raise ValueError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
@@ -2212,11 +2215,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     added_tok_encoder = json.load(added_tokens_handle)
                 # legacy: we have to init with (rstrip=True, lstrip=True)
                 strip = True if "Fast" not in cls.__name__ else False
-                added_tokens_decoder = {
-                    index: AddedToken(token, rstrip=strip, lstrip=strip, special=token in all_special_strings)
-                    for token, index in added_tok_encoder.items()
-                }
+                added_tokens_decoder = {}
+                added_token_map = {}
+                for token, index in added_tok_encoder.items():
+                    token = AddedToken(token, rstrip=strip, lstrip=strip, special=token in all_special_strings)
+                    added_tokens_decoder[index] = token
+                    added_token_map[str(token)] = token
             # end legacy
+
+        # Make sure the default init_kwargs are overwritten! Simulates passing kwargs :) Everything is added_token.  But not additional special tokens because class does no overwrite?
+        # If we save the eos etc as added tokens we don't have this, but this is fool proof
+        for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
+            if added_token_map != {}:
+                if key == "additional_special_tokens":
+                    init_kwargs[key] = [added_token_map[token] if token in added_token_map else token for token in init_kwargs[key]]
+                elif init_kwargs[key] in added_token_map:
+                    init_kwargs[key] = added_token_map[init_kwargs.get(key)]
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens if the `fast` was not properly saved!
         # thus we delay adding special tokens in the init using `slow_to_fast` flag.
@@ -2228,7 +2242,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
         init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
-
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -2240,7 +2253,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
         # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
-        # TODO this should be performed before init. This way we don't add twice
+        # TODO this should be performed before init. This way we don't add twice. We could update the added tokens info
+        # but can't get the index
         if legacy_saved and "Fast" not in cls.__name__ and added_tokens_file is None and tokenizer_file is not None:
             # This is for slow so can be done before
             all_special_strings = [str(token) for token in tokenizer.all_special_tokens]
