@@ -415,7 +415,9 @@ class PersimmonIntegrationTest(unittest.TestCase):
         prompt = "human: Simply put, the theory of relativity states that?\n\nadept:"
         tokenizer = AutoTokenizer.from_pretrained("adept/persimmon-8b-chat", use_fast=False)
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
-        model = PersimmonForCausalLM.from_pretrained("adept/persimmon-8b-chat", load_in_8bit=True, device_map="auto", torch_dtype=torch.float16)
+        model = PersimmonForCausalLM.from_pretrained(
+            "adept/persimmon-8b-chat", load_in_8bit=True, device_map="auto", torch_dtype=torch.float16
+        )
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64)
