@@ -400,12 +400,15 @@ class PersimmonIntegrationTest(unittest.TestCase):
         out = model(torch.tensor([input_ids], device=torch_device)).logits
 
         EXPECTED_MEAN = torch.tensor(
-            [[-11.4726, -11.1495, -11.2694, -11.2223, -10.9452, -11.0663, -11.0031, -11.1028]], dtype=torch.float16
+            [[-11.4726, -11.1495, -11.2694, -11.2223, -10.9452, -11.0663, -11.0031, -11.1028]]
         )
         # change dtype to `torch.float32` before calling `mean` to avoid `nan` values
         torch.testing.assert_close(out.cpu().to(torch.float32).mean(-1), EXPECTED_MEAN, atol=1e-4, rtol=1e-4)
         # fmt: off
-        EXPECTED_SLICE = torch.tensor([16.9062, 16.9062, 16.9062, 16.9062, 16.8906, 16.9062, 16.9531, 16.9062, 16.9062, 16.9062, 16.9531, 16.9062, 16.9531, 16.9062, 16.9062, 16.9062, 16.9062, 16.9062, 16.9531, 16.9062, 16.9062, 16.9062, 16.9062, 16.9062, 16.9062, 16.9531, 16.9062, 16.9531, 16.9062, 16.9062])
+        EXPECTED_SLICE = torch.tensor(
+            [-16.9062, -16.9062, -16.9062, -16.9062, -16.8906, -16.9062, -16.9531, -16.9062, -16.9062, -16.9062, -16.9531, -16.9062, -16.9531, -16.9062, -16.9062, -16.9062, -16.9062, -16.9062, -16.9531, -16.9062, -16.9062, -16.9062, -16.9062, -16.9062, -16.9062, -16.9531, -16.9062, -16.9531, -16.9062, -16.9062],
+            dtype=torch.float16
+        )
         # fmt: on
         torch.testing.assert_close(out.cpu()[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
