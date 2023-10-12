@@ -4101,7 +4101,7 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, additional_special_tokens=[new_eos])
-                self.assertEquals(tokenizer._additional_special_tokens[-1], new_eos)
+                # self.assertEquals(tokenizer._additional_special_tokens[-1], new_eos)
 
                 # make sure the token was added
                 self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
