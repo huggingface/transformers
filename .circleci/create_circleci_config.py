@@ -161,6 +161,12 @@ class CircleCIJob:
 
         self.tests_to_run = ["tests/models"]
 
+        import os
+        tests_to_run = os.listdir("src/transformers/models/")
+        start = 0
+        end = 64
+        self.tests_to_run = tests_to_run[start:end]
+
         if self.parallelism == 1:
             if self.tests_to_run is None:
                 test_command += " << pipeline.parameters.tests_to_run >>"
