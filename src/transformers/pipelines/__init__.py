@@ -766,7 +766,7 @@ def pipeline(
     if task is None and model is not None:
         if not isinstance(model, str):
             raise RuntimeError(
-                "Inferring the task automatically requires to check the hub with a model_id defined as a `str`."
+                "Inferring the task automatically requires to check the hub with a model_id defined as a `str`. "
                 f"{model} is not a valid model_id."
             )
         task = get_task(model, use_auth_token)
