@@ -120,12 +120,6 @@ Em Tarefas Multimodais:
 - [Classificação de Imagens sem Anotação com CLIP](https://huggingface.co/openai/clip-vit-large-patch14)
 - [Respostas de Perguntas em Documentos com LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
 - [Classificação de Vídeo sem Anotação com X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
-Em Tarefas Multimodais:
-- [Respostas de Perguntas em Tabelas com TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
-- [Respostas de Perguntas Visuais com ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
-- [Classificação de Imagens sem Anotação com CLIP](https://huggingface.co/openai/clip-vit-large-patch14)
-- [Respostas de Perguntas em Documentos com LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
-- [Classificação de Vídeo sem Anotação com X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
 
 ## 100 Projetos Usando Transformers
 
