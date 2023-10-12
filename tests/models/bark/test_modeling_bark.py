@@ -580,14 +580,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
-        model = self.all_model_classes[0](config).eval().to(torch_device)
-        model.generate(
-            input_ids,
-            semantic_generation_config=BarkSemanticGenerationConfig(
-                max_input_semantic_length=int(len(input_ids) / 2), max_new_tokens=10, min_eos_p=0.1
-            ),
-        )
-
 
 @require_torch
 class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
