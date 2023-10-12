@@ -299,6 +299,7 @@ _import_structure = {
     "models.deprecated.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
+    "models.rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RT_DETRConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
     "models.dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config"],
@@ -993,6 +994,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.rt_detr"].extend(["RtDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
@@ -1648,6 +1650,15 @@ else:
             "DetrForSegmentation",
             "DetrModel",
             "DetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.rt_detr"].extend(
+        [
+            "RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RT_DETRForObjectDetection",
+            "RT_DETRForSegmentation",
+            "RT_DETRModel",
+            "RT_DETRPreTrainedModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -4453,6 +4464,7 @@ if TYPE_CHECKING:
     from .models.deprecated.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
+    from .models.rt_detr import RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, RT_DETRConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
     from .models.dinov2 import DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Dinov2Config
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -5077,6 +5089,7 @@ if TYPE_CHECKING:
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.pvt import PvtImageProcessor
+        from .models.rt_detr import RtDetrImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
@@ -5637,6 +5650,13 @@ if TYPE_CHECKING:
             DetrForSegmentation,
             DetrModel,
             DetrPreTrainedModel,
+        )
+        from .models.rt_detr import (
+            RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RT_DETRForObjectDetection,
+            RT_DETRForSegmentation,
+            RT_DETRModel,
+            RT_DETRPreTrainedModel,
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
