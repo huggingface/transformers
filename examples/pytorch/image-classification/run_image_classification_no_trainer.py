@@ -32,8 +32,8 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import (
     CenterCrop,
     Compose,
-    Normalize,
     Lambda,
+    Normalize,
     RandomHorizontalFlip,
     RandomResizedCrop,
     Resize,
