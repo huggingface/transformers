@@ -1299,7 +1299,7 @@ class LongformerAttention(nn.Module):
         super().__init__()
         self.self = LongformerSelfAttention(config, layer_id)
         self.cross_modality = cross_modality
-        self.self_output = LongformerSelfOutput(config)
+        self.output = LongformerSelfOutput(config)
         if cross_modality:
             self.cross = LongDocumentCrossAttention(config, layer_id, position_embedding_type='')
             self.cross_output = LongDocumentCrossOutput(config)
