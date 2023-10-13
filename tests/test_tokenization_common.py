@@ -4049,7 +4049,7 @@ class TokenizerTesterMixin:
                         )
                     else:
                         self.assertTrue(len(encoded_split_special_token) > 1)
-
+    #TODO split this test
     def test_added_tokens_serialization(self):
         self.maxDiff = None
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
@@ -4087,6 +4087,18 @@ class TokenizerTesterMixin:
                             self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
                             self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
                             self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
+
+                if self.rust_tokenizer_class is not None:
+                    tokenizer_fast = self.rust_tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
+                    self.assertEquals(tokenizer_fast._eos_token, new_eos)
+                    # make sure the exact added token made it to the added tokens decoder
+                    self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
+                    self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
+                    with tempfile.TemporaryDirectory() as tmp_dir_4:
+                        tokenizer_fast.save_pretrained(tmp_dir_4)
+                        tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_4)
+                        self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
+                        self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
 
             # make sure the special tokens are marked as special in the fast tokenizer.json and in the slow as well of course. Read the jsons
             # MAKE SURE THE ONLY WAY TO CHANGE AN ADDEDTOKEN IS THROUGH add_tokens!

@@ -947,7 +947,7 @@ class SpecialTokensMixin:
                 for token in value:
                     if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
-                        token = AddedToken(token, normalized=False, rstrip=True, lstrip=True)
+                        token = AddedToken(token, normalized=False, rstrip=True, lstrip=True, special=True)
                     if str(token) not in self.additional_special_tokens:
                         to_add.add(token)
                 if replace_additional_special_tokens:
@@ -2248,7 +2248,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
         init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
-
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
