@@ -1375,8 +1375,15 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> image_embeddings = outputs.image_embeddings
         >>> text_embeddings = outputs.text_embeddings
         >>> multimodal_embeddings = outputs.multimodal_embeddings
-        >>> print(image_embeddings.shape, text_embeddings.shape, multimodal_embeddings.shape)
-        torch.Size([1, 197, 768]) torch.Size([1, 7, 768]) torch.Size([1, 205, 768])
+
+        >>> outputs.image_embeddings.shape
+        torch.Size([1, 197, 768])
+
+        >>> text_embeddings.shape
+        torch.Size([1, 7, 768])
+
+        >>> multimodal_embeddings.shape
+        torch.Size([1, 205, 768])
         ```
         """
 
