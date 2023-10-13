@@ -143,7 +143,6 @@ OBJECTS_TO_IGNORE = [
     "CvtConfig",
     "CvtModel",
     "DeiTImageProcessor",
-    "DPRConfig",
     "DPRReaderTokenizer",
     "DPRReaderTokenizerFast",
     "DPTModel",
