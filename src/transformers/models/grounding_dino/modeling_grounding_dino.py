@@ -1107,8 +1107,8 @@ class GroundingDINOFusionLayer(nn.Module):
 
         # add layer scale for training stability
         self.drop_path = GroundingDINODropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.gamma_v = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
-        self.gamma_l = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
+        self.vision_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
+        self.text_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
 
     def forward(self, vision_features, text_features, attention_mask_vision=None, attention_mask_text=None):
         vision_features = self.layer_norm_vision(vision_features)
@@ -1119,8 +1119,8 @@ class GroundingDINOFusionLayer(nn.Module):
             vision_attention_mask=attention_mask_vision,
             text_attention_mask=attention_mask_text,
         )
-        vision_features = vision_features + self.drop_path(self.gamma_v * delta_v)
-        text_features = text_features + self.drop_path(self.gamma_l * delta_t)
+        vision_features = vision_features + self.drop_path(self.vision_param * delta_v)
+        text_features = text_features + self.drop_path(self.text_param * delta_t)
 
         return (vision_features, vision_attn), (text_features, text_attn)
 
