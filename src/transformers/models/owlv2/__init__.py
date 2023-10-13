@@ -25,7 +25,6 @@ _import_structure = {
     "configuration_owlv2": [
         "OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Owlv2Config",
-        "Owlv2OnnxConfig",
         "Owlv2TextConfig",
         "Owlv2VisionConfig",
     ],
@@ -60,7 +59,6 @@ if TYPE_CHECKING:
     from .configuration_owlv2 import (
         OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Owlv2Config,
-        Owlv2OnnxConfig,
         Owlv2TextConfig,
         Owlv2VisionConfig,
     )
