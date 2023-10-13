@@ -156,7 +156,12 @@ class ClvpTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_ids", "attention_mask", "input_ids_with_special_tokens", "attention_mask_with_special_tokens"]
+    model_input_names = [
+        "input_ids",
+        "attention_mask",
+        "input_ids_with_special_tokens",
+        "attention_mask_with_special_tokens",
+    ]
 
     def __init__(
         self,
@@ -269,9 +274,12 @@ class ClvpTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []
+
         output = bos_token_id + token_ids_0 + eos_token_id
+
         if token_ids_1 is not None:
             output = output + bos_token_id + token_ids_1 + eos_token_id
+
         return output
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_special_tokens_mask

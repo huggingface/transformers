@@ -17,6 +17,7 @@
 import json
 import os
 import unittest
+from typing import List
 
 from transformers import ClvpTokenizer
 

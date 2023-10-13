@@ -18,8 +18,6 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
-
 from transformers import ClvpFeatureExtractor, ClvpProcessor, ClvpTokenizer
 from transformers.testing_utils import require_torch
 
@@ -71,7 +69,7 @@ class ClvpProcessorTest(unittest.TestCase):
         raw_speech = floats_list((3, 1000))
 
         input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
-        input_processor = processor(raw_speech=raw_speech,  return_tensors="np")
+        input_processor = processor(raw_speech=raw_speech, return_tensors="np")
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

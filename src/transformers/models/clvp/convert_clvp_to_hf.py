@@ -145,18 +145,23 @@ def convert_decoder_weights(original_weights):
                 slice1, slice2, slice3 = original_weights[updated_key].split(split_size=dim, dim=0)
 
             indices = torch.arange(dim)
-            index1, index2, index3 = (indices.unfold(0, sub_dim, sub_dim*3).flatten(),
-                                      indices[sub_dim:].unfold(0, sub_dim, sub_dim*3).flatten(),
-                                      indices[2*sub_dim:].unfold(0, sub_dim, sub_dim*3).flatten())
+            index1, index2, index3 = (
+                indices.unfold(0, sub_dim, sub_dim * 3).flatten(),
+                indices[sub_dim:].unfold(0, sub_dim, sub_dim * 3).flatten(),
+                indices[2 * sub_dim :].unfold(0, sub_dim, sub_dim * 3).flatten(),
+            )
 
             converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.q_proj.{attr}"] = torch.concatenate(
-                [slice1[index1], slice2[index3], slice3[index2]], axis=0,
+                [slice1[index1], slice2[index3], slice3[index2]],
+                axis=0,
             )
             converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.k_proj.{attr}"] = torch.concatenate(
-                [slice1[index2], slice2[index1], slice3[index3]], axis=0,
+                [slice1[index2], slice2[index1], slice3[index3]],
+                axis=0,
             )
             converted_weights[f"conditioning_encoder.mel_attn_blocks.{index}.v_proj.{attr}"] = torch.concatenate(
-                [slice1[index3], slice2[index2], slice3[index1]], axis=0,
+                [slice1[index3], slice2[index2], slice3[index1]],
+                axis=0,
             )
             continue
 

@@ -284,11 +284,10 @@ class ClvpSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
-
         # Raise error when position_ids is None but rotary_pos_emb is provided, because we need that when applying
         # rotary_pos_emb to query and key states.
         if rotary_pos_emb is not None and position_ids is None:
-            raise ValueError(f"`position_ids` must be provided when `rotary_pos_emb` is not None.")
+            raise ValueError("`position_ids` must be provided when `rotary_pos_emb` is not None.")
 
         bsz, _, embed_dim = hidden_states.size()
 
@@ -574,7 +573,8 @@ class ClvpConditioningEncoder(nn.Module):
 
     def compute_groupnorm_groups(self, channels: int, groups: int = 32):
         """
-        Calculates the value of `num_groups` for nn.GroupNorm. This logic is taken from the official tortoise repository. link :
+        Calculates the value of `num_groups` for nn.GroupNorm. This logic is taken from the official tortoise
+        repository. link :
         https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/models/arch_util.py#L26
         """
         if channels <= 16:
@@ -696,7 +696,9 @@ class ClvpPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ClvpForCausalLM):
             for name, p in module.named_parameters():
                 if name == "c_proj.weight":
-                    p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers)))
+                    p.data.normal_(
+                        mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.num_hidden_layers))
+                    )
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)

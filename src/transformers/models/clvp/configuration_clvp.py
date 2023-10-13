@@ -15,8 +15,6 @@
 """ CLVP model configuration"""
 
 
-import copy
-import json
 import os
 from typing import TYPE_CHECKING, Union
 
