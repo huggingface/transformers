@@ -45,19 +45,50 @@ logger = logging.get_logger(__name__)
 
 
 def get_owlv2_config(model_name):
-    if "patch16" in model_name:
-        patch_size = 16
-        image_size = 768
-
-    if "v2" in model_name:
+    if "large" in model_name:
+        image_size = 1008
+        patch_size = 14
+        vision_hidden_size = 1024
+        vision_intermediate_size = 4096
+        vision_num_hidden_layers = 24
+        vision_num_attention_heads = 8
+        projection_dim = 768
+        text_hidden_size = 768
+        text_intermediate_size = 3072
+        text_num_attention_heads = 12
+        text_num_hidden_layers = 12
+    else:
         image_size = 960
+        patch_size = 16
+        vision_hidden_size = 768
+        vision_intermediate_size = 3072
+        vision_num_hidden_layers = 12
+        vision_num_attention_heads = 12
+        projection_dim = 512
+        text_hidden_size = 512
+        text_intermediate_size = 2048
+        text_num_attention_heads = 8
+        text_num_hidden_layers = 12
 
-    vision_config = Owlv2VisionConfig(patch_size=patch_size, image_size=image_size)
-    text_config = Owlv2TextConfig()
+    vision_config = Owlv2VisionConfig(
+        patch_size=patch_size,
+        image_size=image_size,
+        hidden_size=vision_hidden_size,
+        num_hidden_layers=vision_num_hidden_layers,
+        intermediate_size=vision_intermediate_size,
+        num_attention_heads=vision_num_attention_heads,
+    )
+    text_config = Owlv2TextConfig(
+        hidden_size=text_hidden_size,
+        intermediate_size=text_intermediate_size,
+        num_attention_heads=text_num_attention_heads,
+        num_hidden_layers=text_num_hidden_layers,
+    )
 
     config = Owlv2Config(
         text_config=text_config.to_dict(),
         vision_config=vision_config.to_dict(),
+        projection_dim=projection_dim,
     )
 
     return config
@@ -212,7 +243,9 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
     # Load original state dict based on model name
     model_name_to_checkpoint_path = {
         "owlv2-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams_c7e1b9a",
+        "owlv2-base-patch16-finetuned": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams-ft-lvisbase_d368398",
         "owlv2-base-patch16-ensemble": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams-curated-ft-lvisbase-ens-cold-weight-05_209b65b",
+        "owlv2-large-patch14": "/Users/nielsrogge/Documents/OWL-ViT/owl2-l14-1008-st-ngrams_0881fd6",
     }
     checkpoint_path = model_name_to_checkpoint_path[model_name]
     variables = checkpoints.restore_checkpoint(checkpoint_path, target=None)
@@ -275,6 +308,16 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
             expected_objectness_logits = torch.tensor(
                 [[-5.6589, -7.7702, -16.3965]],
             )
+        elif model_name == "owlv2-base-patch16-finetuned":
+            expected_logits = torch.tensor(
+                [[-9.2391, -9.2313, -8.0295], [-14.5498, -16.8450, -14.7166], [-15.1278, -17.3060, -15.7169]],
+            )
+            expected_boxes = torch.tensor(
+                [[0.0103, 0.0094, 0.0207], [0.0483, 0.0729, 0.1013], [0.0629, 0.1396, 0.1313]]
+            )
+            expected_objectness_logits = torch.tensor(
+                [[-6.5234, -13.3788, -14.6627]],
+            )
         elif model_name == "owlv2-base-patch16-ensemble":
             expected_logits = torch.tensor(
                 [[-8.6353, -9.5409, -6.6154], [-7.9442, -9.6151, -6.7117], [-12.4593, -15.3332, -12.1048]]
@@ -307,8 +350,8 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
 
     if push_to_hub:
         print(f"Pushing {model_name} to the hub...")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"google/{model_name}")
+        processor.push_to_hub(f"google/{model_name}")
 
 
 if __name__ == "__main__":
@@ -318,7 +361,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_name",
         default="owlv2-base-patch16",
-        choices=["owlv2-base-patch16", "owlv2-base-patch16-ensemble"],
+        choices=[
+            "owlv2-base-patch16",
+            "owlv2-base-patch16-finetuned",
+            "owlv2-base-patch16-ensemble",
+            "owlv2-large-patch14",
+            "owlv2-large-patch14-finetuned",
+            "owlv2-large-patch14-ensemble",
+        ],
         type=str,
         help="Name of the Owlv2 model you'd like to convert from FLAX to PyTorch.",
     )
