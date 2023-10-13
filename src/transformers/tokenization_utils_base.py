@@ -947,7 +947,7 @@ class SpecialTokensMixin:
                 for token in value:
                     if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
-                        token = AddedToken(token, rstrip=True, lstrip=True, normalized=False, special=True)
+                        token = AddedToken(token, rstrip=True, lstrip=True, normalized=True, special=True)
                     if str(token) not in self.additional_special_tokens:
                         to_add.add(token)
                 if replace_additional_special_tokens:
@@ -961,7 +961,7 @@ class SpecialTokensMixin:
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
                     # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
-                    value = AddedToken(value, rstrip=True, lstrip=True, normalized=False, special=True)
+                    value = AddedToken(value, rstrip=True, lstrip=True, normalized=True, special=True)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
                 if value not in added_tokens:
