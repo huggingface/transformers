@@ -34,7 +34,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_pvt"] = ["PvtImageProcessor"]
+    _import_structure["image_processing_pvt_v2"] = ["PvtV2ImageProcessor"]
 
 try:
     if not is_torch_available():

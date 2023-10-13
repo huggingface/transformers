@@ -40,7 +40,7 @@ from .configuration_pvt_v2 import PvtV2Config
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PvtConfig"
+_CONFIG_FOR_DOC = "PvtV2Config"
 
 _CHECKPOINT_FOR_DOC = "Zetatech/pvt-tiny-224"
 _EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
@@ -438,22 +438,22 @@ class PvtV2PreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-PVT_START_DOCSTRING = r"""
+PVT_V2_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`~PvtConfig`]): Model configuration class with all the parameters of the model.
+        config ([`~PvtV2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-PVT_INPUTS_DOCSTRING = r"""
+PVT_V2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`PvtImageProcessor.__call__`]
-            for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. 
+            See [`PvtV2ImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -466,8 +466,8 @@ PVT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Pvt encoder outputting raw hidden-states without any specific head on top.",
-    PVT_START_DOCSTRING,
+    "The bare Pvt-v2 encoder outputting raw hidden-states without any specific head on top.",
+    PVT_V2_START_DOCSTRING,
 )
 class PvtV2Model(PvtV2PreTrainedModel):
     def __init__(self, config: PvtV2Config):
@@ -488,7 +488,7 @@ class PvtV2Model(PvtV2PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
+    @add_start_docstrings_to_model_forward(PVT_V2_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
@@ -529,10 +529,10 @@ class PvtV2Model(PvtV2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    Pvt Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
+    Pvt-v2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
+    of the [CLS] token) e.g. for ImageNet.
     """,
-    PVT_START_DOCSTRING,
+    PVT_V2_START_DOCSTRING,
 )
 class PvtV2ForImageClassification(PvtV2PreTrainedModel):
     def __init__(self, config: PvtV2Config) -> None:
@@ -549,7 +549,7 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
+    @add_start_docstrings_to_model_forward(PVT_V2_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
