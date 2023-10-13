@@ -2178,7 +2178,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
-            # For GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours. 
+            # For GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours.
             # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
             dtype_present_in_args = False
 
@@ -2195,8 +2195,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
                     " `dtype` by passing the correct `torch_dtype` argument."
                 )
-
-      return super().to(*args, **kwargs)
+        return super().to(*args, **kwargs)
 
     def half(self, *args):
         # Checks if the model is quantized
