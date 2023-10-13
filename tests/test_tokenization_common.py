@@ -4063,7 +4063,6 @@ class TokenizerTesterMixin:
                 # make sure the exact added token made it to the added tokens decoder
                 self.assertIn(new_eos, list(tokenizer.added_tokens_decoder.values()))
 
-                tokenizer.additional_special_tokens = [""]
                 with tempfile.TemporaryDirectory() as tmp_dir_2:
                     tokenizer.save_pretrained(tmp_dir_2)
                     tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_2)
@@ -4094,10 +4093,16 @@ class TokenizerTesterMixin:
                     self.assertEquals(tokenizer_fast._eos_token, new_eos)
                     # make sure the exact added token made it to the added tokens decoder
                     self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
+                    # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
                     self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
+                    EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
                     with tempfile.TemporaryDirectory() as tmp_dir_4:
                         tokenizer_fast.save_pretrained(tmp_dir_4)
                         tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_4)
+                        self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
+                        self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
+
+                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_4)
                         self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
                         self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
 
