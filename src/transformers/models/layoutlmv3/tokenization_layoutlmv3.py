@@ -253,7 +253,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
         cls_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):

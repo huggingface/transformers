@@ -153,7 +153,7 @@ if args.tokenizer_name:
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=True)
 else:
     raise ValueError(
-        "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+        "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
         "You can do it from another script, save it, and load it from here, using --tokenizer_name."
     )
 
@@ -288,7 +288,7 @@ pad_on_right = tokenizer.padding_side == "right"
 
 if args.max_seq_length > tokenizer.model_max_length:
     logger.warning(
-        f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the"
+        f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the "
         f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
     )
 

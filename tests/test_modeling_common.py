@@ -275,6 +275,24 @@ class ModelTesterMixin:
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 self.assertTrue(torch.equal(p1, p2))
 
+    def test_keep_in_fp32_modules(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if model_class._keep_in_fp32_modules is None:
+                return
+
+            model = model_class(config)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+
+                for name, param in model.named_parameters():
+                    if any(n in model_class._keep_in_fp32_modules for n in name.split(".")):
+                        self.assertTrue(param.dtype == torch.float32)
+                    else:
+                        self.assertTrue(param.dtype == torch.float16, name)
+
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2926,7 +2944,7 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
 
                 dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
                 model = model_class.from_pretrained(
                     tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
