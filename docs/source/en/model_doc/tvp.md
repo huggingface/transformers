@@ -53,13 +53,13 @@ from transformers import AutoProcessor, TvpForVideoGrounding
 
 
 def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
-    """
+    '''
     Convert the video from its original fps to the target_fps and decode the video with PyAV decoder.
     Returns:
         frames (tensor): decoded frames from the video. Return None if the no
             video stream was found.
         fps (float): the number of frames per second of the video.
-    """
+    '''
     fps = float(container.streams.video[0].average_rate)
     clip_size = sampling_rate * num_frames / target_fps * fps
     delta = max(container.streams.video[0].frames - clip_size, 0)
@@ -81,12 +81,11 @@ def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, targe
             frames[frame.pts] = frame
             break
     frames = [frames[pts] for pts in sorted(frames)]
-
     return frames, fps
 
 
 def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
-    """
+    '''
     Decode the video and perform temporal sampling.
     Args:
         container (container): pyav container.
@@ -100,7 +99,7 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
             the target video fps before frame sampling.
     Returns:
         frames (tensor): decoded frames from the video.
-    """
+    '''
     assert clip_idx >= -2, "Not a valied clip_idx {}".format(clip_idx)
     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
     clip_size = sampling_rate * num_frames / target_fps * fps
@@ -109,22 +108,19 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     frames = [frames[idx] for idx in index]
     frames = [frame.to_rgb().to_ndarray() for frame in frames]
     frames = torch.from_numpy(np.stack(frames))
-
     return frames
 
 def get_resize_size(image, max_size):
-    """
+    '''
     Args:
         image: np.ndarray
         max_size: The max size of height and width
-
     Returns:
         (height, width)
     Note the height/width order difference >>> pil_img = Image.open("raw_img_tensor.jpg") >>> pil_img.size (640,
     480) # (width, height) >>> np_img = np.array(pil_img) >>> np_img.shape (480, 640, 3) # (height, width, 3)
-    """
+    '''
     height, width = image.shape[-2:]
-
     if height >= width:
         ratio = width * 1.0 / height
         new_height = max_size
@@ -137,7 +133,6 @@ def get_resize_size(image, max_size):
     return size
 
 file = hf_hub_download(repo_id="Intel/tvp_demo", filename="3MSZA.mp4", repo_type="dataset")
-
 model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
 
 decoder_kwargs = dict(
@@ -148,8 +143,7 @@ decoder_kwargs = dict(
     num_clips=1,
     target_fps=3,
 )
-raw_sampled_frms = decode(**decoder_kwargs)
-raw_sampled_frms = raw_sampled_frms.permute(0, 3, 1, 2)
+raw_sampled_frms = decode(**decoder_kwargs).permute(0, 3, 1, 2)
 
 text = "person turn a light on."
 processor = AutoProcessor.from_pretrained("Intel/tvp-base")
@@ -161,7 +155,6 @@ data = processor(
 data["pixel_values"] = data["pixel_values"].to(model.dtype)
 data["labels"] = torch.tensor([30.96, 24.3, 30.4])
 output = model(**data)
-
 print(f"The model's output is {output}")
 
 def get_video_duration(filename):

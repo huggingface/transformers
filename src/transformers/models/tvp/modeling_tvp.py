@@ -612,7 +612,7 @@ class TvpPreTrainedModel(PreTrainedModel):
     """
 
     config_class = TvpConfig
-    base_model_prefix = "tvp"
+    base_model_prefix = "model"
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -804,6 +804,8 @@ class TvpModel(TvpPreTrainedModel):
         elif config.visual_prompter_type == "framepad":
             self.visual_prompter = TvpFramePadPrompter(config.max_img_size, config.pad_size, config.num_frm)
 
+        self.post_init()
+
     @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
     def add_vision_prompt(self, pixel_values):
         r"""
@@ -930,6 +932,8 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         self.config = config
         self.model = TvpModel(config)
         self.video_grounding_head = TvpVideoGroundingHead(config.hidden_size)
+
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TvpOutput, config_class=TvpConfig)
@@ -1067,7 +1071,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         >>> timestamp = output["logits"].tolist()
         >>> start, end = timestamp[0][0] * 100, timestamp[0][1] * 100
         >>> print(f'The time slot of the video corresponding to the text "{text}" is from {start}% to {end}%')
-        The time slot of the video corresponding to the text "person turn a light on." is from 48.02% to 51.19%
+        The time slot of the video corresponding to the text "person turn a light on." is from 43.71% to 91.49%
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.model(

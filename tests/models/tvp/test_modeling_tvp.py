@@ -384,14 +384,6 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(reason="This test doesn't work for TvpForVideoGrounding and doesn't test core functionality")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="This test doesn't work for TvpForVideoGrounding and doesn't test core functionality")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -428,6 +420,6 @@ class TvpModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 61, 768))
         assert outputs.last_hidden_state.shape == expected_shape
         expected_slice = torch.tensor(
-            [[1.4481, 1.6407, 1.8388], [0.3341, 1.5929, 0.2725], [1.5129, 0.8059, -0.1604]]
+            [[0.0875, 0.2006, 0.4813], [-0.3025, -0.4271, 0.1503], [0.4636, 0.0250, 0.5077]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
