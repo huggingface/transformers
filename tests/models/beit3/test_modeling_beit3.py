@@ -129,8 +129,6 @@ class Beit3ModelTester:
             num_labels=self.num_labels,
         )
 
-        # return Beit3Config()
-
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])

@@ -16,10 +16,10 @@ specific language governing permissions and limitations under the License.
 
 The BEiT-3 model was proposed in [Image as a Foreign Language: BEiT Pretraining for All Vision and Vision-Language
 Tasks](https://arxiv.org/abs/2208.10442) by Wenhui Wang, Hangbo Bao, Li Dong, Johan Bjorck, Zhiliang Peng, Qiang Liu,
-Kriti Aggarwal, Owais Khan Mohammed, Saksham Singhal, Subhojit Som, Furu Wei. 
+Kriti Aggarwal, Owais Khan Mohammed, Saksham Singhal, Subhojit Som, Furu Wei.
 
 BEiT-3 is a general-purpose multimodal foundation model that excels in both vision and vision-language tasks. It
-utilizes  [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific encoding, 
+utilizes  [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific encoding,
 and unifies masked modeling on images, texts, and image-text pairs, achieving top performance on multiple benchmarks.
 
 The abstract from the paper is the following:
@@ -37,7 +37,8 @@ image classification (ImageNet), visual reasoning (NLVR2), visual question answe
 This model was contributed by [Raghavan](https://huggingface.co/Raghavan).
 The original code can be found [here](https://github.com/microsoft/unilm/tree/master/beit3).
 
-## Examples 
+## Examples
+
     Here is a sample usage:
     
     ```python
@@ -67,10 +68,6 @@ The original code can be found [here](https://github.com/microsoft/unilm/tree/ma
     ... )
     ```"""
 
-## BEiT3 specific outputs
-
-[[autodoc]] models.beit3.modeling_beit3.Biet3ImageTextMatchingModelOutput
-
 ## Beit3Config
 
 [[autodoc]] Beit3Config
@@ -82,29 +79,29 @@ The original code can be found [here](https://github.com/microsoft/unilm/tree/ma
 ## Beit3Model
 
 [[autodoc]] Beit3Model
-    - forward
+- forward
 
 ## Beit3ForCaptioning
 
 [[autodoc]] Beit3ForCaptioning
-    - forward
+- forward
 
 ## Beit3ForImageClassification
 
 [[autodoc]] Beit3ForImageClassification
-    - forward
+- forward
 
 ## Beit3ForImageTextRetrieval
 
 [[autodoc]] Beit3ForImageTextRetrieval
-    - forward
+- forward
 
 ## Beit3ForQuestionAnswering
 
 [[autodoc]] Beit3ForQuestionAnswering
-    - forward
+- forward
 
 ## Beit3ForVisualReasoning
 
 [[autodoc]] Beit3ForVisualReasoning
-    - forward
+- forward

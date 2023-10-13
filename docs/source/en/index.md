@@ -48,7 +48,6 @@ The documentation is organized into five sections:
   - **MODELS** details the classes and functions related to each model implemented in the library.
   - **INTERNAL HELPERS** details utility classes and functions used internally.
 
-  
 ## Supported models and frameworks
 
 The table below represents the current support in the library for each of those models, whether they have a Python

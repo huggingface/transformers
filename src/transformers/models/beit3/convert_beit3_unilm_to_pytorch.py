@@ -323,7 +323,6 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
         if validate_logits:
             assert round(float(output.loss.detach().numpy()), 4) == 1.8435
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     tokenizer.save_pretrained(pytorch_dump_folder_path)
     model.save_pretrained(pytorch_dump_folder_path)
