@@ -270,6 +270,8 @@ class ConversationalPipeline(Pipeline):
         # in because of this BC change.
         if isinstance(conversations, list) and isinstance(conversations[0], dict):
             conversations = Conversation(conversations)
+        elif isinstance(conversations, list) and isinstance(conversations[0], list):
+            conversations = [Conversation(conv) for conv in conversations]
         outputs = super().__call__(conversations, num_workers=num_workers, **kwargs)
         if isinstance(outputs, list) and len(outputs) == 1:
             return outputs[0]
