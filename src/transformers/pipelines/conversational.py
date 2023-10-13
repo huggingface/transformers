@@ -268,6 +268,8 @@ class ConversationalPipeline(Pipeline):
         # Otherwise the threads will require a Conversation copy.
         # This will definitely hinder performance on GPU, but has to be opted
         # in because of this BC change.
+        if isinstance(conversations, list) and isinstance(conversations[0], dict):
+            conversations = Conversation(conversations)
         outputs = super().__call__(conversations, num_workers=num_workers, **kwargs)
         if isinstance(outputs, list) and len(outputs) == 1:
             return outputs[0]
@@ -283,19 +285,10 @@ class ConversationalPipeline(Pipeline):
         return {"input_ids": input_ids, "conversation": conversation}
 
     def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
-        max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-
         n = model_inputs["input_ids"].shape[1]
-        if max_length - minimum_tokens < n:
-            logger.warning(
-                f"Conversation input is too long ({n}), trimming it to {max_length - minimum_tokens} tokens. Consider increasing `max_length` to avoid truncation."
-            )
-            trim = max_length - minimum_tokens
-            model_inputs["input_ids"] = model_inputs["input_ids"][:, -trim:]
-            if "attention_mask" in model_inputs:
-                model_inputs["attention_mask"] = model_inputs["attention_mask"][:, -trim:]
         conversation = model_inputs.pop("conversation")
-        generate_kwargs["max_length"] = max_length
+        if "max_length" not in generate_kwargs and "max_new_tokens" not in generate_kwargs:
+            generate_kwargs["max_new_tokens"] = 1024
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:
             start_position = 1
