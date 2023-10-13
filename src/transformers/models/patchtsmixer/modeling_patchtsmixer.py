@@ -1628,14 +1628,6 @@ class PatchTSMixerModelOutput(ModelOutput):
     PATCHTSMIXER_START_DOCSTRING,
 )
 class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
-    """
-    PatchTSMixer model.
-
-    Args:
-        config: PatchTSMixerConfig
-        mask_input (`bool`, *optional*): Whether to mask the input or not. Defaults to False.
-    """
-
     def __init__(self, config: PatchTSMixerConfig, mask_input: bool = False):
         super().__init__(config)
 
