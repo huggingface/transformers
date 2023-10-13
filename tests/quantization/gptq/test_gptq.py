@@ -161,9 +161,9 @@ class GPTQTest(unittest.TestCase):
         r"""
         A simple test to check if the model succesfully stores the original dtype
         """
-        self.assertTrue(hasattr(self.quantized_model.config, "_quantization_original_dtype"))
-        self.assertFalse(hasattr(self.model_fp16.config, "_quantization_original_dtype"))
-        self.assertTrue(self.quantized_model.config._quantization_original_dtype == torch.float16)
+        self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
+        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
+        self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
 
     def test_quantized_layers_class(self):
         """
