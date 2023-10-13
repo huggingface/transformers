@@ -16,8 +16,6 @@
 
 import unittest
 
-from huggingface_hub import hf_hub_download
-
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_vision_available
 
@@ -116,9 +114,8 @@ class Owlv2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_integration_test(self):
         processor = Owlv2ImageProcessor()
 
-        filepath = hf_hub_download(repo_id="adirik/OWL-ViT", repo_type="space", filename="assets/astronaut.png")
-        image = Image.open(filepath)
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         pixel_values = processor(image, return_tensors="pt").pixel_values
 
         mean_value = round(pixel_values.mean().item(), 4)
-        self.assertEqual(mean_value, 0.0004)
+        self.assertEqual(mean_value, 0.2353)

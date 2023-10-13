@@ -146,7 +146,7 @@ def _preprocess_resize_output_shape(image, output_shape):
 def _clip_warp_output(input_image, output_image, mode, cval):
     """Clip output image to range of values of input image.
 
-    Note that this function modifies the values of *output_image* in-place and it is only modified if `clip=True`.
+    Note that this function modifies the values of *output_image* in-place.
 
     Taken from:
     https://github.com/scikit-image/scikit-image/blob/b4b521d6f0a105aabeaa31699949f78453ca3511/skimage/transform/_warps.py#L640.

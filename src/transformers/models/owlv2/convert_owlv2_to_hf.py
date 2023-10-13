@@ -324,7 +324,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--verify_logits",
-        action="store_true",
+        action="store_false",
         required=False,
         help="Path to the output PyTorch model directory.",
     )
