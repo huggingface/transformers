@@ -262,17 +262,23 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
             expected_logits = torch.tensor(
                 [[-9.6403, -9.6249, -9.1869], [-12.4517, -11.8114, -12.3912], [-12.2289, -11.3871, -12.0908]]
             )
-            expected_boxes = torch.tensor([[0.0206, 0.0355, 0.0400], [0.0711, 0.3572, 0.1431], [0.0811, 0.4575, 0.1718]])
+            expected_boxes = torch.tensor(
+                [[0.0206, 0.0355, 0.0400], [0.0711, 0.3572, 0.1431], [0.0811, 0.4575, 0.1718]]
+            )
         elif model_name == "owlv2-base-patch16":
             expected_logits = torch.tensor(
                 [[-10.0043, -9.0226, -8.0433], [-12.4569, -14.0380, -12.6153], [-21.0731, -22.2705, -21.8850]]
             )
-            expected_boxes = torch.tensor([[0.0136, 0.0223, 0.0269], [0.0406, 0.0327, 0.0797], [0.0638, 0.1539, 0.1255]])
+            expected_boxes = torch.tensor(
+                [[0.0136, 0.0223, 0.0269], [0.0406, 0.0327, 0.0797], [0.0638, 0.1539, 0.1255]]
+            )
         elif model_name == "owlv2-base-patch16-ensemble":
             expected_logits = torch.tensor(
                 [[-8.6353, -9.5409, -6.6154], [-7.9442, -9.6151, -6.7117], [-12.4593, -15.3332, -12.1048]]
             )
-            expected_boxes = torch.tensor([[0.0126, 0.0090, 0.0238], [0.0387, 0.0227, 0.0754], [0.0582, 0.1058, 0.1139]])
+            expected_boxes = torch.tensor(
+                [[0.0126, 0.0090, 0.0238], [0.0387, 0.0227, 0.0754], [0.0582, 0.1058, 0.1139]]
+            )
 
         print("Logits:", logits[0, :3, :3])
         print("Pred boxes:", pred_boxes[0, :3, :3])
