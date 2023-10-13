@@ -4049,7 +4049,8 @@ class TokenizerTesterMixin:
                         )
                     else:
                         self.assertTrue(len(encoded_split_special_token) > 1)
-    #TODO split this test
+
+    # TODO split this test
     def test_added_tokens_serialization(self):
         self.maxDiff = None
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
