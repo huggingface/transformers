@@ -1384,9 +1384,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         Returns:
             Objectness scores.
         """
-        # TODO support training mode
-        # if self.objectness_head_configs.stop_gradient:
-        #     image_features = jax.lax.stop_gradient(image_features)
+        image_features = image_features.detach()
         objectness_logits = self.objectness_head(image_features)
         objectness_logits = objectness_logits[..., 0]
         return objectness_logits
