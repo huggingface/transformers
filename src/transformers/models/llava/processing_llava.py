@@ -29,15 +29,11 @@ from ...utils import (
     is_vision_available,
 )
 
-
 if is_vision_available():
     from PIL import Image
 
 if is_torch_available():
     import torch
-
-    from ..clip import CLIPVisionModel
-
 
 class LlavaProcessor(ProcessorMixin):
     r"""
@@ -59,10 +55,9 @@ class LlavaProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
     image_processor_class = "CLIPImageProcessor"
 
-    def __init__(self, image_processor, tokenizer, vision_model):
+    def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
-        self.vision_model = vision_model
         self.DEFAULT_IMAGE_TOKEN = "<image>"
         self.IMAGE_TOKEN_INDEX = -200
 
@@ -154,10 +149,6 @@ class LlavaProcessor(ProcessorMixin):
             else:
                 image_encoding = self.image_processor.preprocess(images, return_tensors=return_tensors)["pixel_values"]
 
-            #vision_encoding = self.vision_model(image_encoding, output_hidden_states=True)
-            #image_features = vision_encoding.hidden_states[-2]
-            #image_features = image_features[:, 1:]
-
             dummy["pixel_values"] = image_encoding
             encoding.update(dummy)
         return encoding
@@ -203,18 +194,3 @@ class LlavaProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    def save_pretrained(self, save_directory, **kwargs):
-        if os.path.isfile(save_directory):
-            raise ValueError(f"Provided path ({save_directory}) should be a directory, not a file")
-        os.makedirs(save_directory, exist_ok=True)
-        clip_path = os.path.join(save_directory, "clip")
-        self.vision_model.save_pretrained(clip_path)
-        return super().save_pretrained(save_directory, **kwargs)
-
-    # overwrite to load the CLIP vision model from a separate folder
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        vision_model = CLIPVisionModel.from_pretrained(pretrained_model_name_or_path, subfolder="clip")
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
-        args.append(vision_model)
-        return cls(*args)

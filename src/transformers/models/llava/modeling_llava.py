@@ -34,7 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_llava import LlavaConfig, LlavaTextConfig, LlavaVisionConfig
+from .configuration_llava import LlavaConfig, LlavaVisionConfig
 
 
 if is_flash_attn_available():
@@ -679,18 +679,19 @@ class LlavaModel(LlavaPreTrainedModel):
 
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
+
         self.vision_model = LlavaVisionModel(config.vision_config)
 
         self.text_model = AutoModelForCausalLM.from_config(config.text_config)
         if config.vision_config.projector == "Linear":
-            modules = [nn.Linear(config.vision_config.mm_hidden_size, config.vision_config.hidden_size)]
+            modules = [nn.Linear(config.vision_config.mm_hidden_size, config.vision_config.proj_hidden_size)]
             for _ in range(1, 2):
                 modules.append(nn.GELU())
-                modules.append(nn.Linear(config.vision_config.hidden_size, config.vision_config.hidden_size))
+                modules.append(nn.Linear(config.vision_config.proj_hidden_size, config.vision_config.proj_hidden_size))
 
-            self.model.mm_projector = nn.Sequential(*modules)
+            self.text_model.mm_projector = nn.Sequential(*modules)
         else:
-            self.model.mm_projector = nn.Linear(config.vision_config.mm_hidden_size, config.vision_config.hidden_size)
+            self.text_model.mm_projector = nn.Linear(config.vision_config.mm_hidden_size, config.vision_config.proj_hidden_size)
 
         self.post_init()
 
@@ -971,7 +972,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.model = LlavaModel(config)
-        self.lm_head = nn.Linear(config.vision_config.hidden_size, config.vision_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.vision_config.proj_hidden_size, config.vision_config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1094,3 +1095,4 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
             }
         )
         return model_inputs
+
