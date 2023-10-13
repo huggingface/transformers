@@ -52,6 +52,7 @@ if is_vision_available():
     from transformers import OwlViTProcessor
 
 
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTester with OwlViT->Owlv2
 class Owlv2VisionModelTester:
     def __init__(
         self,
@@ -130,10 +131,11 @@ class Owlv2VisionModelTester:
 
 
 @require_torch
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
 class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as OWLV2 does not use input_ids, inputs_embeds,
-    attention_mask and seq_length.
+    Here we also overwrite some of the tests of test_modeling_common.py, as OWLV2 does not use input_ids,
+    inputs_embeds, attention_mask and seq_length.
     """
 
     all_model_classes = (Owlv2VisionModel,) if is_torch_available() else ()
@@ -180,11 +182,11 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OWLv2 does not support training yet")
+    @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OWLv2 does not support training yet")
+    @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -203,6 +205,7 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTester with OwlViT->Owlv2
 class Owlv2TextModelTester:
     def __init__(
         self,
@@ -293,6 +296,7 @@ class Owlv2TextModelTester:
 
 
 @require_torch
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
 class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2TextModel,) if is_torch_available() else ()
     fx_compatible = False
@@ -310,11 +314,11 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OWLv2 does not support training yet")
+    @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OWLv2 does not support training yet")
+    @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -394,6 +398,7 @@ class Owlv2ModelTester:
 
 
 @require_torch
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
 class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -543,6 +548,7 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTester with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
 class Owlv2ForObjectDetectionTester:
     def __init__(self, parent, is_training=True):
         self.parent = parent
@@ -602,6 +608,7 @@ class Owlv2ForObjectDetectionTester:
 
 
 @require_torch
+# Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
 class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Owlv2ForObjectDetection,) if is_torch_available() else ()
     fx_compatible = False
@@ -645,11 +652,11 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="OWLv2 does not support training yet")
+    @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OWLv2 does not support training yet")
+    @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training_gradient_checkpointing(self):
         pass
 
