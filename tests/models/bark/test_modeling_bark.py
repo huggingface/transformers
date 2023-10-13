@@ -921,6 +921,27 @@ class BarkModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(output_ids[0, : len(expected_output_ids)].tolist(), expected_output_ids)
 
     @slow
+    def test_generate_semantic_early_stop(self):
+        input_ids = self.inputs
+
+        # fmt: off
+        # check first ids
+        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]
+        # fmt: on
+
+        self.semantic_generation_config.min_eos_p = 0.05
+
+        with torch.no_grad():
+            output_ids = self.model.semantic.generate(
+                **input_ids,
+                do_sample=True,
+                temperature=1.0,
+                semantic_generation_config=self.semantic_generation_config,
+            )
+
+        self.assertNotEqual(output_ids[0, : len(expected_output_ids)].tolist()[-1], [-1])
+
+    @slow
     def test_generate_coarse(self):
         input_ids = self.inputs
 
