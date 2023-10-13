@@ -17,11 +17,11 @@ rendered properly in your Markdown viewer.
 # 発電用ユーティリティ
 
 このページには、[`~generation.GenerationMixin.generate`] で使用されるすべてのユーティリティ関数がリストされています。
-[`~世代.GenerationMixin.greedy_search`],
+[`~generation.GenerationMixin.greedy_search`],
 [`~generation.GenerationMixin.contrastive_search`],
-[`~世代.GenerationMixin.サンプル`],
-[`~世代.GenerationMixin.beam_search`],
-[`~世代.GenerationMixin.beam_sample`],
+[`~generation.GenerationMixin.sample`],
+[`~generation.GenerationMixin.beam_search`],
+[`~generation.GenerationMixin.beam_sample`],
 [`~generation.GenerationMixin.group_beam_search`]、および
 [`~generation.GenerationMixin.constrained_beam_search`]。
 
