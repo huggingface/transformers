@@ -44,11 +44,11 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google/owlv2-base-patch16"
+_CHECKPOINT_FOR_DOC = "google/owlv2-base-patch16-ensemble"
 
 # See all Owlv2 models at https://huggingface.co/models?filter=owlv2
 OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/owlv2-base-patch16",
+    "google/owlv2-base-patch16-ensemble",
     # See all OWLv2 models at https://huggingface.co/models?filter=owlv2
 ]
 
@@ -891,7 +891,7 @@ class Owlv2TextTransformer(nn.Module):
         )
 
 
-# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextModel with OWLVIT->OWLV2,OwlViT->Owlv2,google/owlvit-base-patch32->google/owlv2-base-patch16
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextModel with google/owlvit-base-patch32->google/owlv2-base-patch16, OWLVIT->OWLV2,OwlViT->Owlv2
 class Owlv2TextModel(Owlv2PreTrainedModel):
     config_class = Owlv2TextConfig
 
@@ -1055,7 +1055,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
 
 
 @add_start_docstrings(OWLV2_START_DOCSTRING)
-# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTModel with OWLVIT->OWLV2,OwlViT->Owlv2,owlvit->owlv2,OWL-ViT->OWLv2,google/owlvit-base-patch32->google/owlv2-base-patch16
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTModel with google/owlvit-base-patch32->google/owlv2-base-patch16-ensemble, OWLVIT->OWLV2,OwlViT->Owlv2,owlvit->owlv2,OWL-ViT->OWLv2
 class Owlv2Model(Owlv2PreTrainedModel):
     config_class = Owlv2Config
 
@@ -1109,8 +1109,8 @@ class Owlv2Model(Owlv2PreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, Owlv2Model
 
-        >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch32")
+        >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -1145,8 +1145,8 @@ class Owlv2Model(Owlv2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Owlv2Model
 
-        >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch32")
+        >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(images=image, return_tensors="pt")
@@ -1193,8 +1193,8 @@ class Owlv2Model(Owlv2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Owlv2Model
 
-        >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch32")
+        >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
@@ -1570,7 +1570,6 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OWLV2_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Owlv2ImageGuidedObjectDetectionOutput, config_class=Owlv2Config)
-    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_guided_detection with OwlViTImageGuidedObjectDetectionOutput->Owlv2ImageGuidedObjectDetectionOutput, OwlViTForObjectDetection->Owlv2ForObjectDetection, owlvit-base-patch16->owlv2-base-patch16
     def image_guided_detection(
         self,
         pixel_values: torch.FloatTensor,
@@ -1589,8 +1588,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> import torch
         >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
 
-        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16")
-        >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> query_url = "http://images.cocodataset.org/val2017/000000001675.jpg"
@@ -1602,15 +1601,26 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> target_sizes = torch.Tensor([image.size[::-1]])
         >>> # Convert outputs (bounding boxes and class logits) to COCO API
         >>> results = processor.post_process_image_guided_detection(
-        ...     outputs=outputs, threshold=0.6, nms_threshold=0.3, target_sizes=target_sizes
+        ...     outputs=outputs, threshold=0.9, nms_threshold=0.3, target_sizes=target_sizes
         ... )
         >>> i = 0  # Retrieve predictions for the first image
         >>> boxes, scores = results[i]["boxes"], results[i]["scores"]
         >>> for box, score in zip(boxes, scores):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected similar object with confidence {round(score.item(), 3)} at location {box}")
-        Detected similar object with confidence 0.856 at location [10.94, 50.4, 315.8, 471.39]
-        Detected similar object with confidence 1.0 at location [334.84, 25.33, 636.16, 374.71]
+        Detected similar object with confidence 0.938 at location [327.31, 54.94, 547.39, 268.06]
+        Detected similar object with confidence 0.959 at location [5.78, 360.65, 619.12, 366.39]
+        Detected similar object with confidence 0.902 at location [2.85, 360.01, 627.63, 380.79]
+        Detected similar object with confidence 0.985 at location [176.97, -29.45, 672.69, 182.83]
+        Detected similar object with confidence 1.0 at location [6.53, 14.35, 624.87, 470.82]
+        Detected similar object with confidence 0.998 at location [579.98, 29.14, 615.49, 489.05]
+        Detected similar object with confidence 0.985 at location [206.15, 10.53, 247.74, 466.01]
+        Detected similar object with confidence 0.947 at location [18.62, 429.72, 646.5, 457.72]
+        Detected similar object with confidence 0.996 at location [523.88, 20.69, 586.84, 483.18]
+        Detected similar object with confidence 0.998 at location [3.39, 360.59, 617.29, 499.21]
+        Detected similar object with confidence 0.969 at location [4.47, 449.05, 614.5, 474.76]
+        Detected similar object with confidence 0.966 at location [31.44, 463.65, 654.66, 471.07]
+        Detected similar object with confidence 0.924 at location [30.93, 468.07, 635.35, 475.39]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1685,8 +1695,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> import torch
         >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
 
-        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch32")
-        >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1698,7 +1708,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> target_sizes = torch.Tensor([image.size[::-1]])
         >>> # Convert outputs (bounding boxes and class logits) to final bounding boxes and scores
         >>> results = processor.post_process_object_detection(
-        ...     outputs=outputs, threshold=0.1, target_sizes=target_sizes
+        ...     outputs=outputs, threshold=0.2, target_sizes=target_sizes
         ... )
 
         >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
@@ -1708,8 +1718,8 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         >>> for box, score, label in zip(boxes, scores, labels):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
-        Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
-        Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
+        Detected a photo of a cat with confidence 0.614 at location [341.67, 17.54, 642.32, 278.51]
+        Detected a photo of a cat with confidence 0.665 at location [6.75, 38.97, 326.62, 354.85]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
