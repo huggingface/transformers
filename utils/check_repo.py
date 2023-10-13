@@ -110,7 +110,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BarkCausalModel",  # Building part of bigger (tested) model.
-    "BarkModel",  # Does not have a forward signature - generation tested with integration tests
+    "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
+    "TvpTransformer", # No need to test it as it is tested by TvpModel model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
