@@ -98,7 +98,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to add an `bos_token` at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
-        use_default_system_prompt (`bool`, *optional*, defaults to `True`):
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
     """
 
@@ -118,7 +118,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         add_bos_token=True,
         add_eos_token=False,
-        use_default_system_prompt=True,
+        use_default_system_prompt=False,
         **kwargs,
     ):
         super().__init__(
