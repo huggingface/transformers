@@ -644,6 +644,8 @@ class TvpTransformer(TvpPreTrainedModel):
         self.text_prompt = nn.Parameter(torch.randn([1, 10, config.hidden_size]))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
+        self.post_init()
+
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
@@ -1069,7 +1071,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         >>> output = model(**data)
 
         >>> timestamp = output["logits"].tolist()
-        >>> start, end = timestamp[0][0] * 100, timestamp[0][1] * 100
+        >>> start, end = round(timestamp[0][0] * 100, 2), round(timestamp[0][1] * 100, 2)
         >>> print(f'The time slot of the video corresponding to the text "{text}" is from {start}% to {end}%')
         The time slot of the video corresponding to the text "person turn a light on." is from 43.71% to 91.49%
         ```"""
