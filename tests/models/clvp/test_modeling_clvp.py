@@ -59,12 +59,12 @@ class ClvpEncoderTester:
         is_training=True,
         use_input_mask=True,
         use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        projection_dim=32,
+        vocab_size=50,
+        hidden_size=128,
+        projection_dim=16,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=64,
+        intermediate_size=32,
         dropout=0.1,
         attention_dropout=0.1,
         initializer_range=0.02,
@@ -171,7 +171,7 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ClvpEncoderTester(self)
-        self.encoder_config_tester = ConfigTester(self, config_class=ClvpEncoderConfig, hidden_size=64)
+        self.encoder_config_tester = ConfigTester(self, config_class=ClvpEncoderConfig, hidden_size=32)
 
     def tearDown(self):
         super().tearDown()
@@ -206,7 +206,7 @@ class ClvpDecoderTester:
         max_position_embeddings=256,
         max_text_tokens=256,
         use_input_mask=True,
-        hidden_size=32,
+        hidden_size=128,
         num_hidden_layers=2,
         num_attention_heads=2,
         bos_token_id=97,
@@ -290,7 +290,7 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = ClvpDecoderTester(self)
-        self.decoder_config_tester = ConfigTester(self, config_class=ClvpDecoderConfig, hidden_size=64)
+        self.decoder_config_tester = ConfigTester(self, config_class=ClvpDecoderConfig, hidden_size=32)
 
     def tearDown(self):
         super().tearDown()
@@ -346,11 +346,11 @@ class ClvpModelForConditionalGenerationTester:
 
     def get_config(self):
         decoder_config = ClvpDecoderConfig(
-            vocab_size=200,
-            max_position_embeddings=150,
-            max_text_tokens=100,
-            hidden_size=32,
-            num_hidden_layers=2,
+            vocab_size=50,
+            max_position_embeddings=30,
+            max_text_tokens=30,
+            hidden_size=128,
+            num_hidden_layers=1,
             num_attention_heads=2,
             bos_token_id=97,
             eos_token_id=98,
@@ -365,7 +365,7 @@ class ClvpModelForConditionalGenerationTester:
             text_config,
             speech_config,
             decoder_config,
-            projection_dim=64,
+            projection_dim=16,
         )
 
     def prepare_config_and_inputs(self):
@@ -416,7 +416,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)
-        self.clvp_config_tester = ConfigTester(self, config_class=ClvpConfig, hidden_size=64)
+        self.clvp_config_tester = ConfigTester(self, config_class=ClvpConfig, hidden_size=32)
 
     def tearDown(self):
         super().tearDown()
@@ -580,8 +580,9 @@ class ClvpIntegrationTest(unittest.TestCase):
 
         # fmt: off
         EXPECTED_TEXT_EMBEDS = torch.tensor(
-            [ 1.4798, -2.0005, 2.3902, -0.5042, 1.6401, -2.4135, -1.4800, 3.0118, -2.4422, 1.3267,
-              2.2339, 1.4761, -4.8983, -1.3592, 6.0251, 6.7364, 2.2576, 3.7229, -10.0436, 4.6676,
+            [ 1.8060e+00, -2.7928e+00,  3.2021e+00, -1.5673e+00,  2.3284e+00, -3.2065e+00, -1.3368e+00,  2.2322e+00,
+              -1.7667e+00,  4.1505e-01, 2.4119e+00, -5.8133e-03, -4.6367e+00,  1.6450e-01,  6.7459e+00, 6.6292e+00,
+              1.1046e+00,  3.6196e+00, -1.0496e+01,  5.4924e+00
             ]
         )
         # fmt: on
@@ -593,8 +594,8 @@ class ClvpIntegrationTest(unittest.TestCase):
 
         # fmt: off
         EXPECTED_SPEECH_EMBEDS = torch.tensor(
-            [ 3.1202, -3.1183, -1.4264, -6.1339, 1.8885, -0.1983, 0.9461, -1.7414, 0.3320, -3.8400,
-              -1.5715, 1.5096, -1.7576, 0.2387, 4.9758, 5.8450, -6.2534, 2.8586, -5.5816, 4.7821,
+            [ 4.6143, -5.5784,  0.8983, -3.9665, -0.6714, -1.0665, -1.1277,  1.5619, 2.6322, -7.2008, -2.4932,  0.3265,
+              -1.4738,  0.1425,  5.0825,  4.1760, -5.4708,  2.1935, -6.0044,  3.9540
             ]
         )
         # fmt: on

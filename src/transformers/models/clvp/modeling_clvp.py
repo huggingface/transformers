@@ -112,17 +112,13 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(state, freqs):
-    """
-    Applies rotary position embeddings on state.
-    """
-    pos_emb_len = freqs.shape[-1]
-    state_l, state_r = state[..., :pos_emb_len], state[..., pos_emb_len:]
-
-    freqs = freqs[:, :, -state_l.shape[-1] :]
-    state_l = (state_l * freqs.cos()) + (rotate_half(state_l) * freqs.sin())
-
-    return torch.cat([state_l, state_r], dim=-1)
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
+    cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
+    sin = sin[position_ids].unsqueeze(1)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 @dataclass
@@ -282,15 +278,22 @@ class ClvpSelfAttention(nn.Module):
         hidden_states: torch.FloatTensor,
         rotary_pos_emb: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
-        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        # Raise error when position_ids is None but rotary_pos_emb is provided, because we need that when applying
+        # rotary_pos_emb to query and key states.
+        if rotary_pos_emb is not None and position_ids is None:
+            raise ValueError(f"`position_ids` must be provided when `rotary_pos_emb` is not None.")
+
+        bsz, _, embed_dim = hidden_states.size()
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
+        query_states = self._shape(self.q_proj(hidden_states), -1, bsz) * self.scale
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
@@ -304,68 +307,61 @@ class ClvpSelfAttention(nn.Module):
         else:
             present = None
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
         if rotary_pos_emb is not None:
-            query_states = apply_rotary_pos_emb(query_states, rotary_pos_emb)
-            key_states = apply_rotary_pos_emb(key_states, rotary_pos_emb)
-            value_states = apply_rotary_pos_emb(value_states, rotary_pos_emb)
+            rotary_emb_dim = rotary_pos_emb.shape[-1]
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
+            # Partial rotary embedding
+            query_rot, query_pass = (
+                query_states[..., :rotary_emb_dim],
+                query_states[..., rotary_emb_dim:],
+            )
+            key_rot, key_pass = (
+                key_states[..., :rotary_emb_dim],
+                key_states[..., rotary_emb_dim:],
             )
 
+            cos, sin = rotary_pos_emb.cos().squeeze(0), rotary_pos_emb.sin().squeeze(0)
+            query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+
+            # [batch_size, num_heads, seq_length, head_dim]
+            query_states = torch.cat((query_rot, query_pass), dim=-1)
+            key_states = torch.cat((key_rot, key_pass), dim=-1)
+
+        tgt_len = query_states.shape[2]
+        src_len = key_states.shape[2]
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
+
         if attention_mask is not None:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         # Mask heads if we want to
         if head_mask is not None:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights * head_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.matmul(attn_probs, value_states)
 
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+        if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
-        outputs = (attn_output, present)
-        if output_attentions:
-            outputs += (attn_weights_reshaped,)
+        if not output_attentions:
+            attn_weights = None
 
-        return outputs
+        return attn_output, present, attn_weights
 
 
 class ClvpGatedLinearUnit(nn.Module):
@@ -412,14 +408,15 @@ class ClvpEncoderLayer(nn.Module):
         self.self_attn = ClvpSelfAttention(config)
         self.mlp = ClvpEncoderMLP(config)
 
-        self.rms_1 = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.rms_2 = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_rmsnorm = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_rmsnorm = ClvpRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.FloatTensor,
         rotary_pos_emb: torch.FloatTensor,
         attention_mask: torch.LongTensor,
+        position_ids: torch.LongTensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
@@ -430,18 +427,21 @@ class ClvpEncoderLayer(nn.Module):
                 rotary position embeddings generated by `ClvpRotaryPositionalEmbedding` module.
             attention_mask (`torch.FloatTensor` of shape `(batch, 1, tgt_len, src_len)`):
                 attention mask where padding elements are indicated by very large negative values.
+            position_ids (`torch.LongTensor`):
+                Denotes position ids of the input tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
         residual = hidden_states
 
-        hidden_states = self.rms_1(hidden_states)
+        hidden_states = self.input_rmsnorm(hidden_states)
 
         attention_outputs = self.self_attn(
             hidden_states=hidden_states,
             rotary_pos_emb=rotary_pos_emb,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             output_attentions=output_attentions,
         )
 
@@ -450,7 +450,7 @@ class ClvpEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.rms_2(hidden_states)
+        hidden_states = self.post_attention_rmsnorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -486,9 +486,9 @@ class ClvpDecoderLayer(nn.Module):
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
-        self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.input_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = ClvpSelfAttention(config)
-        self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        self.post_attention_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         self.mlp = ClvpDecoderMLP(inner_dim, config)
 
@@ -496,17 +496,19 @@ class ClvpDecoderLayer(nn.Module):
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
-        hidden_states = self.ln_1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         attn_outputs = self.attn(
             hidden_states,
             past_key_value=past_key_value,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -517,7 +519,7 @@ class ClvpDecoderLayer(nn.Module):
         hidden_states = attn_output + residual
 
         residual = hidden_states
-        hidden_states = self.ln_2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         feed_forward_hidden_states = self.mlp(hidden_states)
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
@@ -597,6 +599,25 @@ class ClvpConditioningEncoder(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
     ):
+        # process text
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            batch_size, seq_length = input_ids.size()
+            inputs_embeds = self.text_token_embedding(input_ids)
+        elif inputs_embeds is not None:
+            batch_size, seq_length = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        # construct attention mask if not given
+        if attention_mask is None:
+            attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=inputs_embeds.device)
+
+        position_ids = attention_mask.cumsum(-1) - 1
+        position_embeds = self.text_position_embedding(position_ids)
+        text_embeds = inputs_embeds + position_embeds
+
         if self.gradient_checkpointing and self.training:
             # process each log-mel spectrogram into a single vector
             mel_spec = torch.utils.checkpoint.checkpoint(self.mel_conv, input_features)
@@ -621,25 +642,6 @@ class ClvpConditioningEncoder(nn.Module):
 
         mel_spec = mel_spec[:, :, 0]
         mel_spec = mel_spec.unsqueeze(1)
-
-        # process text
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.size()
-            inputs_embeds = self.text_token_embedding(input_ids)
-        elif inputs_embeds is not None:
-            batch_size, seq_length = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        # construct attention mask if not given
-        if attention_mask is None:
-            attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=inputs_embeds.device)
-
-        position_ids = attention_mask.cumsum(-1) - 1
-        position_embeds = self.text_position_embedding(position_ids)
-        text_embeds = inputs_embeds + position_embeds
 
         # repeat if there is either (1 text vs N audios) or (N texts vs 1 audio)
         if text_embeds.shape[0] == 1 and mel_spec.shape[0] != 1:
@@ -867,6 +869,7 @@ class ClvpEncoder(ClvpPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -882,13 +885,15 @@ class ClvpEncoder(ClvpPreTrainedModel):
                 [What are input IDs?](../glossary#input-ids)
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 input embeddings for the model. This bypasses the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
+            position_ids (`torch.LongTensor`, *optional*):
+                Denotes the position ids of `input_ids`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -916,10 +921,15 @@ class ClvpEncoder(ClvpPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        # expand attention_mask
+        # expand attention_mask and create position_ids if needed
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+
+        if position_ids is None:
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = torch.arange(input_shape[1], dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -943,12 +953,14 @@ class ClvpEncoder(ClvpPreTrainedModel):
                     hidden_states,
                     rotary_pos_emb,
                     attention_mask,
+                    position_ids,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     rotary_pos_emb,
                     attention_mask,
+                    position_ids,
                     output_attentions=output_attentions,
                 )
 
@@ -1146,6 +1158,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
                     hidden_states,
                     None,
                     attention_mask,
+                    position_ids,
                     head_mask[i],
                 )
             else:
@@ -1153,6 +1166,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
                     hidden_states,
                     past_key_value=past_key_value,
                     attention_mask=attention_mask,
+                    position_ids=position_ids,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,

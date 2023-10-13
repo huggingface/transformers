@@ -67,6 +67,8 @@ CLVP_DECODER_MAPPING = {
     "mel_embedding": "speech_decoder_model.model.decoder.input_embeds_layer",
     "mel_pos_embedding.emb": "speech_decoder_model.model.decoder.position_embeds_layer",
     "gpt.h": "speech_decoder_model.model.decoder.layers",
+    "ln_1": "input_layernorm",
+    "ln_2": "post_attention_layernorm",
 }
 
 
@@ -82,13 +84,13 @@ def convert_encoder_weights(original_weights):
     original_weights_keys = sorted(original_weights.keys())
     for original_key in original_weights_keys:
         updated_key = original_key
-        # for rms_1.weight and rms_2.weight
+        # for input_rmsnorm.weight and post_attention_rmsnorm.weight
         if "0.0.g" in updated_key:
             present_index = updated_key.split(".")[4]
             if int(present_index) % 2 == 0:
-                updated_key = updated_key.replace("0.0.g", "rms_1.weight")
+                updated_key = updated_key.replace("0.0.g", "input_rmsnorm.weight")
             else:
-                updated_key = updated_key.replace("0.0.g", "rms_2.weight")
+                updated_key = updated_key.replace("0.0.g", "post_attention_rmsnorm.weight")
 
         if "transformer.attn_layers.layers" in updated_key:
             present_index = updated_key.split(".")[4]

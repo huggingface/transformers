@@ -315,6 +315,8 @@ class ClvpTokenizer(PreTrainedTokenizer):
             token = "".join(
                 self.byte_encoder[b] for b in token.encode("utf-8")
             )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
+
+            # if the token is "Ġ" we replace it with "[SPACE]" (if "[SPACE]" is present in the vocab), otherwise we keep the "Ġ".
             bpe_tokens.extend(
                 "[SPACE]" if bpe_token == "\u0120" and "[SPACE]" in self.encoder.keys() else bpe_token
                 for bpe_token in self.bpe(token).split(" ")
