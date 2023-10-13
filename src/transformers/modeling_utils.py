@@ -2177,6 +2177,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "`.to` is not supported for `4-bit` or `8-bit` bitsandbytes models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
+        elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
+            # For GPTQ models, we force users to NOT cast the model into th edesired dtype
+            # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
+            dtype_present_in_args = False
+
+            if "dtype" not in kwargs:
+                for arg in args:
+                    if isinstance(arg, torch.dtype):
+                        dtype_present_in_args = True
+                        break
+            else:
+                dtype_present_in_args = True
+
+            if dtype_present_in_args:
+                raise ValueError(
+                    "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
+                    " `dtype` by passing the correct `torch_dtype` argument."
+                )
+
+            return super().to(*args, **kwargs)
         else:
             return super().to(*args, **kwargs)
 

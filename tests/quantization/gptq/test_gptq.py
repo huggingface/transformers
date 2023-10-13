@@ -145,6 +145,18 @@ class GPTQTest(unittest.TestCase):
 
         self.assertAlmostEqual(self.mem_fp16 / mem_quantized, self.EXPECTED_RELATIVE_DIFFERENCE)
 
+    def test_device_and_dtype_assignment(self):
+        r"""
+        Test whether trying to cast (or assigning a device to) a model after converting it in 8-bit will throw an error.
+        Checks also if other models are casted correctly.
+        """
+        # This should work
+        _ = self.quantized_model.to(0)
+
+        with self.assertRaises(ValueError):
+            # Tries with a `dtype``
+            self.quantized_model.to(torch.float16)
+
     def test_original_dtype(self):
         r"""
         A simple test to check if the model succesfully stores the original dtype
