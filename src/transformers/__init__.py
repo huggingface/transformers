@@ -2592,7 +2592,7 @@ else:
     )
     _import_structure["models.pvt_v2"].extend(
         [
-            "PVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "PvtV2ForImageClassification",
             "PvtV2Model",
             "PvtV2PreTrainedModel",
