@@ -5010,7 +5010,7 @@ if TYPE_CHECKING:
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.pvt import PvtImageProcessor
-        from .models.pvt_v2 import PvtV2Config
+        from .models.pvt_v2 import PvtV2ImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
