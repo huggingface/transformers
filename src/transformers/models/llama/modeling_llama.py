@@ -41,6 +41,24 @@ from ...utils import (
 from .configuration_llama import LlamaConfig
 
 
+class AttentionMask2DTo4D:
+    def __init__(self, is_causal: bool):
+        self.is_causal = is_causal
+        self.cached_2d_tensor = None
+        self.cached_4d_tensor = None
+
+    def __call__(self, attention_mask_2d: torch.Tensor):
+        """
+        Multiplies the given tensor x by -10,000. 
+        If the cached tensor does not exist or has a different size, a new one is allocated.
+        """
+        if self.cached_2d_tensor is None or (attention_mask_2d != self.cached_2d_tensor).any():
+            self.cached_2d_tensor = attention_mask_2d
+            self.cached_4d_tensor = self._expand_2d_mask(attention_mask_2d, is_causal=is_causal)
+
+        return self.cached_4d_tensor
+
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -272,6 +290,7 @@ class LlamaAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
+        self.mask_converter = mask_converter
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -376,6 +395,8 @@ class LlamaAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
+        # convert 2d -> 4d. Re-use cached mask if available
+        attention_mask = self.attn_mask_converter(attention_mask)
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
@@ -420,12 +441,11 @@ class LlamaFlashAttention2(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
-        padding_mask: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # LlamaFlashAttention2 attention does not support output_attentions
         output_attentions = False
@@ -485,7 +505,7 @@ class LlamaFlashAttention2(LlamaAttention):
             value_states = value_states.to(torch.float16)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, padding_mask, q_len, dropout=dropout_rate
+            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -538,7 +558,7 @@ class LlamaFlashAttention2(LlamaAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=True,
+                causal=self.mask_converter.is_causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
@@ -589,13 +609,13 @@ class LlamaFlashAttention2(LlamaAttention):
 
 
 class LlamaDecoderLayer(nn.Module):
-    def __init__(self, config: LlamaConfig):
+    def __init__(self, config: LlamaConfig, mask_converter=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = (
-            LlamaAttention(config=config)
+            LlamaAttention(config=config, mask_converter=mask_converter)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else LlamaFlashAttention2(config=config)
+            else LlamaFlashAttention2(config=config, mask_converter=mask_converter)
         )
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -784,8 +804,9 @@ class LlamaModel(LlamaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
+        attn_mask_converter = AttentionMask2DTo4D(is_causal=True)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([LlamaDecoderLayer(config, attn_mask_converter) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
