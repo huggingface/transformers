@@ -1428,7 +1428,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
@@ -1453,7 +1453,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder,"
+    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder, "
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
@@ -2475,7 +2475,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 

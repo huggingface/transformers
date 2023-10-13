@@ -1452,8 +1452,8 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         if return_timestamps is not None:
             if not hasattr(generation_config, "no_timestamps_token_id"):
                 raise ValueError(
-                    "You are trying to return timestamps, but the generation config is not properly set."
-                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`."
+                    "You are trying to return timestamps, but the generation config is not properly set. "
+                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`. "
                     "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
                 )
 

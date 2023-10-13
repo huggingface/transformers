@@ -855,7 +855,7 @@ class MT5PreTrainedModel(PreTrainedModel):
 
         if decoder_start_token_id is None:
             raise ValueError(
-                "self.model.config.decoder_start_token_id has to be defined. In MT5 it is usually set to the pad_token_id."
+                "self.model.config.decoder_start_token_id has to be defined. In MT5 it is usually set to the pad_token_id. "
                 "See MT5 docs for more information."
             )
 

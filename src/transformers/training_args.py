@@ -756,7 +756,7 @@ class TrainingArguments:
         default=500,
         metadata={
             "help": (
-                "Log every X updates steps. Should be an integer or a float in range `[0,1)`."
+                "Log every X updates steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
@@ -770,7 +770,7 @@ class TrainingArguments:
         default=500,
         metadata={
             "help": (
-                "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`."
+                "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
@@ -923,7 +923,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Run an evaluation every X steps. Should be an integer or a float in range `[0,1)`."
+                "Run an evaluation every X steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
@@ -1006,7 +1006,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a"
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a "
                 "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
             )
         },
@@ -1207,7 +1207,7 @@ class TrainingArguments:
     dispatch_batches: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
+            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process "
             "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
             "underlying dataset is an `IterableDataset`, `False` otherwise."
         },
@@ -1297,7 +1297,7 @@ class TrainingArguments:
                     if not (self.eval_steps < 1 and self.save_steps < 1):
                         raise ValueError(
                             "--load_best_model_at_end requires the saving steps to be a multiple of the evaluation "
-                            "steps, which cannot get guaranteed when mixing ratio and absolute steps for save_steps"
+                            "steps, which cannot get guaranteed when mixing ratio and absolute steps for save_steps "
                             f"{self.save_steps} and eval_steps {self.eval_steps}."
                         )
                     # Work around floating point precision issues
@@ -1807,7 +1807,7 @@ class TrainingArguments:
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 warnings.warn(
-                    "`use_mps_device` is deprecated and will be removed in version 5.0 of 🤗 Transformers."
+                    "`use_mps_device` is deprecated and will be removed in version 5.0 of 🤗 Transformers. "
                     "`mps` device will be used by default if available similar to the way `cuda` device is used."
                     "Therefore, no action from user is required. "
                 )
