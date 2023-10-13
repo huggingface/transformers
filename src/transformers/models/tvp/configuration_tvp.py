@@ -15,6 +15,7 @@
 """ TVP model configuration"""
 
 import copy
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
@@ -82,10 +83,10 @@ class TvpConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        type_vocab_size (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability of attention layers.
     """

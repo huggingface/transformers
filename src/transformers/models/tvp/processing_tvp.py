@@ -29,9 +29,9 @@ class TvpProcessor(ProcessorMixin):
     [`~TvpProcessor.__call__`] and [`~TvpProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`TvpImageProcessor`]):
+        image_processor ([`TvpImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`BertTokenizerFast`]):
+        tokenizer ([`BertTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
