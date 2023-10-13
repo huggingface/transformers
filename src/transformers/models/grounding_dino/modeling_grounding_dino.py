@@ -47,7 +47,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import is_ninja_available, logging
 from ..auto import AutoBackbone
-from .configuration_grounding_dino import GroundingDINOConfig
+from .configuration_grounding_dino import GroundingDINOConfig, GroundingDINOTextPrenetConfig
 from .load_custom import load_cuda_kernels
 
 
@@ -1923,9 +1923,16 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
+                    query_pos,
+                    reference_points_input,
+                    spatial_shapes,
+                    level_start_index,
                     vision_encoder_hidden_states,
                     vision_encoder_attention_mask,
-                    None,
+                    text_encoder_hidden_states,
+                    text_encoder_attention_mask,
+                    self_attn_mask,
+                    None
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -2004,6 +2011,42 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
             vision_cross_attentions=all_cross_attns_vision,
             text_cross_attentions=all_cross_attns_text,
         )
+
+SPECIAL_TOKENS = [101, 102, 1012, 1029]
+def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTensor) -> Tuple[Tensor, Tensor]:
+    """Generate attention mask between each pair of special tokens and positional ids.
+    Args:
+        input_ids (torch.LongTensor): input ids. Shape: [bs, num_token]
+    Returns:
+        Tuple[torch.Tensor]: attention mask between each special tokens and position_ids
+    """
+    bs, num_token = input_ids.shape
+    # special_tokens_mask: bs, num_token. 1 for special tokens. 0 for normal tokens
+    special_tokens_mask = torch.zeros((bs, num_token), device=input_ids.device).bool()
+    for special_token in SPECIAL_TOKENS:
+        special_tokens_mask |= input_ids == special_token
+
+    # idxs: each row is a list of indices of special tokens
+    idxs = torch.nonzero(special_tokens_mask)
+
+    # generate attention mask and positional ids
+    attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(bs, 1, 1)
+    position_ids = torch.zeros((bs, num_token), device=input_ids.device)
+    previous_col = 0
+    for i in range(idxs.shape[0]):
+        row, col = idxs[i]
+        if (col == 0) or (col == num_token - 1):
+            attention_mask[row, col, col] = True
+            position_ids[row, col] = 0
+        else:
+            attention_mask[row, previous_col + 1 : col + 1, previous_col + 1 : col + 1] = True
+            position_ids[row, previous_col + 1 : col + 1] = torch.arange(
+                0, col - previous_col, device=input_ids.device
+            )
+
+        previous_col = col
+
+    return attention_mask, position_ids.to(torch.long)
 
 
 @add_start_docstrings(
@@ -2173,11 +2216,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         self,
         pixel_values: Tensor,
         input_ids: Tensor,
-        attention_mask: Tensor,
         token_type_ids: Tensor,
-        text_token_mask: Tensor,
-        text_self_attention_masks: Tensor,
-        position_ids: Tensor,
+        attention_mask: Tensor,
         pixel_mask: Optional[Tensor] = None,
         encoder_outputs=None,
         output_attentions=None,
@@ -2214,8 +2254,19 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids)
+        text_token_mask = attention_mask.bool() # just to avoid renaming everywhere
+
+        max_text_len = self.config.max_text_len
+        if text_self_attention_masks.shape[1] > max_text_len:
+            text_self_attention_masks = text_self_attention_masks[:, :max_text_len, :max_text_len]
+            position_ids = position_ids[:, :max_text_len]
+            input_ids = input_ids[:, :max_text_len]
+            token_type_ids = token_type_ids[:, :max_text_len]
+            text_token_mask = text_token_mask[:, :max_text_len]
+
         # Extract text features from text backbone
-        text_features = self.text_backbone(input_ids, attention_mask, token_type_ids, position_ids)[
+        text_features = self.text_backbone(input_ids, text_self_attention_masks, token_type_ids, position_ids)[
             "last_hidden_state"
         ]
         text_features = self.input_proj_text(text_features)
@@ -2463,11 +2514,8 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor,
-        attention_mask: torch.BoolTensor,
+        attention_mask: torch.LongTensor,
         token_type_ids: torch.LongTensor,
-        text_token_mask: torch.BoolTensor,
-        text_self_attention_masks: torch.BoolTensor,
-        position_ids: torch.LongTensor,
         pixel_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[Union[GroundingDINOEncoderOutput, Tuple]] = None,
         labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
@@ -2523,9 +2571,6 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
-            text_token_mask=text_token_mask,
-            text_self_attention_masks=text_self_attention_masks,
-            position_ids=position_ids,
             pixel_mask=pixel_mask,
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
@@ -2551,7 +2596,7 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
             outputs_class = self.class_embed[level](
                 vision_hidden_state=hidden_states[:, level],
                 text_hidden_state=enc_text_hidden_state,
-                text_token_mask=text_token_mask,
+                text_token_mask=attention_mask.bool(),
             )
             delta_bbox = self.bbox_embed[level](hidden_states[:, level])
             if reference.shape[-1] == 4:
@@ -3609,6 +3654,7 @@ class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
     to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
+    config_class = GroundingDINOTextPrenetConfig
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
