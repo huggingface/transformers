@@ -58,7 +58,7 @@ PATCHTSMIXER_START_DOCSTRING = r"""
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        mask_input (`bool`, *optional*):
+        mask_input (`bool`, *optional*, defaults to `False`):
             If True, Masking will be enabled. False otherwise.
 """
 
