@@ -16,9 +16,8 @@
 # limitations under the License.
 """ Pvt model configuration"""
 
-import warnings
 from collections import OrderedDict
-from typing import Callable, Dict, List, Mapping, Union
+from typing import Callable, List, Mapping
 
 from packaging import version
 
@@ -27,17 +26,11 @@ from ...onnx import OnnxConfig
 from ...utils import logging
 from ...utils.backbone_utils import get_aligned_output_features_output_indices
 
-
 logger = logging.get_logger(__name__)
 
 PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "pvt_v2_b0": "https://huggingface.co/FoamoftheSea/pvt_v2_b0",
-    "pvt_v2_b1": "https://huggingface.co/FoamoftheSea/pvt_v2_b1",
-    "pvt_v2_b2": "https://huggingface.co/FoamoftheSea/pvt_v2_b2",
-    "pvt_v2_b2_linear": "https://huggingface.co/FoamoftheSea/pvt_v2_b2_linear",
-    "pvt_v2_b3": "https://huggingface.co/FoamoftheSea/pvt_v2_b3",
-    "pvt_v2_b4": "https://huggingface.co/FoamoftheSea/pvt_v2_b4",
-    "pvt_v2_b5": "https://huggingface.co/FoamoftheSea/pvt_v2_b5",
+    "pvt-tiny-224": "https://huggingface.co/Zetatech/pvt-tiny-224",
+    # See all PVT models at https://huggingface.co/models?filter=pvt
 }
 
 
@@ -62,12 +55,12 @@ class PvtV2Config(PretrainedConfig):
             The number of layers in each encoder block.
         sr_ratios (`List[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
             Sequence reduction ratios in each encoder block.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
+        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 128, 320, 512]`):
             Dimension of each of the encoder blocks.
-        patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
-            Patch size for overlapping patch embedding before each encoder block.
+        patch_sizes (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
+            Patch size before each encoder block.
         strides (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
-            Stride for overlapping patch embedding before each encoder block.
+            Stride before each encoder block.
         num_attention_heads (`List[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
         mlp_ratios (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
@@ -116,17 +109,17 @@ class PvtV2Config(PretrainedConfig):
 
     def __init__(
         self,
-        image_size: Dict[str, int] = {"height": 224, "width": 224},
+        image_size: int = 224,
         num_channels: int = 3,
         num_encoder_blocks: int = 4,
         depths: List[int] = [2, 2, 2, 2],
         sr_ratios: List[int] = [8, 4, 2, 1],
-        hidden_sizes: List[int] = [32, 64, 160, 256],
-        patch_sizes: List[int] = [7, 3, 3, 3],
+        hidden_sizes: List[int] = [64, 128, 320, 512],
+        patch_sizes: List[int] = [4, 2, 2, 2],
         strides: List[int] = [4, 2, 2, 2],
         num_attention_heads: List[int] = [1, 2, 5, 8],
         mlp_ratios: List[int] = [8, 8, 4, 4],
-        hidden_act: Union[str, Mapping[str, Callable]] = "gelu",
+        hidden_act: Mapping[str, Callable] = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,
         initializer_range: float = 0.02,
@@ -136,17 +129,10 @@ class PvtV2Config(PretrainedConfig):
         num_labels: int = 1000,
         attn_reduce: str = "SR",  # Set to "SR" for spatial reduction (Conv2d), "AP" for average pooling
         out_features=None,
-        out_indices=[1, 2, 3],
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        if "reshape_last_stage" in kwargs and kwargs["reshape_last_stage"] is False:
-            warnings.warn(
-                "Reshape_last_stage is set to False in this config. This argument is deprecated and will soon be"
-                " removed, as the behaviour will default to that of reshape_last_stage = True.",
-                FutureWarning,
-            )
 
         self.image_size = image_size
         self.num_channels = num_channels
@@ -168,7 +154,6 @@ class PvtV2Config(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.attn_reduce = attn_reduce
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
