@@ -1371,8 +1371,10 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> inputs = processor(text=["a photo of a cat"], images=image, return_tensors="pt", padding=True)
 
         >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.contrastive_logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+
+        >>> image_embeddings = outputs.image_embeddings
+        >>> text_embeddings = outputs.text_embeddings
+        >>> multimodal_embeddings = outputs.multimodal_embeddings
         ```
         """
 
