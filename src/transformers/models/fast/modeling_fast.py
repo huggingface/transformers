@@ -609,48 +609,48 @@ class FASTHead(nn.Module):
         x = self.final(x)
         return x
 
-    def get_results(self, out, img_meta, scale=2):
-        org_img_size = img_meta["org_img_size"]
-        img_size = img_meta["img_size"]  # 640*640
-        batch_size = out.size(0)
-        outputs = {}
-
-        texts = F.interpolate(
-            out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
-        )  # B*1*320*320
-        texts = self._max_pooling(texts, scale=scale)  # B*1*320*320
-        score_maps = torch.sigmoid_(texts)  # B*1*320*320~
-        score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
-        score_maps = score_maps.squeeze(1)  # B*640*640
-
-        kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
-        labels_ = []
-        for kernel in kernels.numpy():
-            ret, label_ = cv2.connectedComponents(kernel)
-            labels_.append(label_)
-        labels_ = np.array(labels_)
-        labels_ = torch.from_numpy(labels_)
-        labels = labels_.unsqueeze(1).to(torch.float32)  # B*1*160*160
-        labels = F.interpolate(
-            labels, size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
-        )  # B*1*320*320
-        labels = self._max_pooling(labels, scale=scale)
-        labels = F.interpolate(labels, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
-        labels = labels.squeeze(1).to(torch.int32)  # B*640*640
-
-        keys = [torch.unique(labels_[i], sorted=True) for i in range(batch_size)]
-
-        outputs.update({"kernels": kernels.data.cpu()})
-
-        scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
-
-        results = []
-        for i in range(batch_size):
-            bboxes, scores = self.generate_bbox(keys[i], labels[i], score_maps[i], scales)
-            results.append({"bboxes": bboxes, "scores": scores})
-        outputs.update({"results": results})
-
-        return outputs
+    # def get_results(self, out, img_meta, scale=2):
+    #     org_img_size = img_meta["org_img_size"]
+    #     img_size = img_meta["img_size"]  # 640*640
+    #     batch_size = out.size(0)
+    #     outputs = {}
+    #
+    #     texts = F.interpolate(
+    #         out[:, 0:1, :, :], size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+    #     )  # B*1*320*320
+    #     texts = self._max_pooling(texts, scale=scale)  # B*1*320*320
+    #     score_maps = torch.sigmoid_(texts)  # B*1*320*320~
+    #     score_maps = F.interpolate(score_maps, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
+    #     score_maps = score_maps.squeeze(1)  # B*640*640
+    #
+    #     kernels = (out[:, 0, :, :] > 0).to(torch.uint8)  # B*160*160
+    #     labels_ = []
+    #     for kernel in kernels.numpy():
+    #         ret, label_ = cv2.connectedComponents(kernel)
+    #         labels_.append(label_)
+    #     labels_ = np.array(labels_)
+    #     labels_ = torch.from_numpy(labels_)
+    #     labels = labels_.unsqueeze(1).to(torch.float32)  # B*1*160*160
+    #     labels = F.interpolate(
+    #         labels, size=(img_size[0] // scale, img_size[1] // scale), mode="nearest"
+    #     )  # B*1*320*320
+    #     labels = self._max_pooling(labels, scale=scale)
+    #     labels = F.interpolate(labels, size=(img_size[0], img_size[1]), mode="nearest")  # B*1*640*640
+    #     labels = labels.squeeze(1).to(torch.int32)  # B*640*640
+    #
+    #     keys = [torch.unique(labels_[i], sorted=True) for i in range(batch_size)]
+    #
+    #     outputs.update({"kernels": kernels.data.cpu()})
+    #
+    #     scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
+    #
+    #     results = []
+    #     for i in range(batch_size):
+    #         bboxes, scores = self.generate_bbox(keys[i], labels[i], score_maps[i], scales)
+    #         results.append({"bboxes": bboxes, "scores": scores})
+    #     outputs.update({"results": results})
+    #
+    #     return outputs
 
     def _max_pooling(self, x, scale=1):
         if scale == 1:
@@ -659,38 +659,38 @@ class FASTHead(nn.Module):
             x = self.pooling_2s(x)
         return x
 
-    def generate_bbox(self, keys, label, score, scales):
-        label_num = len(keys)
-        bboxes = []
-        scores = []
-        for index in range(1, label_num):
-            i = keys[index]
-            ind = label == i
-            ind_np = ind.data.cpu().numpy()
-            points = np.array(np.where(ind_np)).transpose((1, 0))
-            if points.shape[0] < self.min_area:
-                label[ind] = 0
-                continue
-            score_i = score[ind].mean().item()
-            if score_i < self.min_score:
-                label[ind] = 0
-                continue
-
-            if self.bbox_type == "rect":
-                rect = cv2.minAreaRect(points[:, ::-1])
-                alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
-                rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
-                bbox = cv2.boxPoints(rect) * scales
-            else:
-                binary = np.zeros(label.shape, dtype="uint8")
-                binary[ind_np] = 1
-                contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                bbox = contours[0] * scales
-
-            bbox = bbox.astype("int32")
-            bboxes.append(bbox.reshape(-1).tolist())
-            scores.append(score_i)
-        return bboxes, scores
+    # def generate_bbox(self, keys, label, score, scales):
+    #     label_num = len(keys)
+    #     bboxes = []
+    #     scores = []
+    #     for index in range(1, label_num):
+    #         i = keys[index]
+    #         ind = label == i
+    #         ind_np = ind.data.cpu().numpy()
+    #         points = np.array(np.where(ind_np)).transpose((1, 0))
+    #         if points.shape[0] < self.min_area:
+    #             label[ind] = 0
+    #             continue
+    #         score_i = score[ind].mean().item()
+    #         if score_i < self.min_score:
+    #             label[ind] = 0
+    #             continue
+    #
+    #         if self.bbox_type == "rect":
+    #             rect = cv2.minAreaRect(points[:, ::-1])
+    #             alpha = math.sqrt(math.sqrt(points.shape[0] / (rect[1][0] * rect[1][1])))
+    #             rect = (rect[0], (rect[1][0] * alpha, rect[1][1] * alpha), rect[2])
+    #             bbox = cv2.boxPoints(rect) * scales
+    #         else:
+    #             binary = np.zeros(label.shape, dtype="uint8")
+    #             binary[ind_np] = 1
+    #             contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    #             bbox = contours[0] * scales
+    #
+    #         bbox = bbox.astype("int32")
+    #         bboxes.append(bbox.reshape(-1).tolist())
+    #         scores.append(score_i)
+    #     return bboxes, scores
 
 
 class FASTForImageCaptioning(PreTrainedModel):
@@ -714,7 +714,7 @@ class FASTForImageCaptioning(PreTrainedModel):
         det_out = self.det_head(f)
 
         det_out = self._upsample(det_out, imgs.size(), scale=4)
-        det_res = self.det_head.get_results(det_out, img_metas, scale=2)
-        outputs.update(det_res)
+        # det_res = self.det_head.get_results(det_out, img_metas, scale=2)
+        # outputs.update(det_res)
 
-        return outputs
+        return det_out
