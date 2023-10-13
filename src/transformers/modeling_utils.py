@@ -3185,7 +3185,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model.is_quantized = True
 
             # We store the original dtype for quantized models as we cannot easily retrieve them
-            # one the weights have been quantized
+            # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
             # remain a single source of truth
             config._pre_quantization_dtype = torch_dtype
