@@ -62,20 +62,17 @@ def convert_llava_checkpoint(
 
     # load original models
     llava_state_dict = OrderedDict()
-    llava_state_dict = torch.load(checkpoint_path_llava_1, map_location="gpu")
-    for i in llava_state_dict:
-        i = i.replace("model","model.text_model")
-    llava_state_dict.update(torch.load(checkpoint_path_llava_2, map_location="gpu"))
+    llava_state_dict = torch.load(checkpoint_path_llava_1, map_location="cpu")
+    llava_state_dict.update(torch.load(checkpoint_path_llava_2, map_location="cpu"))
     for i in llava_state_dict:
         i = i.replace("model","model.text_model")
 
     state_dict = OrderedDict()
-    state_dict.update(torch.load(checkpoint_path_clip, map_location="gpu"))
+    state_dict.update(torch.load(checkpoint_path_clip, map_location="cpu"))
 
     for i in state_dict:
         i = i.replace("model","model.vision_model")
 
-    
     state_dict.update(llava_state_dict)
 
     model = LlavaForCausalLM(config)
