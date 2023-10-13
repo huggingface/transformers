@@ -14,15 +14,16 @@
 # limitations under the License.
 
 from math import ceil
+from typing import Dict, List
 
 
-def assert_device_map(device_map, num_blocks):
+def assert_device_map(device_map: Dict[int, List[int]], num_blocks: int):
     blocks = list(range(0, num_blocks))
 
     device_map_blocks = [item for sublist in list(device_map.values()) for item in sublist]
 
     # Duplicate check
-    duplicate_blocks = []
+    duplicate_blocks: List[int] = []
     for i in device_map_blocks:
         if device_map_blocks.count(i) > 1 and i not in duplicate_blocks:
             duplicate_blocks.append(i)
@@ -47,7 +48,7 @@ def assert_device_map(device_map, num_blocks):
         )
 
 
-def get_device_map(n_layers, devices):
+def get_device_map(n_layers: int, devices: List[int]):
     """Returns a dictionary of layers distributed evenly across all devices."""
     layers = list(range(n_layers))
     n_blocks = int(ceil(n_layers / len(devices)))

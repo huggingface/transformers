@@ -19,7 +19,7 @@ import importlib.metadata
 import operator
 import re
 import sys
-from typing import Optional
+from typing import Optional, Union
 
 from packaging import version
 
@@ -34,7 +34,9 @@ ops = {
 }
 
 
-def _compare_versions(op, got_ver, want_ver, requirement, pkg, hint):
+def _compare_versions(
+    op: str, got_ver: Union[int, None], want_ver: Union[str, None], requirement: str, pkg: str, hint: str
+):
     if got_ver is None or want_ver is None:
         raise ValueError(
             f"Unable to compare versions for {requirement}: need={want_ver} found={got_ver}. This is unusual. Consider"
@@ -111,7 +113,7 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
             _compare_versions(op, got_ver, want_ver, requirement, pkg, hint)
 
 
-def require_version_core(requirement):
+def require_version_core(requirement: str):
     """require_version wrapper which emits a core-specific hint on failure"""
     hint = "Try: pip install transformers -U or pip install -e '.[dev]' if you're working with git main"
     return require_version(requirement, hint)

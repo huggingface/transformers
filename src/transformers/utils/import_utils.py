@@ -27,7 +27,7 @@ from collections import OrderedDict
 from functools import lru_cache, wraps
 from itertools import chain
 from types import ModuleType
-from typing import Any, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple, Union
 
 from packaging import version
 
@@ -409,7 +409,7 @@ def is_ftfy_available():
 
 
 @lru_cache()
-def is_torch_tpu_available(check_device=True):
+def is_torch_tpu_available(check_device: bool = True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:
         return False
@@ -428,14 +428,14 @@ def is_torch_tpu_available(check_device=True):
 
 
 @lru_cache()
-def is_torch_neuroncore_available(check_device=True):
+def is_torch_neuroncore_available(check_device: bool = True):
     if importlib.util.find_spec("torch_neuronx") is not None:
         return is_torch_tpu_available(check_device)
     return False
 
 
 @lru_cache()
-def is_torch_npu_available(check_device=False):
+def is_torch_npu_available(check_device: bool = False):
     "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
     if not _torch_available or importlib.util.find_spec("torch_npu") is None:
         return False
@@ -552,7 +552,7 @@ def is_ipex_available():
 
 
 @lru_cache
-def is_torch_xpu_available(check_device=False):
+def is_torch_xpu_available(check_device: bool = False):
     "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
     if not is_ipex_available():
         return False
@@ -621,7 +621,7 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available(min_version: str = None):
+def is_accelerate_available(min_version: Optional[str] = None):
     if min_version is not None:
         return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
     return _accelerate_available
@@ -790,7 +790,7 @@ def is_phonemizer_available():
     return _phonemizer_available
 
 
-def torch_only_method(fn):
+def torch_only_method(fn: Callable[..., Any]):
     def wrapper(*args, **kwargs):
         if not _torch_available:
             raise ImportError(
@@ -1192,7 +1192,7 @@ BACKENDS_MAPPING = OrderedDict(
 )
 
 
-def requires_backends(obj, backends):
+def requires_backends(obj, backends: Union[str, List[str], Tuple[str, ...]]):
     if not isinstance(backends, (list, tuple)):
         backends = [backends]
 
@@ -1218,7 +1218,7 @@ class DummyObject(type):
     `requires_backend` each time a user tries to access any method of that class.
     """
 
-    def __getattribute__(cls, key):
+    def __getattribute__(cls, key: str):
         if key.startswith("_") and key != "_from_config":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)

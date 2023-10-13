@@ -56,7 +56,7 @@ _default_log_level = logging.WARNING
 _tqdm_active = True
 
 
-def _get_default_logging_level():
+def _get_default_logging_level() -> int:
     """
     If TRANSFORMERS_VERBOSITY env var is set to one of the valid choices return that as the new default level. If it is
     not - fall back to `_default_log_level`
@@ -120,11 +120,11 @@ def _reset_library_root_logger() -> None:
         _default_handler = None
 
 
-def get_log_levels_dict():
+def get_log_levels_dict() -> dict[str, int]:
     return log_levels
 
 
-def captureWarnings(capture):
+def captureWarnings(capture: bool = True) -> None:
     """
     Calls the `captureWarnings` method from the logging library to enable management of the warnings emitted by the
     `warnings` library.
@@ -365,7 +365,7 @@ class _tqdm_cls:
         else:
             return EmptyTqdm(*args, **kwargs)
 
-    def set_lock(self, *args, **kwargs):
+    def set_lock(self, *args, **kwargs) -> None:
         self._lock = None
         if _tqdm_active:
             return tqdm_lib.tqdm.set_lock(*args, **kwargs)
@@ -384,14 +384,14 @@ def is_progress_bar_enabled() -> bool:
     return bool(_tqdm_active)
 
 
-def enable_progress_bar():
+def enable_progress_bar() -> None:
     """Enable tqdm progress bar."""
     global _tqdm_active
     _tqdm_active = True
     hf_hub_utils.enable_progress_bars()
 
 
-def disable_progress_bar():
+def disable_progress_bar() -> None:
     """Disable tqdm progress bar."""
     global _tqdm_active
     _tqdm_active = False

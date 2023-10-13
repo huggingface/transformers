@@ -186,7 +186,13 @@ def torch_nn_embedding(self, input):
 
 
 def torch_nn_functional_embedding(
-    input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    padding_idx: Optional[int] = None,
+    max_norm: Optional[float] = None,
+    norm_type: float = 2.0,
+    scale_grad_by_freq: bool = False,
+    sparse: bool = False,
 ):
     return torch.empty(*input.shape, weight.shape[-1], device="meta", dtype=weight.dtype)
 
@@ -199,7 +205,7 @@ def torch_nn_groupnorm(self, input):
     return input
 
 
-def torch_nn_linear(self, input):
+def torch_nn_linear(self, input: torch.Tensor):
     return torch.empty(input.shape[:-1] + (self.out_features,), device="meta")
 
 
@@ -211,7 +217,7 @@ def torch_nn_relu(self, x):
     return x
 
 
-def torch_nn_functional_relu(x, inplace=False):
+def torch_nn_functional_relu(x, inplace: bool = False):
     if not inplace:
         raise ValueError("Don't support in-place functional.relu for MetaTensor analysis")
     return x

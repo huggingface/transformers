@@ -48,7 +48,7 @@ class QuantizationConfigMixin:
     quant_method: QuantizationMethod
 
     @classmethod
-    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
+    def from_dict(cls, config_dict: Dict[str, Any], return_unused_kwargs: bool = False, **kwargs):
         """
         Instantiates a [`QuantizationConfigMixin`] from a Python dictionary of parameters.
 
@@ -179,15 +179,15 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        load_in_8bit=False,
-        load_in_4bit=False,
-        llm_int8_threshold=6.0,
-        llm_int8_skip_modules=None,
-        llm_int8_enable_fp32_cpu_offload=False,
-        llm_int8_has_fp16_weight=False,
+        load_in_8bit: bool = False,
+        load_in_4bit: bool = False,
+        llm_int8_threshold: float = 6.0,
+        llm_int8_skip_modules: Optional[List[str]] = None,
+        llm_int8_enable_fp32_cpu_offload: bool = False,
+        llm_int8_has_fp16_weight: bool = False,
         bnb_4bit_compute_dtype=None,
         bnb_4bit_quant_type="fp4",
-        bnb_4bit_use_double_quant=False,
+        bnb_4bit_use_double_quant: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES

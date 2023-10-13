@@ -129,12 +129,12 @@ HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/tele
 _CACHED_NO_EXIST = object()
 
 
-def is_remote_url(url_or_filename):
+def is_remote_url(url_or_filename: str):
     parsed = urlparse(url_or_filename)
     return parsed.scheme in ("http", "https")
 
 
-def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
+def get_cached_models(cache_dir: Optional[Union[str, Path]] = None) -> List[Tuple[str, str, float]]:
     """
     Returns a list of tuples representing model binaries that are cached locally. Each tuple has shape `(model_url,
     etag, size_MB)`. Filenames in `cache_dir` are use to get the metadata for each model, only urls ending with *.bin*
@@ -585,7 +585,7 @@ def get_file_from_repo(
     )
 
 
-def download_url(url, proxies=None):
+def download_url(url: str, proxies: Optional[Dict[str, str]] = None):
     """
     Downloads a given url in a temporary file. This function is not safe to use in multiple processes. Its only use is
     for deprecated behavior allowing to download config/models with a single url instead of using the Hub.
@@ -903,7 +903,7 @@ class PushToHubMixin:
             )
 
 
-def send_example_telemetry(example_name, *example_args, framework="pytorch"):
+def send_example_telemetry(example_name: str, *example_args, framework: str = "pytorch"):
     """
     Sends telemetry that helps tracking the examples use.
 
@@ -975,18 +975,18 @@ def convert_file_size_to_int(size: Union[int, str]):
 
 
 def get_checkpoint_shard_files(
-    pretrained_model_name_or_path,
-    index_filename,
-    cache_dir=None,
-    force_download=False,
-    proxies=None,
-    resume_download=False,
-    local_files_only=False,
-    token=None,
-    user_agent=None,
-    revision=None,
-    subfolder="",
-    _commit_hash=None,
+    pretrained_model_name_or_path: str,
+    index_filename: str,
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    force_download: bool = False,
+    proxies: Optional[Dict[str, str]] = None,
+    resume_download: bool = False,
+    local_files_only: bool = False,
+    token: Optional[Union[bool, str]] = None,
+    user_agent: Optional[str] = None,
+    revision: Optional[str] = None,
+    subfolder: str = "",
+    _commit_hash: Optional[str] = None,
     **deprecated_kwargs,
 ):
     """
@@ -1072,7 +1072,7 @@ def get_checkpoint_shard_files(
 # All what is below is for conversion between old cache format and new cache format.
 
 
-def get_all_cached_files(cache_dir=None):
+def get_all_cached_files(cache_dir: Optional[Union[str, os.PathLike]] = None):
     """
     Returns a list for all files cached with appropriate metadata.
     """
@@ -1083,7 +1083,7 @@ def get_all_cached_files(cache_dir=None):
     if not os.path.isdir(cache_dir):
         return []
 
-    cached_files = []
+    cached_files: List[Dict[str, str]] = []
     for file in os.listdir(cache_dir):
         meta_path = os.path.join(cache_dir, f"{file}.json")
         if not os.path.isfile(meta_path):
@@ -1098,7 +1098,7 @@ def get_all_cached_files(cache_dir=None):
     return cached_files
 
 
-def extract_info_from_url(url):
+def extract_info_from_url(url: str):
     """
     Extract repo_name, revision and filename from an url.
     """
@@ -1119,7 +1119,7 @@ def clean_files_for(file):
             os.remove(f)
 
 
-def move_to_new_cache(file, repo, filename, revision, etag, commit_hash):
+def move_to_new_cache(file: str, repo: str, filename: str, revision: str, etag: str, commit_hash: str):
     """
     Move file to repo following the new huggingface hub cache organization.
     """
@@ -1145,7 +1145,11 @@ def move_to_new_cache(file, repo, filename, revision, etag, commit_hash):
     clean_files_for(file)
 
 
-def move_cache(cache_dir=None, new_cache_dir=None, token=None):
+def move_cache(
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    new_cache_dir: Optional[Union[str, os.PathLike]] = None,
+    token: Optional[Union[bool, str]] = None,
+):
     if new_cache_dir is None:
         new_cache_dir = TRANSFORMERS_CACHE
     if cache_dir is None:

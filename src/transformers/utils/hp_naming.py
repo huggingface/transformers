@@ -14,6 +14,7 @@
 
 import copy
 import re
+from typing import Any, Dict
 
 
 class TrialShortNamer:
@@ -22,13 +23,13 @@ class TrialShortNamer:
     NAMING_INFO = None
 
     @classmethod
-    def set_defaults(cls, prefix, defaults):
+    def set_defaults(cls, prefix: str, defaults: Dict[str, Any]):
         cls.PREFIX = prefix
         cls.DEFAULTS = defaults
         cls.build_naming_info()
 
     @staticmethod
-    def shortname_for_word(info, word):
+    def shortname_for_word(info: Dict[str, Any], word: str):
         if len(word) == 0:
             return ""
         short_word = None
@@ -46,7 +47,7 @@ class TrialShortNamer:
 
         if short_word is None:
             # Paranoid fallback
-            def int_to_alphabetic(integer):
+            def int_to_alphabetic(integer: int):
                 s = ""
                 while integer != 0:
                     s = chr(ord("A") + integer % 10) + s
@@ -67,7 +68,7 @@ class TrialShortNamer:
         return short_word
 
     @staticmethod
-    def shortname_for_key(info, param_name):
+    def shortname_for_key(info: Dict[str, Any], param_name: str):
         words = param_name.split("_")
 
         shortname_parts = [TrialShortNamer.shortname_for_word(info, word) for word in words]
@@ -86,7 +87,7 @@ class TrialShortNamer:
         return param_name
 
     @staticmethod
-    def add_new_param_name(info, param_name):
+    def add_new_param_name(info: Dict[str, Any], param_name: str):
         short_name = TrialShortNamer.shortname_for_key(info, param_name)
         info["short_param"][param_name] = short_name
         info["reverse_short_param"][short_name] = param_name
@@ -111,7 +112,7 @@ class TrialShortNamer:
         cls.NAMING_INFO = info
 
     @classmethod
-    def shortname(cls, params):
+    def shortname(cls, params: Dict[str, Any]):
         cls.build_naming_info()
         assert cls.PREFIX is not None
         name = [copy.copy(cls.PREFIX)]
@@ -135,7 +136,7 @@ class TrialShortNamer:
         return "_".join(name)
 
     @classmethod
-    def parse_repr(cls, repr):
+    def parse_repr(cls, repr: str):
         repr = repr[len(cls.PREFIX) + 1 :]
         if repr == "":
             values = []

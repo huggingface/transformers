@@ -15,7 +15,7 @@
 
 import re
 import time
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import IPython.display as disp
 
@@ -23,14 +23,14 @@ from ..trainer_callback import TrainerCallback
 from ..trainer_utils import IntervalStrategy, has_length
 
 
-def format_time(t):
+def format_time(t: int):
     "Format `t` (in seconds) to (h):mm:ss"
     t = int(t)
     h, m, s = t // 3600, (t // 60) % 60, t % 60
     return f"{h}:{m:02d}:{s:02d}" if h != 0 else f"{m:02d}:{s:02d}"
 
 
-def html_progress_bar(value, total, prefix, label, width=300):
+def html_progress_bar(value: int, total: int, prefix: str, label: str, width: int = 300):
     # docstyle-ignore
     return f"""
     <div>
@@ -41,7 +41,7 @@ def html_progress_bar(value, total, prefix, label, width=300):
     """
 
 
-def text_to_html_table(items):
+def text_to_html_table(items: List[List[str]]):
     "Put the texts in `items` in an HTML table."
     html_code = """<table border="1" class="dataframe">\n"""
     html_code += """  <thead>\n <tr style="text-align: left;">\n"""
@@ -115,7 +115,7 @@ class NotebookProgressBar:
         self.comment = None
         self.output = None
 
-    def update(self, value: int, force_update: bool = False, comment: str = None):
+    def update(self, value: int, force_update: bool = False, comment: Optional[str] = None):
         """
         The main method to update the progress bar to `value`.
 
@@ -166,7 +166,7 @@ class NotebookProgressBar:
             else:
                 self.wait_for = max(int(self.update_every / self.average_time_per_item), 1)
 
-    def update_bar(self, value, comment=None):
+    def update_bar(self, value: int, comment: Optional[str] = None):
         spaced_value = " " * (len(str(self.total)) - len(str(value))) + str(value)
         if self.elapsed_time is None:
             self.label = f"[{spaced_value}/{self.total} : < :"
@@ -208,7 +208,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
             [`~utils.notebook.NotebookTrainingTracker.write_line`] if not set).
     """
 
-    def __init__(self, num_steps, column_names=None):
+    def __init__(self, num_steps: int, column_names: Optional[List[str]] = None):
         super().__init__(num_steps)
         self.inner_table = None if column_names is None else [column_names]
         self.child_bar = None
@@ -224,7 +224,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
         else:
             self.output.update(disp.HTML(self.html_code))
 
-    def write_line(self, values):
+    def write_line(self, values: Dict[str, float]):
         """
         Write the values in the inner table.
 
@@ -255,7 +255,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
             else:
                 self.inner_table.append([values[c] for c in columns])
 
-    def add_child(self, total, prefix=None, width=300):
+    def add_child(self, total: int, prefix: Optional[str] = None, width: int = 300):
         """
         Add a child progress bar displayed under the table of metrics. The child progress bar is returned (so it can be
         easily updated).
@@ -287,7 +287,7 @@ class NotebookProgressCallback(TrainerCallback):
         self.prediction_bar = None
         self._force_next_update = False
 
-    def on_train_begin(self, args, state, control, **kwargs):
+    def on_train_begin(self, args: Dict[str, Any], state, control: Dict[str, Any], **kwargs):
         self.first_column = "Epoch" if args.evaluation_strategy == IntervalStrategy.EPOCH else "Step"
         self.training_loss = 0
         self.last_log = 0
@@ -296,7 +296,7 @@ class NotebookProgressCallback(TrainerCallback):
             column_names.append("Validation Loss")
         self.training_tracker = NotebookTrainingTracker(state.max_steps, column_names)
 
-    def on_step_end(self, args, state, control, **kwargs):
+    def on_step_end(self, args: Dict[str, Any], state, control: Dict[str, Any], **kwargs):
         epoch = int(state.epoch) if int(state.epoch) == state.epoch else f"{state.epoch:.2f}"
         self.training_tracker.update(
             state.global_step + 1,
@@ -305,7 +305,9 @@ class NotebookProgressCallback(TrainerCallback):
         )
         self._force_next_update = False
 
-    def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
+    def on_prediction_step(
+        self, args: Dict[str, Any], state, control: Dict[str, Any], eval_dataloader: Any = None, **kwargs
+    ):
         if not has_length(eval_dataloader):
             return
         if self.prediction_bar is None:
