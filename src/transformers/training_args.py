@@ -1213,6 +1213,24 @@ class TrainingArguments:
         },
     )
 
+    dispatch_batches: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process "
+            "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
+            "underlying dataset is an `IterableDataset`, `False` otherwise."
+        },
+    )
+
+    split_batches: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether or not the accelerator should split the batches yielded by the dataloaders across the devices during distributed training. If"
+            "set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it must be a"
+            "round multiple of the number of processes you are using (such as GPUs)."
+        },
+    )
+
     include_tokens_per_second: Optional[bool] = field(
         default=False,
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},

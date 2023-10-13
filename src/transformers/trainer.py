@@ -3847,6 +3847,7 @@ class Trainer:
         # create accelerator object
         self.accelerator = Accelerator(
             dispatch_batches=self.args.dispatch_batches,
+            split_batches=self.args.split_batches,
             deepspeed_plugin=self.args.deepspeed_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
