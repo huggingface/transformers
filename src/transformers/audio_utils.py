@@ -587,7 +587,7 @@ def get_mel_filter_banks(
     sample_rate: int,
     norm: Optional[str] = None,
     mel_scale: str = "htk",
-) -> np.array:
+) -> np.ndarray:
     warnings.warn(
         "The function `get_mel_filter_banks` is deprecated and will be removed in version 4.31.0 of Transformers",
         FutureWarning,
@@ -603,7 +603,9 @@ def get_mel_filter_banks(
     )
 
 
-def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 400, center: bool = True):
+def fram_wave(
+    waveform: np.ndarray, hop_length: int = 160, fft_window_size: int = 400, center: bool = True
+) -> np.ndarray:
     """
     In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
     segments called `frames`.
@@ -659,7 +661,7 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
     return frames
 
 
-def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = None):
+def stft(frames: np.ndarray, windowing_function: np.ndarray, fft_window_size: Optional[int] = None):
     """
     Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
     as `torch.stft`.

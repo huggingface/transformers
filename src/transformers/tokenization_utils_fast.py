@@ -13,14 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers library). For slow (python) tokenizers
- see tokenization_utils.py
+Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers library). For slow (python) tokenizers
+see tokenization_utils.py
 """
 import copy
 import json
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
@@ -307,7 +307,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def _convert_id_to_token(self, index: int) -> Optional[str]:
         return self._tokenizer.id_to_token(int(index))
 
-    def _add_tokens(self, new_tokens: List[Union[str, AddedToken]], special_tokens=False) -> int:
+    def _add_tokens(self, new_tokens: List[Union[str, AddedToken]], special_tokens: bool = False) -> int:
         if special_tokens:
             return self._tokenizer.add_special_tokens(new_tokens)
 
@@ -653,11 +653,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def train_new_from_iterator(
         self,
-        text_iterator,
-        vocab_size,
-        length=None,
-        new_special_tokens=None,
-        special_tokens_map=None,
+        text_iterator: Iterable[List[str]],
+        vocab_size: int,
+        length: Optional[int] = None,
+        new_special_tokens: Optional[List[Union[str, AddedToken]]] = None,
+        special_tokens_map: Optional[Dict[str, str]] = None,
         **kwargs,
     ):
         """

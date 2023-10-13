@@ -145,7 +145,7 @@ if is_peft_available():
 
 
 @contextmanager
-def no_init_weights(_enable=True):
+def no_init_weights(_enable: bool = True):
     """
     Context manager to globally disable weight initialization to speed up loading large models.
 
@@ -243,7 +243,7 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
     return last_dtype
 
 
-def get_state_dict_float_dtype(state_dict):
+def get_state_dict_float_dtype(state_dict: Dict[str, Tensor]):
     """
     Returns the first found floating dtype in `state_dict` or asserts if none were found.
     """
@@ -254,7 +254,7 @@ def get_state_dict_float_dtype(state_dict):
     raise ValueError("couldn't find any floating point dtypes in state_dict")
 
 
-def get_state_dict_dtype(state_dict):
+def get_state_dict_dtype(state_dict: Dict[str, Tensor]):
     """
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
     """
@@ -370,7 +370,7 @@ def shard_checkpoint(
     return shards, index
 
 
-def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
+def load_sharded_checkpoint(model: nn.Module, folder: str, strict: bool = True, prefer_safe: bool = True):
     """
     This is the same as
     [`torch.nn.Module.load_state_dict`](https://pytorch.org/docs/stable/generated/torch.nn.Module.html?highlight=load_state_dict#torch.nn.Module.load_state_dict)
@@ -451,7 +451,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         gc.collect()
 
     # Return the same thing as PyTorch load_state_dict function.
-    return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
+    return nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
 def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
@@ -504,7 +504,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             )
 
 
-def set_initialized_submodules(model, state_dict_keys):
+def set_initialized_submodules(model: nn.Module, state_dict_keys: List[str]):
     """
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
     dict.
@@ -515,7 +515,7 @@ def set_initialized_submodules(model, state_dict_keys):
             module._is_hf_initialized = True
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
+def _load_state_dict_into_model(model_to_load: nn.Module, state_dict: Dict[str, Tensor], start_prefix: str):
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
     new_keys = []
@@ -576,7 +576,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
     return error_msgs
 
 
-def find_submodule_and_param_name(model, long_key, start_prefix):
+def find_submodule_and_param_name(model: nn.Module, long_key: str, start_prefix: str):
     """
     A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll be removed
     from the start of the key
@@ -599,13 +599,12 @@ def find_submodule_and_param_name(model, long_key, start_prefix):
     return submodule, split_key[0]
 
 
-def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
+def _move_model_to_meta(model: nn.Module, loaded_state_dict_keys: Dict[str, Tensor], start_prefix: str):
     """
     Moves `loaded_state_dict_keys` in model to meta device which frees up the memory taken by those params.
 
     `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
     `bert.pooler.dense.weight`
-
     """
 
     # dematerialize param storage for keys that are going to be replaced by state_dict, by
@@ -617,29 +616,29 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             # be next replaced from state_dict. This a complex way to do p.to_("meta")
             # since we have no in-place to_ for tensors.
             new_val = getattr(submodule, param_name)
-            if isinstance(new_val, torch.nn.Parameter):
+            if isinstance(new_val, nn.Parameter):
                 # isinstance returns False for Params on meta device, so switch after the check
-                new_val = torch.nn.Parameter(new_val.to("meta"))
+                new_val = nn.Parameter(new_val.to("meta"))
             else:
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
 
 
 def _load_state_dict_into_meta_model(
-    model,
-    state_dict,
-    loaded_state_dict_keys,  # left for now but could be removed, see below
-    start_prefix,
-    expected_keys,
-    device_map=None,
-    offload_folder=None,
-    offload_index=None,
-    state_dict_folder=None,
-    state_dict_index=None,
-    dtype=None,
-    is_quantized=False,
-    is_safetensors=False,
-    keep_in_fp32_modules=None,
+    model: nn.Module,
+    state_dict: Dict[str, Tensor],
+    loaded_state_dict_keys: Dict[str, Tensor],  # left for now but could be removed, see below
+    start_prefix: str,
+    expected_keys: List[str],
+    device_map: Optional[Dict[str, str]] = None,
+    offload_folder: Optional[str] = None,
+    offload_index: Optional[str] = None,
+    state_dict_folder: Optional[str] = None,
+    state_dict_index: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
+    is_quantized: bool = False,
+    is_safetensors: bool = False,
+    keep_in_fp32_modules: Optional[List[str]] = None,
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -856,7 +855,9 @@ class ModuleUtilsMixin:
         return encoder_extended_attention_mask
 
     @staticmethod
-    def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device=None):
+    def create_extended_attention_mask_for_decoder(
+        input_shape: Tuple[int], attention_mask: Tensor, device: Optional[torch.device] = None
+    ):
         if device is not None:
             warnings.warn(
                 "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
@@ -1486,7 +1487,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f"The following encoder weights were not tied to the decoder {uninitialized_encoder_weights}"
             )
 
-    def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
+    def _tie_or_clone_weights(self, output_embeddings: nn.Module, input_embeddings: nn.Module):
         """Tie or clone module weights depending of whether we are using TorchScript or not"""
         if self.config.torchscript:
             output_embeddings.weight = nn.Parameter(input_embeddings.weight.clone())
@@ -1544,7 +1545,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return model_embeds
 
-    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
+    def _resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
         if hasattr(old_embeddings, "_hf_hook"):
@@ -1760,7 +1761,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return new_lm_head
 
     def _copy_lm_head_original_to_resized(
-        self, new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
+        self,
+        new_lm_head: nn.Linear,
+        old_lm_head: nn.Linear,
+        num_tokens_to_copy: int,
+        transposed: bool,
+        has_new_lm_head_bias: bool,
     ):
         # Copy old lm head weights to new lm head
         if not transposed:
@@ -2158,7 +2164,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mem = mem + mem_bufs
         return mem
 
-    @wraps(torch.nn.Module.cuda)
+    @wraps(nn.Module.cuda)
     def cuda(self, *args, **kwargs):
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
@@ -2169,7 +2175,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             return super().cuda(*args, **kwargs)
 
-    @wraps(torch.nn.Module.to)
+    @wraps(nn.Module.to)
     def to(self, *args, **kwargs):
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
@@ -3401,21 +3407,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def _load_pretrained_model(
         cls,
-        model,
-        state_dict,
-        loaded_keys,
-        resolved_archive_file,
-        pretrained_model_name_or_path,
-        ignore_mismatched_sizes=False,
-        sharded_metadata=None,
-        _fast_init=True,
-        low_cpu_mem_usage=False,
-        device_map=None,
-        offload_folder=None,
-        offload_state_dict=None,
-        dtype=None,
-        is_quantized=False,
-        keep_in_fp32_modules=None,
+        model: PreTrainedModel,
+        state_dict: Optional[Dict[str, torch.Tensor]],
+        loaded_keys: List[str],
+        resolved_archive_file: Union[str, List[str]],
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        ignore_mismatched_sizes: bool = False,
+        sharded_metadata: Optional[Dict[str, Any]] = None,
+        _fast_init: bool = True,
+        low_cpu_mem_usage: bool = False,
+        device_map: Optional[Union[str, Dict[str, str]]] = None,
+        offload_folder: Optional[str] = None,
+        offload_state_dict: Optional[bool] = None,
+        dtype: Optional[torch.dtype] = None,
+        is_quantized: bool = False,
+        keep_in_fp32_modules: Optional[List[str]] = None,
     ):
         is_safetensors = False
         if is_quantized:

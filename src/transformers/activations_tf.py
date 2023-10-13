@@ -15,10 +15,11 @@
 import math
 
 import tensorflow as tf
+from tensorflow import Tensor
 from packaging import version
 
 
-def _gelu(x):
+def _gelu(x: Tensor) -> Tensor:
     """
     Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
     initially created. For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
@@ -31,7 +32,7 @@ def _gelu(x):
     return x * cdf
 
 
-def _gelu_new(x):
+def _gelu_new(x: Tensor) -> Tensor:
     """
     Gaussian Error Linear Unit. This is a smoother version of the GELU. Original paper: https://arxiv.org/abs/1606.0841
 
@@ -49,13 +50,13 @@ def _gelu_new(x):
     return x * cdf
 
 
-def mish(x):
+def mish(x: Tensor) -> Tensor:
     x = tf.convert_to_tensor(x)
 
     return x * tf.tanh(tf.math.softplus(x))
 
 
-def gelu_fast(x):
+def gelu_fast(x: Tensor) -> Tensor:
     x = tf.convert_to_tensor(x)
     coeff1 = tf.cast(0.044715, x.dtype)
     coeff2 = tf.cast(0.7978845608, x.dtype)
@@ -63,13 +64,13 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + tf.tanh(x * coeff2 * (1.0 + coeff1 * x * x)))
 
 
-def quick_gelu(x):
+def quick_gelu(x: Tensor) -> Tensor:
     x = tf.convert_to_tensor(x)
     coeff = tf.cast(1.702, x.dtype)
     return x * tf.math.sigmoid(coeff * x)
 
 
-def gelu_10(x):
+def gelu_10(x: Tensor):
     """
     Clip the range of possible GeLU outputs between [-10, 10]. This is especially useful for quantization purpose, as
     it allows mapping 2 negatives values in the GeLU spectrum. For more information on this trick, please refer to
@@ -83,7 +84,7 @@ def gelu_10(x):
     return tf.clip_by_value(_gelu(x), -10, 10)
 
 
-def glu(x, axis=-1):
+def glu(x: Tensor, axis: int = -1) -> Tensor:
     """
     Gated Linear Unit. Implementation as defined in the original paper (see https://arxiv.org/abs/1612.08083), where
     the input `x` is split in two halves across a dimension (`axis`), A and B, returning A * sigmoid(B).
@@ -101,7 +102,7 @@ def glu(x, axis=-1):
 
 if version.parse(tf.version.VERSION) >= version.parse("2.4"):
 
-    def approximate_gelu_wrap(x):
+    def approximate_gelu_wrap(x: Tensor):
         return tf.keras.activations.gelu(x, approximate=True)
 
     gelu = tf.keras.activations.gelu
@@ -127,8 +128,7 @@ ACT2FN = {
 }
 
 
-def get_tf_activation(activation_string):
+def get_tf_activation(activation_string: str):
     if activation_string in ACT2FN:
         return ACT2FN[activation_string]
-    else:
-        raise KeyError(f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}")
+    raise KeyError(f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}")

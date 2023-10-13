@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import collections
+from typing import List, Optional
 
 from .utils import ExplicitEnum, is_torch_available, logging
 
@@ -142,14 +143,20 @@ class DebugUnderflowOverflow:
             Whether to abort after a certain batch number has finished
     """
 
-    def __init__(self, model, max_frames_to_save=21, trace_batch_nums=[], abort_after_batch_num=None):
+    def __init__(
+        self,
+        model,
+        max_frames_to_save: int = 21,
+        trace_batch_nums: List[int] = [],
+        abort_after_batch_num: Optional[int] = None,
+    ):
         self.model = model
         self.trace_batch_nums = trace_batch_nums
         self.abort_after_batch_num = abort_after_batch_num
 
         # keep a LIFO buffer of frames to dump as soon as inf/nan is encountered to give context to the problem emergence
-        self.frames = collections.deque([], max_frames_to_save)
-        self.frame = []
+        self.frames: collections.deque[str] = collections.deque([], max_frames_to_save)
+        self.frame: List[str] = []
         self.batch_number = 0
         self.total_calls = 0
         self.detected_overflow = False
@@ -159,21 +166,21 @@ class DebugUnderflowOverflow:
 
         self.register_forward_hook()
 
-    def save_frame(self, frame=None):
+    def save_frame(self, frame: Optional[List[str]] = None):
         if frame is not None:
             self.expand_frame(frame)
         self.frames.append("\n".join(self.frame))
         self.frame = []  # start a new frame
 
-    def expand_frame(self, line):
+    def expand_frame(self, line: str):
         self.frame.append(line)
 
     def trace_frames(self):
         print("\n".join(self.frames))
-        self.frames = []
+        self.frames.clear()
 
     def reset_saved_frames(self):
-        self.frames = []
+        self.frames.clear()
 
     def dump_saved_frames(self):
         print(f"\nDetected inf/nan during batch_number={self.batch_number}")
@@ -181,7 +188,7 @@ class DebugUnderflowOverflow:
         print(f"{'abs min':8} {'abs max':8} metadata")
         print("\n".join(self.frames))
         print("\n\n")
-        self.frames = []
+        self.frames.clear()
 
     def analyse_model(self):
         # extract the fully qualified module names, to be able to report at run time. e.g.:

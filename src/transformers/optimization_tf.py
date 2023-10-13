@@ -48,10 +48,10 @@ class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
     def __init__(
         self,
         initial_learning_rate: float,
-        decay_schedule_fn: Callable,
+        decay_schedule_fn: Callable[[float], float],
         warmup_steps: int,
         power: float = 1.0,
-        name: str = None,
+        name: Optional[str] = None,
     ):
         super().__init__()
         self.initial_learning_rate = initial_learning_rate
@@ -227,7 +227,7 @@ class AdamWeightDecay(Adam):
         self._exclude_from_weight_decay = exclude_from_weight_decay
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: dict):
         """Creates an optimizer from its config with WarmUp custom object."""
         custom_objects = {"WarmUp": WarmUp}
         return super(AdamWeightDecay, cls).from_config(config, custom_objects=custom_objects)
@@ -238,7 +238,7 @@ class AdamWeightDecay(Adam):
             self.weight_decay_rate, name="adam_weight_decay_rate"
         )
 
-    def _decay_weights_op(self, var, learning_rate, apply_state):
+    def _decay_weights_op(self, var, learning_rate: int, apply_state: dict):
         do_decay = self._do_use_weight_decay(var.name)
         if do_decay:
             return var.assign_sub(

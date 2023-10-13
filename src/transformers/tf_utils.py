@@ -70,7 +70,7 @@ def stable_softmax(logits: tf.Tensor, axis: Optional[int] = None, name: Optional
     return tf.nn.softmax(logits=logits + 1e-9, axis=axis, name=name)
 
 
-def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
+def functional_layernorm(inputs: tf.Tensor, weight: tf.Tensor, bias: tf.Tensor, epsilon: float = 1e-5, axis: int = -1):
     # This is a very simplified functional layernorm, designed to duplicate
     # the functionality of PyTorch nn.functional.layer_norm when this is needed to port
     # models in Transformers.
@@ -102,7 +102,7 @@ def functional_layernorm(inputs, weight, bias, epsilon=1e-5, axis=-1):
     return outputs
 
 
-def flatten(input, start_dim=0, end_dim=-1):
+def flatten(input: tf.Tensor, start_dim: int = 0, end_dim: int = -1):
     # Replicates the behavior of torch.flatten in TF
 
     # If end_dim or start_dim is negative, count them from the end
@@ -168,7 +168,7 @@ def check_embeddings_within_bounds(tensor: tf.Tensor, embed_dim: int, tensor_nam
     )
 
 
-def save_attributes_to_hdf5_group(group, name, data):
+def save_attributes_to_hdf5_group(group: tf.io.gfile.GFile, name: str, data: List[str]) -> None:
     """Saves attributes (data) of the specified name into the HDF5 group.
 
     This method deals with an inherent problem of HDF5 file which is not able to store data larger than
@@ -180,7 +180,7 @@ def save_attributes_to_hdf5_group(group, name, data):
         data: Attributes data to store.
 
     Raises:
-      RuntimeError: If any single attribute is too large to be saved.
+        RuntimeError: If any single attribute is too large to be saved.
 
     Copied from Keras to Transformers to avoid versioning issues.
     """
@@ -215,7 +215,7 @@ def save_attributes_to_hdf5_group(group, name, data):
         group.attrs[name] = data
 
 
-def load_attributes_from_hdf5_group(group, name):
+def load_attributes_from_hdf5_group(group: tf.io.gfile.GFile, name: str):
     """Loads attributes of the specified name from the HDF5 group.
 
     This method deals with an inherent problem of HDF5 file which is not able to store data larger than
@@ -243,7 +243,7 @@ def load_attributes_from_hdf5_group(group, name):
     return data
 
 
-def expand_1d(data):
+def expand_1d(data: tf.Tensor):
     """Expands 1-dimensional `Tensor`s into 2-dimensional `Tensor`s.
     Copied from Keras to here to avoid versioning issues."""
 

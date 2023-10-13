@@ -187,7 +187,7 @@ class LaplaceActivation(nn.Module):
     Inspired by squared relu, but with bounded range and gradient for better stability
     """
 
-    def forward(self, input, mu=0.707107, sigma=0.282095):
+    def forward(self, input: Tensor, mu: float = 0.707107, sigma: float = 0.282095) -> Tensor:
         input = (input - mu).div(sigma * math.sqrt(2.0))
         return 0.5 * (1.0 + torch.erf(input))
 
@@ -197,7 +197,7 @@ class ReLUSquaredActivation(nn.Module):
     Applies the relu^2 activation introduced in https://arxiv.org/abs/2109.08668v2
     """
 
-    def forward(self, input):
+    def forward(self, input: Tensor) -> Tensor:
         relu_applied = nn.functional.relu(input)
         squared = torch.square(relu_applied)
         return squared
@@ -233,11 +233,10 @@ ACT2CLS = {
 ACT2FN = ClassInstantier(ACT2CLS)
 
 
-def get_activation(activation_string):
+def get_activation(activation_string: str):
     if activation_string in ACT2FN:
         return ACT2FN[activation_string]
-    else:
-        raise KeyError(f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}")
+    raise KeyError(f"function {activation_string} not found in ACT2FN mapping {list(ACT2FN.keys())}")
 
 
 # For backwards compatibility with: from activations import gelu_python

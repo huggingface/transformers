@@ -149,7 +149,7 @@ ENDPOINT_STAGING = "https://hub-ci.huggingface.co"
 TOKEN = "hf_94wBhPGp6KrrTH3KDchhKpRxZwd6dmHWLL"
 
 
-def parse_flag_from_env(key, default=False):
+def parse_flag_from_env(key: str, default: bool = False):
     try:
         value = os.environ[key]
     except KeyError:
@@ -165,7 +165,7 @@ def parse_flag_from_env(key, default=False):
     return _value
 
 
-def parse_int_from_env(key, default=None):
+def parse_int_from_env(key: str, default=None):
     try:
         value = os.environ[key]
     except KeyError:

@@ -16,7 +16,7 @@ import warnings
 from argparse import ArgumentParser
 from os import listdir, makedirs
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from packaging.version import Version, parse
 
@@ -131,7 +131,11 @@ def check_onnxruntime_requirements(minimum_version: Version):
         )
 
 
-def ensure_valid_input(model, tokens, input_names):
+def ensure_valid_input(
+    model: Pipeline,
+    tokens: BatchEncoding,
+    input_names: List[str],
+) -> tuple[list[str], tuple[Any, ...]]:
     """
     Ensure inputs are presented in the correct order, without any Non
 
@@ -146,7 +150,8 @@ def ensure_valid_input(model, tokens, input_names):
     print("Ensuring inputs are in correct order")
 
     model_args_name = model.forward.__code__.co_varnames
-    model_args, ordered_input_names = [], []
+    model_args: List[Any] = []
+    ordered_input_names: List[str] = []
     for arg_name in model_args_name[1:]:  # start at index 1 to skip "self" argument
         if arg_name in input_names:
             ordered_input_names.append(arg_name)
@@ -175,7 +180,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
         - a BatchEncoding reference which was used to infer all the above information
     """
 
-    def build_shape_dict(name: str, tensor, is_input: bool, seq_len: int):
+    def build_shape_dict(name: str, tensor: Any, is_input: bool, seq_len: int):
         if isinstance(tensor, (tuple, list)):
             return [build_shape_dict(name, t, is_input, seq_len) for t in tensor]
 
@@ -224,7 +229,11 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
 
 def load_graph_from_args(
-    pipeline_name: str, framework: str, model: str, tokenizer: Optional[str] = None, **models_kwargs
+    pipeline_name: str,
+    framework: str,
+    model: str,
+    tokenizer: Optional[str] = None,
+    **models_kwargs,
 ) -> Pipeline:
     """
     Convert the set of arguments provided through the CLI to an actual pipeline reference (tokenizer + model
@@ -254,7 +263,7 @@ def load_graph_from_args(
     return pipeline(pipeline_name, model=model, tokenizer=tokenizer, framework=framework, model_kwargs=models_kwargs)
 
 
-def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format: bool):
+def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format: bool) -> None:
     """
     Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR
 
@@ -309,7 +318,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
             )
 
 
-def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
+def convert_tensorflow(nlp: Pipeline, opset: int, output: Path) -> None:
     """
     Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR)
 
@@ -499,7 +508,7 @@ def quantize(onnx_model_path: Path) -> Path:
     return quantized_model_path
 
 
-def verify(path: Path):
+def verify(path: Path) -> None:
     from onnxruntime import InferenceSession, SessionOptions
     from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException
 

@@ -251,61 +251,60 @@ class PretrainedConfig(PushToHubMixin):
     attribute_map: Dict[str, str] = {}
     _auto_class: Optional[str] = None
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key: str, value: str):
         if key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
         super().__setattr__(key, value)
 
-    def __getattribute__(self, key):
+    def __getattribute__(self, key: str):
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
         return super().__getattribute__(key)
 
     def __init__(self, **kwargs):
         # Attributes with defaults
-        self.return_dict = kwargs.pop("return_dict", True)
-        self.output_hidden_states = kwargs.pop("output_hidden_states", False)
-        self.output_attentions = kwargs.pop("output_attentions", False)
-        self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
+        self.return_dict: bool = kwargs.pop("return_dict", True)
+        self.output_hidden_states: bool = kwargs.pop("output_hidden_states", False)
+        self.output_attentions: bool = kwargs.pop("output_attentions", False)
+        self.torchscript: bool = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
-        self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
-        self.tf_legacy_loss = kwargs.pop("tf_legacy_loss", False)  # Only used by TensorFlow models
-        self.pruned_heads = kwargs.pop("pruned_heads", {})
-        self.tie_word_embeddings = kwargs.pop(
-            "tie_word_embeddings", True
-        )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
+        self.use_bfloat16: bool = kwargs.pop("use_bfloat16", False)
+        self.tf_legacy_loss: bool = kwargs.pop("tf_legacy_loss", False)  # Only used by TensorFlow models
+        self.pruned_heads: Dict[Any, Any] = kwargs.pop("pruned_heads", {})
+        self.tie_word_embeddings: bool = kwargs.pop("tie_word_embeddings", True)
+        # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
-        self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
-        self.is_decoder = kwargs.pop("is_decoder", False)
+        self.is_encoder_decoder: bool = kwargs.pop("is_encoder_decoder", False)
+        self.is_decoder: bool = kwargs.pop("is_decoder", False)
         self.cross_attention_hidden_size = kwargs.pop("cross_attention_hidden_size", None)
-        self.add_cross_attention = kwargs.pop("add_cross_attention", False)
-        self.tie_encoder_decoder = kwargs.pop("tie_encoder_decoder", False)
+        self.add_cross_attention: bool = kwargs.pop("add_cross_attention", False)
+        self.tie_encoder_decoder: bool = kwargs.pop("tie_encoder_decoder", False)
 
         # Parameters for sequence generation
-        self.max_length = kwargs.pop("max_length", 20)
-        self.min_length = kwargs.pop("min_length", 0)
-        self.do_sample = kwargs.pop("do_sample", False)
-        self.early_stopping = kwargs.pop("early_stopping", False)
-        self.num_beams = kwargs.pop("num_beams", 1)
-        self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
-        self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
-        self.temperature = kwargs.pop("temperature", 1.0)
-        self.top_k = kwargs.pop("top_k", 50)
-        self.top_p = kwargs.pop("top_p", 1.0)
-        self.typical_p = kwargs.pop("typical_p", 1.0)
-        self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
-        self.length_penalty = kwargs.pop("length_penalty", 1.0)
-        self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
-        self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
+        self.max_length: int = kwargs.pop("max_length", 20)
+        self.min_length: int = kwargs.pop("min_length", 0)
+        self.do_sample: bool = kwargs.pop("do_sample", False)
+        self.early_stopping: bool = kwargs.pop("early_stopping", False)
+        self.num_beams: int = kwargs.pop("num_beams", 1)
+        self.num_beam_groups: int = kwargs.pop("num_beam_groups", 1)
+        self.diversity_penalty: float = kwargs.pop("diversity_penalty", 0.0)
+        self.temperature: float = kwargs.pop("temperature", 1.0)
+        self.top_k: int = kwargs.pop("top_k", 50)
+        self.top_p: float = kwargs.pop("top_p", 1.0)
+        self.typical_p: float = kwargs.pop("typical_p", 1.0)
+        self.repetition_penalty: float = kwargs.pop("repetition_penalty", 1.0)
+        self.length_penalty: float = kwargs.pop("length_penalty", 1.0)
+        self.no_repeat_ngram_size: int = kwargs.pop("no_repeat_ngram_size", 0)
+        self.encoder_no_repeat_ngram_size: int = kwargs.pop("encoder_no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
-        self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
-        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
-        self.output_scores = kwargs.pop("output_scores", False)
-        self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
+        self.num_return_sequences: int = kwargs.pop("num_return_sequences", 1)
+        self.chunk_size_feed_forward: int = kwargs.pop("chunk_size_feed_forward", 0)
+        self.output_scores: bool = kwargs.pop("output_scores", False)
+        self.return_dict_in_generate: bool = kwargs.pop("return_dict_in_generate", False)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
-        self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
+        self.remove_invalid_values: bool = kwargs.pop("remove_invalid_values", False)
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
@@ -326,7 +325,7 @@ class PretrainedConfig(PushToHubMixin):
                     f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
                     f"{self.id2label}. The number of labels wil be overwritten to {self.num_labels}."
                 )
-            self.id2label = {int(key): value for key, value in self.id2label.items()}
+            self.id2label: Dict[int, Any] = {int(key): value for key, value in self.id2label.items()}
             # Keys are always strings in JSON so convert ids to int here.
         else:
             self.num_labels = kwargs.pop("num_labels", 2)
@@ -416,7 +415,7 @@ class PretrainedConfig(PushToHubMixin):
         return len(self.id2label)
 
     @num_labels.setter
-    def num_labels(self, num_labels: int):
+    def num_labels(self, num_labels: int) -> None:
         if not hasattr(self, "id2label") or self.id2label is None or len(self.id2label) != num_labels:
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
@@ -470,7 +469,7 @@ class PretrainedConfig(PushToHubMixin):
             )
 
     @staticmethod
-    def _set_token_in_kwargs(kwargs, token=None):
+    def _set_token_in_kwargs(kwargs, token=None) -> None:
         """Temporary method to deal with `token` and `use_auth_token`.
 
         This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
@@ -918,7 +917,7 @@ class PretrainedConfig(PushToHubMixin):
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
+    def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True) -> None:
         """
         Save this instance to a JSON file.
 
@@ -932,7 +931,7 @@ class PretrainedConfig(PushToHubMixin):
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
 
-    def update(self, config_dict: Dict[str, Any]):
+    def update(self, config_dict: Dict[str, Any]) -> None:
         """
         Updates attributes of this class with attributes from `config_dict`.
 
@@ -942,7 +941,7 @@ class PretrainedConfig(PushToHubMixin):
         for key, value in config_dict.items():
             setattr(self, key, value)
 
-    def update_from_string(self, update_str: str):
+    def update_from_string(self, update_str: str) -> None:
         """
         Updates attributes of this class with attributes from `update_str`.
 
@@ -993,7 +992,7 @@ class PretrainedConfig(PushToHubMixin):
                 self.dict_torch_dtype_to_str(value)
 
     @classmethod
-    def register_for_auto_class(cls, auto_class="AutoConfig"):
+    def register_for_auto_class(cls, auto_class: Union[str, type] = "AutoConfig"):
         """
         Register this class with a given auto class. This should only be used for custom configurations as the ones in
         the library are already mapped with `AutoConfig`.
@@ -1050,7 +1049,7 @@ def get_configuration_file(configuration_files: List[str]) -> str:
     return configuration_file
 
 
-def recursive_diff_dict(dict_a, dict_b, config_obj=None):
+def recursive_diff_dict(dict_a: Dict[Any, Any], dict_b: Dict[Any, Any], config_obj: Any = None):
     """
     Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
     values from `dict_a` that are different from values in `dict_b`.

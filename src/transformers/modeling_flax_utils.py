@@ -90,7 +90,7 @@ def dtype_byte_size(dtype):
     return bit_size // 8
 
 
-def flax_shard_checkpoint(params, max_shard_size="10GB"):
+def flax_shard_checkpoint(params: Union[Dict, FrozenDict], max_shard_size: Union[str, int] = "10GB"):
     """
     Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
     given size. The sub-checkpoints are determined by iterating through the `state_dict` in the order of its keys, so
@@ -1026,8 +1026,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self,
         save_directory: Union[str, os.PathLike],
         params=None,
-        push_to_hub=False,
-        max_shard_size="10GB",
+        push_to_hub: bool = False,
+        max_shard_size: Union[int, str] = "10GB",
         token: Optional[Union[str, bool]] = None,
         **kwargs,
     ):
@@ -1184,7 +1184,7 @@ if FlaxPreTrainedModel.push_to_hub.__doc__ is not None:
     )
 
 
-def overwrite_call_docstring(model_class, docstring):
+def overwrite_call_docstring(model_class: Union[FlaxPreTrainedModel, FlaxModuleWithState], docstring: str):
     # copy __call__ function to be sure docstring is changed only for this function
     model_class.__call__ = copy_func(model_class.__call__)
     # delete existing docstring

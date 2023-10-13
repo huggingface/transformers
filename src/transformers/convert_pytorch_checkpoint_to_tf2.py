@@ -17,6 +17,7 @@
 
 import argparse
 import os
+from typing import List, Optional, Union
 
 from . import (
     ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -302,7 +303,12 @@ MODEL_CLASSES = {
 
 
 def convert_pt_checkpoint_to_tf(
-    model_type, pytorch_checkpoint_path, config_file, tf_dump_path, compare_with_pt_model=False, use_cached_models=True
+    model_type: str,
+    pytorch_checkpoint_path: str,
+    config_file: str,
+    tf_dump_path: str,
+    compare_with_pt_model: bool = False,
+    use_cached_models: bool = True,
 ):
     if model_type not in MODEL_CLASSES:
         raise ValueError(f"Unrecognized model type, should be one of {list(MODEL_CLASSES.keys())}.")
@@ -321,7 +327,9 @@ def convert_pt_checkpoint_to_tf(
     # Load weights from tf checkpoint
     if pytorch_checkpoint_path in aws_config_map.keys():
         pytorch_checkpoint_path = cached_file(
-            pytorch_checkpoint_path, WEIGHTS_NAME, force_download=not use_cached_models
+            pytorch_checkpoint_path,
+            WEIGHTS_NAME,
+            force_download=not use_cached_models,
         )
     # Load PyTorch checkpoint in tf2 model:
     tf_model = load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
@@ -349,14 +357,14 @@ def convert_pt_checkpoint_to_tf(
 
 
 def convert_all_pt_checkpoints_to_tf(
-    args_model_type,
-    tf_dump_path,
-    model_shortcut_names_or_path=None,
-    config_shortcut_names_or_path=None,
-    compare_with_pt_model=False,
-    use_cached_models=False,
-    remove_cached_files=False,
-    only_convert_finetuned_models=False,
+    args_model_type: Union[str, None],
+    tf_dump_path: str,
+    model_shortcut_names_or_path: Optional[List[str]] = None,
+    config_shortcut_names_or_path: Optional[List[str]] = None,
+    compare_with_pt_model: bool = False,
+    use_cached_models: bool = False,
+    remove_cached_files: bool = False,
+    only_convert_finetuned_models: bool = False,
 ):
     if args_model_type is None:
         model_types = list(MODEL_CLASSES.keys())

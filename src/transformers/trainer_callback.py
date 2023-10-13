@@ -88,14 +88,14 @@ class TrainerState:
     save_steps: int = 500
     num_train_epochs: int = 0
     total_flos: float = 0
-    log_history: List[Dict[str, float]] = None
+    log_history: Optional[List[Dict[str, float]]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
     is_hyper_param_search: bool = False
-    trial_name: str = None
-    trial_params: Dict[str, Union[str, float, int, bool]] = None
+    trial_name: Optional[str] = None
+    trial_params: Optional[Dict[str, Union[str, float, int, bool]]] = None
 
     def __post_init__(self):
         if self.log_history is None:

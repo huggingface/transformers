@@ -18,8 +18,12 @@
 
 import os
 import re
+from typing import Callable, List, Optional, Union
 
 import numpy
+from transformers.modeling_tf_utils import TFPreTrainedModel
+
+from transformers.modeling_utils import PreTrainedModel
 
 from .utils import ExplicitEnum, expand_dims, is_numpy_array, is_torch_tensor, logging, reshape, squeeze, tensor_size
 from .utils import transpose as transpose_func
@@ -40,7 +44,10 @@ class TransposeType(ExplicitEnum):
 
 
 def convert_tf_weight_name_to_pt_weight_name(
-    tf_name, start_prefix_to_remove="", tf_weight_shape=None, name_scope=None
+    tf_name: str,
+    start_prefix_to_remove: str = "",
+    tf_weight_shape: Optional[tuple] = None,
+    name_scope: Optional[str] = None,
 ):
     """
     Convert a TF 2.0 model variable name in a pytorch model weight name.
@@ -111,7 +118,12 @@ def convert_tf_weight_name_to_pt_weight_name(
     return tf_name, transpose
 
 
-def apply_transpose(transpose: TransposeType, weight, match_shape=None, pt_to_tf=True):
+def apply_transpose(
+    transpose: TransposeType,
+    weight: numpy.ndarray,
+    match_shape: Optional[tuple] = None,
+    pt_to_tf: bool = True,
+):
     """
     Apply a transpose to some weight then tries to reshape the weight to the same shape as a given shape, all in a
     framework agnostic way.
@@ -154,13 +166,13 @@ def apply_transpose(transpose: TransposeType, weight, match_shape=None, pt_to_tf
 
 
 def load_pytorch_checkpoint_in_tf2_model(
-    tf_model,
-    pytorch_checkpoint_path,
-    tf_inputs=None,
-    allow_missing_keys=False,
-    output_loading_info=False,
-    _prefix=None,
-    tf_to_pt_weight_rename=None,
+    tf_model: TFPreTrainedModel,
+    pytorch_checkpoint_path: Union[str, List[str]],
+    tf_inputs: Optional[dict] = None,
+    allow_missing_keys: bool = False,
+    output_loading_info: bool = False,
+    _prefix: Optional[str] = None,
+    tf_to_pt_weight_rename: Optional[Callable[[str], str]] = None,
 ):
     """Load pytorch checkpoints in a TF 2.0 model"""
     try:
@@ -197,7 +209,12 @@ def load_pytorch_checkpoint_in_tf2_model(
     )
 
 
-def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_missing_keys=False):
+def load_pytorch_model_in_tf2_model(
+    tf_model: TFPreTrainedModel,
+    pt_model: PreTrainedModel,
+    tf_inputs: Optional[dict] = None,
+    allow_missing_keys: bool = False,
+):
     """Load pytorch checkpoints in a TF 2.0 model"""
     pt_state_dict = pt_model.state_dict()
 
@@ -415,7 +432,11 @@ def load_pytorch_state_dict_in_tf2_model(
 
 
 def load_tf2_checkpoint_in_pytorch_model(
-    pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+    pt_model: PreTrainedModel,
+    tf_checkpoint_path: Union[str, List[str]],
+    tf_inputs: Optional[dict] = None,
+    allow_missing_keys: bool = False,
+    output_loading_info: bool = False,
 ):
     """
     Load TF 2.0 HDF5 checkpoint in a PyTorch model We use HDF5 to easily do transfer learning (see
@@ -455,7 +476,12 @@ def load_tf2_checkpoint_in_pytorch_model(
     )
 
 
-def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False, output_loading_info=False):
+def load_tf2_model_in_pytorch_model(
+    pt_model: PreTrainedModel,
+    tf_model: TFPreTrainedModel,
+    allow_missing_keys: bool = False,
+    output_loading_info: bool = False,
+):
     """Load TF 2.0 model in a pytorch model"""
     weights = tf_model.weights
 
@@ -464,7 +490,12 @@ def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False
     )
 
 
-def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False, output_loading_info=False):
+def load_tf2_weights_in_pytorch_model(
+    pt_model: PreTrainedModel,
+    tf_model: TFPreTrainedModel,
+    allow_missing_keys: bool = False,
+    output_loading_info: bool = False,
+):
     """Load TF2.0 symbolic weights in a PyTorch model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -482,7 +513,12 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     )
 
 
-def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_keys=False, output_loading_info=False):
+def load_tf2_state_dict_in_pytorch_model(
+    pt_model: PreTrainedModel,
+    tf_model: TFPreTrainedModel,
+    allow_missing_keys: bool = False,
+    output_loading_info: bool = False,
+):
     import torch
 
     new_pt_params_dict = {}

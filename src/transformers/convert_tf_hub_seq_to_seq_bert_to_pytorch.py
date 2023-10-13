@@ -30,7 +30,13 @@ from . import (
 logging.set_verbosity_info()
 
 
-def convert_tf_checkpoint_to_pytorch(tf_hub_path, pytorch_dump_path, is_encoder_named_decoder, vocab_size, is_encoder):
+def convert_tf_checkpoint_to_pytorch(
+    tf_hub_path: str,
+    pytorch_dump_path: str,
+    is_encoder_named_decoder: bool,
+    vocab_size: int,
+    is_encoder: bool,
+) -> None:
     # Initialise PyTorch model
     bert_config = BertConfig.from_pretrained(
         "bert-large-cased",

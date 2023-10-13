@@ -17,7 +17,7 @@
 
 import os
 from pickle import UnpicklingError
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -230,7 +230,9 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
 ############################
 
 
-def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
+def convert_pytorch_sharded_state_dict_to_flax(
+    shard_filenames: List[str], flax_model: transformers.FlaxPreTrainedModel
+):
     import torch
 
     # Load the index
@@ -310,7 +312,7 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
 #####################
 
 
-def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
+def load_flax_checkpoint_in_pytorch_model(model: str, flax_checkpoint_path: str):
     """Load flax checkpoints in a PyTorch model"""
     flax_checkpoint_path = os.path.abspath(flax_checkpoint_path)
     logger.info(f"Loading Flax weights from {flax_checkpoint_path}")
@@ -328,7 +330,7 @@ def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
     return load_flax_weights_in_pytorch_model(model, flax_state_dict)
 
 
-def load_flax_weights_in_pytorch_model(pt_model, flax_state):
+def load_flax_weights_in_pytorch_model(pt_model: transformers.PreTrainedModel, flax_state: Dict[str, np.ndarray]):
     """Load flax checkpoints in a PyTorch model"""
 
     try:

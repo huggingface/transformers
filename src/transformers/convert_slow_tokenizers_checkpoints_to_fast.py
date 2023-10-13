@@ -16,6 +16,7 @@
 
 import argparse
 import os
+from typing import Union
 
 import transformers
 
@@ -31,7 +32,12 @@ logger = logging.get_logger(__name__)
 TOKENIZER_CLASSES = {name: getattr(transformers, name + "Fast") for name in SLOW_TO_FAST_CONVERTERS}
 
 
-def convert_slow_checkpoint_to_fast(tokenizer_name, checkpoint_name, dump_path, force_download):
+def convert_slow_checkpoint_to_fast(
+    tokenizer_name: Union[str, None],
+    checkpoint_name: Union[str, None],
+    dump_path: str,
+    force_download: bool,
+):
     if tokenizer_name is not None and tokenizer_name not in TOKENIZER_CLASSES:
         raise ValueError(f"Unrecognized tokenizer name, should be one of {list(TOKENIZER_CLASSES.keys())}.")
 

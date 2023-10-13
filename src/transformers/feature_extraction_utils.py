@@ -77,15 +77,14 @@ class BatchFeature(UserDict):
         super().__init__(data)
         self.convert_to_tensors(tensor_type=tensor_type)
 
-    def __getitem__(self, item: str) -> Union[Any]:
+    def __getitem__(self, item: str) -> Any:
         """
         If the key is a string, returns the value of the dict associated to `key` ('input_values', 'attention_mask',
         etc.).
         """
         if isinstance(item, str):
             return self.data[item]
-        else:
-            raise KeyError("Indexing with integers is not available when using Python based feature extractors")
+        raise KeyError("Indexing with integers is not available when using Python based feature extractors")
 
     def __getattr__(self, item: str):
         try:

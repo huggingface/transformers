@@ -243,12 +243,12 @@ class Trie:
 
         return self.cut_text(text, offsets)
 
-    def cut_text(self, text, offsets):
+    def cut_text(self, text: str, offsets: List[int]) -> List[str]:
         # We have all the offsets now, we just need to do the actual splitting.
         # We need to eventually add the first part of the string and the eventual
         # last part.
         offsets.append(len(text))
-        tokens = []
+        tokens: List[str] = []
         start = 0
         for end in offsets:
             if start > end:
@@ -268,7 +268,7 @@ class Trie:
         return tokens
 
 
-def _is_whitespace(char):
+def _is_whitespace(char: str):
     """Checks whether `char` is a whitespace character."""
     # \t, \n, and \r are technically control characters but we treat them
     # as whitespace since they are generally considered as such.
@@ -280,7 +280,7 @@ def _is_whitespace(char):
     return False
 
 
-def _is_control(char):
+def _is_control(char: str):
     """Checks whether `char` is a control character."""
     # These are technically control characters but we count them as whitespace
     # characters.
@@ -292,7 +292,7 @@ def _is_control(char):
     return False
 
 
-def _is_punctuation(char):
+def _is_punctuation(char: str):
     """Checks whether `char` is a punctuation character."""
     cp = ord(char)
     # We treat all non-letter/number ASCII as punctuation.
@@ -307,13 +307,13 @@ def _is_punctuation(char):
     return False
 
 
-def _is_end_of_word(text):
+def _is_end_of_word(text: str):
     """Checks whether the last character in text is one of a punctuation, control or whitespace character."""
     last_char = text[-1]
     return bool(_is_control(last_char) | _is_punctuation(last_char) | _is_whitespace(last_char))
 
 
-def _is_start_of_word(text):
+def _is_start_of_word(text: str):
     """Checks whether the first character in text is one of a punctuation, control or whitespace character."""
     first_char = text[0]
     return bool(_is_control(first_char) | _is_punctuation(first_char) | _is_whitespace(first_char))
@@ -607,7 +607,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # ["This", " is", " something", "<special_token_1>", "else"]
         return tokenized_text
 
-    def _tokenize(self, text, **kwargs):
+    def _tokenize(self, text: str, **kwargs):
         """
         Converts a string in a sequence of tokens (string), using the tokenizer. Split in words for word-based
         vocabulary or sub-words for sub-word-based vocabularies (BPE/SentencePieces/WordPieces).
@@ -981,7 +981,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self,
         token_ids: List[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
+        clean_up_tokenization_spaces: Optional[bool] = None,
         spaces_between_special_tokens: bool = True,
         **kwargs,
     ) -> str:

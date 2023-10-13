@@ -20,11 +20,13 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import warnings
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
+
+from transformers.tokenization_utils import PreTrainedTokenizer
 
 from .utils import is_protobuf_available, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
@@ -55,7 +57,7 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores: Optional[Dict[Any, int]] = None) -> Tuple[Dict[str, int], List[Tuple[Any, Any]]]:
         """
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
@@ -555,7 +557,7 @@ class AlbertConverter(SpmConverter):
             for piece in proto.pieces
         ]
 
-    def normalizer(self, proto):
+    def normalizer(self, proto) -> Sequence[normalizers.Normalizer]:
         list_normalizers = [
             normalizers.Replace("``", '"'),
             normalizers.Replace("''", '"'),
@@ -586,7 +588,7 @@ class AlbertConverter(SpmConverter):
 
 
 class BarthezConverter(SpmConverter):
-    def unk_id(self, proto):
+    def unk_id(self, proto) -> int:
         unk_id = 3
         return unk_id
 
@@ -701,7 +703,7 @@ class MBartConverter(SpmConverter):
         vocab += [("<mask>", 0.0)]
         return vocab
 
-    def unk_id(self, proto):
+    def unk_id(self, proto) -> int:
         return 3
 
     def post_processor(self):
@@ -730,7 +732,7 @@ class MBart50Converter(SpmConverter):
         vocab += [("<mask>", 0.0)]
         return vocab
 
-    def unk_id(self, proto):
+    def unk_id(self, proto) -> int:
         return 3
 
     def post_processor(self):
@@ -761,7 +763,7 @@ class NllbConverter(SpmConverter):
         vocab += [("<mask>", 0.0)]
         return vocab
 
-    def unk_id(self, proto):
+    def unk_id(self, proto) -> int:
         return 3
 
     def post_processor(self):
@@ -787,7 +789,7 @@ class XLMRobertaConverter(SpmConverter):
         vocab += [("<mask>", 0.0)]
         return vocab
 
-    def unk_id(self, proto):
+    def unk_id(self, proto) -> int:
         unk_id = 3
         return unk_id
 
@@ -1108,7 +1110,7 @@ class XGLMConverter(SpmConverter):
         # fmt: on
         return vocab
 
-    def unk_id(self, proto):
+    def unk_id(self, proto) -> int:
         unk_id = 3
         return unk_id
 
@@ -1135,7 +1137,7 @@ class LlamaConverter(SpmConverter):
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
 
-    def unk_id(self, proto):
+    def unk_id(self, proto) -> int:
         unk_id = 0
         return unk_id
 
@@ -1290,7 +1292,7 @@ SLOW_TO_FAST_CONVERTERS = {
 }
 
 
-def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
+def convert_slow_tokenizer(transformer_tokenizer: PreTrainedTokenizer) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 

@@ -127,7 +127,7 @@ def rescale(
     return rescaled_image
 
 
-def _rescale_for_pil_conversion(image):
+def _rescale_for_pil_conversion(image: np.ndarray) -> bool:
     """
     Detects whether or not the image needs to be rescaled before being converted to a PIL image.
 

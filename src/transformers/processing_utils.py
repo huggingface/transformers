@@ -90,7 +90,7 @@ class ProcessorMixin(PushToHubMixin):
         attributes_repr = "\n".join(attributes_repr)
         return f"{self.__class__.__name__}:\n{attributes_repr}"
 
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Saves the attributes of this processor (feature extractor, tokenizer...) in the specified directory so that it
         can be reloaded using the [`~ProcessorMixin.from_pretrained`] method.
@@ -227,7 +227,7 @@ class ProcessorMixin(PushToHubMixin):
         return cls(*args)
 
     @classmethod
-    def register_for_auto_class(cls, auto_class="AutoProcessor"):
+    def register_for_auto_class(cls, auto_class: Optional[str] = "AutoProcessor"):
         """
         Register this class with a given auto class. This should only be used for custom feature extractors as the ones
         in the library are already mapped with `AutoProcessor`.

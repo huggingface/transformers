@@ -31,7 +31,7 @@ DataClassType = NewType("DataClassType", Any)
 
 
 # From https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
-def string_to_bool(v):
+def string_to_bool(v: Union[bool, str]) -> bool:
     if isinstance(v, bool):
         return v
     if v.lower() in ("yes", "true", "t", "y", "1"):
@@ -61,11 +61,11 @@ def make_choice_type_function(choices: list) -> Callable[[str], Any]:
 
 def HfArg(
     *,
-    aliases: Union[str, List[str]] = None,
-    help: str = None,
+    aliases: Optional[Union[str, List[str]]] = None,
+    help: Optional[str] = None,
     default: Any = dataclasses.MISSING,
     default_factory: Callable[[], Any] = dataclasses.MISSING,
-    metadata: dict = None,
+    metadata: Optional[Dict] = None,
     **kwargs,
 ) -> dataclasses.Field:
     """Argument helper enabling a concise syntax to create dataclass fields for parsing with `HfArgumentParser`.
