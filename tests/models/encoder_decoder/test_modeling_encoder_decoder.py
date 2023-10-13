@@ -803,7 +803,6 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         with CaptureLogger(logger) as cl:
             torch.manual_seed(0)
             output = model(input_ids, attention_mask, labels=labels)
-            loss_for_default_decoder_attention_mask = output[0]
 
         # Assert that the warning does not show up since a default decoder_attention_mask should have been created.
         self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
@@ -812,14 +811,12 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         # and the default attention mask.
         attention_mask_ignoring_padding = torch.ones(labels.shape, dtype=torch.long)
         torch.manual_seed(0)
-        output = model(
+        ignore_pad_tokens_output = model(
             input_ids, attention_mask, labels=labels, decoder_attention_mask=attention_mask_ignoring_padding
         )
-        loss_for_attention_mask_ignoring_padding = output[0]
         self.assertNotAlmostEqual(
-            loss_for_default_decoder_attention_mask.item(), loss_for_attention_mask_ignoring_padding.item()
+            output.loss.item(), ignore_pad_tokens_output.loss.item()
         )
-
 
 @require_torch
 class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
