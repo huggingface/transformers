@@ -471,7 +471,6 @@ OBJECTS_TO_IGNORE = [
     "RobertaPreLayerNormConfig",
     "RobertaPreLayerNormModel",
     "RobertaTokenizerFast",
-    "RwkvConfig",
     "SEWConfig",
     "SEWDConfig",
     "SEWDForCTC",
