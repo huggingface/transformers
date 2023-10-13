@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Grounding DINO model configuration"""
+import os
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -25,7 +27,7 @@ GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "idea-research/grounding-dino-tiny": "https://huggingface.co/idea-research/grg-dino-tiny/resolve/main/config.json",
 }
 
-# Copied from transformers.models.bert.configuration_bert.BertConfig with Bert->GroundingDINOTextPrenet
+# Modified from transformers.models.bert.configuration_bert.BertConfig with Bert->GroundingDINOTextPrenet
 class GroundingDINOTextPrenetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GroundingDINOTextPrenetModel`] or a
@@ -133,6 +135,24 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the text config dict if we are loading from CLIPSegConfig
+        if config_dict.get("model_type") == "grounding-dino":
+            config_dict = config_dict["text_backbone_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
 
 
 class GroundingDINOConfig(PretrainedConfig):
@@ -289,7 +309,6 @@ class GroundingDINOConfig(PretrainedConfig):
         text_backbone_config=None,
         num_channels=3,
         num_queries=900,
-        max_position_embeddings=1024,
         encoder_layers=6,
         encoder_ffn_dim=2048,
         encoder_attention_heads=8,
@@ -352,7 +371,6 @@ class GroundingDINOConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.num_channels = num_channels
         self.num_queries = num_queries
-        self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers
@@ -391,7 +409,7 @@ class GroundingDINOConfig(PretrainedConfig):
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
-        self.text_backbone_config = GroundingDINOTextPrenetConfig() if text_backbone_config is None else text_backbone_config
+        self.text_backbone_config = GroundingDINOTextPrenetConfig() if text_backbone_config is None else GroundingDINOTextPrenetConfig(**text_backbone_config)
         self.max_text_len = max_text_len
         # Text Enhancer
         self.text_enhancer_dropout = text_enhancer_dropout
