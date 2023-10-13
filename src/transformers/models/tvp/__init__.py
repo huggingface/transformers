@@ -19,7 +19,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_tvp": [
-        "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TvpConfig",
     ],
     "processing_tvp": ["TvpProcessor"],

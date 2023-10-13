@@ -566,7 +566,7 @@ _import_structure = {
         "TvltProcessor",
     ],
     "models.tvp": [
-        "TVP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TvpConfig",
         "TvpProcessor",
     ],
