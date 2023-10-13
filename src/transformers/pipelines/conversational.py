@@ -290,7 +290,7 @@ class ConversationalPipeline(Pipeline):
         n = model_inputs["input_ids"].shape[1]
         conversation = model_inputs.pop("conversation")
         if "max_length" not in generate_kwargs and "max_new_tokens" not in generate_kwargs:
-            generate_kwargs["max_new_tokens"] = 1024
+            generate_kwargs["max_new_tokens"] = 256
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.model.config.is_encoder_decoder:
             start_position = 1
