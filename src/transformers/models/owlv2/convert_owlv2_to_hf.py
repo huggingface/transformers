@@ -26,6 +26,7 @@ import numpy as np
 import torch
 from flax.training import checkpoints
 from huggingface_hub import hf_hub_download
+from PIL import Image
 
 from transformers import (
     CLIPTokenizer,
@@ -219,9 +220,6 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
     flax_params = jax.tree_util.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
     state_dict = flatten_nested_dict(flax_params)
 
-    for name, param in state_dict.items():
-        print(name, param.shape, param.dtype)
-
     # Rename keys
     rename_keys = create_rename_keys(config, model_name)
     for src, dest in rename_keys:
@@ -239,21 +237,26 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
     image_processor = Owlv2ImageProcessor(size=size)
     # Initialize tokenizer
     tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32", pad_token="!", model_max_length=16)
-
     # Initialize processor
     processor = Owlv2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
-    filename = "owlvit_pixel_values_960.pt" if "v2" in model_name else "owlvit_pixel_values.pt"
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
-    pixel_values = torch.load(filepath).permute(0, 3, 1, 2)
-    print("Shape of pixel values:", pixel_values.shape)
-    filename = "owlv2_input_ids.pt" if "v2" in model_name else "owlvit_input_ids.pt"
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
-    input_ids = torch.load(filepath).squeeze()
-    print("Shape of input ids:", input_ids.shape)
+    # Verify pixel_values and input_ids
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlvit_pixel_values_960.pt", repo_type="dataset")
+    original_pixel_values = torch.load(filepath).permute(0, 3, 1, 2)
+
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="owlv2_input_ids.pt", repo_type="dataset")
+    original_input_ids = torch.load(filepath).squeeze()
+
+    filepath = hf_hub_download(repo_id="adirik/OWL-ViT", repo_type="space", filename="assets/astronaut.png")
+    image = Image.open(filepath)
+    texts = [["face", "rocket", "nasa badge", "star-spangled banner"]]
+    inputs = processor(text=texts, images=image, return_tensors="pt")
+
+    assert torch.allclose(inputs.pixel_values, original_pixel_values.float(), atol=1e-6)
+    assert torch.allclose(inputs.input_ids[:4,:], original_input_ids[:4,:], atol=1e-6)
 
     with torch.no_grad():
-        outputs = model(input_ids=input_ids, pixel_values=pixel_values)
+        outputs = model(**inputs)
         logits = outputs.logits
         pred_boxes = outputs.pred_boxes
 
