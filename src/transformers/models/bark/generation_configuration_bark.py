@@ -88,8 +88,8 @@ class BarkSemanticGenerationConfig(GenerationConfig):
             semantic_rate_hz (`float`, *optional*, defaults to 49.9):
                 Semantic rate in Hertz.
             min_eos_p (`float`, *optional*):
-                Minimum threshold of the probability of the EOS token for it to be sampled. This is an early
-                stopping strategy to mitigate potential unwanted generations at the end of a prompt.
+                Minimum threshold of the probability of the EOS token for it to be sampled. This is an early stopping
+                strategy to mitigate potential unwanted generations at the end of a prompt.
         """
         super().__init__(
             temperature=temperature,
