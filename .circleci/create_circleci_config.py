@@ -163,7 +163,7 @@ class CircleCIJob:
 
         tests_to_run = [f"tests/models/{x}" for x in os.listdir("tests/models/") if x != "deprecated"]
         start = 0
-        end = 32 + 16 + 8
+        end = 32 + 16 + 4
         self.tests_to_run = [x for x in tests_to_run[start:end] if not os.path.isfile(x)]
 
         if self.parallelism == 1:
