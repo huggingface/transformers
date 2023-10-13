@@ -24,17 +24,17 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
-
+from ...utils.backbone_utils import get_aligned_output_features_output_indices
 
 logger = logging.get_logger(__name__)
 
-PVT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "pvt-tiny-224": "https://huggingface.co/Zetatech/pvt-tiny-224",
     # See all PVT models at https://huggingface.co/models?filter=pvt
 }
 
 
-class PvtConfig(PretrainedConfig):
+class PvtV2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PvtModel`]. It is used to instantiate an Pvt
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -53,7 +53,7 @@ class PvtConfig(PretrainedConfig):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
         depths (`List[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
-        sequence_reduction_ratios (`List[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
+        sr_ratios (`List[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
             Sequence reduction ratios in each encoder block.
         hidden_sizes (`List[int]`, *optional*, defaults to `[64, 128, 320, 512]`):
             Dimension of each of the encoder blocks.
@@ -83,21 +83,29 @@ class PvtConfig(PretrainedConfig):
             Whether or not a learnable bias should be added to the queries, keys and values.
         num_labels ('int', *optional*, defaults to 1000)
             The number of classes.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
     Example:
 
     ```python
-    >>> from transformers import PvtModel, PvtConfig
+    >>> from transformers import PvtV2Model, PvtV2Config
 
-    >>> # Initializing a PVT Xrenya/pvt-tiny-224 style configuration
-    >>> configuration = PvtConfig()
+    >>> # Initializing a pvt_v2-b0 style configuration
+    >>> configuration = PvtV2Config()
 
     >>> # Initializing a model from the Xrenya/pvt-tiny-224 style configuration
-    >>> model = PvtModel(configuration)
+    >>> model = PvtV2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "pvt"
+    model_type = "pvt_v2"
 
     def __init__(
         self,
@@ -105,7 +113,7 @@ class PvtConfig(PretrainedConfig):
         num_channels: int = 3,
         num_encoder_blocks: int = 4,
         depths: List[int] = [2, 2, 2, 2],
-        sequence_reduction_ratios: List[int] = [8, 4, 2, 1],
+        sr_ratios: List[int] = [8, 4, 2, 1],
         hidden_sizes: List[int] = [64, 128, 320, 512],
         patch_sizes: List[int] = [4, 2, 2, 2],
         strides: List[int] = [4, 2, 2, 2],
@@ -119,6 +127,9 @@ class PvtConfig(PretrainedConfig):
         layer_norm_eps: float = 1e-6,
         qkv_bias: bool = True,
         num_labels: int = 1000,
+        attn_reduce: str = "SR",  # Set to "SR" for spatial reduction (Conv2d), "AP" for average pooling
+        out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -127,7 +138,7 @@ class PvtConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
         self.depths = depths
-        self.sequence_reduction_ratios = sequence_reduction_ratios
+        self.sr_ratios = sr_ratios
         self.hidden_sizes = hidden_sizes
         self.patch_sizes = patch_sizes
         self.strides = strides
@@ -141,6 +152,11 @@ class PvtConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.num_labels = num_labels
         self.qkv_bias = qkv_bias
+        self.attn_reduce = attn_reduce
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
 
 
 class PvtOnnxConfig(OnnxConfig):

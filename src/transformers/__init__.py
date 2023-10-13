@@ -521,6 +521,7 @@ _import_structure = {
     ],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
+    "models.pvt_v2": ["PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtV2Config"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
@@ -1017,6 +1018,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.pvt_v2"].extend(["PvtV2ImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
@@ -2612,6 +2614,14 @@ else:
             "PvtForImageClassification",
             "PvtModel",
             "PvtPreTrainedModel",
+        ]
+    )
+    _import_structure["models.pvt_v2"].extend(
+        [
+            "PVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PvtV2ForImageClassification",
+            "PvtV2Model",
+            "PvtV2PreTrainedModel",
         ]
     )
     _import_structure["models.qdqbert"].extend(
@@ -4765,6 +4775,7 @@ if TYPE_CHECKING:
     )
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
+    from .models.pvt_v2 import PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtV2Config
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
@@ -5212,6 +5223,7 @@ if TYPE_CHECKING:
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.pvt import PvtImageProcessor
+        from .models.pvt_v2 import PvtV2Config
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
@@ -6539,6 +6551,12 @@ if TYPE_CHECKING:
             PvtForImageClassification,
             PvtModel,
             PvtPreTrainedModel,
+        )
+        from .models.pvt_v2 import (
+            PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PvtV2ForImageClassification,
+            PvtV2Model,
+            PvtV2PreTrainedModel,
         )
         from .models.qdqbert import (
             QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
