@@ -34,7 +34,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_pvt_v2"] = ["PvtV2ImageProcessor"]
+    _import_structure["image_processing_pvt"] = ["PvtImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -47,7 +47,6 @@ else:
         "PvtV2ForImageClassification",
         "PvtV2Model",
         "PvtV2PreTrainedModel",
-        "PvtV2Backbone",
     ]
 
 
@@ -73,7 +72,6 @@ if TYPE_CHECKING:
             PvtV2ForImageClassification,
             PvtV2Model,
             PvtV2PreTrainedModel,
-            PvtV2Backbone,
         )
 
 else:

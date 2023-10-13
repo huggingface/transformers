@@ -36,27 +36,21 @@ from ...utils import (
     logging,
 )
 from .configuration_pvt_v2 import PvtV2Config
-from ...utils.backbone_utils import BackboneMixin
+
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PvtV2Config"
+_CONFIG_FOR_DOC = "PvtConfig"
 
-_CHECKPOINT_FOR_DOC = "FoamoftheSea/pvt_v2_b0"
+_CHECKPOINT_FOR_DOC = "Zetatech/pvt-tiny-224"
 _EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
 
-_IMAGE_CLASS_CHECKPOINT = "FoamoftheSea/pvt_v2_b0"
+_IMAGE_CLASS_CHECKPOINT = "Zetatech/pvt-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "FoamoftheSea/pvt_v2_b0",
-    "FoamoftheSea/pvt_v2_b1",
-    "FoamoftheSea/pvt_v2_b2",
-    "FoamoftheSea/pvt_v2_b2_linear",
-    "FoamoftheSea/pvt_v2_b3",
-    "FoamoftheSea/pvt_v2_b4",
-    "FoamoftheSea/pvt_v2_b5",
-    # See all PVT models at https://huggingface.co/models?filter=pvt_v2
+    "Zetatech/pvt-tiny-224"
+    # See all PVT models at https://huggingface.co/models?filter=pvt
 ]
 
 
@@ -97,10 +91,11 @@ class PvtV2DropPath(nn.Module):
 
 
 class PvtV2OverlapPatchEmbeddings(nn.Module):
-    """Image to Patch Embedding"""
+    """ Image to Patch Embedding"""
 
     def __init__(
         self,
+        image_size: Union[int, Iterable[int]],
         patch_size: Union[int, Iterable[int]],
         stride: int,
         num_channels: int,
@@ -108,15 +103,15 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
     ):
         super().__init__()
         self.fp16_enabled = False
+        image_size = _ntuple(2)(image_size)
         patch_size = _ntuple(2)(patch_size)
+
+        self.img_size = image_size
         self.patch_size = patch_size
-        self.proj = nn.Conv2d(
-            num_channels,
-            hidden_size,
-            kernel_size=patch_size,
-            stride=stride,
-            padding=(patch_size[0] // 2, patch_size[1] // 2),
-        )
+        self.H, self.W = image_size[0] // patch_size[0], image_size[1] // patch_size[1]
+        self.num_patches = self.H * self.W
+        self.proj = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=stride,
+                              padding=(patch_size[0] // 2, patch_size[1] // 2))
         self.layer_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, pixel_values):
@@ -144,7 +139,9 @@ class PvTV2DWConv(nn.Module):
 class PvtV2SelfAttention(nn.Module):
     """Efficient self-attention mechanism."""
 
-    def __init__(self, config: PvtV2Config, hidden_size: int, num_attention_heads: int, sr_ratio: int):
+    def __init__(
+        self, config: PvtV2Config, hidden_size: int, num_attention_heads: int, sr_ratio: int
+    ):
         super().__init__()
         self.attn_reduce = config.attn_reduce
         self.pruned_heads = set()
@@ -160,19 +157,23 @@ class PvtV2SelfAttention(nn.Module):
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
+        # Original code computes k and v with the same Linear layer
         self.query = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        # self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        # self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.kv = nn.Linear(self.hidden_size, self.hidden_size * 2, bias=config.qkv_bias)
         self.attn_drop = nn.Dropout(config.attention_probs_dropout_prob)
         self.proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.proj_drop = nn.Dropout(config.hidden_dropout_prob)
 
         self.sr_ratio = sr_ratio
         if self.attn_reduce == "AP":
-            self.pool = nn.AdaptiveAvgPool2d(7)
-            self.sr = nn.Conv2d(hidden_size, hidden_size, kernel_size=1, stride=1)
-            self.layer_norm = nn.LayerNorm(hidden_size)
-            self.act = nn.GELU()
+            self.sr = nn.Sequential(
+                nn.AdaptiveAvgPool2d(sr_ratio),
+                nn.Conv2d(hidden_size, hidden_size, kernel_size=1, stride=1),
+                nn.LayerNorm(hidden_size),
+                nn.GELU(),
+            )
         elif sr_ratio > 1:
             self.sr = nn.Conv2d(self.hidden_size, self.hidden_size, kernel_size=sr_ratio, stride=sr_ratio)
             self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
@@ -194,15 +195,16 @@ class PvtV2SelfAttention(nn.Module):
 
         if self.attn_reduce == "AP":
             hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-            hidden_states = self.sr(self.pool(hidden_states)).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
-            hidden_states = self.act(self.layer_norm(hidden_states))
+            hidden_states = self.sr(hidden_states).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
         elif self.sr_ratio > 1:
             hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
             hidden_states = self.sr(hidden_states).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
             hidden_states = self.layer_norm(hidden_states)
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        # k = self.transpose_for_scores(self.key(hidden_states))
+        # v = self.transpose_for_scores(self.value(hidden_states))
+        kv = self.transpose_for_scores(self.kv(hidden_states))
+        key_layer, value_layer = kv[0], kv[1]
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -235,9 +237,10 @@ class PvtV2SelfAttention(nn.Module):
 
         # Prune linear layers
         self.query = prune_linear_layer(self.query, index)
-        self.key = prune_linear_layer(self.key, index)
-        self.value = prune_linear_layer(self.value, index)
-        self.proj = prune_linear_layer(self.proj, index, dim=1)
+        # self.key = prune_linear_layer(self.key, index)
+        # self.value = prune_linear_layer(self.value, index)
+        self.kv = prune_linear_layer(self.kv, index)
+        self.output.dense = prune_linear_layer(self.proj, index, dim=1)
 
         # Update hyper params and store pruned heads
         self.num_attention_heads = self.num_attention_heads - len(heads)
@@ -263,11 +266,9 @@ class PvtV2ConvFFN(nn.Module):
             self.intermediate_act_fn = config.hidden_act
         self.dense2 = nn.Linear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.relu = nn.ReLU() if config.attn_reduce == "AP" else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor, height, width) -> torch.Tensor:
         hidden_states = self.dense1(hidden_states)
-        hidden_states = self.relu(hidden_states)
         hidden_states = self.dwconv(hidden_states, height, width)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -312,7 +313,7 @@ class PvtV2Layer(nn.Module):
         attention_output = self.drop_path(attention_output)
         hidden_states = attention_output + hidden_states
 
-        mlp_output = self.mlp(self.layer_norm_2(hidden_states), height, width)
+        mlp_output = self.mlp(self.layer_norm_2(hidden_states))
 
         mlp_output = self.drop_path(mlp_output)
         layer_output = hidden_states + mlp_output
@@ -336,6 +337,7 @@ class PvtV2Encoder(nn.Module):
         for i in range(config.num_encoder_blocks):
             embeddings.append(
                 PvtV2OverlapPatchEmbeddings(
+                    image_size=config.image_size if i == 0 else self.config.image_size // (2 ** (i + 1)),
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
                     num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
@@ -368,9 +370,7 @@ class PvtV2Encoder(nn.Module):
         self.block = nn.ModuleList(blocks)
 
         # Layer norms
-        self.layer_norms = nn.ModuleList(
-            [nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)]
-        )
+        self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -383,26 +383,24 @@ class PvtV2Encoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         batch_size = pixel_values.shape[0]
+        num_blocks = len(self.block)
         hidden_states = pixel_values
-        for idx, x in enumerate(zip(self.patch_embeddings, self.block, self.layer_norms)):
-            embedding_layer, block_layer, norm_layer = x
+        for idx, (embedding_layer, block_layer) in enumerate(zip(self.patch_embeddings, self.block)):
             # first, obtain patch embeddings
             hidden_states, height, width = embedding_layer(hidden_states)
             # second, send embeddings through blocks
             for block in block_layer:
                 layer_outputs = block(hidden_states, height, width, output_attentions)
                 hidden_states = layer_outputs[0]
-                if output_attentions and idx in self.config.out_indices:
+                if output_attentions:
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
-            # third, apply layer norm
-            hidden_states = norm_layer(hidden_states)
-            # fourth, optionally reshape back to (batch_size, num_channels, height, width)
-            if idx != len(self.patch_embeddings) - 1 or (
-                idx == len(self.patch_embeddings) - 1 and self.config.reshape_last_stage
-            ):
+                if output_hidden_states:
+                    all_hidden_states = all_hidden_states + (hidden_states,)
+            if idx != num_blocks - 1:
                 hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
-            if output_hidden_states and idx in self.config.out_indices:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+        hidden_states = self.layer_norm(hidden_states)
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
@@ -445,22 +443,22 @@ class PvtV2PreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-PVT_V2_START_DOCSTRING = r"""
+PVT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`~PvtV2Config`]): Model configuration class with all the parameters of the model.
+        config ([`~PvtConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-PVT_V2_INPUTS_DOCSTRING = r"""
+PVT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`PvtV2ImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`PvtImageProcessor.__call__`]
+            for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -473,14 +471,13 @@ PVT_V2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Pvt-v2 encoder outputting raw hidden-states without any specific head on top.",
-    PVT_V2_START_DOCSTRING,
+    "The bare Pvt encoder outputting raw hidden-states without any specific head on top.",
+    PVT_START_DOCSTRING,
 )
 class PvtV2Model(PvtV2PreTrainedModel):
     def __init__(self, config: PvtV2Config):
         super().__init__(config)
         self.config = config
-        self.channels = [config.hidden_sizes[i] for i in config._out_indices]
 
         # hierarchical Transformer encoder
         self.encoder = PvtV2Encoder(config)
@@ -496,7 +493,7 @@ class PvtV2Model(PvtV2PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(PVT_V2_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
+    @add_start_docstrings_to_model_forward(PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
@@ -534,26 +531,13 @@ class PvtV2Model(PvtV2PreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
-@add_start_docstrings(
-    """
-    PVTv2 backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    PVT_V2_START_DOCSTRING,
-)
-class PvtV2Backbone(PvtV2Model, BackboneMixin):
-
-    def __init__(self, config: PvtV2Config):
-        super().__init__(config)
-        super()._init_backbone(config)
-        self.num_features = config.hidden_sizes
-
 
 @add_start_docstrings(
     """
-    Pvt-v2 Model transformer with an image classification head on top (a linear layer on top of the final hidden state
-    of the [CLS] token) e.g. for ImageNet.
+    Pvt Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.
     """,
-    PVT_V2_START_DOCSTRING,
+    PVT_START_DOCSTRING,
 )
 class PvtV2ForImageClassification(PvtV2PreTrainedModel):
     def __init__(self, config: PvtV2Config) -> None:
@@ -570,7 +554,7 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PVT_V2_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
+    @add_start_docstrings_to_model_forward(PVT_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
@@ -602,17 +586,7 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
 
         sequence_output = outputs[0]
 
-        # convert last hidden states to (batch_size, height*width, hidden_size)
-        batch_size = sequence_output.shape[0]
-        if self.config.reshape_last_stage:
-            # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-            sequence_output = sequence_output.permute(0, 2, 3, 1)
-        sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
-
-        # global average pooling
-        sequence_output = sequence_output.mean(dim=1)
-
-        logits = self.classifier(sequence_output)
+        logits = self.classifier(sequence_output[:, 0, :])
 
         loss = None
         if labels is not None:
