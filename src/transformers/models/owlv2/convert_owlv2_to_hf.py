@@ -202,7 +202,7 @@ def rename_and_reshape_key(dct, old, new, config):
 
 
 @torch.no_grad()
-def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
+def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, verify_logits):
     """
     Copy/paste/tweak model's weights to our OWL-ViT structure.
     """
@@ -236,9 +236,6 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     assert unexpected_keys == [] if "v2" in model_name else ["class_head/padding", "class_head/padding_bias"]
     model.eval()
 
-    # for name, param in model.named_parameters():
-    #     print(name, param.shape)
-
     # Initialize image processor
     size = {"height": config.vision_config.image_size, "width": config.vision_config.image_size}
     image_processor = Owlv2ImageProcessor(size=size)
@@ -261,12 +258,6 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
         outputs = model(input_ids=input_ids, pixel_values=pixel_values)
         logits = outputs.logits
         pred_boxes = outputs.pred_boxes
-
-    # # note: the logits below were obtained without center cropping
-    # if checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/owlvit/im1k/owlvit_atto_1k_224_ema.pt":
-    #     expected_logits = torch.tensor([-0.3930, 0.1747, -0.5246, 0.4177, 0.4295])
-    # else:
-    #     raise ValueError(f"Unknown URL: {checkpoint_url}")
 
     if model_name == "owlvit-base-patch16":
         expected_logits = torch.tensor(
@@ -324,7 +315,13 @@ if __name__ == "__main__":
         required=False,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument(
+        "--verify_logits",
+        action="store_true",
+        required=False,
+        help="Path to the output PyTorch model directory.",
+    )
     parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
 
     args = parser.parse_args()
-    convert_owlv2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_owlv2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.verify_logits)
