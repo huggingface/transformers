@@ -432,29 +432,31 @@ class TvpImageProcessor(BaseImageProcessor):
         videos = make_batched(videos)
 
         videos = [
-            np.array([
-                self._preprocess_image(
-                    image=img,
-                    do_resize=do_resize,
-                    size=size,
-                    resample=resample,
-                    do_center_crop=do_center_crop,
-                    crop_size=crop_size,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_pad=do_pad,
-                    pad_size=pad_size,
-                    constant_values=constant_values,
-                    pad_mode=pad_mode,
-                    do_normalize=do_normalize,
-                    do_flip_channel_order=do_flip_channel_order,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                )
-                for img in video
-            ])
+            np.array(
+                [
+                    self._preprocess_image(
+                        image=img,
+                        do_resize=do_resize,
+                        size=size,
+                        resample=resample,
+                        do_center_crop=do_center_crop,
+                        crop_size=crop_size,
+                        do_rescale=do_rescale,
+                        rescale_factor=rescale_factor,
+                        do_pad=do_pad,
+                        pad_size=pad_size,
+                        constant_values=constant_values,
+                        pad_mode=pad_mode,
+                        do_normalize=do_normalize,
+                        do_flip_channel_order=do_flip_channel_order,
+                        image_mean=image_mean,
+                        image_std=image_std,
+                        data_format=data_format,
+                        input_data_format=input_data_format,
+                    )
+                    for img in video
+                ]
+            )
             for video in videos
         ]
 

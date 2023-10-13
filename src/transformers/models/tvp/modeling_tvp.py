@@ -1072,8 +1072,6 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
 
         >>> timestamp = output["logits"].tolist()
         >>> start, end = round(timestamp[0][0] * 100, 2), round(timestamp[0][1] * 100, 2)
-        >>> print(f'The time slot of the video corresponding to the text "{text}" is from {start}% to {end}%')
-        The time slot of the video corresponding to the text "person turn a light on." is from 43.71% to 91.49%
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.model(
