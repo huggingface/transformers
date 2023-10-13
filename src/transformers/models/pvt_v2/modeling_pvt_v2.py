@@ -157,11 +157,9 @@ class PvtV2SelfAttention(nn.Module):
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        # Original code computes k and v with the same Linear layer
         self.query = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        # self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        # self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.kv = nn.Linear(self.hidden_size, self.hidden_size * 2, bias=config.qkv_bias)
+        self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.attn_drop = nn.Dropout(config.attention_probs_dropout_prob)
         self.proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.proj_drop = nn.Dropout(config.hidden_dropout_prob)
@@ -201,10 +199,8 @@ class PvtV2SelfAttention(nn.Module):
             hidden_states = self.sr(hidden_states).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
             hidden_states = self.layer_norm(hidden_states)
 
-        # k = self.transpose_for_scores(self.key(hidden_states))
-        # v = self.transpose_for_scores(self.value(hidden_states))
-        kv = self.transpose_for_scores(self.kv(hidden_states))
-        key_layer, value_layer = kv[0], kv[1]
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -237,10 +233,9 @@ class PvtV2SelfAttention(nn.Module):
 
         # Prune linear layers
         self.query = prune_linear_layer(self.query, index)
-        # self.key = prune_linear_layer(self.key, index)
-        # self.value = prune_linear_layer(self.value, index)
-        self.kv = prune_linear_layer(self.kv, index)
-        self.output.dense = prune_linear_layer(self.proj, index, dim=1)
+        self.key = prune_linear_layer(self.key, index)
+        self.value = prune_linear_layer(self.value, index)
+        self.proj = prune_linear_layer(self.proj, index, dim=1)
 
         # Update hyper params and store pruned heads
         self.num_attention_heads = self.num_attention_heads - len(heads)
