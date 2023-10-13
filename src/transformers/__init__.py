@@ -440,6 +440,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
+    "models.monza": ["MONZA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MonzaConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig"],
     "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"],
@@ -2278,6 +2279,9 @@ else:
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
         ]
+    )
+    _import_structure["models.monza"].extend(
+        ["MonzaForCausalLM", "MonzaForSequenceClassification", "MonzaModel", "MonzaPreTrainedModel"]
     )
     _import_structure["models.mpnet"].extend(
         [
@@ -4561,6 +4565,7 @@ if TYPE_CHECKING:
     from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
+    from .models.monza import MONZA_PRETRAINED_CONFIG_ARCHIVE_MAP, MonzaConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
     from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
@@ -6122,6 +6127,12 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.monza import (
+            MonzaForCausalLM,
+            MonzaForSequenceClassification,
+            MonzaModel,
+            MonzaPreTrainedModel,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,

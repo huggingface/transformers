@@ -138,6 +138,7 @@ from . import (
     mobilenet_v2,
     mobilevit,
     mobilevitv2,
+    monza,
     mpnet,
     mpt,
     mra,
