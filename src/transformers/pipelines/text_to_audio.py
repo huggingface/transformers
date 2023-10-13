@@ -62,7 +62,7 @@ class TextToAudioPipeline(Pipeline):
     ...     "max_new_tokens": 35,
     ... }
 
-    >>> outputs = music_generator("This is a test", generate_kwargs=generate_kwargs)
+    >>> outputs = music_generator("Techno music with high melodic riffs", generate_kwargs=generate_kwargs)
     ```
 
     </Tip>
