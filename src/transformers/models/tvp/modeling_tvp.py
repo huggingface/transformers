@@ -957,121 +957,17 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
 
         Examples:
         ```python
-        >>> import av
-        >>> import numpy as np
         >>> import torch
-        >>> from huggingface_hub import hf_hub_download
-        >>> from transformers import AutoProcessor, TvpForVideoGrounding
+        >>> from transformers import AutoConfig, AutoTokenizer, TvpForVideoGrounding
 
+        >>> config = AutoConfig.from_pretrained("Intel/tvp-base")
+        >>> model = TvpForVideoGrounding(config)
 
-        >>> def pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
-        ...     '''
-        ...     Convert the video from its original fps to the target_fps and decode the video with PyAV decoder.
-        ...     Returns:
-        ...         frames (tensor): decoded frames from the video. Return None if the no
-        ...             video stream was found.
-        ...         fps (float): the number of frames per second of the video.
-        ...     '''
-        ...     fps = float(container.streams.video[0].average_rate)
-        ...     clip_size = sampling_rate * num_frames / target_fps * fps
-        ...     delta = max(container.streams.video[0].frames - clip_size, 0)
-        ...     start_idx = delta * clip_idx / num_clips
-        ...     end_idx = start_idx + clip_size - 1
-        ...     timebase = container.streams.video[0].duration / container.streams.video[0].frames
-        ...     video_start_pts = int(start_idx * timebase)
-        ...     video_end_pts = int(end_idx * timebase)
-        ...     stream_name = {"video": 0}
-        ...     seek_offset = max(video_start_pts - 1024, 0)
-        ...     container.seek(seek_offset, any_frame=False, backward=True, stream=container.streams.video[0])
-        ...     frames = {}
-        ...     for frame in container.decode(**stream_name):
-        ...         if frame.pts < video_start_pts:
-        ...             continue
-        ...         if frame.pts <= video_end_pts:
-        ...             frames[frame.pts] = frame
-        ...         else:
-        ...             frames[frame.pts] = frame
-        ...             break
-        ...     frames = [frames[pts] for pts in sorted(frames)]
-        ...     return frames, fps
+        >>> tokenizer = AutoTokenizer.from_pretrained("Intel/tvp-base")
 
-
-        >>> def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps):
-        ...     '''
-        ...     Decode the video and perform temporal sampling.
-        ...     Args:
-        ...         container (container): pyav container.
-        ...         sampling_rate (int): frame sampling rate (interval between two sampled frames).
-        ...         num_frames (int): number of frames to sample.
-        ...         clip_idx (int): if clip_idx is -1, perform random temporal sampling.
-        ...             If clip_idx is larger than -1, uniformly split the video to num_clips
-        ...             clips, and select the clip_idx-th video clip.
-        ...         num_clips (int): overall number of clips to uniformly sample from the given video.
-        ...         target_fps (int): the input video may have different fps, convert it to
-        ...             the target video fps before frame sampling.
-        ...     Returns:
-        ...         frames (tensor): decoded frames from the video.
-        ...     '''
-        ...     assert clip_idx >= -2, "Not a valied clip_idx {}".format(clip_idx)
-        ...     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
-        ...     clip_size = sampling_rate * num_frames / target_fps * fps
-        ...     index = torch.linspace(0, clip_size - 1, num_frames)
-        ...     index = torch.clamp(index, 0, len(frames) - 1).long().tolist()
-        ...     frames = [frames[idx] for idx in index]
-        ...     frames = [frame.to_rgb().to_ndarray() for frame in frames]
-        ...     frames = torch.from_numpy(np.stack(frames))
-        ...     return frames
-
-
-        >>> def get_resize_size(image, max_size):
-        ...     '''
-        ...     Args:
-        ...         image: np.ndarray
-        ...         max_size: The max size of height and width
-        ...     Returns:
-        ...         (height, width)
-        ...     Note the height/width order difference >>> pil_img = Image.open("raw_img_tensor.jpg") >>> pil_img.size (640,
-        ...     480) # (width, height) >>> np_img = np.array(pil_img) >>> np_img.shape (480, 640, 3) # (height, width, 3)
-        ...     '''
-        ...     height, width = image.shape[-2:]
-        ...     if height >= width:
-        ...         ratio = width * 1.0 / height
-        ...         new_height = max_size
-        ...         new_width = new_height * ratio
-        ...     else:
-        ...         ratio = height * 1.0 / width
-        ...         new_width = max_size
-        ...         new_height = new_width * ratio
-        ...     size = {"height": int(new_height), "width": int(new_width)}
-        ...     return size
-
-
-        >>> file = hf_hub_download(repo_id="Intel/tvp_demo", filename="3MSZA.mp4", repo_type="dataset")
-        >>> model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
-
-        >>> decoder_kwargs = dict(
-        ...     container=av.open(file, metadata_errors="ignore"),
-        ...     sampling_rate=1,
-        ...     num_frames=model.config.num_frm,
-        ...     clip_idx=0,
-        ...     num_clips=1,
-        ...     target_fps=3,
-        ... )
-
-        >>> raw_sampled_frms = decode(**decoder_kwargs).permute(0, 3, 1, 2)
-        >>> text = "person turn a light on."
-        >>> processor = AutoProcessor.from_pretrained("Intel/tvp-base")
-        >>> size = get_resize_size(raw_sampled_frms, model.config.max_img_size)
-        >>> data = processor(
-        ...     text=[text], videos=list(raw_sampled_frms.numpy()), return_tensors="pt", max_text_length=100, size=size
-        ... )
-
-        >>> data["pixel_values"] = data["pixel_values"].to(model.dtype)
-        >>> data["labels"] = torch.tensor([30.96, 24.3, 30.4])
-        >>> output = model(**data)
-
-        >>> timestamp = output["logits"].tolist()
-        >>> start, end = round(timestamp[0][0] * 100, 2), round(timestamp[0][1] * 100, 2)
+        >>> pixel_values = torch.rand(1, 48, 3, 448, 448)
+        >>> text_inputs = tokenizer("This is an example inputs", return_tensors="pt")
+        >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         outputs = self.model(
