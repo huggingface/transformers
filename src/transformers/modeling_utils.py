@@ -2178,7 +2178,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
-            # For GPTQ models, we force users to NOT cast the model into th edesired dtype
+            # For GPTQ models, we prevent users from casting the model to another dytpe to restrict unwanted behaviours. 
             # the correct API should be to load the model with the desired dtype directly through `from_pretrained`.
             dtype_present_in_args = False
 
@@ -2196,9 +2196,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " `dtype` by passing the correct `torch_dtype` argument."
                 )
 
-            return super().to(*args, **kwargs)
-        else:
-            return super().to(*args, **kwargs)
+      return super().to(*args, **kwargs)
 
     def half(self, *args):
         # Checks if the model is quantized
@@ -3184,7 +3182,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(model, "quantization_method"):
             model.is_quantized = True
 
-            # We store the original dtype for quantized models as we cannot easily retrieve them
+            # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
             # Note that once you have loaded a quantized model, you can't change its dtype so this will
             # remain a single source of truth
