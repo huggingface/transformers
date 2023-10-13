@@ -25,7 +25,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_pvt_v2": ["PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtV2Config", "PvtV2OnnxConfig"],
+    "configuration_pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig", "PvtOnnxConfig"],
 }
 
 try:
@@ -34,7 +34,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_pvt_v2"] = ["PvtV2ImageProcessor"]
+    _import_structure["image_processing_pvt"] = ["PvtImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -42,16 +42,16 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_pvt_v2"] = [
-        "PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PvtV2ForImageClassification",
-        "PvtV2Model",
-        "PvtV2PreTrainedModel",
+    _import_structure["modeling_pvt"] = [
+        "PVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "PvtForImageClassification",
+        "PvtModel",
+        "PvtPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_pvt_v2 import PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtV2Config, PvtV2OnnxConfig
+    from .configuration_pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig, PvtOnnxConfig
 
     try:
         if not is_vision_available():
@@ -59,7 +59,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_pvt_v2 import PvtV2ImageProcessor
+        from .image_processing_pvt import PvtImageProcessor
 
     try:
         if not is_torch_available():
@@ -67,11 +67,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_pvt_v2 import (
-            PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PvtV2ForImageClassification,
-            PvtV2Model,
-            PvtV2PreTrainedModel,
+        from .modeling_pvt import (
+            PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PvtForImageClassification,
+            PvtModel,
+            PvtPreTrainedModel,
         )
 
 else:
