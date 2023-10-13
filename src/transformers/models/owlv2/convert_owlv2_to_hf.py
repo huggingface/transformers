@@ -259,6 +259,10 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
         outputs = model(**inputs)
         logits = outputs.logits
         pred_boxes = outputs.pred_boxes
+        objectness_logits = outputs.objectness_logits
+
+    print("Shape of objectness logits:", objectness_logits.shape)
+    print("First values of objectness logits:", objectness_logits[:3, :3])
 
     if verify_logits:
         if model_name == "owlvit-base-patch16":
@@ -282,12 +286,16 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
             expected_boxes = torch.tensor(
                 [[0.0126, 0.0090, 0.0238], [0.0387, 0.0227, 0.0754], [0.0582, 0.1058, 0.1139]]
             )
+            expected_objectness_logits = torch.tensor(
+                [[-6.0628, -5.9507, -10.4486]],
+            )
 
         print("Logits:", logits[0, :3, :3])
         print("Pred boxes:", pred_boxes[0, :3, :3])
 
         assert torch.allclose(logits[0, :3, :3], expected_logits, atol=1e-3)
         assert torch.allclose(pred_boxes[0, :3, :3], expected_boxes, atol=1e-3)
+        assert torch.allclose(objectness_logits[:3, :3], expected_objectness_logits, atol=1e-3)
         print("Looks ok!")
     else:
         print("Model converted without verifying logits")
@@ -313,7 +321,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="owlv2-base-patch16",
+        default="owlv2-base-patch16-ensemble",
         choices=["owlv2-base-patch16", "owlv2-base-patch16-ensemble"],
         type=str,
         help="Name of the Owlv2 model you'd like to convert from FLAX to PyTorch.",

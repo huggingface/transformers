@@ -325,7 +325,9 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         image = _clip_warp_output(image, out)
 
         image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
-        image = to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+        image = (
+            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+        )
         return image
 
     def preprocess(
