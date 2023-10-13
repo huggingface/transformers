@@ -46,8 +46,8 @@ OWL-ViT a zero-shot text-conditioned object detection model. OWL-ViT uses [CLIP]
 
 >>> from transformers import Owlv2Processor, Owlv2ForObjectDetection
 
->>> processor = Owlv2Processor.from_pretrained("google/owlvit-base-patch32")
->>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
+>>> processor = Owlv2Processor.from_pretrained("google/owlv2-base-patch16-ensemble")
+>>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-patch16-ensemble")
 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -65,8 +65,8 @@ OWL-ViT a zero-shot text-conditioned object detection model. OWL-ViT uses [CLIP]
 >>> for box, score, label in zip(boxes, scores, labels):
 ...     box = [round(i, 2) for i in box.tolist()]
 ...     print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
-Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
-Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
+Detected a photo of a cat with confidence 0.614 at location [341.67, 17.54, 642.32, 278.51]
+Detected a photo of a cat with confidence 0.665 at location [6.75, 38.97, 326.62, 354.85]
 ```
 
 ## Owlv2Config

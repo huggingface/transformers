@@ -772,7 +772,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
             outputs.logits_per_text.shape,
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
-        expected_logits = torch.tensor([[3.4613, 0.9403]], device=torch_device)
+        expected_logits = torch.tensor([[-6.2229, -8.2601]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
 
     @slow
@@ -797,8 +797,10 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
+        expected_slice_logits = torch.tensor([[-21.4139, -21.6130], [-19.0084, -19.5491], [-20.9592, -21.3830]])
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
         expected_slice_boxes = torch.tensor(
-            [[0.0691, 0.0445, 0.1373], [0.1592, 0.0456, 0.3192], [0.1632, 0.0423, 0.2478]]
+            [[0.2413, 0.0519, 0.4533], [0.1395, 0.0457, 0.2507], [0.2330, 0.0505, 0.4277]],
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
@@ -826,7 +828,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0691, 0.0445, 0.1373], [0.1592, 0.0456, 0.3192], [0.1632, 0.0423, 0.2478]]
+            [[0.2413, 0.0519, 0.4533], [0.1395, 0.0457, 0.2507], [0.2330, 0.0505, 0.4277]],
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 

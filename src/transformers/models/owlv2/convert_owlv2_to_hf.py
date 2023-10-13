@@ -247,6 +247,7 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
         "owlv2-base-patch16-ensemble": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams-curated-ft-lvisbase-ens-cold-weight-05_209b65b",
         "owlv2-large-patch14": "/Users/nielsrogge/Documents/OWL-ViT/owl2-l14-1008-st-ngrams_0881fd6",
         "owlv2-large-patch14-finetuned": "/Users/nielsrogge/Documents/OWL-ViT/owl2-l14-1008-st-ngrams-ft-lvisbase_8ca674c",
+        "owlv2-large-patch14-ensemble": "/Users/nielsrogge/Documents/OWL-ViT/owl2-l14-1008-st-ngrams-ft-lvisbase-ens-cold-weight-04_8ca674c",
     }
     checkpoint_path = model_name_to_checkpoint_path[model_name]
     variables = checkpoints.restore_checkpoint(checkpoint_path, target=None)
@@ -353,6 +354,16 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
             )
             expected_objectness_logits = torch.tensor(
                 [[-6.2655, -6.5845, -11.3105]],
+            )
+        elif model_name == "owlv2-large-patch14-ensemble":
+            expected_logits = torch.tensor(
+                [[-12.2037, -12.2070, -11.5371], [-13.4875, -13.8235, -13.1586], [-18.2007, -22.9834, -20.6816]],
+            )
+            expected_boxes = torch.tensor(
+                [[0.0126, 0.0127, 0.0222], [0.0107, 0.0113, 0.0164], [0.0482, 0.1162, 0.0885]],
+            )
+            expected_objectness_logits = torch.tensor(
+                [[-7.7572, -8.3637, -13.0334]],
             )
 
         print("Logits:", logits[0, :3, :3])
