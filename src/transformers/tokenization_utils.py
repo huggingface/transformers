@@ -477,7 +477,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     token = AddedToken(token, normalized=True, rstrip=True, lstrip=True)
             if special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
-                token.__setstate__({"special":True, "normalized":token.normalized})
+                token.__setstate__({"special": True, "normalized": token.normalized})
             if token in self._added_tokens_decoder:
                 continue
             if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
