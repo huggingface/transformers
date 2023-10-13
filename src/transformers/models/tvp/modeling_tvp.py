@@ -687,7 +687,7 @@ class TvpTransformer(TvpPreTrainedModel):
         txt_pt = txt_pt.expand(text_embedding_output.shape[0], -1, -1)
         embedding_output = torch.cat([txt_pt, text_embedding_output, visual_embedding_output], dim=1)  # (B, Lt+Lv, d)
 
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape).to(device)
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,

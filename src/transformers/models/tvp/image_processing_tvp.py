@@ -432,7 +432,7 @@ class TvpImageProcessor(BaseImageProcessor):
         videos = make_batched(videos)
 
         videos = [
-            [
+            np.array([
                 self._preprocess_image(
                     image=img,
                     do_resize=do_resize,
@@ -454,7 +454,7 @@ class TvpImageProcessor(BaseImageProcessor):
                     input_data_format=input_data_format,
                 )
                 for img in video
-            ]
+            ])
             for video in videos
         ]
 
