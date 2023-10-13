@@ -814,9 +814,8 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         ignore_pad_tokens_output = model(
             input_ids, attention_mask, labels=labels, decoder_attention_mask=attention_mask_ignoring_padding
         )
-        self.assertNotAlmostEqual(
-            output.loss.item(), ignore_pad_tokens_output.loss.item()
-        )
+        self.assertNotAlmostEqual(output.loss.item(), ignore_pad_tokens_output.loss.item())
+
 
 @require_torch
 class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
