@@ -143,7 +143,7 @@ def _preprocess_resize_output_shape(image, output_shape):
     return image, output_shape
 
 
-def _clip_warp_output(input_image, output_image, mode, cval):
+def _clip_warp_output(input_image, output_image):
     """Clip output image to range of values of input image.
 
     Note that this function modifies the values of *output_image* in-place.
@@ -156,11 +156,6 @@ def _clip_warp_output(input_image, output_image, mode, cval):
             Input image.
         output_image : ndarray
             Output image, which is modified in-place.
-        mode : {'constant', 'edge', 'symmetric', 'reflect', 'wrap'}
-            Points outside the boundaries of the input are filled according to the given mode. Modes match the
-            behaviour of *numpy.pad*.
-        cval : float
-            Used in conjunction with mode 'constant', the value outside the image boundaries.
     """
     min_val = np.min(input_image)
     if np.isnan(min_val):
@@ -173,22 +168,9 @@ def _clip_warp_output(input_image, output_image, mode, cval):
         max_func = np.max
     max_val = max_func(input_image)
 
-    # Check if cval has been used such that it expands the effective input
-    # range
-    preserve_cval = (
-        mode == "constant"
-        and not min_val <= cval <= max_val
-        and min_func(output_image) <= cval <= max_func(output_image)
-    )
+    output_image = np.clip(output_image, min_val, max_val)
 
-    # expand min/max range to account for cval
-    if preserve_cval:
-        # cast cval to the same dtype as the input image
-        cval = input_image.dtype.type(cval)
-        min_val = min(min_val, cval)
-        max_val = max(max_val, cval)
-
-    np.clip(output_image, min_val, max_val, out=output_image)
+    return output_image
 
 
 class Owlv2ImageProcessor(BaseImageProcessor):
@@ -319,7 +301,6 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         factors = np.divide(input_shape, output_shape)
 
         # Translate modes used by np.pad to those used by scipy.ndimage
-        mode = "reflect"
         ndi_mode = "mirror"
         cval = 0
         order = 1
@@ -341,10 +322,10 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         zoom_factors = [1 / f for f in factors]
         out = ndi.zoom(filtered, zoom_factors, order=order, mode=ndi_mode, cval=cval, grid_mode=True)
 
-        _clip_warp_output(image, out, mode, cval)
+        image = _clip_warp_output(image, out)
 
-        out = to_channel_dimension_format(out, input_data_format, ChannelDimension.LAST)
-        image = to_channel_dimension_format(out, data_format, input_data_format) if data_format is not None else out
+        image = to_channel_dimension_format(image, input_data_format, ChannelDimension.LAST)
+        image = to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
         return image
 
     def preprocess(

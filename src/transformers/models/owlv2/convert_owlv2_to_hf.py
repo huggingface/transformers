@@ -253,7 +253,7 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
     inputs = processor(text=texts, images=image, return_tensors="pt")
 
     assert torch.allclose(inputs.pixel_values, original_pixel_values.float(), atol=1e-6)
-    assert torch.allclose(inputs.input_ids[:4,:], original_input_ids[:4,:], atol=1e-6)
+    assert torch.allclose(inputs.input_ids[:4, :], original_input_ids[:4, :], atol=1e-6)
 
     with torch.no_grad():
         outputs = model(**inputs)
