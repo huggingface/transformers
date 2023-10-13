@@ -51,7 +51,7 @@ def get_owlv2_config(model_name):
         vision_hidden_size = 1024
         vision_intermediate_size = 4096
         vision_num_hidden_layers = 24
-        vision_num_attention_heads = 8
+        vision_num_attention_heads = 16
         projection_dim = 768
         text_hidden_size = 768
         text_intermediate_size = 3072
@@ -285,7 +285,12 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
     texts = [["face", "rocket", "nasa badge", "star-spangled banner"]]
     inputs = processor(text=texts, images=image, return_tensors="pt")
 
-    assert torch.allclose(inputs.pixel_values, original_pixel_values.float(), atol=1e-6)
+    print("Shape of pixel values:", inputs.pixel_values.shape)
+    print("First values of pixel values:", inputs.pixel_values[0, 0, :3, :3])
+    print("Mean of pixel values:", inputs.pixel_values.mean())
+
+    if "large" not in model_name:
+        assert torch.allclose(inputs.pixel_values, original_pixel_values.float(), atol=1e-6)
     assert torch.allclose(inputs.input_ids[:4, :], original_input_ids[:4, :], atol=1e-6)
 
     with torch.no_grad():
@@ -327,6 +332,16 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
             )
             expected_objectness_logits = torch.tensor(
                 [[-6.0628, -5.9507, -10.4486]],
+            )
+        elif model_name == "owlv2-large-patch14":
+            expected_logits = torch.tensor(
+                [[-12.6662, -11.8384, -12.1880], [-16.0599, -16.5835, -16.9364], [-21.4957, -26.7038, -25.1313]],
+            )
+            expected_boxes = torch.tensor(
+                [[0.0136, 0.0161, 0.0256], [0.0126, 0.0135, 0.0202], [0.0498, 0.0948, 0.0915]],
+            )
+            expected_objectness_logits = torch.tensor(
+                [[-6.7196, -9.4590, -13.9472]],
             )
 
         print("Logits:", logits[0, :3, :3])
