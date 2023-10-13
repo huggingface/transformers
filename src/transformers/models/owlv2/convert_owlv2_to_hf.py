@@ -234,22 +234,13 @@ def rename_and_reshape_key(dct, old, new, config):
 
 
 @torch.no_grad()
-def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, verify_logits):
+def convert_owlv2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub, verify_logits):
     """
     Copy/paste/tweak model's weights to our OWL-ViT structure.
     """
     config = get_owlv2_config(model_name)
 
-    # Load original state dict based on model name
-    model_name_to_checkpoint_path = {
-        "owlv2-base-patch16": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams_c7e1b9a",
-        "owlv2-base-patch16-finetuned": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams-ft-lvisbase_d368398",
-        "owlv2-base-patch16-ensemble": "/Users/nielsrogge/Documents/OWL-ViT/owl2-b16-960-st-ngrams-curated-ft-lvisbase-ens-cold-weight-05_209b65b",
-        "owlv2-large-patch14": "/Users/nielsrogge/Documents/OWL-ViT/owl2-l14-1008-st-ngrams_0881fd6",
-        "owlv2-large-patch14-finetuned": "/Users/nielsrogge/Documents/OWL-ViT/owl2-l14-1008-st-ngrams-ft-lvisbase_8ca674c",
-        "owlv2-large-patch14-ensemble": "/Users/nielsrogge/Documents/OWL-ViT/owl2-l14-1008-st-ngrams-ft-lvisbase-ens-cold-weight-04_8ca674c",
-    }
-    checkpoint_path = model_name_to_checkpoint_path[model_name]
+    # see available checkpoints at https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit#pretrained-checkpoints
     variables = checkpoints.restore_checkpoint(checkpoint_path, target=None)
     variables = variables["params"] if "v2" in model_name else variables["optimizer"]["target"]
     flax_params = jax.tree_util.tree_map(lambda x: x.astype(jnp.float32) if x.dtype == jnp.bfloat16 else x, variables)
@@ -287,10 +278,6 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
     texts = [["face", "rocket", "nasa badge", "star-spangled banner"]]
     inputs = processor(text=texts, images=image, return_tensors="pt")
 
-    print("Shape of pixel values:", inputs.pixel_values.shape)
-    print("First values of pixel values:", inputs.pixel_values[0, 0, :3, :3])
-    print("Mean of pixel values:", inputs.pixel_values.mean())
-
     if "large" not in model_name:
         assert torch.allclose(inputs.pixel_values, original_pixel_values.float(), atol=1e-6)
     assert torch.allclose(inputs.input_ids[:4, :], original_input_ids[:4, :], atol=1e-6)
@@ -300,9 +287,6 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
         logits = outputs.logits
         pred_boxes = outputs.pred_boxes
         objectness_logits = outputs.objectness_logits
-
-    print("Shape of objectness logits:", objectness_logits.shape)
-    print("First values of objectness logits:", objectness_logits[:3, :3])
 
     if verify_logits:
         if model_name == "owlv2-base-patch16":
@@ -366,6 +350,7 @@ def convert_owlv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, 
                 [[-7.7572, -8.3637, -13.0334]],
             )
 
+        print("Objectness logits:", objectness_logits[:3, :3])
         print("Logits:", logits[0, :3, :3])
         print("Pred boxes:", pred_boxes[0, :3, :3])
 
@@ -410,6 +395,13 @@ if __name__ == "__main__":
         help="Name of the Owlv2 model you'd like to convert from FLAX to PyTorch.",
     )
     parser.add_argument(
+        "--checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the original Flax checkpoint.",
+    )
+    parser.add_argument(
         "--pytorch_dump_folder_path",
         default=None,
         type=str,
@@ -425,4 +417,6 @@ if __name__ == "__main__":
     parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
 
     args = parser.parse_args()
-    convert_owlv2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.verify_logits)
+    convert_owlv2_checkpoint(
+        args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub, args.verify_logits
+    )
