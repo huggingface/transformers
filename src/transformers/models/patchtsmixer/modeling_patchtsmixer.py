@@ -1694,7 +1694,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
                 Whether or not to return the hidden states of all layers.
             return_dict (`bool`, *optional*):
                 Return dict.
-        
+
         Returns:
             [`PatchTSMixerModelOutput`]
         """
