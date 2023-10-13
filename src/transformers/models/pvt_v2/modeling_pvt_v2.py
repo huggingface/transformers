@@ -167,7 +167,7 @@ class PvtV2SelfAttention(nn.Module):
         self.sr_ratio = sr_ratio
         if self.attn_reduce == "AP":
             self.sr = nn.Sequential(
-                nn.AdaptiveAvgPool2d(sr_ratio),
+                nn.AdaptiveAvgPool2d(7),
                 nn.Conv2d(hidden_size, hidden_size, kernel_size=1, stride=1),
                 nn.LayerNorm(hidden_size),
                 nn.GELU(),
