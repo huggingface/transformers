@@ -159,8 +159,8 @@ def create_rename_keys(state_dict, config):
         'norm2.bias': 'text_enhancer_layer.layer_norm_after.bias',
     }
     fusion_key_mappings = {
-        'gamma_v': 'fusion_layer.gamma_v',
-        'gamma_l': 'fusion_layer.gamma_l',
+        'gamma_v': 'fusion_layer.vision_param',
+        'gamma_l': 'fusion_layer.text_param',
         'layer_norm_v.weight': 'fusion_layer.layer_norm_vision.weight',
         'layer_norm_v.bias': 'fusion_layer.layer_norm_vision.bias',
         'layer_norm_l.weight': 'fusion_layer.layer_norm_text.weight',
@@ -326,66 +326,11 @@ def text_processor(text: str, config):
             return result
         return result + "."
 
-    def generate_masks_with_special_tokens_and_transfer_map(tokenized, special_tokens_list) -> list:
-        """Generate attention mask between each pair of special tokens
-        Args:
-            input_ids (torch.Tensor): input ids. Shape: [bs, num_token]
-            special_tokens_mask (list): special tokens mask.
-        Returns:
-            torch.Tensor: attention mask between each special tokens.
-        """
-        input_ids = tokenized["input_ids"]
-        bs, num_token = input_ids.shape
-        # special_tokens_mask: bs, num_token. 1 for special tokens. 0 for normal tokens
-        special_tokens_mask = torch.zeros((bs, num_token), device=input_ids.device).bool()
-        for special_token in special_tokens_list:
-            special_tokens_mask |= input_ids == special_token
-
-        # idxs: each row is a list of indices of special tokens
-        idxs = torch.nonzero(special_tokens_mask)
-
-        # generate attention mask and positional ids
-        attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(bs, 1, 1)
-        position_ids = torch.zeros((bs, num_token), device=input_ids.device)
-        previous_col = 0
-        for i in range(idxs.shape[0]):
-            row, col = idxs[i]
-            if (col == 0) or (col == num_token - 1):
-                attention_mask[row, col, col] = True
-                position_ids[row, col] = 0
-            else:
-                attention_mask[row, previous_col + 1 : col + 1, previous_col + 1 : col + 1] = True
-                position_ids[row, previous_col + 1 : col + 1] = torch.arange(
-                    0, col - previous_col, device=input_ids.device
-                )
-
-            previous_col = col
-
-        return attention_mask, position_ids.to(torch.long)
-
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased") # Using just for now since I didn't finish the tokenizer
-    special_tokens = tokenizer.convert_tokens_to_ids(["[CLS]", "[SEP]", ".", "?"])
     text = preprocess_caption(text)
     tokenized = tokenizer([text], padding="longest", return_tensors="pt")
-    text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(
-        tokenized, special_tokens
-    )
 
-    max_text_len = config.max_text_len
-    if text_self_attention_masks.shape[1] > max_text_len:
-        text_self_attention_masks = text_self_attention_masks[:, :max_text_len, :max_text_len]
-        position_ids = position_ids[:, :max_text_len]
-        tokenized["input_ids"] = tokenized["input_ids"][:, :max_text_len]
-        tokenized["attention_mask"] = tokenized["attention_mask"][:, :max_text_len]
-        tokenized["token_type_ids"] = tokenized["token_type_ids"][:, :max_text_len]
-
-    # extract text embeddings
-    tokenized_for_encoder = {k: v for k, v in tokenized.items() if k != "attention_mask"}
-    tokenized_for_encoder["attention_mask"] = text_self_attention_masks
-    tokenized_for_encoder["position_ids"] = position_ids
-
-    return tokenized_for_encoder, tokenized.attention_mask.bool()
-
+    return tokenized
 
 @torch.no_grad()
 def convert_grounding_dino_checkpoint(args):
@@ -415,7 +360,8 @@ def convert_grounding_dino_checkpoint(args):
     read_in_q_k_v(new_state_dict, config)
 
     # Load HF implementation with default config and converted state dict
-    model = GroundingDINOForObjectDetection(config).eval()
+    model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny").eval()
+    # model = GroundingDINOForObjectDetection(config=config).eval()
     model.load_state_dict(new_state_dict, strict=False)
 
     # Load and process test image
@@ -425,18 +371,23 @@ def convert_grounding_dino_checkpoint(args):
         [T.Resize(size=800, max_size=1333), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)]
     )
     image_inputs = image_processor(image)
-    text_inputs, text_token_mask = text_processor(text, config)
+    text_inputs = text_processor(text, config)
 
     # Running forward
     output = model(
         pixel_values=image_inputs.unsqueeze(0),
-        input_ids=text_inputs["input_ids"],
-        attention_mask=text_inputs["attention_mask"],
-        token_type_ids=text_inputs["token_type_ids"],
-        text_token_mask=text_token_mask,
-        text_self_attention_masks=text_inputs["attention_mask"],
-        position_ids=text_inputs["position_ids"],
+        **text_inputs
     )
+
+    # output.pred_boxes[:, :3, :]
+    # tensor([[[0.7674, 0.4136, 0.4572, 0.7305],
+    #      [0.2566, 0.5463, 0.4760, 0.8777],
+    #      [0.2585, 0.5442, 0.4640, 0.8683]]])
+    #
+    # output.logits[:, :3, :4]
+    # tensor([[[-4.8913, -0.1900, -0.2161, -4.2374],
+    #      [-4.9652, -0.3719, -0.3950, -4.2315],
+    #      [-5.9599, -3.3765, -3.3104, -5.9752]]])
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
@@ -448,10 +399,6 @@ def convert_grounding_dino_checkpoint(args):
     if push_to_hub:
         print(f"Pushing model and image processor for {model_name} to hub")
         model.push_to_hub(f"EduardoPacheco/{model_name}")
-        #TODO push image processor to hub
-        # image_processor.push_to_hub(f"microsoft/{model_name}")
-        #TODO push tokenizer to hub
-        #TODO push processor to hub
 
 
 if __name__ == "__main__":
@@ -459,7 +406,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="grounding-dino-base",
+        default="grounding-dino-tiny",
         type=str,
         choices=["grounding-dino-tiny", "grounding-dino-base"],
         help="Name of the GroundingDINO model you'd like to convert.",
