@@ -104,8 +104,8 @@ class ModelArguments:
         default=0.05,
         metadata={
             "help": (
-                "Probability of each feature vector along the time axis to be chosen as the start of the vector"
-                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "Probability of each feature vector along the time axis to be chosen as the start of the vector "
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature "
                 "vectors will be masked along the time axis."
             )
         },
@@ -249,7 +249,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
         },
@@ -430,7 +430,7 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu} "
         f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):

@@ -1774,13 +1774,13 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
             if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
                 raise ValueError(
-                    "expected reordered_layer_past_states to have the same shape than layer_past_states"
+                    "expected reordered_layer_past_states to have the same shape than layer_past_states, "
                     f"but got {reordered_layer_past_states[0].shape} and {layer_past_states[0].shape}"
                 )
             if len(reordered_layer_past_states) != len(layer_past_states):
                 raise ValueError(
-                    "expected layer_past_states to have the same length as reordered_layer_past_states"
-                    f"got {len(layer_past_states)} and {len(reordered_layer_past_states)}"
+                    "expected layer_past_states to have the same length as reordered_layer_past_states, "
+                    f"but got {len(layer_past_states)} and {len(reordered_layer_past_states)}"
                 )
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)

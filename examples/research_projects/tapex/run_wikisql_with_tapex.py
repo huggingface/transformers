@@ -170,7 +170,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`. "
                 "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
                 "during ``evaluate`` and ``predict``."
             )
@@ -379,7 +379,7 @@ def main():
 
     if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
         logger.warning(
-            "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
+            "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for "
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
 
