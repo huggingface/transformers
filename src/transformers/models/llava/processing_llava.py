@@ -154,11 +154,11 @@ class LlavaProcessor(ProcessorMixin):
             else:
                 image_encoding = self.image_processor.preprocess(images, return_tensors=return_tensors)["pixel_values"]
 
-            vision_encoding = self.vision_model(image_encoding, output_hidden_states=True)
-            image_features = vision_encoding.hidden_states[-2]
-            image_features = image_features[:, 1:]
+            #vision_encoding = self.vision_model(image_encoding, output_hidden_states=True)
+            #image_features = vision_encoding.hidden_states[-2]
+            #image_features = image_features[:, 1:]
 
-            dummy["pixel_values"] = image_features
+            dummy["pixel_values"] = image_encoding
             encoding.update(dummy)
         return encoding
 

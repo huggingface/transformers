@@ -20,6 +20,9 @@ from typing import Union
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+from ..auto import CONFIG_MAPPING
+
 
 logger = logging.get_logger(__name__)
 
@@ -249,6 +252,19 @@ class LlavaVisionConfig(PretrainedConfig):
         use_cache: bool = True,
         vocab_size: int = 50282,
         projector: str = "Linear",
+        hidden_size=768,
+        intermediate_size=3072,
+        projection_dim=512,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        image_size=224,
+        patch_size=32,
+        hidden_act="quick_gelu",
+        layer_norm_eps=1e-5,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        initializer_factor=1.0,
         **kwargs,
     ):
         self.mm_hidden_size = mm_hidden_size
@@ -257,6 +273,19 @@ class LlavaVisionConfig(PretrainedConfig):
         self.n_layers = n_layers
         self.vocab_size = vocab_size
         self.projector = projector
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.projection_dim = projection_dim
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.image_size = image_size
+        self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
         super().__init__(**kwargs)
 
     @classmethod
@@ -332,8 +361,12 @@ class LlavaConfig(PretrainedConfig):
         if vision_config is None:
             vision_config = {}
             logger.info("vision_config is None. Initializing the LlavaVisionConfig with default values.")
+            
+        text_model_type = text_config["model_type"] if "model_type" in text_config else "llama"
+        self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
-        self.text_config = LlavaTextConfig(**text_config)
+
+        #self.text_config = LlavaTextConfig(**text_config)
         self.vision_config = LlavaVisionConfig(**vision_config)
 
         self.initializer_factor = 1.0
@@ -342,7 +375,8 @@ class LlavaConfig(PretrainedConfig):
     @classmethod
     def from_llava_configs(
         cls,
-        text_config: LlavaTextConfig,
+        text_config: PretrainedConfig,
+        #text_config: LlavaTextConfig,
         vision_config: LlavaVisionConfig,
         **kwargs,
     ):
