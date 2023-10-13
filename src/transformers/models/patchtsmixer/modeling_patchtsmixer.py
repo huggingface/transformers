@@ -1999,39 +1999,41 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             model_output.last_hidden_state,
         )  # tensor [batch_size x forecast_len x input_size]
 
-        if target_values is not None and return_loss is True:
-            if self.config.forecast_channel_indices is not None:
-                if self.distribution_output:
-                    if self.config.distribution_output == "negative_binomial" and torch.any(target_values < 0):
-                        raise Exception("target_values cannot be negative for negative_binomial distribution.")
-                    distribution = self.distribution_output.distribution(
-                        y_hat,
-                        loc=model_output.loc[..., self.config.forecast_channel_indices],
-                        scale=model_output.scale[..., self.config.forecast_channel_indices],
-                    )
+        loss_val = None
+        if self.config.forecast_channel_indices is not None:
+            if self.distribution_output:
+                # if self.config.distribution_output == "negative_binomial" and torch.any(target_values < 0):
+                #     raise Exception("target_values cannot be negative for negative_binomial distribution.")
+                distribution = self.distribution_output.distribution(
+                    y_hat,
+                    loc=model_output.loc[..., self.config.forecast_channel_indices],
+                    scale=model_output.scale[..., self.config.forecast_channel_indices],
+                )
+                if target_values is not None and return_loss is True:
                     loss_val = self.loss(distribution, target_values[..., self.config.forecast_channel_indices])
                     # take average of the loss
                     loss_val = weighted_average(loss_val)
-                else:
-                    y_hat = (
-                        y_hat * model_output.scale[..., self.config.forecast_channel_indices]
-                        + model_output.loc[..., self.config.forecast_channel_indices]
-                    )
-                    loss_val = self.loss(y_hat, target_values[..., self.config.forecast_channel_indices])
             else:
-                if self.distribution_output:
-                    if self.config.distribution_output == "negative_binomial" and torch.any(target_values < 0):
-                        raise Exception("target_values cannot be negative for negative_binomial distribution.")
-                    distribution = self.distribution_output.distribution(
-                        y_hat, loc=model_output.loc, scale=model_output.scale
-                    )
+                y_hat = (
+                    y_hat * model_output.scale[..., self.config.forecast_channel_indices]
+                    + model_output.loc[..., self.config.forecast_channel_indices]
+                )
+                if target_values is not None and return_loss is True:
+                    loss_val = self.loss(y_hat, target_values[..., self.config.forecast_channel_indices])
+        else:
+            if self.distribution_output:
+                # if self.config.distribution_output == "negative_binomial" and torch.any(target_values < 0):
+                #     raise Exception("target_values cannot be negative for negative_binomial distribution.")
+                distribution = self.distribution_output.distribution(
+                    y_hat, loc=model_output.loc, scale=model_output.scale
+                )
+                if target_values is not None and return_loss is True:
                     loss_val = self.loss(distribution, target_values)
                     loss_val = weighted_average(loss_val)
-                else:
-                    y_hat = y_hat * model_output.scale + model_output.loc
+            else:
+                y_hat = y_hat * model_output.scale + model_output.loc
+                if target_values is not None and return_loss is True:
                     loss_val = self.loss(y_hat, target_values)
-        else:
-            loss_val = None
 
         if self.config.forecast_channel_indices is not None:
             loc = model_output.loc[..., self.config.forecast_channel_indices]

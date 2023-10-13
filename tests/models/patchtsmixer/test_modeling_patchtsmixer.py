@@ -392,7 +392,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-0.3580]], [[2.9853]], [[-0.0456]], [[-1.8141]], [[-0.5844]], [[11.0132]], [[-0.1548]]],
+            [[[-0.7897]], [[2.4488]], [[-0.4926]], [[-1.8397]], [[0.1943]], [[10.0104]], [[0.0179]]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
@@ -401,7 +401,9 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         # TODO: Make repo public
         model = PatchTSMixerForForecasting.from_pretrained("ibm/patchtsmixer-etth1-forecasting").to(torch_device)
         batch = prepare_batch(file="forecast_batch.pt")
+        print(batch)
 
+        model.eval()
         torch.manual_seed(0)
         with torch.no_grad():
             output = model(
@@ -410,11 +412,11 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
             ).prediction_logits
 
         print(output[0, :1, :7])
-        expected_shape = torch.Size([1024, model.config.forecast_len, model.config.input_size])
+        expected_shape = torch.Size([32, model.config.forecast_len, model.config.input_size])
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.5071, -0.0901, 0.5348, 0.6649, -0.2680, -2.0142, 0.2994]],
+            [[0.4446, 0.0048, 0.4519, 0.7301, -0.2972, -2.2407, 0.2899]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
