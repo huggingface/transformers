@@ -138,7 +138,9 @@ class MixedInt8Test(BaseMixedInt8Test):
             model_id, trust_remote_code=True, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
         )
         with init_empty_weights():
-            model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
+            model = AutoModelForCausalLM.from_config(
+                config, trust_remote_code=True, code_revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
+            )
         self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
         # without trust_remote_code
         config = AutoConfig.from_pretrained(model_id, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7")
@@ -260,13 +262,6 @@ class MixedInt8Test(BaseMixedInt8Test):
         )
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
-    def test_warns_save_pretrained(self):
-        r"""
-        Test whether trying to save a model after converting it in 8-bit will throw a warning.
-        """
-        with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
-            self.model_8bit.save_pretrained(tmpdirname)
 
     def test_raise_if_config_and_load_in_8bit(self):
         r"""

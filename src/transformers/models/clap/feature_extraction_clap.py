@@ -41,32 +41,32 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
     Fourier Transform* (STFT) which should match pytorch's `torch.stft` equivalent.
 
     Args:
-        feature_size (`int`, defaults to 64):
+        feature_size (`int`, *optional*, defaults to 64):
             The feature dimension of the extracted Mel spectrograms. This corresponds to the number of mel filters
             (`n_mels`).
-        sampling_rate (`int`, defaults to 48_000):
+        sampling_rate (`int`, *optional*, defaults to 48000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves
             to warn users if the audio fed to the feature extractor does not have the same sampling rate.
-        hop_length (`int`, defaults to 480):
+        hop_length (`int`,*optional*, defaults to 480):
             Length of the overlaping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split
             in smaller `frames` with a step of `hop_length` between each frame.
-        max_length_s (`int`, defaults to 10):
+        max_length_s (`int`, *optional*, defaults to 10):
             The maximum input length of the model in seconds. This is used to pad the audio.
-        fft_window_size (`int`, defaults to 1024):
+        fft_window_size (`int`, *optional*, defaults to 1024):
             Size of the window (in samples) on which the Fourier transform is applied. This controls the frequency
             resolution of the spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the attention masks coresponding to the input.
-        frequency_min (`float`, *optional*, default to 0):
+        frequency_min (`float`, *optional*, defaults to 0):
             The lowest frequency of interest. The STFT will not be computed for values below this.
-        frequency_max (`float`, *optional*, default to 14_000):
+        frequency_max (`float`, *optional*, defaults to 14000):
             The highest frequency of interest. The STFT will not be computed for values above this.
         top_db (`float`, *optional*):
             The highest decibel value used to convert the mel spectrogram to the log scale. For more details see the
             `audio_utils.power_to_db` function
-        truncation (`str`, *optional*, default to `"fusions"`):
+        truncation (`str`, *optional*, defaults to `"fusion"`):
             Truncation pattern for long audio inputs. Two patterns are available:
                 - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and a
                   downsampled version of the entire mel spectrogram.

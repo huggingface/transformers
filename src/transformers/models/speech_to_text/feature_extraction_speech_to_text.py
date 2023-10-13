@@ -41,13 +41,13 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     mean and variance normalization to the extracted features.
 
     Args:
-        feature_size (`int`, defaults to 80):
+        feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000):
+        sampling_rate (`int`, *optional*, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        num_mel_bins (`int`, defaults to 80):
+        num_mel_bins (`int`, *optional*, defaults to 80):
             Number of Mel-frequency bins.
-        padding_value (`float`, defaults to 0.0):
+        padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding vectors.
         do_ceptral_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.

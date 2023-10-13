@@ -94,10 +94,11 @@ default template for that model class is used instead. Let's take a look at the 
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
-That's kind of intimidating. Let's add some newlines and indentation to make it more readable. Note that
-we remove the first newline after each block as well as any preceding whitespace before a block by default, using the 
-Jinja `trim_blocks` and `lstrip_blocks` flags. This means that you can write your templates with indentations and 
-newlines and still have them function correctly!
+That's kind of intimidating. Let's add some newlines and indentation to make it more readable. Note that the first
+newline after each block as well as any preceding whitespace before a block are ignored by default, using the 
+Jinja `trim_blocks` and `lstrip_blocks` flags. However, be cautious - although leading whitespace on each
+line is stripped, spaces between blocks on the same line are not. We strongly recommend checking that your template
+isn't printing extra spaces where it shouldn't be!
 
 ```
 {% for message in messages %}
@@ -218,10 +219,11 @@ input formats. Our default template for models that don't have a class-specific 
 {% endfor %}
 ```
 
-If you like this one, here it is in one-liner form, ready to copy into your code:
+If you like this one, here it is in one-liner form, ready to copy into your code. The one-liner also includes
+handy support for "generation prompts" - see the next section for more!
 
 ```
-tokenizer.chat_template = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}"
+tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
 ```
 
 This template wraps each message in `<|im_start|>` and `<|im_end|>` tokens, and simply writes the role as a string, which
@@ -240,6 +242,56 @@ The "user", "system" and "assistant" roles are the standard for chat, and we rec
 particularly if you want your model to operate well with [`ConversationalPipeline`]. However, you are not limited
 to these roles - templating is extremely flexible, and any string can be a role.
 
+## What are "generation prompts"?
+
+You may notice that the `apply_chat_template` method has an `add_generation_prompt` argument. This argument tells
+the template to add tokens that indicate the start of a bot response. For example, consider the following chat:
+
+```python
+messages = [
+    {"role": "user", "content": "Hi there!"},
+    {"role": "assistant", "content": "Nice to meet you!"},
+    {"role": "user", "content": "Can I ask a question?"}
+]
+```
+
+Here's what this will look like without a generation prompt, using the ChatML template we described above:
+
+```python
+>> tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+"""<|im_start|>user
+Hi there!<|im_end|>
+<|im_start|>assistant
+Nice to meet you!<|im_end|>
+<|im_start|>user
+Can I ask a question?<|im_end|>
+"""
+```
+
+And here's what it looks like **with** a generation prompt:
+
+```python
+>> tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+"""<|im_start|>user
+Hi there!<|im_end|>
+<|im_start|>assistant
+Nice to meet you!<|im_end|>
+<|im_start|>user
+Can I ask a question?<|im_end|>
+<|im_start|>assistant
+"""
+```
+
+Note that this time, we've added the tokens that indicate the start of a bot response. This ensures that when the model
+generates text it will write a bot response instead of doing something unexpected, like continuing the user's 
+message. Remember, chat models are still just language models - they're trained to continue text, and chat is just a 
+special kind of text to them! You need to guide them with the appropriate control tokens so they know what they're 
+supposed to be doing.
+
+Not all models require generation prompts. Some models, like BlenderBot and LLaMA, don't have any
+special tokens before bot responses. In these cases, the `add_generation_prompt` argument will have no effect. The exact
+effect that `add_generation_prompt` has will depend on the template being used.
+
 ## I want to use chat templates! How should I get started?
 
 If you have any chat models, you should set their `tokenizer.chat_template` attribute and test it using
@@ -253,3 +305,63 @@ model, which means it is also automatically supported in places like `Conversati
 By ensuring that models have this attribute, we can make sure that the whole community gets to use the full power of
 open-source models. Formatting mismatches have been haunting the field and silently harming performance for too long - 
 it's time to put an end to them!
+
+## Template writing tips
+
+If you're unfamiliar with Jinja, we generally find that the easiest way to write a chat template is to first
+write a short Python script that formats messages the way you want, and then convert that script into a template.
+
+Remember that the template handler will receive the conversation history as a variable called `messages`. Each
+message is a dictionary with two keys, `role` and `content`. You will be able to access `messages` in your template
+just like you can in Python, which means you can loop over it with `{% for message in messages %}` or access
+individual messages with, for example, `{{ messages[0] }}`.
+
+You can also use the following tips to convert your code to Jinja:
+
+### For loops
+
+For loops in Jinja look like this:
+
+```
+{% for message in messages %}
+{{ message['content'] }}
+{% endfor %}
+```
+
+Note that whatever's inside the {{ expression block }} will be printed to the output. You can use operators like
+`+` to combine strings inside expression blocks.
+
+### If statements
+
+If statements in Jinja look like this:
+
+```
+{% if message['role'] == 'user' %}
+{{ message['content'] }}
+{% endif %}
+```
+
+Note how where Python uses whitespace to mark the beginnings and ends of `for` and `if` blocks, Jinja requires you
+to explicitly end them with `{% endfor %}` and `{% endif %}`.
+
+### Special variables
+
+Inside your template, you will have access to the list of `messages`, but you can also access several other special
+variables. These include special tokens like `bos_token` and `eos_token`, as well as the `add_generation_prompt`
+variable that we discussed above. You can also use the `loop` variable to access information about the current loop
+iteration, for example  using `{% if loop.last %}` to check if the current message is the last message in the 
+conversation. Here's an example that puts these ideas together to add a generation prompt at the end of the
+conversation if add_generation_prompt is `True`:
+
+```
+{% if loop.last and add_generation_prompt %}
+{{ bos_token + 'Assistant:\n' }}
+{% endif %}
+```
+
+### Notes on whitespace
+
+As much as possible, we've tried to get Jinja to ignore whitespace outside of {{ expressions }}. However, be aware
+that Jinja is a general-purpose templating engine, and it may treat whitespace between blocks on the same line
+as significant and print it to the output. We **strongly** recommend checking that your template isn't printing extra
+spaces where it shouldn't be before you upload it!

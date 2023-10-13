@@ -92,6 +92,8 @@
     sections:
     - local: tasks/idefics
       title: Image tasks with IDEFICS
+    - local: tasks/prompting
+      title: LLM prompting guide
     title: Prompting
   title: Task Guides
 - sections:
@@ -384,6 +386,8 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/mistral
+        title: Mistral
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert
@@ -506,7 +510,7 @@
       - local: model_doc/dinat
         title: DiNAT
       - local: model_doc/dinov2
-        title: DINO V2
+        title: DINOV2
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -687,6 +691,8 @@
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/nougat
+        title: Nougat
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit

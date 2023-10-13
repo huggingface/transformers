@@ -1056,8 +1056,9 @@ class FSMTModel(PretrainedFSMTModel):
         return self.decoder
 
     def _tie_weights(self):
-        self._tie_or_clone_weights(self.decoder.embed_tokens, self.get_input_embeddings())
-        self._tie_or_clone_weights(self.decoder.output_projection, self.get_input_embeddings())
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.get_input_embeddings())
+            self._tie_or_clone_weights(self.decoder.output_projection, self.get_input_embeddings())
 
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

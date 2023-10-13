@@ -62,7 +62,7 @@ class MgpstrConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         distilled (`bool`, *optional*, defaults to `False`):
             Model includes a distillation token and head as in DeiT models.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         drop_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder.
