@@ -42,14 +42,14 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PvtV2Config"
 
-_CHECKPOINT_FOR_DOC = "Zetatech/pvt-tiny-224"
+_CHECKPOINT_FOR_DOC = "FoamoftheSea/pvt-v2-b0-224"
 _EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
 
-_IMAGE_CLASS_CHECKPOINT = "Zetatech/pvt-tiny-224"
+_IMAGE_CLASS_CHECKPOINT = "FoamoftheSea/pvt-v2-b0-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Zetatech/pvt-tiny-224"
+    "FoamoftheSea/pvt-v2-b0-224"
     # See all PVT models at https://huggingface.co/models?filter=pvt
 ]
 
@@ -95,7 +95,6 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
 
     def __init__(
         self,
-        image_size: Union[int, Iterable[int]],
         patch_size: Union[int, Iterable[int]],
         stride: int,
         num_channels: int,
@@ -103,13 +102,8 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
     ):
         super().__init__()
         self.fp16_enabled = False
-        image_size = _ntuple(2)(image_size)
         patch_size = _ntuple(2)(patch_size)
-
-        self.img_size = image_size
         self.patch_size = patch_size
-        self.H, self.W = image_size[0] // patch_size[0], image_size[1] // patch_size[1]
-        self.num_patches = self.H * self.W
         self.proj = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=stride,
                               padding=(patch_size[0] // 2, patch_size[1] // 2))
         self.layer_norm = nn.LayerNorm(hidden_size)
@@ -166,12 +160,10 @@ class PvtV2SelfAttention(nn.Module):
 
         self.sr_ratio = sr_ratio
         if self.attn_reduce == "AP":
-            self.sr = nn.Sequential(
-                nn.AdaptiveAvgPool2d(7),
-                nn.Conv2d(hidden_size, hidden_size, kernel_size=1, stride=1),
-                nn.LayerNorm(hidden_size),
-                nn.GELU(),
-            )
+            self.pool = nn.AdaptiveAvgPool2d(7)
+            self.sr = nn.Conv2d(hidden_size, hidden_size, kernel_size=1, stride=1)
+            self.layer_norm = nn.LayerNorm(hidden_size)
+            self.act = nn.GELU()
         elif sr_ratio > 1:
             self.sr = nn.Conv2d(self.hidden_size, self.hidden_size, kernel_size=sr_ratio, stride=sr_ratio)
             self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
@@ -193,7 +185,8 @@ class PvtV2SelfAttention(nn.Module):
 
         if self.attn_reduce == "AP":
             hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-            hidden_states = self.sr(hidden_states).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+            hidden_states = self.sr(self.pool(hidden_states)).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+            hidden_states = self.act(self.layer_norm(hidden_states))
         elif self.sr_ratio > 1:
             hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
             hidden_states = self.sr(hidden_states).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
@@ -308,7 +301,7 @@ class PvtV2Layer(nn.Module):
         attention_output = self.drop_path(attention_output)
         hidden_states = attention_output + hidden_states
 
-        mlp_output = self.mlp(self.layer_norm_2(hidden_states))
+        mlp_output = self.mlp(self.layer_norm_2(hidden_states), height, width)
 
         mlp_output = self.drop_path(mlp_output)
         layer_output = hidden_states + mlp_output
@@ -332,7 +325,6 @@ class PvtV2Encoder(nn.Module):
         for i in range(config.num_encoder_blocks):
             embeddings.append(
                 PvtV2OverlapPatchEmbeddings(
-                    image_size=config.image_size if i == 0 else self.config.image_size // (2 ** (i + 1)),
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
                     num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
@@ -365,7 +357,9 @@ class PvtV2Encoder(nn.Module):
         self.block = nn.ModuleList(blocks)
 
         # Layer norms
-        self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
+        self.layer_norms = nn.ModuleList(
+            [nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)]
+        )
 
     def forward(
         self,
@@ -380,22 +374,25 @@ class PvtV2Encoder(nn.Module):
         batch_size = pixel_values.shape[0]
         num_blocks = len(self.block)
         hidden_states = pixel_values
-        for idx, (embedding_layer, block_layer) in enumerate(zip(self.patch_embeddings, self.block)):
+        for idx, x in enumerate(zip(self.patch_embeddings, self.block, self.layer_norms)):
+            embedding_layer, block_layer, norm_layer = x
             # first, obtain patch embeddings
             hidden_states, height, width = embedding_layer(hidden_states)
             # second, send embeddings through blocks
             for block in block_layer:
                 layer_outputs = block(hidden_states, height, width, output_attentions)
                 hidden_states = layer_outputs[0]
-                if output_attentions:
+                if output_attentions and idx in self.config._output_indices:
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (hidden_states,)
-            if idx != num_blocks - 1:
+            # third, apply layer norm
+            hidden_states = norm_layer(hidden_states)
+            # fourth, optionally reshape back to (batch_size, num_channels, height, width)
+            if idx != len(self.patch_embeddings) - 1 or (
+                idx == len(self.patch_embeddings) - 1 and self.config.reshape_last_stage
+            ):
                 hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
-        hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            if output_hidden_states and idx in self.config._output_indices:
+                all_hidden_states = all_hidden_states + (hidden_states,)
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
@@ -581,7 +578,17 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
 
         sequence_output = outputs[0]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        # convert last hidden states to (batch_size, height*width, hidden_size)
+        batch_size = sequence_output.shape[0]
+        if self.config.reshape_last_stage:
+            # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+            sequence_output = sequence_output.permute(0, 2, 3, 1)
+        sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
+
+        # global average pooling
+        sequence_output = sequence_output.mean(dim=1)
+
+        logits = self.classifier(sequence_output)
 
         loss = None
         if labels is not None:
