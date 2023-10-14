@@ -20,7 +20,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from transformers import Beit3Processor, BeitImageProcessor, XLMRobertaTokenizer, is_torch_available
+from transformers import Beit3Processor, BeitImageProcessor, XLMRobertaTokenizer, is_torch_available, pipeline
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.models.beit3.configuration_beit3 import Beit3Config
@@ -596,3 +596,17 @@ class BeitModelIntegrationTest(unittest.TestCase):
         )
 
         assert round(float(output.loss.detach().numpy()), 4) == 1.8435
+
+    @slow
+    def test_pipeline_visual_question_answering(self):
+        model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
+        tokenizer = XLMRobertaTokenizer.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
+
+        image_processor = BeitImageProcessor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
+
+        image = prepare_img()
+        vqa_pipeline = pipeline(
+            "visual-question-answering", model, tokenizer=tokenizer, image_processor=image_processor
+        )
+        ans = vqa_pipeline(image, "What is in this photo ?", top_k=1)
+        assert ans[0]["answer"] == "cat"

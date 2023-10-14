@@ -171,7 +171,7 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        text_padding_mask (`torch.LongTensor` of shape `({0})`):
+        attention_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
 
             - 1 indicates the token is **not masked**,
@@ -1192,7 +1192,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         self,
         input_ids,
         pixel_values,
-        text_padding_mask,
+        attention_mask,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1227,7 +1227,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         encoder_outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            text_padding_mask=text_padding_mask,
+            text_padding_mask=attention_mask,
         )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
