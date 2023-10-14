@@ -161,6 +161,7 @@ from . import (
     pop2piano,
     prophetnet,
     pvt,
+    pvt_v2,
     qdqbert,
     rag,
     realm,
