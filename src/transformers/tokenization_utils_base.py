@@ -947,7 +947,7 @@ class SpecialTokensMixin:
                 for token in value:
                     if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
-                        token = AddedToken(token, rstrip=True, lstrip=True, normalized=True, special=True)
+                        token = AddedToken(token, rstrip=True, lstrip=True, normalized=False, special=True)
                     if str(token) not in self.additional_special_tokens:
                         to_add.add(token)
                 if replace_additional_special_tokens:
@@ -960,8 +960,8 @@ class SpecialTokensMixin:
                 if not isinstance(value, (str, AddedToken)):
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
-                    # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
-                    value = AddedToken(value, rstrip=True, lstrip=True, normalized=True, special=True)
+                    # for legacy purpose we default to stripping. `False` depends on this
+                    value = AddedToken(value, rstrip=True, lstrip=True, normalized=False, special=True)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
                 if value not in added_tokens:
@@ -2175,6 +2175,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_tokens_decoder: Dict[int, AddedToken] = {}
         added_tokens_map: Dict[str, AddedToken] = {}
 
+        # if a fast did not save the tokenizer_config.json
         legacy_saved = "added_tokens_decoder" not in init_kwargs
         if not legacy_saved:
             for idx, token in init_kwargs["added_tokens_decoder"].items():
@@ -2235,9 +2236,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     # for legacy purpose, we ignore whether or not these tokens are special. TODO not sure anymore
                     # serialized_tokens.pop("special")
                     added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
-                    # TODO special is wrong here?
 
+            # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
+            # this is for legacy purpose
+            if added_tokens_file is not None:
+                with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
+                    added_tok_encoder = json.load(added_tokens_handle)
+                for str_token, index in added_tok_encoder.items():
+                    if index not in added_tokens_decoder:
+                        added_tokens_decoder[index] = AddedToken(str_token,  rstrip = True, lstrip = True, normalized = True)
             # end legacy
+
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens if the `fast` was not properly saved!
         # thus we delay adding special tokens in the init using `slow_to_fast` flag.
         if added_tokens_decoder is not {} and "Fast" in cls.__name__:
@@ -2257,54 +2266,39 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
 
-        tokens_to_add = []
-        # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
-        # this is for legacy purpose
-        if added_tokens_file is not None and legacy_saved:
-            with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
-                added_tok_encoder = json.load(added_tokens_handle)
-            tokens_to_add += [
-                k
-                for k, v in sorted(added_tok_encoder.items(), key=lambda x: x[1])
-                if token not in tokenizer.added_tokens_encoder
-            ]
-
         # This is slow... if the added tokens decoder was not used (we are fast) use it
-        if tokenizer_file is None and not legacy_saved and init_kwargs.get("slow_to_fast", False):
-            tokens_to_add += list(added_tokens_decoder.values())
+        if init_kwargs.get("slow_to_fast", False):
+            # for efficiency should we only add the ones that are not present (str) ? 
+            tokens_to_add = list(added_tokens_decoder.values())
+            if len(tokens_to_add) > 1:
+                # super hack: if a token.special is set, tokenizer ignores it for now so FIXME:
+                if "Fast" in cls.__name__:
+                    # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
+                    # individual tokens would repeatedly rebuild a trie, which can be slow.
+                    is_last_special = None
+                    tokens = []
+                    for token in tokens_to_add:
+                        is_special = (
+                            token.special
+                            if isinstance(token, AddedToken)
+                            else token in tokenizer.additional_special_tokens
+                        )
+                        if is_last_special is None or is_last_special == is_special:
+                            tokens.append(token)
+                        else:
+                            tokenizer.add_tokens(tokens, special_tokens=is_last_special)
+                            tokens = [token]
+                        is_last_special = is_special
 
-        if len(tokens_to_add) > 1:
-            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME:
-            if "Fast" in cls.__name__:
-                # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
-                # individual tokens would repeatedly rebuild a trie, which can be slow.
-                is_last_special = None
-                tokens = []
-
-                for token in tokens_to_add:
-                    is_special = (
-                        token.special
-                        if isinstance(token, AddedToken)
-                        else token in tokenizer.additional_special_tokens
-                    )
-                    if is_last_special is None or is_last_special == is_special:
-                        tokens.append(token)
-                    else:
+                    if tokens:
                         tokenizer.add_tokens(tokens, special_tokens=is_last_special)
-                        tokens = [token]
-                    is_last_special = is_special
-
-                if tokens:
-                    tokenizer.add_tokens(tokens, special_tokens=is_last_special)
-
-            else:
-                tokenizer.add_tokens(tokens_to_add)
 
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
         # uses the information stored in `added_tokens_decoder`.
         if init_kwargs.get("slow_to_fast", False):
             # this is costly for fast tokenizers as we re-compute the regex again. But not all tokens are added tokens
-            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
+            encoder = tokenizer.added_tokens_encoder
+            tokenizer.add_tokens([ token for token in tokenizer.all_special_tokens_extended if token not in encoder], special_tokens=True)
 
         if len(added_tokens_decoder) > 0:
             logger.warning_advice(

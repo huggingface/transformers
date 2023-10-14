@@ -157,7 +157,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # We add the additional tokens that are not part of the vocab
         if not slow_to_fast:
-            self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
+            self._add_tokens([token for token in self.all_special_tokens_extended if str(token) not in self.added_tokens_encoder], special_tokens=True)
 
     @property
     def is_fast(self) -> bool:

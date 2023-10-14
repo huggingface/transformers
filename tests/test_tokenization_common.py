@@ -4110,7 +4110,8 @@ class TokenizerTesterMixin:
             # make sure the special tokens are marked as special in the fast tokenizer.json and in the slow as well of course. Read the jsons
             # MAKE SURE THE ONLY WAY TO CHANGE AN ADDEDTOKEN IS THROUGH add_tokens!
             # Allow re-building the regex?
-            # make sure we don't cast anything in another type,
+            # make sure we don't cast anything in another type
+            # SPLIT INTO MORE SUBTESTs!!!
 
     def test_additional_special_tokens_serialization(self):
         self.maxDiff = None
