@@ -257,9 +257,11 @@ class PvtV2ConvFFN(nn.Module):
             self.intermediate_act_fn = config.hidden_act
         self.dense2 = nn.Linear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.relu = nn.ReLU() if config.attn_reduce == "AP" else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor, height, width) -> torch.Tensor:
         hidden_states = self.dense1(hidden_states)
+        hidden_states = self.relu(hidden_states)
         hidden_states = self.dwconv(hidden_states, height, width)
         hidden_states = self.intermediate_act_fn(hidden_states)
         hidden_states = self.dropout(hidden_states)
