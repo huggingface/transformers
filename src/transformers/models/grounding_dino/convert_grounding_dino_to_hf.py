@@ -360,10 +360,9 @@ def convert_grounding_dino_checkpoint(args):
         rename_key(new_state_dict, src, dest)
     read_in_q_k_v(new_state_dict, config)
 
-    # Load HF implementation with default config and converted state dict
+    # Load HF model
     model = GroundingDINOForObjectDetection(config)
     model.eval()
-    # model = GroundingDINOForObjectDetection(config=config).eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
@@ -378,23 +377,23 @@ def convert_grounding_dino_checkpoint(args):
     text_inputs = text_processor(text, config)
 
     # Running forward
-    model(pixel_values=image_inputs.unsqueeze(0), **text_inputs)
+    with torch.no_grad():
+        outputs = model(pixel_values=image_inputs.unsqueeze(0), **text_inputs)
 
-    # output.pred_boxes[:, :3, :]
-    # tensor([[[0.7674, 0.4136, 0.4572, 0.7305],
-    #      [0.2566, 0.5463, 0.4760, 0.8777],
-    #      [0.2585, 0.5442, 0.4640, 0.8683]]])
-    #
-    # output.logits[:, :3, :4]
-    # tensor([[[-4.8913, -0.1900, -0.2161, -4.2374],
-    #      [-4.9652, -0.3719, -0.3950, -4.2315],
-    #      [-5.9599, -3.3765, -3.3104, -5.9752]]])
+    print("First values of logits:", outputs.logits[0, :3, :3])
+    print("First values of boxes:", outputs.pred_boxes[0, :3, :3])
+
+    # verify outputs
+    expected_boxes = torch.tensor([[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]])
+    expected_logits = torch.tensor(
+        [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
+    )
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        print(f"Saving model and image processor for {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-
-        print(f"Saving image processor to {pytorch_dump_folder_path}")
         image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
