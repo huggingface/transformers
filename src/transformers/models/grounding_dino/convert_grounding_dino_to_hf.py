@@ -407,13 +407,14 @@ def convert_grounding_dino_checkpoint(args):
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and image processor for {model_name} to {pytorch_dump_folder_path}")
+        print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        image_processor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and image processor for {model_name} to hub")
+        print(f"Pushing model and processor for {model_name} to hub")
         model.push_to_hub(f"EduardoPacheco/{model_name}")
+        processor.push_to_hub(f"EduardoPacheco/{model_name}")
 
 
 if __name__ == "__main__":
