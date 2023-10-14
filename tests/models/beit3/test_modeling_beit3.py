@@ -187,7 +187,7 @@ class Beit3ModelTester:
         return self.get_config(), {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
-            "text_padding_mask": text_padding_mask,
+            "attention_mask": text_padding_mask,
         }
 
     def prepare_config_and_inputs_for_text_retrieval(self):
@@ -245,6 +245,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict_dup = inputs_dict.copy()
         inputs_dict_to_return = None
         if model_class.__name__ == "Beit3ForVisualReasoning":
             # inputs_dict_to_return =  self.model_tester.prepare_config_and_inputs_for_visual_reasoning()[1]
@@ -254,10 +255,10 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
             inputs_dict_to_return["pixel_values"] = torch.cat(
-                (inputs_dict["pixel_values"].unsqueeze(1), inputs_dict["pixel_values"].unsqueeze(1)), dim=1
+                (inputs_dict_dup["pixel_values"].unsqueeze(1), inputs_dict_dup["pixel_values"].unsqueeze(1)), dim=1
             )
-            inputs_dict_to_return["text_padding_mask"] = inputs_dict["text_padding_mask"]
-            inputs_dict_to_return["input_ids"] = inputs_dict["input_ids"]
+            inputs_dict_to_return["text_padding_mask"] = inputs_dict_dup["text_padding_mask"]
+            inputs_dict_to_return["input_ids"] = inputs_dict_dup["input_ids"]
             return inputs_dict_to_return
         elif model_class.__name__ == "Beit3ForImageClassification":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_image_classification()[1]
@@ -265,7 +266,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 inputs_dict_to_return["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            inputs_dict_to_return.update(inputs_dict)
+            inputs_dict_to_return.update(inputs_dict_dup)
             del inputs_dict_to_return["input_ids"]
             del inputs_dict_to_return["text_padding_mask"]
             return inputs_dict_to_return
@@ -278,14 +279,16 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dtype=torch.float,
                 device=torch_device,
             )
+            inputs_dict_dup['attention_mask'] = inputs_dict_dup['text_padding_mask']
+            del inputs_dict_dup['text_padding_mask']
         elif model_class.__name__ == "Beit3ForCaptioning":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_captioning()[1]
         elif model_class.__name__ == "Beit3Model":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_basemodel()[1]
-            inputs_dict_to_return.update(inputs_dict)
+            inputs_dict_to_return.update(inputs_dict_dup)
             del inputs_dict_to_return["text_padding_mask"]
             return inputs_dict_to_return
-        inputs_dict_to_return.update(inputs_dict)
+        inputs_dict_to_return.update(inputs_dict_dup)
         return inputs_dict_to_return
 
     def setUp(self):
