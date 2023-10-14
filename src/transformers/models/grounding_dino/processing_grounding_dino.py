@@ -60,7 +60,7 @@ class GroundingDINOProcessor(ProcessorMixin):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = False,
+        return_token_type_ids: bool = True,
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
