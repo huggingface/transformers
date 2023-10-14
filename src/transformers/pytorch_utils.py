@@ -19,7 +19,7 @@ from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import logging
+from .utils import is_torch_tpu_available, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -28,10 +28,12 @@ logger = logging.get_logger(__name__)
 
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
+is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
 is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
 is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
 is_torch_greater_or_equal_than_1_11 = parsed_torch_version_base >= version.parse("1.11")
 is_torch_less_than_1_11 = parsed_torch_version_base < version.parse("1.11")
+is_torch_1_8_0 = parsed_torch_version_base == version.parse("1.8.0")
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -284,4 +286,15 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
     non-overlapping lifetimes may have the same id.
     """
-    return tensor.device, storage_ptr(tensor), storage_size(tensor)
+    if tensor.device.type == "xla" and is_torch_tpu_available():
+        # NOTE: xla tensors dont have storage
+        # use some other unique id to distinguish.
+        # this is a XLA tensor, it must be created using torch_xla's
+        # device. So the following import is safe:
+        import torch_xla
+
+        unique_id = torch_xla._XLAC._xla_get_tensor_id(tensor)
+    else:
+        unique_id = storage_ptr(tensor)
+
+    return tensor.device, unique_id, storage_size(tensor)

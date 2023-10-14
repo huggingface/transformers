@@ -59,7 +59,7 @@ class TFMobileViTModelTester:
         image_size=32,
         patch_size=2,
         num_channels=3,
-        last_hidden_size=640,
+        last_hidden_size=32,
         num_attention_heads=4,
         hidden_act="silu",
         conv_kernel_size=3,
@@ -118,6 +118,8 @@ class TFMobileViTModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             classifier_dropout_prob=self.classifier_dropout_prob,
             initializer_range=self.initializer_range,
+            hidden_sizes=[12, 16, 20],
+            neck_hidden_sizes=[8, 8, 16, 16, 32, 32, 32],
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):

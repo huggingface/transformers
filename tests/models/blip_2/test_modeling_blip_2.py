@@ -62,7 +62,7 @@ class Blip2VisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -215,7 +215,7 @@ class Blip2QFormerModelTester:
         vocab_size=99,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=6,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -289,7 +289,7 @@ class Blip2TextModelDecoderOnlyTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=4,
         hidden_act="gelu",
@@ -503,7 +503,7 @@ class Blip2TextModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,
@@ -666,7 +666,11 @@ class Blip2ModelTester:
 class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Blip2Model, "image-to-text": Blip2ForConditionalGeneration}
+        {
+            "feature-extraction": Blip2Model,
+            "image-to-text": Blip2ForConditionalGeneration,
+            "visual-question-answering": Blip2ForConditionalGeneration,
+        }
         if is_torch_available()
         else {}
     )

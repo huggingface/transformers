@@ -49,7 +49,7 @@ class CpmAntModelTester:
         use_mc_token_ids=False,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=3,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         num_buckets=32,

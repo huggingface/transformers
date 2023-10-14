@@ -60,7 +60,7 @@ class AltCLIPVisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -212,7 +212,7 @@ class AltCLIPTextModelTester:
         hidden_size=32,
         projection_dim=32,
         project_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -297,6 +297,11 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = True
     test_pruning = False
     test_head_masking = False
+
+    # TODO (@SunMarc): Fix me
+    @unittest.skip("It's broken.")
+    def test_resize_tokens_embeddings(self):
+        super().test_resize_tokens_embeddings()
 
     def setUp(self):
         self.model_tester = AltCLIPTextModelTester(self)

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ MusicGen model configuration"""
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -228,16 +227,7 @@ class MusicgenConfig(PretrainedConfig):
             **kwargs,
         )
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_encoder"] = self.text_encoder.to_dict()
-        output["audio_encoder"] = self.audio_encoder.to_dict()
-        output["decoder"] = self.decoder.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+    @property
+    # This is a property because you might want to change the codec model on the fly
+    def sampling_rate(self):
+        return self.audio_encoder.sampling_rate

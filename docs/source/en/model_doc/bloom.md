@@ -85,3 +85,13 @@ See also:
 
 [[autodoc]] BloomForQuestionAnswering
     - forward
+
+## FlaxBloomModel
+
+[[autodoc]] FlaxBloomModel
+    - __call__
+
+## FlaxBloomForCausalLM
+
+[[autodoc]] FlaxBloomForCausalLM
+    - __call__

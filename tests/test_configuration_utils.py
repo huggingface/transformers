@@ -119,7 +119,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
-        config.push_to_hub("test-config", use_auth_token=self._token)
+        config.push_to_hub("test-config", token=self._token)
 
         new_config = BertConfig.from_pretrained(f"{USER}/test-config")
         for k, v in config.to_dict().items():
@@ -131,7 +131,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir, repo_id="test-config", push_to_hub=True, use_auth_token=self._token)
+            config.save_pretrained(tmp_dir, repo_id="test-config", push_to_hub=True, token=self._token)
 
         new_config = BertConfig.from_pretrained(f"{USER}/test-config")
         for k, v in config.to_dict().items():
@@ -209,6 +209,13 @@ class ConfigTestUtils(unittest.TestCase):
                 " `test_configuration_common.config_common_kwargs` pick another value for them:"
                 f" {', '.join(keys_with_defaults)}."
             )
+
+    def test_nested_config_load_from_dict(self):
+        config = AutoConfig.from_pretrained(
+            "hf-internal-testing/tiny-random-CLIPModel", text_config={"num_hidden_layers": 2}
+        )
+        self.assertNotIsInstance(config.text_config, dict)
+        self.assertEqual(config.text_config.__class__.__name__, "CLIPTextConfig")
 
     def test_from_pretrained_subfolder(self):
         with self.assertRaises(OSError):

@@ -1,13 +1,17 @@
 import enum
 import warnings
 
-from .. import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
-from ..utils import add_end_docstrings, is_tf_available
+from ..utils import add_end_docstrings, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
+if is_torch_available():
+    from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+
 if is_tf_available():
     import tensorflow as tf
+
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 
 class ReturnType(enum.Enum):
@@ -35,7 +39,10 @@ class TextGenerationPipeline(Pipeline):
     >>> outputs = generator("My tart needs some", num_return_sequences=4, return_full_text=False)
     ```
 
-    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
+    generation parameters to this pipeline to control stopping criteria, decoding strategy, and more. Learn more about
+    text generation parameters in [Text generation strategies](../generation_strategies) and [Text
+    generation](text_generation).
 
     This language generation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"text-generation"`.
@@ -62,7 +69,7 @@ class TextGenerationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING
+            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         )
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
@@ -96,14 +103,15 @@ class TextGenerationPipeline(Pipeline):
         prefix=None,
         handle_long_generation=None,
         stop_sequence=None,
+        add_special_tokens=False,
         **generate_kwargs,
     ):
-        preprocess_params = {}
+        preprocess_params = {"add_special_tokens": add_special_tokens}
         if prefix is not None:
             preprocess_params["prefix"] = prefix
         if prefix:
             prefix_inputs = self.tokenizer(
-                prefix, padding=False, add_special_tokens=False, return_tensors=self.framework
+                prefix, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
             )
             generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
 
@@ -199,9 +207,11 @@ class TextGenerationPipeline(Pipeline):
         """
         return super().__call__(text_inputs, **kwargs)
 
-    def preprocess(self, prompt_text, prefix="", handle_long_generation=None, **generate_kwargs):
+    def preprocess(
+        self, prompt_text, prefix="", handle_long_generation=None, add_special_tokens=False, **generate_kwargs
+    ):
         inputs = self.tokenizer(
-            prefix + prompt_text, padding=False, add_special_tokens=False, return_tensors=self.framework
+            prefix + prompt_text, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
         )
         inputs["prompt_text"] = prompt_text
 
@@ -295,10 +305,9 @@ class TextGenerationPipeline(Pipeline):
                         )
                     )
 
+                all_text = text[prompt_length:]
                 if return_type == ReturnType.FULL_TEXT:
-                    all_text = prompt_text + text[prompt_length:]
-                else:
-                    all_text = text[prompt_length:]
+                    all_text = prompt_text + all_text
 
                 record = {"generated_text": all_text}
             records.append(record)

@@ -306,7 +306,7 @@ class TFWav2Vec2ModelTester:
         model = TFWav2Vec2ForCTC(config)
         input_lengths = tf.constant([input_values.shape[-1] // i for i in [4, 2, 1]])
         max_length_labels = model.wav2vec2._get_feat_extract_output_lengths(input_lengths)
-        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size + 100)
+        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size + 500)
         with pytest.raises(ValueError):
             model(input_values, labels=labels)
 

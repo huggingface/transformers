@@ -318,6 +318,13 @@ Pipelines available for audio tasks include the following.
     - __call__
     - all
 
+### TextToAudioPipeline
+
+[[autodoc]] TextToAudioPipeline
+    - __call__
+    - all
+
+
 ### ZeroShotAudioClassificationPipeline
 
 [[autodoc]] ZeroShotAudioClassificationPipeline
@@ -342,6 +349,12 @@ Pipelines available for computer vision tasks include the following.
 ### ImageSegmentationPipeline
 
 [[autodoc]] ImageSegmentationPipeline
+    - __call__
+    - all
+
+### ImageToImagePipeline
+
+[[autodoc]] ImageToImagePipeline
     - __call__
     - all
 

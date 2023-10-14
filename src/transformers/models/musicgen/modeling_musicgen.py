@@ -18,7 +18,7 @@ import inspect
 import math
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -27,7 +27,7 @@ from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...generation.configuration_utils import GenerationConfig
-from ...generation.logits_process import LogitsProcessorList
+from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessorList
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -47,6 +47,9 @@ from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
 
+
+if TYPE_CHECKING:
+    from ...generation.streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
 
@@ -773,10 +776,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = torch.zeros((bsz, seq_len, self.d_model), device=input_ids.device)
-
-            for codebook in range(num_codebooks):
-                inputs_embeds += self.embed_tokens[codebook](input[:, codebook])
+            inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -1188,6 +1188,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         synced_gpus: Optional[bool] = None,
+        streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ):
         """
@@ -1228,6 +1229,9 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1303,12 +1307,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         # 5. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if has_default_max_length and generation_config.max_new_tokens is None:
+        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
             logger.warning(
-                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
-                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
-                " recommend using `max_new_tokens` to control the maximum length of the generation.",
-                UserWarning,
+                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
+                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
@@ -1340,6 +1342,9 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             max_length=generation_config.max_length,
         )
 
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
+
         # stash the delay mask so that we don't have to recompute it in each forward pass
         model_kwargs["delay_pattern_mask"] = delay_pattern_mask
 
@@ -1355,7 +1360,12 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             and generation_config.do_sample is True
         )
 
-        # 8. prepare distribution pre_processing samplers
+        # 8. prepare batched CFG externally (to enable coexistance with the unbatched CFG)
+        if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
+            logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
+            generation_config.guidance_scale = None
+
+        # 9. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
@@ -1364,7 +1374,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             logits_processor=logits_processor,
         )
 
-        # 9. prepare stopping criteria
+        # 10. prepare stopping criteria
         stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
@@ -1376,7 +1386,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                     f"but is {generation_config.num_return_sequences}."
                 )
 
-            # 8. run greedy search
+            # 11. run greedy search
             outputs = self.greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
@@ -1386,11 +1396,12 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
         elif is_sample_gen_mode:
-            # 9. prepare logits warper
+            # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
             # expand input_ids with `num_return_sequences` additional sequences per batch
@@ -1400,7 +1411,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 **model_kwargs,
             )
 
-            # 10. run sample
+            # 12. run sample
             outputs = self.sample(
                 input_ids,
                 logits_processor=logits_processor,
@@ -1411,12 +1422,13 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
@@ -1441,7 +1453,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder,"
+    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder, "
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
@@ -1983,9 +1995,17 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             if decoder_attention_mask is not None:
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
-        # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -2185,6 +2205,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         synced_gpus: Optional[bool] = None,
+        streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ):
         """
@@ -2225,6 +2246,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2332,10 +2356,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             logger.warning(
-                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
-                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
-                " recommend using `max_new_tokens` to control the maximum length of the generation.",
-                UserWarning,
+                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
+                "to control the generation length. We recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
@@ -2368,6 +2390,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         # stash the delay mask so that we don't have to recompute in each forward pass
         model_kwargs["decoder_delay_pattern_mask"] = decoder_delay_pattern_mask
 
+        # input_ids are ready to be placed on the streamer (if used)
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
+
         # 7. determine generation mode
         is_greedy_gen_mode = (
             (generation_config.num_beams == 1)
@@ -2380,7 +2406,12 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             and generation_config.do_sample is True
         )
 
-        # 8. prepare distribution pre_processing samplers
+        # 8. prepare batched CFG externally (to enable coexistance with the unbatched CFG)
+        if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
+            logits_processor.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
+            generation_config.guidance_scale = None
+
+        # 9. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
@@ -2389,7 +2420,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             logits_processor=logits_processor,
         )
 
-        # 9. prepare stopping criteria
+        # 10. prepare stopping criteria
         stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
@@ -2401,7 +2432,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     f"but is {generation_config.num_return_sequences}."
                 )
 
-            # 10. run greedy search
+            # 11. run greedy search
             outputs = self.greedy_search(
                 input_ids,
                 logits_processor=logits_processor,
@@ -2411,6 +2442,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -2437,12 +2469,13 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 

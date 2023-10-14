@@ -13,7 +13,7 @@ if is_decord_available():
 
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -34,7 +34,7 @@ class VideoClassificationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "decord")
-        self.check_model_type(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING)
+        self.check_model_type(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES)
 
     def _sanitize_parameters(self, top_k=None, num_frames=None, frame_sampling_rate=None):
         preprocess_params = {}

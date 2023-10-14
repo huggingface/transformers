@@ -72,13 +72,14 @@ class BioGptConfig(PretrainedConfig):
             Please refer to the paper about LayerDrop: https://arxiv.org/abs/1909.11556 for further details
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        pad_token_id (`int`, *optional*, defaults to 1)
+        pad_token_id (`int`, *optional*, defaults to 1):
             Padding token id.
-        bos_token_id (`int`, *optional*, defaults to 0)
+        bos_token_id (`int`, *optional*, defaults to 0):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 2)
+        eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
-        Example:
+
+    Example:
 
     ```python
     >>> from transformers import BioGptModel, BioGptConfig

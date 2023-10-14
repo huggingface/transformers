@@ -9,10 +9,10 @@ from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
 
 
 if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 
 
 def sigmoid(_outputs):
@@ -84,9 +84,9 @@ class TextClassificationPipeline(Pipeline):
         super().__init__(**kwargs)
 
         self.check_model_type(
-            TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+            TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
             if self.framework == "tf"
-            else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+            else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
         )
 
     def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, top_k="", **tokenizer_kwargs):

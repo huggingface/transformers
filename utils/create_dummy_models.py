@@ -974,6 +974,10 @@ def get_token_id_from_tokenizer(token_id_name, tokenizer, original_token_id):
 
 
 def get_config_overrides(config_class, processors):
+    # `Bark` configuration is too special. Let's just not handle this for now.
+    if config_class.__name__ == "BarkConfig":
+        return {}
+
     config_overrides = {}
 
     # Check if there is any tokenizer (prefer fast version if any)
@@ -1505,7 +1509,7 @@ if __name__ == "__main__":
         "--models_to_skip",
         type=list_str,
         help=(
-            "Comma-separated list of model class names(s) from which the tiny models won't be created.\nThis is usually"
+            "Comma-separated list of model class names(s) from which the tiny models won't be created.\nThis is usually "
             "the list of model classes that have their tiny versions already uploaded to the Hub."
         ),
     )

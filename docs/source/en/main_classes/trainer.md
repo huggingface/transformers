@@ -60,7 +60,7 @@ from transformers import Trainer
 
 class CustomTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
-        labels = inputs.get("labels")
+        labels = inputs.pop("labels")
         # forward pass
         outputs = model(**inputs)
         logits = outputs.get("logits")
@@ -441,7 +441,7 @@ as the model saving with FSDP activated is only available with recent fixes.
 - Remaining FSDP config is passed via `--fsdp_config <path_to_fsdp_config.json>`. It is either a location of
   FSDP json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`. 
   - If auto wrapping is enabled, you can either use transformer based auto wrap policy or size based auto wrap policy.
-    - For transformer based auto wrap policy, please specify `fsdp_transformer_layer_cls_to_wrap` in the config file. 
+    - For transformer based auto wrap policy, it is recommended to specify `fsdp_transformer_layer_cls_to_wrap` in the config file. If not specified, the default value is `model._no_split_modules` when available.
       This specifies the list of transformer layer class name (case-sensitive) to wrap ,e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
       This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
       Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
@@ -456,6 +456,10 @@ as the model saving with FSDP activated is only available with recent fixes.
     If `"True"`, FSDP explicitly prefetches the next upcoming all-gather while executing in the forward pass. 
   - `limit_all_gathers` can be specified in the config file. 
     If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight all-gathers.
+  - `activation_checkpointing` can be specified in the config file.
+    If `"True"`, FSDP activation checkpointing is a technique to reduce memory usage by clearing activations of
+    certain layers and recomputing them during a backward pass. Effectively, this trades extra computation time
+    for reduced memory usage.
 
 **Few caveats to be aware of**
 - it is incompatible with `generate`, thus is incompatible with `--predict_with_generate` 
@@ -482,7 +486,7 @@ Pass `--fsdp "full shard"` along with following changes to be made in `--fsdp_co
   This setting can only be used when the xla flag is set to true, and an auto wrapping policy is specified through
   `fsdp_min_num_params` or `fsdp_transformer_layer_cls_to_wrap`. 
 - You can either use transformer based auto wrap policy or size based auto wrap policy.
-  - For transformer based auto wrap policy, please specify `fsdp_transformer_layer_cls_to_wrap` in the config file. 
+  - For transformer based auto wrap policy, it is recommended to specify `fsdp_transformer_layer_cls_to_wrap` in the config file. If not specified, the default value is `model._no_split_modules` when available.
     This specifies the list of transformer layer class name (case-sensitive) to wrap ,e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
     This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
     Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 

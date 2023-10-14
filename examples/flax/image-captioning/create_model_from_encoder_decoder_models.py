@@ -37,7 +37,7 @@ class ModelArguments:
     encoder_model_name_or_path: str = field(
         metadata={
             "help": (
-                "The encoder model checkpoint for weights initialization."
+                "The encoder model checkpoint for weights initialization. "
                 "Don't set if you want to train an encoder model from scratch."
             )
         },
@@ -45,7 +45,7 @@ class ModelArguments:
     decoder_model_name_or_path: str = field(
         metadata={
             "help": (
-                "The decoder model checkpoint for weights initialization."
+                "The decoder model checkpoint for weights initialization. "
                 "Don't set if you want to train a decoder model from scratch."
             )
         },

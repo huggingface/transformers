@@ -95,6 +95,10 @@ See [`T5TokenizerFast`] for all details.
 
 [[autodoc]] MT5EncoderModel
 
+## MT5ForSequenceClassification
+
+[[autodoc]] MT5ForSequenceClassification
+
 ## MT5ForQuestionAnswering
 
 [[autodoc]] MT5ForQuestionAnswering

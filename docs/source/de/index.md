@@ -218,7 +218,7 @@ Flax), PyTorch, und/oder TensorFlow haben.
 |       BigBird-Pegasus       |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |         Blenderbot          |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |       BlenderbotSmall       |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
-|            BLOOM            |       ❌       |       ✅       |       ✅        |         ❌         |      ❌      |
+|            BLOOM            |       ❌       |       ✅       |       ✅        |         ❌         |      ✅      |
 |          CamemBERT          |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |           CANINE            |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 |            CLIP             |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |

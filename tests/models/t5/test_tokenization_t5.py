@@ -63,11 +63,12 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(vocab_keys[0], "<unk>")
         self.assertEqual(vocab_keys[1], "<s>")
-        self.assertEqual(vocab_keys[-1], "<pad>")
+        self.assertEqual(vocab_keys[1100], "<pad>")
         self.assertEqual(len(vocab_keys), 1_101)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 1_100)
+        self.assertEqual(self.get_tokenizer().vocab_size, 1000)
+        self.assertEqual(len(self.get_tokenizer()), 1101)
 
     def test_full_tokenizer(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB)
@@ -400,6 +401,31 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
         self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted(range(1000, 1010)))
 
+    def test_some_edge_cases(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+
+        sp_tokens = tokenizer.sp_model.encode("</s>>", out_type=str)
+        self.assertEqual(sp_tokens, ["<", "/", "s", ">", ">"])
+        tokens = tokenizer.tokenize("</s>>")
+        self.assertNotEqual(sp_tokens, tokens)
+        self.assertEqual(tokens, ["</s>", ">"])
+
+        tokens = tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("", out_type=str))
+
+        tokens = tokenizer.tokenize(" ")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode(" ", out_type=str))
+
+        tokens = tokenizer.tokenize("▁")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+
+        tokens = tokenizer.tokenize(" ▁")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+
 
 @require_sentencepiece
 @require_tokenizers
@@ -411,8 +437,9 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0, legacy=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<extra_id_0>"]})
-        tokenizer._create_trie(tokenizer.all_special_tokens)
+        tokenizer.add_special_tokens(
+            {"additional_special_tokens": [AddedToken("<extra_id_0>", rstrip=False, lstrip=False)]}
+        )
         # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
         # So the extra ids are split....
         cls.tokenizer = tokenizer
@@ -423,9 +450,21 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode(". Hello", add_special_tokens=False)
         self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode(". Hello")
-        self.assertEqual(input_ids, sp_encode)
+        self.assertEqual(input_ids, [7] + sp_encode)
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
+
+        tokens = self.tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode("", out_type=str))
+
+        tokens = self.tokenizer.tokenize(" ")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode(" ", out_type=str))
+
+        tokens = self.tokenizer.tokenize("▁")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode("▁", out_type=str))
 
     def test_remove_extra_whitespaces(self):
         # make sure the extra spaces are eaten
@@ -433,7 +472,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("       . Hello", add_special_tokens=False)
         self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode("       . Hello")
-        self.assertEqual(input_ids, sp_encode)
+        self.assertEqual(input_ids, [7] + sp_encode)
         tokens = self.tokenizer.tokenize(" . Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -445,11 +484,9 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         input_ids = self.tokenizer.encode("▁He is not<extra_id_0>             ▁He")
         # here t5x does not eat with lstrip, so there is and extra ▁He in the original one
-        # TODO @arthurzucker we should probably not srip right since it is done by default
-        # for certain models...
-        self.assertEqual(input_ids, [156, 46, 44, 999, 0, 2])
+        self.assertEqual(input_ids, [156, 46, 44, 1001, 156, 2])
         tokens = self.tokenizer.tokenize("▁He is not<extra_id_0>              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "He"])  # spaces are eaten by spm + our strip
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "▁He"])  # spaces are eaten by spm
         # make sure that the output after the extra id is the same as if
         # extra_id was not there
         input_ids = self.tokenizer.encode("▁He is not             ▁He")
@@ -461,34 +498,34 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # Make sure that `tokenizer.tokenize` is similar to
         # adding the equivalent special token to the vocab
         input_ids = self.tokenizer.encode("Hey <extra_id_0>I")
-        self.assertEqual(input_ids, [156, 30, 999, 100, 2])
+        self.assertEqual(input_ids, [156, 30, 1001, 100, 2])
         tokens = self.tokenizer.tokenize("Hey <extra_id_0>I")
         self.assertEqual(tokens, ["▁He", "y", "<extra_id_0>", "I"])
 
         input_ids = self.tokenizer.encode("Hello, <extra_id_0>,")
-        self.assertEqual(input_ids, [156, 86, 20, 3, 999, 3, 2])
+        self.assertEqual(input_ids, [156, 86, 20, 3, 1001, 3, 2])
         tokens = self.tokenizer.tokenize("Hello, <extra_id_0>,")
         self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", ","])
 
     def test_special_tokens_strip(self):
         input_ids = self.tokenizer.encode(" <extra_id_0> ,")
-        self.assertEqual(input_ids, [999, 3, 2])
+        self.assertEqual(input_ids, [1001, 7, 3, 2])
         tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
-        # spaces are eaten by rstrip / lstrip
-        self.assertEqual(tokens, ["<extra_id_0>", ","])
+        # spaces are not longer eaten by rstrip and lstrip
+        self.assertEqual(tokens, ["<extra_id_0>", "▁", ","])
 
         # test with a begin of word like `▁He`
         input_ids = self.tokenizer.encode("No <extra_id_0> He")
-        self.assertEqual(input_ids, [284, 999, 0, 2])
+        self.assertEqual(input_ids, [284, 1001, 156, 2])
         # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
         tokens = self.tokenizer.tokenize("No <extra_id_0> He")
-        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "He"])
+        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "▁He"])
 
         # Make sure this does not happen if we don't strip
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
         tokenizer.add_special_tokens({"bos_token": AddedToken("<bos>")})
         input_ids = tokenizer.encode("No <bos> He")
-        self.assertEqual(input_ids, [284, 1000, 156, 2])
+        self.assertEqual(input_ids, [284, 1001, 156, 2])
         tokens = tokenizer.tokenize("No <bos> He")
         # the first `' '` after `'No'` is eaten by spm:
         self.assertEqual(tokenizer.sp_model.encode("No         ", out_type=str), ["▁No"])
@@ -505,7 +542,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("xnli", "all_languages", split="train+test+validation")
 
-        # TODO ArthurZucker fix the 3 commented tests with #23909
+        # TODO @ArthurZucker fix the 3 commented tests with #23909
         input_texts = [
             "Bonjour <extra_id_0>.",
             # "Bonjour<extra_id_0>.",  # this will fail. In T5 the special token has to be at the end.
