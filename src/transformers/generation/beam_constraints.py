@@ -202,7 +202,7 @@ class PhrasalConstraint(Constraint):
 
 
 class DisjunctiveTrie:
-    def __init__(self, nested_token_ids: List[List[int]], no_subsets=True):
+    def __init__(self, nested_token_ids: List[List[int]], no_subsets: bool = True):
         r"""
         A helper class that builds a trie with the words represented in `nested_token_ids`.
         """
@@ -337,7 +337,7 @@ class DisjunctiveConstraint(Constraint):
         else:
             return self.seqlen - len(self.current_seq)
 
-    def copy(self, stateful=False):
+    def copy(self, stateful: bool = False):
         new_constraint = DisjunctiveConstraint(self.token_ids)
 
         if stateful:
@@ -506,7 +506,7 @@ class ConstraintListState:
 
         return complete, stepped
 
-    def copy(self, stateful=True):
+    def copy(self, stateful: bool = True):
         new_state = ConstraintListState(self.constraints)  # we actually never though self.constraints objects
         # throughout this process. So it's at initialization state.
 

@@ -201,7 +201,9 @@ class MemorySummary(NamedTuple):
 MemoryTrace = List[UsedMemoryState]
 
 
-def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_idx=None) -> int:
+def measure_peak_memory_cpu(
+    function: Callable[[], None], interval: float = 0.5, device_idx: Optional[int] = None
+) -> Union[int, None]:
     """
     measures peak cpu memory consumption of a given `function` running the function for at least interval seconds and
     at most 20 * interval seconds. This function is heavily inspired by: `memory_usage` of the package
@@ -839,7 +841,7 @@ class Benchmark(ABC):
             self._environment_info = info
         return self._environment_info
 
-    def print_results(self, result_dict, type_label):
+    def print_results(self, result_dict, type_label: str):
         self.print_fn(80 * "-")
         self.print_fn(
             "Model Name".center(30) + "Batch Size".center(15) + "Seq Length".center(15) + type_label.center(15)
@@ -885,7 +887,7 @@ class Benchmark(ABC):
         )
         self.print_fn(f"\nTotal memory increase: {summary.total}")
 
-    def save_to_csv(self, result_dict, filename):
+    def save_to_csv(self, result_dict, filename: str):
         if not self.args.save_to_csv:
             return
         self.print_fn("Saving results to csv.")
