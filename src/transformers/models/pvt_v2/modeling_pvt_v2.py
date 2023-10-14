@@ -91,7 +91,7 @@ class PvtV2DropPath(nn.Module):
 
 
 class PvtV2OverlapPatchEmbeddings(nn.Module):
-    """ Image to Patch Embedding"""
+    """Image to Patch Embedding"""
 
     def __init__(
         self,
@@ -104,8 +104,13 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
         self.fp16_enabled = False
         patch_size = _ntuple(2)(patch_size)
         self.patch_size = patch_size
-        self.proj = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=stride,
-                              padding=(patch_size[0] // 2, patch_size[1] // 2))
+        self.proj = nn.Conv2d(
+            num_channels,
+            hidden_size,
+            kernel_size=patch_size,
+            stride=stride,
+            padding=(patch_size[0] // 2, patch_size[1] // 2),
+        )
         self.layer_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, pixel_values):
@@ -133,9 +138,7 @@ class PvTV2DWConv(nn.Module):
 class PvtV2SelfAttention(nn.Module):
     """Efficient self-attention mechanism."""
 
-    def __init__(
-        self, config: PvtV2Config, hidden_size: int, num_attention_heads: int, sr_ratio: int
-    ):
+    def __init__(self, config: PvtV2Config, hidden_size: int, num_attention_heads: int, sr_ratio: int):
         super().__init__()
         self.attn_reduce = config.attn_reduce
         self.pruned_heads = set()
@@ -372,7 +375,6 @@ class PvtV2Encoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         batch_size = pixel_values.shape[0]
-        num_blocks = len(self.block)
         hidden_states = pixel_values
         for idx, x in enumerate(zip(self.patch_embeddings, self.block, self.layer_norms)):
             embedding_layer, block_layer, norm_layer = x
@@ -449,8 +451,8 @@ PVT_V2_START_DOCSTRING = r"""
 PVT_V2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. 
-            See [`PvtV2ImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`PvtV2ImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
