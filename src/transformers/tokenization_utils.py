@@ -364,7 +364,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
-        self._add_tokens([token for token in self.all_special_tokens_extended if str(token) not in self._added_tokens_encoder], special_tokens=True)
+        self._add_tokens([token for token in self.all_special_tokens_extended if token not in self._added_tokens_encoder], special_tokens=True)
 
         self._decode_use_source_tokenizer = False
 

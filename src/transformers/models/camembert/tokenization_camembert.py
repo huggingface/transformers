@@ -146,7 +146,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
         self._added_tokens_decoder = {
             0: AddedToken("<s>NOTUSED", special = True),
             1: AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token,
-            2: AddedToken("</s>NOTUSED"),
+            2: AddedToken("</s>NOTUSED", special=True),
             3: AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token,
             4: AddedToken("<unk>NOTUSED", special = True),
         }

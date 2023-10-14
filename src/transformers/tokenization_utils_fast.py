@@ -96,7 +96,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
-        slow_to_fast = kwargs.pop("slow_to_fast", False)
+        added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
@@ -156,8 +156,29 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
 
         # We add the additional tokens that are not part of the vocab
-        if not slow_to_fast:
-            self._add_tokens([token for token in self.all_special_tokens_extended if str(token) not in self.added_tokens_encoder], special_tokens=True)
+        # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
+        # uses the information stored in `added_tokens_decoder`.
+        # this is costly for fast tokenizers as we re-compute the regex again. But not all tokens are added tokens
+        tokens_to_add = [token for token in added_tokens_decoder.values() if token not in self.added_tokens_decoder]
+        encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
+        tokens_to_add += [token for token in self.all_special_tokens_extended if token not in encoder and token not in tokens_to_add]
+        if len(tokens_to_add) > 0:
+            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
+            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
+            # individual tokens would repeatedly rebuild a trie, which can be slow.
+            is_last_special = None
+            tokens = []
+            special_tokens = self.all_special_tokens
+            for token in tokens_to_add:
+                is_special = (token.special or str(token) in special_tokens) if isinstance(token, AddedToken) else str(token) in special_tokens
+                if is_last_special is None or is_last_special == is_special:
+                    tokens.append(token)
+                else:
+                    self._add_tokens(tokens, special_tokens=is_last_special)
+                    tokens = [token]
+                is_last_special = is_special
+            if tokens:
+                self._add_tokens(tokens, special_tokens=is_last_special)
 
     @property
     def is_fast(self) -> bool:

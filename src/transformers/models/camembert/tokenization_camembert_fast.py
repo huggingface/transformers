@@ -119,7 +119,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
+        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED","<unk>NOTUSED"],
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
