@@ -279,8 +279,8 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dtype=torch.float,
                 device=torch_device,
             )
-            inputs_dict_dup['attention_mask'] = inputs_dict_dup['text_padding_mask']
-            del inputs_dict_dup['text_padding_mask']
+            inputs_dict_dup["attention_mask"] = inputs_dict_dup["text_padding_mask"]
+            del inputs_dict_dup["text_padding_mask"]
         elif model_class.__name__ == "Beit3ForCaptioning":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_captioning()[1]
         elif model_class.__name__ == "Beit3Model":
