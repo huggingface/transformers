@@ -17,6 +17,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 
 
@@ -415,7 +416,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, AutoModelForInterestPointDescription
+        >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -424,7 +425,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
-        >>> model = AutoModelForInterestPointDescription.from_pretrained("stevenbucaille/superpoint")
+        >>> model = AutoModel.from_pretrained("stevenbucaille/superpoint")
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -513,7 +514,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
     "SuperPoint model outputting keypoints and descriptors.",
     SUPERPOINT_START_DOCSTRING,
 )
-class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
+class SuperPointForInterestPointDescription(SuperPointPreTrainedModel):
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__(config)
 
@@ -524,12 +525,7 @@ class SuperPointModelForInterestPointDescription(SuperPointPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(SUPERPOINT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=ImagePointDescriptionOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-    )
+    @replace_return_docstrings(output_type=ImagePointDescriptionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,

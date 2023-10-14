@@ -7804,7 +7804,7 @@ class SuperPointModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SuperPointModelForInterestPointDescription(metaclass=DummyObject):
+class SuperPointForInterestPointDescription(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -45,7 +45,7 @@ else:
         "SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SuperPointModel",
         "SuperPointPreTrainedModel",
-        "SuperPointModelForInterestPointDescription",
+        "SuperPointForInterestPointDescription",
     ]
 
 
@@ -73,7 +73,7 @@ if TYPE_CHECKING:
             SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
             SuperPointModel,
             SuperPointPreTrainedModel,
-            SuperPointModelForInterestPointDescription,
+            SuperPointForInterestPointDescription,
         )
 
 else:

@@ -16,8 +16,8 @@ if is_torch_available():
     from transformers import (
         SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
         AutoModelForInterestPointDescription,
+        SuperPointForInterestPointDescription,
         SuperPointModel,
-        SuperPointModelForInterestPointDescription,
     )
 
 if is_vision_available():
@@ -78,7 +78,7 @@ class SuperPointModelTester:
         )
 
     def create_and_check_for_interest_point_description(self, config, pixel_values):
-        model = SuperPointModelForInterestPointDescription(config=config)
+        model = SuperPointForInterestPointDescription(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -97,7 +97,7 @@ class SuperPointModelTester:
 
 @require_torch
 class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (SuperPointModel, SuperPointModelForInterestPointDescription) if is_torch_available() else ()
+    all_model_classes = (SuperPointModel, SuperPointForInterestPointDescription) if is_torch_available() else ()
     all_generative_model_classes = () if is_torch_available() else ()
 
     fx_compatible = False
