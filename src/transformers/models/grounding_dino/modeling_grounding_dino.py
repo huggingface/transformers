@@ -1932,7 +1932,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                     text_encoder_hidden_states,
                     text_encoder_attention_mask,
                     self_attn_mask,
-                    None
+                    None,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -2012,7 +2012,10 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
             text_cross_attentions=all_cross_attns_text,
         )
 
+
 SPECIAL_TOKENS = [101, 102, 1012, 1029]
+
+
 def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTensor) -> Tuple[Tensor, Tensor]:
     """Generate attention mask between each pair of special tokens and positional ids.
     Args:
@@ -2255,7 +2258,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids)
-        text_token_mask = attention_mask.bool() # just to avoid renaming everywhere
+        text_token_mask = attention_mask.bool()  # just to avoid renaming everywhere
 
         max_text_len = self.config.max_text_len
         if text_self_attention_masks.shape[1] > max_text_len:
@@ -3654,6 +3657,7 @@ class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
     to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
+
     config_class = GroundingDINOTextPrenetConfig
 
     def __init__(self, config, add_pooling_layer=True):

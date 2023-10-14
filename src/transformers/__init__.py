@@ -358,7 +358,11 @@ _import_structure = {
         "GPTSanJapaneseTokenizer",
     ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
-    "models.grounding_dino": ["GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GroundingDINOConfig", "GroundingDINOTextPrenetConfig"],
+    "models.grounding_dino": [
+        "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GroundingDINOConfig",
+        "GroundingDINOTextPrenetConfig",
+    ],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -4512,7 +4516,11 @@ if TYPE_CHECKING:
         GPTSanJapaneseTokenizer,
     )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
-    from .models.grounding_dino import GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP, GroundingDINOConfig, GroundingDINOTextPrenetConfig
+    from .models.grounding_dino import (
+        GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GroundingDINOConfig,
+        GroundingDINOTextPrenetConfig,
+    )
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,

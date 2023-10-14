@@ -18,7 +18,7 @@ from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -26,6 +26,7 @@ logger = logging.get_logger(__name__)
 GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "idea-research/grounding-dino-tiny": "https://huggingface.co/idea-research/grg-dino-tiny/resolve/main/config.json",
 }
+
 
 # Modified from transformers.models.bert.configuration_bert.BertConfig with Bert->GroundingDINOTextPrenet
 class GroundingDINOTextPrenetConfig(PretrainedConfig):
@@ -409,7 +410,11 @@ class GroundingDINOConfig(PretrainedConfig):
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
-        self.text_backbone_config = GroundingDINOTextPrenetConfig() if text_backbone_config is None else GroundingDINOTextPrenetConfig(**text_backbone_config)
+        self.text_backbone_config = (
+            GroundingDINOTextPrenetConfig()
+            if text_backbone_config is None
+            else GroundingDINOTextPrenetConfig(**text_backbone_config)
+        )
         self.max_text_len = max_text_len
         # Text Enhancer
         self.text_enhancer_dropout = text_enhancer_dropout

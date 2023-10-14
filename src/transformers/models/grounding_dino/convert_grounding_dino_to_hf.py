@@ -326,15 +326,17 @@ def text_processor(text: str, config):
             return result
         return result + "."
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased") # Using just for now since I didn't finish the tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(
+        "bert-base-uncased"
+    )  # Using just for now since I didn't finish the tokenizer
     text = preprocess_caption(text)
     tokenized = tokenizer([text], padding="longest", return_tensors="pt")
 
     return tokenized
 
+
 @torch.no_grad()
 def convert_grounding_dino_checkpoint(args):
-
     model_name = args.model_name
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
     push_to_hub = args.push_to_hub
@@ -374,10 +376,7 @@ def convert_grounding_dino_checkpoint(args):
     text_inputs = text_processor(text, config)
 
     # Running forward
-    output = model(
-        pixel_values=image_inputs.unsqueeze(0),
-        **text_inputs
-    )
+    model(pixel_values=image_inputs.unsqueeze(0), **text_inputs)
 
     # output.pred_boxes[:, :3, :]
     # tensor([[[0.7674, 0.4136, 0.4572, 0.7305],

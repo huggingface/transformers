@@ -18,7 +18,11 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_grounding_dino": ["GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GroundingDINOConfig", "GroundingDINOTextPrenetConfig"],
+    "configuration_grounding_dino": [
+        "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GroundingDINOConfig",
+        "GroundingDINOTextPrenetConfig",
+    ],
 }
 
 try:
@@ -36,7 +40,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_grounding_dino import GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP, GroundingDINOConfig, GroundingDINOTextPrenetConfig
+    from .configuration_grounding_dino import (
+        GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GroundingDINOConfig,
+        GroundingDINOTextPrenetConfig,
+    )
 
     try:
         if not is_torch_available():
