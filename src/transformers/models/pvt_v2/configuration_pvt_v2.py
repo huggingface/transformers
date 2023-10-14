@@ -18,7 +18,7 @@
 
 import warnings
 from collections import OrderedDict
-from typing import Callable, List, Mapping, Dict
+from typing import Callable, List, Mapping, Dict, Union
 
 from packaging import version
 
@@ -124,7 +124,7 @@ class PvtV2Config(PretrainedConfig):
         strides: List[int] = [4, 2, 2, 2],
         num_attention_heads: List[int] = [1, 2, 5, 8],
         mlp_ratios: List[int] = [8, 8, 4, 4],
-        hidden_act: Mapping[str, Callable] = "gelu",
+        hidden_act: Union[str, Mapping[str, Callable]] = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,
         initializer_range: float = 0.02,
