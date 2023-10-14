@@ -42,7 +42,7 @@ class TextSummarizationTool(PipelineTool):
     inputs = ["text"]
     outputs = ["text"]
 
-    def encode(self, text):
+    def encode(self, text: str):
         return self.pre_processor(text, return_tensors="pt", truncation=True)
 
     def forward(self, inputs):

@@ -14,6 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import List
 import torch
 
 from ..models.auto import AutoModelForSequenceClassification, AutoTokenizer
@@ -55,7 +56,7 @@ class TextClassificationTool(PipelineTool):
         if self.entailment_id == -1:
             raise ValueError("Could not determine the entailment ID from the model config, please pass it at init.")
 
-    def encode(self, text, labels):
+    def encode(self, text: str, labels: List[str]):
         self._labels = labels
         return self.pre_processor(
             [text] * len(labels),

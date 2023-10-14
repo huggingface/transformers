@@ -19,7 +19,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from typing import Dict
+from typing import Any, Dict, List, Optional, Union
 
 import requests
 from huggingface_hub import HfFolder, hf_hub_download, list_spaces
@@ -74,7 +74,7 @@ HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB = [
 ]
 
 
-def get_remote_tools(organization="huggingface-tools"):
+def get_remote_tools(organization: str = "huggingface-tools"):
     if is_offline_mode():
         logger.info("You are in offline mode, so remote tools are not available.")
         return {}
@@ -124,7 +124,9 @@ def _setup_default_tools():
     _tools_are_initialized = True
 
 
-def resolve_tools(code, toolbox, remote=False, cached_tools=None):
+def resolve_tools(
+    code, toolbox: Dict[str, Tool], remote: bool = False, cached_tools: Optional[Dict[str, Tool]] = None
+):
     if cached_tools is None:
         resolved_tools = BASE_PYTHON_TOOLS.copy()
     else:
@@ -143,7 +145,7 @@ def resolve_tools(code, toolbox, remote=False, cached_tools=None):
     return resolved_tools
 
 
-def get_tool_creation_code(code, toolbox, remote=False):
+def get_tool_creation_code(code, toolbox: Dict[str, Tool], remote: bool = False):
     code_lines = ["from transformers import load_tool", ""]
     for name, tool in toolbox.items():
         if name not in code or isinstance(tool, Tool):
@@ -159,7 +161,7 @@ def get_tool_creation_code(code, toolbox, remote=False):
     return "\n".join(code_lines) + "\n"
 
 
-def clean_code_for_chat(result):
+def clean_code_for_chat(result: str):
     lines = result.split("\n")
     idx = 0
     while idx < len(lines) and not lines[idx].lstrip().startswith("```"):
@@ -177,7 +179,7 @@ def clean_code_for_chat(result):
     return explanation, code
 
 
-def clean_code_for_run(result):
+def clean_code_for_run(result: str):
     result = f"I will use the following {result}"
     explanation, code = result.split("Answer:")
     explanation = explanation.strip()
@@ -243,7 +245,7 @@ class Agent:
         """Get all tool currently available to the agent"""
         return self._toolbox
 
-    def format_prompt(self, task, chat_mode=False):
+    def format_prompt(self, task: str, chat_mode: bool = False):
         description = "\n".join([f"- {name}: {tool.description}" for name, tool in self.toolbox.items()])
         if chat_mode:
             if self.chat_history is None:
@@ -265,7 +267,7 @@ class Agent:
         """
         self.log = streamer
 
-    def chat(self, task, *, return_code=False, remote=False, **kwargs):
+    def chat(self, task: str, *, return_code: bool = False, remote: bool = False, **kwargs):
         """
         Sends a new request to the agent in a chat. Will use the previous ones in its history.
 
@@ -315,7 +317,7 @@ class Agent:
         self.chat_state = {}
         self.cached_tools = None
 
-    def run(self, task, *, return_code=False, remote=False, **kwargs):
+    def run(self, task: str, *, return_code: bool = False, remote: bool = False, **kwargs):
         """
         Sends a request to the agent.
 
@@ -401,11 +403,11 @@ class OpenAiAgent(Agent):
 
     def __init__(
         self,
-        model="text-davinci-003",
-        api_key=None,
-        chat_prompt_template=None,
-        run_prompt_template=None,
-        additional_tools=None,
+        model: str = "text-davinci-003",
+        api_key: Optional[str] = None,
+        chat_prompt_template: Optional[str] = None,
+        run_prompt_template: Optional[str] = None,
+        additional_tools: Optional[Union[List[Tool], Dict[str, Tool]]] = None,
     ):
         if not is_openai_available():
             raise ImportError("Using `OpenAiAgent` requires `openai`: `pip install openai`.")
@@ -509,14 +511,14 @@ class AzureOpenAiAgent(Agent):
 
     def __init__(
         self,
-        deployment_id,
-        api_key=None,
-        resource_name=None,
-        api_version="2022-12-01",
-        is_chat_model=None,
-        chat_prompt_template=None,
-        run_prompt_template=None,
-        additional_tools=None,
+        deployment_id: str,
+        api_key: Optional[str] = None,
+        resource_name: Optional[str] = None,
+        api_version: str = "2022-12-01",
+        is_chat_model: Optional[bool] = None,
+        chat_prompt_template: Optional[str] = None,
+        run_prompt_template: Optional[str] = None,
+        additional_tools: Optional[List[Tool]] = None,
     ):
         if not is_openai_available():
             raise ImportError("Using `OpenAiAgent` requires `openai`: `pip install openai`.")

@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
+from typing import Union
 
 from ..utils import cached_file
 
@@ -30,7 +31,7 @@ DEFAULT_PROMPTS_REPO = "huggingface-tools/default-prompts"
 PROMPT_FILES = {"chat": "chat_prompt_template.txt", "run": "run_prompt_template.txt"}
 
 
-def download_prompt(prompt_or_repo_id, agent_name, mode="run"):
+def download_prompt(prompt_or_repo_id: Union[str, None], agent_name: str, mode: str = "run"):
     """
     Downloads and caches the prompt from a repo and returns it contents (if necessary)
     """

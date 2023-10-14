@@ -253,7 +253,7 @@ class TranslationTool(PipelineTool):
     inputs = ["text", "text", "text"]
     outputs = ["text"]
 
-    def encode(self, text, src_lang, tgt_lang):
+    def encode(self, text: str, src_lang: str, tgt_lang: str):
         if src_lang not in self.lang_to_code:
             raise ValueError(f"{src_lang} is not a supported language.")
         if tgt_lang not in self.lang_to_code:

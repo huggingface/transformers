@@ -44,7 +44,7 @@ class TextToSpeechTool(PipelineTool):
             self.post_processor = "microsoft/speecht5_hifigan"
         super().setup()
 
-    def encode(self, text, speaker_embeddings=None):
+    def encode(self, text: str, speaker_embeddings=None):
         inputs = self.pre_processor(text=text, return_tensors="pt", truncation=True)
 
         if speaker_embeddings is None:

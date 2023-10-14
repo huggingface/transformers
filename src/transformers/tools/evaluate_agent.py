@@ -14,20 +14,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Dict, List, Union
 from .agents import BASE_PYTHON_TOOLS, clean_code_for_chat, clean_code_for_run
 from .python_interpreter import InterpretorError, evaluate
 
 
 ### Fake tools for test
-def classifier(text, labels):
+def classifier(text: str, labels: List[str]):
     return f"This is the classification of {text} along {labels}."
 
 
-def translator(text, src_lang, tgt_lang):
+def translator(text: str, src_lang: str, tgt_lang: str):
     return f"This is the translation of {text} from {src_lang} to {tgt_lang}."
 
 
-def speaker(text):
+def speaker(text: str):
     return f"This is actually a sound reading {text}."
 
 
@@ -37,7 +38,7 @@ def transcriber(audio):
     return f"This is the transcribed text from {audio}."
 
 
-def image_generator(prompt):
+def image_generator(prompt: str):
     return f"This is actually an image representing {prompt}."
 
 
@@ -47,39 +48,39 @@ def image_captioner(image):
     return f"This is a description of {image}."
 
 
-def image_transformer(image, prompt):
+def image_transformer(image, prompt: str):
     if "image" not in image:
         raise ValueError(f"`image` ({image}) is not an image.")
     return f"This is a transformation of {image} according to {prompt}."
 
 
-def question_answerer(text, question):
+def question_answerer(text: str, question: str):
     return f"This is the answer to {question} from {text}."
 
 
-def image_qa(image, question):
+def image_qa(image, question: str):
     if "image" not in image:
         raise ValueError(f"`image` ({image}) is not an image.")
     return f"This is the answer to {question} from {image}."
 
 
-def text_downloader(url):
+def text_downloader(url: str):
     return f"This is the content of {url}."
 
 
-def summarizer(text):
+def summarizer(text: str):
     return f"This is a summary of {text}."
 
 
-def video_generator(prompt, seconds=2):
+def video_generator(prompt: str, seconds: int = 2):
     return f"A video of {prompt}"
 
 
-def document_qa(image, question):
+def document_qa(image, question: str):
     return f"This is the answer to {question} from the document {image}."
 
 
-def image_segmenter(image, prompt):
+def image_segmenter(image, prompt: str):
     return f"This is the mask of {prompt} in {image}"
 
 
@@ -117,7 +118,7 @@ class Problem:
             The theoretical answer (or list of possible valid answers) to the problem, as code.
     """
 
-    def __init__(self, task, inputs, answer):
+    def __init__(self, task: List[str], inputs: Union[List[str], Dict[str, str]], answer: Union[str, List[str]]):
         self.task = task
         self.inputs = inputs
         self.answer = answer
@@ -413,7 +414,7 @@ def get_theoretical_tools(agent_answer, theoretical_answer, code_answer):
     return {name for name in TEST_TOOLS if name in code_answer[0]}
 
 
-def evaluate_code(code, inputs=None, state=None, verbose=False, return_interpretor_error=False):
+def evaluate_code(code, inputs=None, state=None, verbose: bool = False, return_interpretor_error: bool = False):
     tools = BASE_PYTHON_TOOLS.copy()
     for name, tool in TEST_TOOLS.items():
         if name not in code:
@@ -502,7 +503,7 @@ def evaluate_one_result(explanation, code, agent_answer, theoretical_answer, ans
     return (tool_selection_score, tool_used_score, score), (tool_selection_errors, tool_used_errors, code_errors)
 
 
-def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
+def evaluate_agent(agent, batch_size: int = 8, verbose: bool = False, return_errors: bool = False):
     """
     Evaluates a new agent on all `EVALUATION_TASKS`.
 
@@ -591,7 +592,7 @@ def evaluate_agent(agent, batch_size=8, verbose=False, return_errors=False):
         return scores
 
 
-def evaluate_chat_agent(agent, verbose=False, return_errors=False):
+def evaluate_chat_agent(agent, verbose: bool = False, return_errors: bool = False):
     """
     Evaluates a new agent on all `EVALUATION_CHATS`.
 

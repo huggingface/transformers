@@ -17,7 +17,7 @@
 import ast
 import difflib
 from collections.abc import Mapping
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 
 class InterpretorError(ValueError):
@@ -29,7 +29,7 @@ class InterpretorError(ValueError):
     pass
 
 
-def evaluate(code: str, tools: Dict[str, Callable], state=None, chat_mode=False):
+def evaluate(code: str, tools: Dict[str, Callable], state: Optional[Dict[str, Any]] = None, chat_mode: bool = False):
     """
     Evaluate a python expression using the content of the variables stored in a state and only evaluating a given set
     of functions.

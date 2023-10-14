@@ -119,7 +119,7 @@ class Tool:
         """
         self.is_initialized = True
 
-    def save(self, output_dir):
+    def save(self, output_dir: str):
         """
         Saves the relevant code files for your tool so it can be pushed to the Hub. This will copy the code of your
         tool in `output_dir` as well as autogenerate:
