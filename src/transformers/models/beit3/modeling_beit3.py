@@ -78,8 +78,8 @@ BEIT3_MODEL = r"""
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
         past_key_value (`Dict`):
-            A Dictionary containing the incremental states layerwise.This can be used to when generating next token
-            in case of image captioning.
+            A Dictionary containing the incremental states layerwise.This can be used to when generating next token in
+            case of image captioning.
         text_end_positions (`int`):
             Position of where text representations end and image representation start.
         return_dict (`bool`, *optional*):
