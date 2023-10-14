@@ -11,7 +11,6 @@ from ..utils import (
 )
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
-
 if is_vision_available():
     from PIL import Image
 

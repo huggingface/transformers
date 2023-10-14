@@ -2,14 +2,8 @@ from collections import defaultdict
 from typing import Optional
 
 from ..image_utils import load_image
-from ..utils import (
-    add_end_docstrings,
-    is_torch_available,
-    logging,
-    requires_backends,
-)
+from ..utils import add_end_docstrings, is_torch_available, logging, requires_backends
 from .base import PIPELINE_INIT_ARGS, ChunkPipeline
-
 
 if is_torch_available():
     import torch

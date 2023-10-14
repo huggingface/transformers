@@ -20,24 +20,19 @@ import logging
 import os
 import sys
 import threading
-from logging import (
-    CRITICAL,  # NOQA
-    DEBUG,  # NOQA
-    ERROR,  # NOQA
-    FATAL,  # NOQA
-    INFO,  # NOQA
-    NOTSET,  # NOQA
-    WARN,  # NOQA
-    WARNING,  # NOQA
-)
-from logging import (
-    captureWarnings as _captureWarnings,
-)
+from logging import CRITICAL  # NOQA
+from logging import DEBUG  # NOQA
+from logging import ERROR  # NOQA
+from logging import FATAL  # NOQA
+from logging import INFO  # NOQA
+from logging import NOTSET  # NOQA
+from logging import WARN  # NOQA
+from logging import WARNING  # NOQA
+from logging import captureWarnings as _captureWarnings
 from typing import Optional
 
 import huggingface_hub.utils as hf_hub_utils
 from tqdm import auto as tqdm_lib
-
 
 _lock = threading.Lock()
 _default_handler: Optional[logging.Handler] = None

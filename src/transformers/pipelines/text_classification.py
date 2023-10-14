@@ -7,7 +7,6 @@ import numpy as np
 from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
 
-
 if is_tf_available():
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 

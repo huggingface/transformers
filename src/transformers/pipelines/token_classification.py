@@ -5,14 +5,8 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 from ..models.bert.tokenization_bert import BasicTokenizer
-from ..utils import (
-    ExplicitEnum,
-    add_end_docstrings,
-    is_tf_available,
-    is_torch_available,
-)
+from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline, Dataset
-
 
 if is_tf_available():
     import tensorflow as tf

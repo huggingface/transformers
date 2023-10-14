@@ -4,7 +4,6 @@ import warnings
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
-
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 

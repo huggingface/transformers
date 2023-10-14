@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Union
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import PIPELINE_INIT_ARGS, ChunkPipeline
 
-
 if is_vision_available():
     from PIL import Image
 

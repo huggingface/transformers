@@ -7,7 +7,6 @@ from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
-
 logger = logging.get_logger(__name__)
 
 

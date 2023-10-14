@@ -5,7 +5,6 @@ import numpy as np
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline, PipelineException
 
-
 if is_tf_available():
     import tensorflow as tf
 
