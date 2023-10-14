@@ -327,7 +327,6 @@ class Trainer:
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
-        compute_metrics_interval: str = "full",
     ):
         if args is None:
             output_dir = "tmp_trainer"
@@ -3201,7 +3200,6 @@ class Trainer:
         all_inputs = None
         # Will be useful when we have an iterable dataset so don't know its length.
 
-        metrics = None
         observed_num_examples = 0
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
@@ -3248,23 +3246,12 @@ class Trainer:
 
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
-            if self.args.compute_metrics_interval == "batch":
-                if self.compute_metrics is not None and preds_host is not None and labels_host is not None:
-                    if args.include_inputs_for_metrics:
-                        metrics = self.compute_metrics(
-                            EvalPrediction(predictions=preds_host, label_ids=labels_host, inputs=inputs_host)
-                        )
-                    else:
-                        metrics = self.compute_metrics(EvalPrediction(predictions=preds_host, label_ids=labels_host))
-                losses_host, preds_host, inputs_host, labels_host = None, None, None, None
-
-            elif (
-                self.args.compute_metrics_interval == "full"
-                and args.eval_accumulation_steps is not None
+            # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
+            if (
+                args.eval_accumulation_steps is not None
                 and (step + 1) % args.eval_accumulation_steps == 0
                 and (self.accelerator.sync_gradients or version.parse(accelerate_version) > version.parse("0.20.3"))
             ):
-                # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
                 if losses_host is not None:
                     losses = nested_numpify(losses_host)
                     all_losses = losses if all_losses is None else np.concatenate((all_losses, losses), axis=0)
@@ -3332,7 +3319,7 @@ class Trainer:
                 )
             else:
                 metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
-        elif metrics is None:
+        else:
             metrics = {}
 
         # To be JSON-serializable, we need to remove numpy types or zero-d tensors
