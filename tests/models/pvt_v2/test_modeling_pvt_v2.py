@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import PvtV2Config, is_torch_available, is_vision_available
+from transformers import is_torch_available, is_vision_available, PvtV2Config
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
@@ -222,8 +222,8 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(hidden_states[0].shape[-3:]),
                 [
                     self.model_tester.hidden_sizes[self.model_tester.out_indices[0]],
-                    self.model_tester.image_size // 2 ** (2 * self.model_tester.out_indices[0] + 1),
-                    self.model_tester.image_size // 2 ** (2 * self.model_tester.out_indices[0] + 1),
+                    self.model_tester.image_size // 2**(2*self.model_tester.out_indices[0] + 1),
+                    self.model_tester.image_size // 2**(2*self.model_tester.out_indices[0] + 1),
                 ],
             )
 
@@ -280,8 +280,8 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification(self):
         # only resize + normalize
-        image_processor = PvtV2ImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
-        model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0").to(torch_device).eval()
+        image_processor = PvtV2ImageProcessor.from_pretrained("Zetatech/pvt-tiny-224")
+        model = PvtV2ForImageClassification.from_pretrained("Zetatech/pvt-tiny-224").to(torch_device).eval()
 
         image = prepare_img()
         encoded_inputs = image_processor(images=image, return_tensors="pt")
@@ -299,9 +299,9 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_model(self):
-        model = PvtV2Model.from_pretrained("FoamoftheSea/pvt_v2_b0").to(torch_device).eval()
+        model = PvtV2Model.from_pretrained("Zetatech/pvt-tiny-224").to(torch_device).eval()
 
-        image_processor = PvtV2ImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+        image_processor = PvtV2ImageProcessor.from_pretrained("Zetatech/pvt-tiny-224")
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
@@ -327,7 +327,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtV2ForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0", torch_dtype=torch.float16)
+        model = PvtV2ForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", torch_dtype=torch.float16)
         model.to(torch_device)
         image_processor = PvtV2ImageProcessor(size=224)
 
