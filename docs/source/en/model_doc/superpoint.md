@@ -13,11 +13,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# SuperGlue
+# SuperPoint
 
 ## Overview
 
-The SuperGlue model was proposed
+The SuperPoint model was proposed
 in [SuperPoint: Self-Supervised Interest Point Detection and Description](https://arxiv.org/abs/1712.07629) by Daniel
 DeTone, Tomasz Malisiewicz and Andrew Rabinovich.
 <INSERT SHORT SUMMARY HERE>
@@ -49,13 +49,13 @@ The original code can be found [here](https://github.com/magicleap/SuperPointPre
 
 [[autodoc]] SuperPointImageProcessor - preprocess
 
-## SuperPointConfigModel
+## SuperPointModel
 
 [[autodoc]] SuperPointModel
     - forward
 
-## SuperGlueForImageClassification
+## SuperPointForInterestPointDescription
 
-[[autodoc]] SuperPointModelForInterestPointDescription
+[[autodoc]] SuperPointForInterestPointDescription
     - forward
 

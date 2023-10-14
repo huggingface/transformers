@@ -8,7 +8,7 @@ from PIL import Image
 from transformers import SuperPointConfig, SuperPointImageProcessor, SuperPointModel
 
 
-def get_superglue_config():
+def get_superpoint_config():
     config = SuperPointConfig(
         conv_layers_sizes=[64, 64, 128, 128, 256],
         descriptor_dim=256,
@@ -78,7 +78,7 @@ def convert_superpoint_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     """
 
     print("Downloading original model from checkpoint...")
-    config = get_superglue_config()
+    config = get_superpoint_config()
 
     original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
 

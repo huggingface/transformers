@@ -54,11 +54,9 @@ def convert_to_grayscale(
     if isinstance(image, np.ndarray):
         if input_data_format == ChannelDimension.FIRST or input_data_format == "channels_first":
             gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
-            # gray_image = gray_image[None, ...]
             gray_image = np.stack([gray_image] * 3, axis=0)
         elif input_data_format == ChannelDimension.LAST or input_data_format == "channels_last":
             gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
-            # gray_image = gray_image[..., None]
             gray_image = np.stack([gray_image] * 3, axis=-1)
         return gray_image
 
