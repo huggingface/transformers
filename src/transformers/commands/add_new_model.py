@@ -231,7 +231,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
                 or ("generating Flax" in line and not output_flax)
             )
 
-        def replace_in_files(path_to_datafile):
+        def replace_in_files(path_to_datafile: str):
             with open(path_to_datafile) as datafile:
                 lines_to_copy = []
                 skip_file = False

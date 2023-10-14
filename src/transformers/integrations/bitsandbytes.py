@@ -1,4 +1,5 @@
 import importlib.metadata
+from typing import List, Union
 import warnings
 from copy import deepcopy
 
@@ -21,7 +22,9 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-def set_module_quantized_tensor_to_device(module, tensor_name, device, value=None, fp16_statistics=None):
+def set_module_quantized_tensor_to_device(
+    module, tensor_name: str, device: Union[str, int], value=None, fp16_statistics=None
+):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
     `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
@@ -117,7 +120,11 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
 
 
 def _replace_with_bnb_linear(
-    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, has_been_replaced=False
+    model,
+    modules_to_not_convert: List[str],
+    current_key_name: List[str],
+    quantization_config,
+    has_been_replaced: bool = False,
 ):
     """
     Private method that wraps the recursion for module replacement.
