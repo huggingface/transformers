@@ -17,7 +17,6 @@
 from ..models.auto import AutoModelForSeq2SeqLM, AutoTokenizer
 from .base import PipelineTool
 
-
 QA_PROMPT = """Here is a text containing a lot of information: '''{text}'''.
 
 Can you answer this question about the text: '{question}'"""

@@ -21,7 +21,6 @@ import numpy as np
 
 from ..utils import is_soundfile_availble, is_torch_available, is_vision_available, logging
 
-
 logger = logging.get_logger(__name__)
 
 if is_vision_available():

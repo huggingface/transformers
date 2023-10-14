@@ -19,7 +19,6 @@ from typing import Union
 
 from ..utils import cached_file
 
-
 # docstyle-ignore
 CHAT_MESSAGE_PROMPT = """
 Human: <<task>>

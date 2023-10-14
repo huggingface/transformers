@@ -21,7 +21,6 @@ from ..models.vision_encoder_decoder import VisionEncoderDecoderModel
 from ..utils import is_vision_available
 from .base import PipelineTool
 
-
 if is_vision_available():
     from PIL import Image
 

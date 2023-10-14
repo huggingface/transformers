@@ -29,16 +29,8 @@ from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get
 from ..dynamic_module_utils import custom_object_save, get_class_from_dynamic_module, get_imports
 from ..image_utils import is_pil_image
 from ..models.auto import AutoProcessor
-from ..utils import (
-    CONFIG_NAME,
-    cached_file,
-    is_accelerate_available,
-    is_torch_available,
-    is_vision_available,
-    logging,
-)
+from ..utils import CONFIG_NAME, cached_file, is_accelerate_available, is_torch_available, is_vision_available, logging
 from .agent_types import handle_agent_inputs, handle_agent_outputs
-
 
 logger = logging.get_logger(__name__)
 

@@ -15,8 +15,8 @@
 import math
 
 import tensorflow as tf
-from tensorflow import Tensor
 from packaging import version
+from tensorflow import Tensor
 
 
 def _gelu(x: Tensor) -> Tensor:

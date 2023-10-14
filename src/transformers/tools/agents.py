@@ -30,7 +30,6 @@ from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remo
 from .prompts import CHAT_MESSAGE_PROMPT, download_prompt
 from .python_interpreter import evaluate
 
-
 logger = logging.get_logger(__name__)
 
 

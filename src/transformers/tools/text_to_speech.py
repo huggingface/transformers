@@ -20,7 +20,6 @@ from ..models.speecht5 import SpeechT5ForTextToSpeech, SpeechT5HifiGan, SpeechT5
 from ..utils import is_datasets_available
 from .base import PipelineTool
 
-
 if is_datasets_available():
     from datasets import load_dataset
 

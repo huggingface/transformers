@@ -21,7 +21,6 @@ from ..models.clipseg import CLIPSegForImageSegmentation
 from ..utils import is_vision_available, requires_backends
 from .base import PipelineTool
 
-
 if is_vision_available():
     from PIL import Image
 

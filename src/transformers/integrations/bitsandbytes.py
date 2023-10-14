@@ -1,12 +1,11 @@
 import importlib.metadata
-from typing import List, Union
 import warnings
 from copy import deepcopy
+from typing import List, Union
 
 from packaging import version
 
 from ..utils import is_accelerate_available, is_bitsandbytes_available, logging
-
 
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
