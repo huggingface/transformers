@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch Falcon model. """
-
+import inspect
 import unittest
 
 from parameterized import parameterized
@@ -55,40 +55,40 @@ class FastModelTester:
             backbone_act_func="relu",
             backbone_dropout_rate=0,
             backbone_ops_order="weight_bn_act",
-            backbone_stage1_in_channels=[64, 64, 64],
-            backbone_stage1_out_channels=[64, 64, 64],
-            backbone_stage1_kernel_size=[[3, 3], [3, 3], [3, 3]],
-            backbone_stage1_stride=[1, 2, 1],
-            backbone_stage1_dilation=[1, 1, 1],
-            backbone_stage1_groups=[1, 1, 1],
-            backbone_stage2_in_channels=[64, 128, 128, 128],
-            backbone_stage2_out_channels=[128, 128, 128, 128],
-            backbone_stage2_kernel_size=[[3, 3], [1, 3], [3, 3], [3, 1]],
-            backbone_stage2_stride=[2, 1, 1, 1],
-            backbone_stage2_dilation=[1, 1, 1, 1],
-            backbone_stage2_groups=[1, 1, 1, 1],
-            backbone_stage3_in_channels=[128, 256, 256, 256],
-            backbone_stage3_out_channels=[256, 256, 256, 256],
-            backbone_stage3_kernel_size=[[3, 3], [3, 3], [3, 1], [1, 3]],
-            backbone_stage3_stride=[2, 1, 1, 1],
-            backbone_stage3_dilation=[1, 1, 1, 1],
-            backbone_stage3_groups=[1, 1, 1, 1],
-            backbone_stage4_in_channels=[256, 512, 512, 512],
-            backbone_stage4_out_channels=[512, 512, 512, 512],
-            backbone_stage4_kernel_size=[[3, 3], [3, 1], [1, 3], [3, 3]],
-            backbone_stage4_stride=[2, 1, 1, 1],
-            backbone_stage4_dilation=[1, 1, 1, 1],
-            backbone_stage4_groups=[1, 1, 1, 1],
-            neck_in_channels=[64, 128, 256, 512],
-            neck_out_channels=[128, 128, 128, 128],
-            neck_kernel_size=[[3, 3], [3, 3], [3, 3], [3, 3]],
-            neck_stride=[1, 1, 1, 1],
-            neck_dilation=[1, 1, 1, 1],
-            neck_groups=[1, 1, 1, 1],
+            backbone_stage1_in_channels=[64],
+            backbone_stage1_out_channels=[64],
+            backbone_stage1_kernel_size=[[3, 3]],
+            backbone_stage1_stride=[1],
+            backbone_stage1_dilation=[1],
+            backbone_stage1_groups=[1],
+            backbone_stage2_in_channels=[64],
+            backbone_stage2_out_channels=[128],
+            backbone_stage2_kernel_size=[ [3, 1]],
+            backbone_stage2_stride=[2],
+            backbone_stage2_dilation=[1],
+            backbone_stage2_groups=[1],
+            backbone_stage3_in_channels=[128],
+            backbone_stage3_out_channels=[256],
+            backbone_stage3_kernel_size=[ [1, 3]],
+            backbone_stage3_stride=[2],
+            backbone_stage3_dilation=[1],
+            backbone_stage3_groups=[1],
+            backbone_stage4_in_channels=[256],
+            backbone_stage4_out_channels=[512],
+            backbone_stage4_kernel_size=[[3, 3]],
+            backbone_stage4_stride=[2],
+            backbone_stage4_dilation=[1],
+            backbone_stage4_groups=[1],
+            neck_in_channels=[64],
+            neck_out_channels=[128],
+            neck_kernel_size=[[3, 3]],
+            neck_stride=[1],
+            neck_dilation=[1],
+            neck_groups=[1],
             head_pooling_size=9,
             head_dropout_ratio=0.1,
-            head_conv_in_channels=512,
-            head_conv_out_channels=128,
+            head_conv_in_channels=128,
+            head_conv_out_channels=4,
             head_conv_kernel_size=[3, 3],
             head_conv_stride=1,
             head_conv_dilation=1,
@@ -99,7 +99,7 @@ class FastModelTester:
             head_final_groups=1,
             head_final_bias=False,
             head_final_has_shuffle=False,
-            head_final_in_channels=128,
+            head_final_in_channels=4,
             head_final_out_channels=5,
             head_final_use_bn=False,
             head_final_act_func=None,
@@ -199,7 +199,7 @@ class FastModelTester:
         #
         config = self.get_config()
 
-        return config, {"imgs": pixel_values, "img_metas": pixel_values_meta}
+        return config, {"pixel_values": pixel_values}
 
     def get_config(self):
         return FastConfig(
@@ -271,8 +271,8 @@ class FastModelTester:
         model = FASTForImageCaptioning(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(imgs=input['imgs'], imgs_mets=input['img_metas'])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        result = model(pixel_values=input['pixel_values'])
+        self.parent.assertEqual(result.hidden_states.shape, (self.batch_size, 5, 125, 125))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -325,3 +325,57 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip(reason="Fast does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
+
+    @unittest.skip(reason="Fast is not a generative model")
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="Fast is does not have any hidden_states")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="Fast is does not have any attention")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        to_return = inputs_dict.copy()
+        gt_instances = torch.zeros(self.model_tester.batch_size, self.model_tester.image_size,
+                                   self.model_tester.image_size)
+        gt_kernels = torch.zeros(self.model_tester.batch_size, self.model_tester.image_size,
+                                 self.model_tester.image_size)
+        gt_text = torch.zeros(self.model_tester.batch_size, self.model_tester.image_size, self.model_tester.image_size)
+        training_masks = torch.ones(self.model_tester.batch_size, self.model_tester.image_size,
+                                    self.model_tester.image_size)
+        labels = {}
+        labels["gt_instances"] = gt_instances
+        labels["gt_kernels"] = gt_kernels
+        labels["gt_texts"] = gt_text
+        labels["training_masks"] = training_masks
+
+        to_return["labels"] = labels
+
+        return to_return
+
+    def test_model_is_small(self):
+        # Just a consistency check to make sure we are not running tests on 80M parameter models.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            num_params = model.num_parameters()
+            assert (
+                num_params < 3000000
+            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
