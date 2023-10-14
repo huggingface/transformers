@@ -193,6 +193,11 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    pipeline_model_mapping = (
+        {"feature-extraction": GroundingDINOModel, "object-detection": GroundingDINOForObjectDetection}
+        if is_torch_available()
+        else {}
+    )
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
