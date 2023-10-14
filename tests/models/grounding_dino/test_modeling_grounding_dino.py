@@ -20,7 +20,7 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-from transformers import GroundingDINOConfig, ResNetConfig, is_torch_available, is_vision_available
+from transformers import GroundingDINOConfig, SwinConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
@@ -53,58 +53,56 @@ class GroundingDINOModelTester:
     def __init__(
         self,
         parent,
+        image_size=196,
         batch_size=8,
-        is_training=True,
-        use_labels=True,
+        is_training=False,
+        use_labels=False,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=8,
-        intermediate_size=4,
-        hidden_act="gelu",
+        hidden_act="relu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         num_queries=12,
         num_channels=3,
-        image_size=196,
         n_targets=8,
-        num_labels=91,
         num_feature_levels=4,
-        encoder_n_points=2,
-        decoder_n_points=6,
+        intermediate_size=32
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.is_training = is_training
         self.use_labels = use_labels
+        self.image_size = image_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.num_queries = num_queries
         self.num_channels = num_channels
-        self.image_size = image_size
         self.n_targets = n_targets
-        self.num_labels = num_labels
         self.num_feature_levels = num_feature_levels
-        self.encoder_n_points = encoder_n_points
-        self.decoder_n_points = decoder_n_points
+        self.intermediate_size = intermediate_size
 
-        # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = (
-            math.ceil(self.image_size / 8) ** 2
-            + math.ceil(self.image_size / 16) ** 2
-            + math.ceil(self.image_size / 32) ** 2
-            + math.ceil(self.image_size / 64) ** 2
-        )
-        self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-
         pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
+
+        input_ids = torch.Tensor([[101, 1037, 4937, 1012, 102]]).long()
+        text_token_mask = torch.ones_like(input_ids).bool()
+        text_self_attention_masks = torch.Tensor([
+                [[ True, False, False, False, False],
+                [False,  True,  True,  True, False],
+                [False,  True,  True,  True, False],
+                [False,  True,  True,  True, False],
+                [False, False, False, False,  True]]
+            ]
+         ).bool()
+        token_type_ids = torch.zeros_like(input_ids).long()
+        position_ids = torch.Tensor([[0, 0, 1, 2, 0]]).long()
 
         labels = None
         if self.use_labels:
@@ -120,16 +118,16 @@ class GroundingDINOModelTester:
                 labels.append(target)
 
         config = self.get_config()
-        return config, pixel_values, pixel_mask, labels
+        return config, pixel_values, pixel_mask, input_ids, text_token_mask, text_self_attention_masks, text_self_attention_masks.copy(), token_type_ids, position_ids, labels
 
     def get_config(self):
-        resnet_config = ResNetConfig(
+        swin_config = SwinConfig(
             num_channels=3,
-            embeddings_size=10,
-            hidden_sizes=[10, 20, 30, 40],
+            hidden_size=128,
+            embed_dim=96,
+            image_size=self.image_size,
+            window_size=7,
             depths=[1, 1, 2, 1],
-            hidden_act="relu",
-            num_labels=3,
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
@@ -149,36 +147,67 @@ class GroundingDINOModelTester:
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
             use_timm_backbone=False,
-            backbone_config=resnet_config,
+            backbone_config=swin_config,
         )
 
     def prepare_config_and_inputs_for_common(self):
-        config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
-        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
+        config, pixel_values, pixel_mask, input_ids, text_token_mask, text_self_attention_masks, attention_mask, token_type_ids, position_ids, labels = self.prepare_config_and_inputs()
+        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask,
+                       "input_ids": input_ids, "text_token_mask": text_token_mask, 
+                       "text_self_attention_masks": text_self_attention_masks, "token_type_ids": token_type_ids, 
+                       "position_ids": position_ids, "attention_mask": attention_mask
+        }
         return config, inputs_dict
 
-    def create_and_check_grounding_dino_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_grounding_dino_model(self, config, pixel_values, pixel_mask, input_ids, text_token_mask, text_self_attention_masks, attention_mask, token_type_ids, position_ids, labels):
         model = GroundingDINOModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        result = model(pixel_values)
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, 
+                       input_ids=input_ids, text_token_mask=text_token_mask, 
+                       text_self_attention_masks=text_self_attention_masks, 
+                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
+                       position_ids=position_ids
+        )
+
+        result = model(pixel_values=pixel_values, 
+                       input_ids=input_ids, text_token_mask=text_token_mask, 
+                       text_self_attention_masks=text_self_attention_masks, 
+                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
+                       position_ids=position_ids
+        )
+        
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
 
-    def create_and_check_grounding_dino_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+    def create_and_check_grounding_dino_object_detection_head_model(self, config, pixel_values, pixel_mask, input_ids, text_token_mask, text_self_attention_masks, attention_mask, token_type_ids, position_ids, labels):
         model = GroundingDINOForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        result = model(pixel_values)
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, 
+                       input_ids=input_ids, text_token_mask=text_token_mask, 
+                       text_self_attention_masks=text_self_attention_masks, 
+                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
+                       position_ids=position_ids
+        )
+        result = model(pixel_values=pixel_values, 
+                       input_ids=input_ids, text_token_mask=text_token_mask, 
+                       text_self_attention_masks=text_self_attention_masks, 
+                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
+                       position_ids=position_ids
+        )
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, 
+                       input_ids=input_ids, text_token_mask=text_token_mask, 
+                       text_self_attention_masks=text_self_attention_masks, 
+                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
+                       position_ids=position_ids, labels=labels
+        )
 
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
