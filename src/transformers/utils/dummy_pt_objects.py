@@ -6489,6 +6489,30 @@ class PvtPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+PVT_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PvtV2ForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PvtV2Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PvtV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
