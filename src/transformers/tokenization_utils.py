@@ -364,7 +364,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
-        self._add_tokens([token for token in self.all_special_tokens_extended if token not in self._added_tokens_encoder], special_tokens=True)
+        self._add_tokens(
+            [token for token in self.all_special_tokens_extended if token not in self._added_tokens_encoder],
+            special_tokens=True,
+        )
 
         self._decode_use_source_tokenizer = False
 
@@ -474,7 +477,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 # for legacy AddedTokens strip left and right by default
                 # TODO this will be remove to have the same default behavior as rust
                 else:
-                    token = AddedToken(token, rstrip=True, lstrip=True, special = special_tokens)
+                    token = AddedToken(token, rstrip=True, lstrip=True, special=special_tokens)
             if special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
                 token.__setstate__({"special": True, "normalized": token.normalized})

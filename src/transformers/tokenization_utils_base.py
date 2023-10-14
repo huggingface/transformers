@@ -2191,7 +2191,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             # We keep this new value and ignore the one stored in the special_tokens_map_file
                             continue
                         if isinstance(value, dict):
-                            value = AddedToken(**value,special=True)
+                            value = AddedToken(**value, special=True)
                         elif key == "additional_special_tokens" and isinstance(value, list):
                             additional_special_tokens = init_kwargs.pop("additional_special_tokens", []) or []
                             for token in value:
@@ -2220,7 +2220,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     added_tok_encoder = json.load(added_tokens_handle)
                 for str_token, index in added_tok_encoder.items():
                     if index not in added_tokens_decoder and str_token not in added_tokens_map:
-                        added_tokens_decoder[index] = AddedToken(str_token,  rstrip = True, lstrip = True, normalized = True)
+                        added_tokens_decoder[index] = AddedToken(str_token, rstrip=True, lstrip=True, normalized=True)
                         added_tokens_map[str(token)] = token
             # end legacy
 
@@ -2242,7 +2242,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
 
-        if added_tokens_decoder!={} and max(list(added_tokens_decoder.keys())[-1],0) > tokenizer.vocab_size:
+        if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.warning_advice(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."

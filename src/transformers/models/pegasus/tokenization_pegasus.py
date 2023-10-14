@@ -154,8 +154,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
         }
 
         if self.mask_token_sent is not None:
-            self._added_tokens_decoder[2] = AddedToken(mask_token_sent)
-            self._added_tokens_decoder[3] = AddedToken(str(mask_token))
+            self._added_tokens_decoder[2] = AddedToken(mask_token_sent, special=True, normalized=True)
+            self._added_tokens_decoder[3] = AddedToken(str(mask_token), special=True, normalized=True)
 
         for i in range(1, self.offset - 1):
             self._added_tokens_decoder[len(self._added_tokens_decoder)] = AddedToken(f"<unk_{i}>")

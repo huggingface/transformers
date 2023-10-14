@@ -137,15 +137,9 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer_with_special_tokens_change(self):
         pass
 
-
     @unittest.skip("We have to use from_slow")
     def test_added_tokens_serialization(self):
         pass
-
-    @unittest.skip("We have to use from_slow")
-    def test_added_tokens_serialization(self):
-        pass
-
 
 
 @require_sentencepiece
@@ -229,7 +223,6 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             token_ids,
             [182, 117, 142, 587, 4211, 120, 117, 263, 112, 804, 109, 856, 25016, 3137, 464, 109, 26955, 3137, 1],
         )
-        
 
     @unittest.skip("We have to use from_slow")
     def test_added_tokens_serialization(self):
