@@ -23,7 +23,13 @@ import torch
 from PIL import Image
 from torchvision import transforms as T
 
-from transformers import AutoTokenizer, GroundingDINOConfig, GroundingDINOForObjectDetection
+from transformers import (
+    AutoTokenizer,
+    DeformableDetrImageProcessor,
+    GroundingDINOConfig,
+    GroundingDINOForObjectDetection,
+    GroundingDINOProcessor,
+)
 
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -318,20 +324,21 @@ def prepare_img():
     return image
 
 
-def text_processor(text: str, config):
-    def preprocess_caption(caption: str) -> str:
-        result = caption.lower().strip()
-        if result.endswith("."):
-            return result
-        return result + "."
+def preprocess_caption(caption: str) -> str:
+    result = caption.lower().strip()
+    if result.endswith("."):
+        return result
+    return result + "."
 
+
+def text_processor(text: str):
     tokenizer = AutoTokenizer.from_pretrained(
         "bert-base-uncased"
     )  # Using just for now since I didn't finish the tokenizer
     text = preprocess_caption(text)
-    tokenized = tokenizer([text], padding="longest", return_tensors="pt")
+    original_text_inputs = tokenizer([text], padding="longest", return_tensors="pt")
 
-    return tokenized
+    return original_text_inputs
 
 
 @torch.no_grad()
@@ -369,16 +376,23 @@ def convert_grounding_dino_checkpoint(args):
 
     # Load and process test image
     image = prepare_img()
+    transforms = T.Compose([T.Resize(size=800, max_size=1333), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
+    original_pixel_values = transforms(image).unsqueeze(0)
     text = "a cat"
-    image_processor = T.Compose(
-        [T.Resize(size=800, max_size=1333), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)]
-    )
-    image_inputs = image_processor(image)
-    text_inputs = text_processor(text, config)
+    text_inputs = text_processor(text)
+
+    image_processor = DeformableDetrImageProcessor()
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    processor = GroundingDINOProcessor(image_processor=image_processor, tokenizer=tokenizer)
+
+    inputs = processor(images=image, text=preprocess_caption(text), return_tensors="pt")
+
+    assert torch.allclose(original_pixel_values, inputs.pixel_values, atol=1e-4)
+    assert torch.allclose(text_inputs["input_ids"], inputs.input_ids, atol=1e-4)
 
     # Running forward
     with torch.no_grad():
-        outputs = model(pixel_values=image_inputs.unsqueeze(0), **text_inputs)
+        outputs = model(pixel_values=original_pixel_values, **text_inputs)
 
     print("First values of logits:", outputs.logits[0, :3, :3])
     print("First values of boxes:", outputs.pred_boxes[0, :3, :3])
@@ -390,6 +404,7 @@ def convert_grounding_dino_checkpoint(args):
     )
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and image processor for {model_name} to {pytorch_dump_folder_path}")

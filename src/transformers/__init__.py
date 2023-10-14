@@ -361,6 +361,7 @@ _import_structure = {
     "models.grounding_dino": [
         "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroundingDINOConfig",
+        "GroundingDINOProcessor",
         "GroundingDINOTextPrenetConfig",
     ],
     "models.groupvit": [
@@ -4519,6 +4520,7 @@ if TYPE_CHECKING:
     from .models.grounding_dino import (
         GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroundingDINOConfig,
+        GroundingDINOProcessor,
         GroundingDINOTextPrenetConfig,
     )
     from .models.groupvit import (

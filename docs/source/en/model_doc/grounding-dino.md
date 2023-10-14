@@ -31,6 +31,10 @@ Tips:
 This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/IDEA-Research/GroundingDINO).
 
+## GroundingDINOProcessor
+
+[[autodoc]] GroundingDINOProcessor
+
 ## GroundingDINOTextPrenetConfig
 
 [[autodoc]] GroundingDINOTextPrenetConfig
