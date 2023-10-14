@@ -365,18 +365,6 @@ class RtDetrImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-    # do_normalize:
-    #     Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
-    #     `preprocess` method.
-    # image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
-    #     Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
-    #     channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-    # image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
-    #     Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
-    #     for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
-    # do_pad (`bool`, *optional*, defaults to `True`):
-    #     Controls whether to pad the image to the largest image in a batch and create a pixel mask. Can be
-    #     overridden by the `do_pad` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -389,26 +377,9 @@ class RtDetrImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
-        # do_normalize: bool = True,
-        # image_mean: Union[float, List[float]] = None,
-        # image_std: Union[float, List[float]] = None,
-        # do_pad: bool = True,
         **kwargs,
     ) -> None:
-        # if "pad_and_return_pixel_mask" in kwargs:
-        #     do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
-
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        # size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        size = size if size is not None else {"height": 640, "width": 640}
 
         super().__init__(**kwargs)
         self.format = format
@@ -417,24 +388,6 @@ class RtDetrImageProcessor(BaseImageProcessor):
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        # self.do_normalize = do_normalize
-        # self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
-        # self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        # self.do_pad = do_pad
-
-    # @classmethod
-    # def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
-    #     """
-    #     Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-    #     created using from_dict and kwargs e.g. `DetrImageProcessor.from_pretrained(checkpoint, size=600,
-    #     max_size=800)`
-    #     """
-    #     image_processor_dict = image_processor_dict.copy()
-    #     if "max_size" in kwargs:
-    #         image_processor_dict["max_size"] = kwargs.pop("max_size")
-    #     if "pad_and_return_pixel_mask" in kwargs:
-    #         image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-    #     return super().from_dict(image_processor_dict, **kwargs)
 
     def prepare_annotation(
         self,
@@ -575,17 +528,11 @@ class RtDetrImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        # return_segmentation_masks: bool = None,
-        # masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample=None,  # PILImageResampling
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[Union[int, float]] = None,
-        # do_normalize: Optional[bool] = None,
-        # image_mean: Optional[Union[float, List[float]]] = None,
-        # image_std: Optional[Union[float, List[float]]] = None,
-        # do_pad: Optional[bool] = None,
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
@@ -610,10 +557,6 @@ class RtDetrImageProcessor(BaseImageProcessor):
                 - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
                   An image can have no segments, in which case the list should be empty.
                 - "file_name" (`str`): The file name of the image.
-            return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
-                Whether to return segmentation masks.
-            masks_path (`str` or `pathlib.Path`, *optional*):
-                Path to the directory containing the segmentation masks.
             do_resize (`bool`, *optional*, defaults to self.do_resize):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to self.size):
@@ -624,14 +567,6 @@ class RtDetrImageProcessor(BaseImageProcessor):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to self.rescale_factor):
                 Rescale factor to use when rescaling the image.
-            do_normalize (`bool`, *optional*, defaults to self.do_normalize):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
-                Mean to use when normalizing the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
-                Standard deviation to use when normalizing the image.
-            do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image.
             format (`str` or `AnnotionFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
             return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
@@ -648,13 +583,6 @@ class RtDetrImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        # if "pad_and_return_pixel_mask" in kwargs:
-        #     logger.warning_once(
-        #         "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-        #         "use `do_pad` instead."
-        #     )
-        #     do_pad = kwargs.pop("pad_and_return_pixel_mask")
-
         max_size = None
         if "max_size" in kwargs:
             logger.warning_once(
@@ -669,10 +597,6 @@ class RtDetrImageProcessor(BaseImageProcessor):
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
         rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        # do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        # image_mean = self.image_mean if image_mean is None else image_mean
-        # image_std = self.image_std if image_std is None else image_std
-        # do_pad = self.do_pad if do_pad is None else do_pad
         format = self.format if format is None else format
 
         if do_resize is not None and size is None:
@@ -680,9 +604,6 @@ class RtDetrImageProcessor(BaseImageProcessor):
 
         if do_rescale is not None and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        # if do_normalize is not None and (image_mean is None or image_std is None):
-        #     raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
         images = make_list_of_images(images)
         if annotations is not None and isinstance(annotations, dict):
@@ -707,26 +628,10 @@ class RtDetrImageProcessor(BaseImageProcessor):
                     "(batch of images) with the following keys: `image_id` and `annotations`, with the latter "
                     "being a list of annotations in the COCO format."
                 )
-            # elif format == AnnotionFormat.COCO_PANOPTIC and not valid_coco_panoptic_annotations(annotations):
-            #     raise ValueError(
-            #         "Invalid COCO panoptic annotations. Annotations must a dict (single image) of list of dicts "
-            #         "(batch of images) with the following keys: `image_id`, `file_name` and `segments_info`, with "
-            #         "the latter being a list of annotations in the COCO format."
-            #     )
             elif format not in SUPPORTED_ANNOTATION_FORMATS:
                 raise ValueError(
                     f"Unsupported annotation format: {format} must be one of {SUPPORTED_ANNOTATION_FORMATS}"
                 )
-
-        # if (
-        #     masks_path is not None
-        #     and format == AnnotionFormat.COCO_PANOPTIC
-        #     and not isinstance(masks_path, (pathlib.Path, str))
-        # ):
-        #     raise ValueError(
-        #         "The path to the directory containing the mask PNG files should be provided as a"
-        #         f" `pathlib.Path` or string object, but is {type(masks_path)} instead."
-        #     )
 
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
