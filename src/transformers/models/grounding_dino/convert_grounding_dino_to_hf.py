@@ -14,8 +14,7 @@
 # limitations under the License.
 """Convert GroundingDINO SimMIM checkpoints from the original repository.
 
-URL:
-https://github.com/microsoft/GroundingDINO-Transformer/blob/main/MODELHUB.md#simmim-pretrained-grounding_dino-v1-models"""
+URL: https://github.com/IDEA-Research/GroundingDINO"""
 
 import argparse
 
@@ -342,16 +341,16 @@ def convert_grounding_dino_checkpoint(args):
     push_to_hub = args.push_to_hub
 
     checkpoint_mapping = {
-        "grounding-dino-tiny": "/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_tiny_clean.pth",
-        "grounding-dino-base": "/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_base_clean.pth",
+        "grounding-dino-tiny": "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth",
+        "grounding-dino-base": "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swinb_cogcoor.pth",
     }
     # Define default GroundingDINO configuation
     config = get_grounding_dino_config(model_name)
 
-    checkpoint_path = checkpoint_mapping[model_name]
-
     # Load original checkpoint
-    original_state_dict = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint_url = checkpoint_mapping[model_name]
+    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
+    original_state_dict = {k.replace("module.", ""): v for k, v in original_state_dict.items()}
 
     # Rename keys
     new_state_dict = original_state_dict.copy()
@@ -362,9 +361,12 @@ def convert_grounding_dino_checkpoint(args):
     read_in_q_k_v(new_state_dict, config)
 
     # Load HF implementation with default config and converted state dict
-    model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny").eval()
+    model = GroundingDINOForObjectDetection(config)
+    model.eval()
     # model = GroundingDINOForObjectDetection(config=config).eval()
-    model.load_state_dict(new_state_dict, strict=False)
+    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
 
     # Load and process test image
     image = prepare_img()
@@ -410,12 +412,6 @@ if __name__ == "__main__":
         choices=["grounding-dino-tiny", "grounding-dino-base"],
         help="Name of the GroundingDINO model you'd like to convert.",
     )
-    # parser.add_argument(
-    #     "--checkpoint_path",
-    #     default="/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_base_clean.pth",
-    #     type=str,
-    #     help="Path to the original PyTorch checkpoint (.pth file).",
-    # )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
