@@ -30,8 +30,12 @@ from ...utils.backbone_utils import get_aligned_output_features_output_indices
 logger = logging.get_logger(__name__)
 
 PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "pvt-v2-b0-224": "https://huggingface.co/Zetatech/pvt-tiny-224",
-    # See all PVT models at https://huggingface.co/models?filter=pvt
+    "pvt_v2_b0": "https://huggingface.co/FoamoftheSea/pvt_v2_b0",
+    "pvt_v2_b1": "https://huggingface.co/FoamoftheSea/pvt_v2_b1",
+    "pvt_v2_b2": "https://huggingface.co/FoamoftheSea/pvt_v2_b2",
+    "pvt_v2_b3": "https://huggingface.co/FoamoftheSea/pvt_v2_b3",
+    "pvt_v2_b4": "https://huggingface.co/FoamoftheSea/pvt_v2_b4",
+    "pvt_v2_b5": "https://huggingface.co/FoamoftheSea/pvt_v2_b5",
 }
 
 
@@ -130,7 +134,7 @@ class PvtV2Config(PretrainedConfig):
         num_labels: int = 1000,
         attn_reduce: str = "SR",  # Set to "SR" for spatial reduction (Conv2d), "AP" for average pooling
         out_features=None,
-        out_indices=None,
+        out_indices=[1, 2, 3],
         **kwargs,
     ):
         super().__init__(**kwargs)
