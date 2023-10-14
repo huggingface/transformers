@@ -148,23 +148,22 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
 
     # define default PvtV2 configuration
     if pvt_v2_size == "b0":
-        config_path = "FoamoftheSea/pvt-v2-b0-224"
+        config_path = "FoamoftheSea/pvt_v2_b0"
     elif pvt_v2_size == "b1":
-        config_path = "FoamoftheSea/pvt-v2-b1-224"
+        config_path = "FoamoftheSea/pvt_v2_b1"
     elif pvt_v2_size == "b2":
-        config_path = "FoamoftheSea/pvt-v2-b2-224"
+        config_path = "FoamoftheSea/pvt_v2_b2"
     elif pvt_v2_size == "b2-linear":
-        config_path = "FoamoftheSea/pvt-v2-b2-linear-224"
+        config_path = "FoamoftheSea/pvt_v2_b2_linear"
     elif pvt_v2_size == "b3":
-        config_path = "FoamoftheSea/pvt-v2-b3-224"
+        config_path = "FoamoftheSea/pvt_v2_b3"
     elif pvt_v2_size == "b4":
-        config_path = "FoamoftheSea/pvt-v2-b4-224"
+        config_path = "FoamoftheSea/pvt_v2_b4"
     elif pvt_v2_size == "b5":
-        config_path = "FoamoftheSea/pvt-v2-b5-224"
+        config_path = "FoamoftheSea/pvt_v2_b5"
     else:
         raise ValueError(f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but " f"'{pvt_v2_size}' was given")
-    attn_reduce = "AP" if "linear" in pvt_v2_size else "SR"
-    config = PvtV2Config(name_or_path=config_path, attn_reduce=attn_reduce)
+    config = PvtV2Config.from_pretrained(config_path)
     # load original model from https://github.com/whai362/PVT
     state_dict = torch.load(pvt_v2_checkpoint, map_location="cpu")
 
@@ -185,25 +184,25 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
     logits = outputs.logits.detach().cpu()
 
     if pvt_v2_size == "b0":
-        expected_slice_logits = torch.tensor([-1.4192, -1.9158, -0.9702])
+        expected_slice_logits = torch.tensor([-1.1939, -1.4547, -0.1076])
     elif pvt_v2_size == "b1":
-        expected_slice_logits = torch.tensor([0.4353, -0.1960, -0.2373])
+        expected_slice_logits = torch.tensor([-0.4716, -0.7335, -0.4600])
     elif pvt_v2_size == "b2":
-        expected_slice_logits = torch.tensor([-0.2914, -0.2231, 0.0321])
+        expected_slice_logits = torch.tensor([0.0795, -0.3170,  0.2247])
     elif pvt_v2_size == "b2-linear":
-        expected_slice_logits = torch.tensor([0.3740, -0.7739, -0.4214])
+        expected_slice_logits = torch.tensor([0.0968,  0.3937, -0.4252])
     elif pvt_v2_size == "b3":
-        expected_slice_logits = torch.tensor([-0.2914, -0.2231, 0.0321])
+        expected_slice_logits = torch.tensor([-0.4595, -0.2870,  0.0940])
     elif pvt_v2_size == "b4":
-        expected_slice_logits = torch.tensor([0.3740, -0.7739, -0.4214])
+        expected_slice_logits = torch.tensor([-0.1769, -0.1747, -0.0143])
     elif pvt_v2_size == "b5":
-        expected_slice_logits = torch.tensor([0.3740, -0.7739, -0.4214])
+        expected_slice_logits = torch.tensor([-0.2943, -0.1008,  0.6812])
     else:
         raise ValueError(
             f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but " f"'{pvt_v2_size}' was given"
         )
 
-    # assert torch.allclose(logits[0, :3], expected_slice_logits, atol=1e-4)
+    assert torch.allclose(logits[0, :3], expected_slice_logits, atol=1e-4)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model pytorch_model.bin to {pytorch_dump_folder_path}")
