@@ -1,5 +1,7 @@
 import math
 from collections import OrderedDict
+from dataclasses import dataclass
+from typing import Optional, Dict
 
 import cv2
 import numpy as np
@@ -7,7 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers import PreTrainedModel
+from transformers import PreTrainedModel, FastConfig
+from transformers.utils import ModelOutput
 
 
 def get_same_padding(kernel_size):
@@ -129,10 +132,6 @@ class My2DLayer(nn.Module):
     @staticmethod
     def is_zero_layer():
         return False
-
-
-class FalsePreTrainedModel(PreTrainedModel):
-    pass
 
 
 class ConvLayer(My2DLayer):
@@ -403,7 +402,24 @@ class RepConvLayer(nn.Module):
     #     return RepConvLayer(**config)
 
 
-class TextNet(PreTrainedModel):
+class FastPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = FastConfig
+    base_model_prefix = "fast"
+    main_input_name = "pixel_values"
+
+    def _init_weights(self, module):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+
+class TextNet(FastPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.first_conv = ConvLayer(
@@ -420,7 +436,7 @@ class TextNet(PreTrainedModel):
             config.backbone_dropout_rate,
             config.backbone_ops_order,
         )
-
+        self.first_conv.apply(self._init_weights)
         stage1 = []
         for stage_config in zip(
                 config.backbone_stage1_in_channels,
@@ -469,15 +485,15 @@ class TextNet(PreTrainedModel):
             stage4.append(RepConvLayer(*stage_config))
         self.stage4 = nn.ModuleList(stage4)
 
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight)
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
+    #     self._initialize_weights()
+    #
+    # def _initialize_weights(self):
+    #     for m in self.modules():
+    #         if isinstance(m, nn.Conv2d):
+    #             nn.init.kaiming_normal_(m.weight)
+    #         elif isinstance(m, nn.BatchNorm2d):
+    #             m.weight.data.fill_(1)
+    #             m.bias.data.zero_()
 
     def forward(self, x):
         x = self.first_conv(x)
@@ -502,7 +518,7 @@ class TextNet(PreTrainedModel):
         return output
 
 
-class FASTNeck(PreTrainedModel):
+class FASTNeck(FastPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         reduce_layer_configs = list(
@@ -515,11 +531,13 @@ class FASTNeck(PreTrainedModel):
                 config.neck_groups,
             )
         )
-
-        self.reduce_layer1 = RepConvLayer(*reduce_layer_configs[0])
-        self.reduce_layer2 = RepConvLayer(*reduce_layer_configs[1])
-        self.reduce_layer3 = RepConvLayer(*reduce_layer_configs[2])
-        self.reduce_layer4 = RepConvLayer(*reduce_layer_configs[3])
+        self.layers_count = len(reduce_layer_configs)
+        for layer_ix in range(0, len(reduce_layer_configs)):
+            setattr(self, f"reduce_layer{layer_ix + 1}", RepConvLayer(*reduce_layer_configs[layer_ix]))
+        # self.reduce_layer1 = RepConvLayer(*reduce_layer_configs[0])
+        # self.reduce_layer2 = RepConvLayer(*reduce_layer_configs[1])
+        # self.reduce_layer3 = RepConvLayer(*reduce_layer_configs[2])
+        # self.reduce_layer4 = RepConvLayer(*reduce_layer_configs[3])
 
         self._initialize_weights()
 
@@ -536,22 +554,22 @@ class FASTNeck(PreTrainedModel):
         return F.upsample(x, size=(H, W), mode="bilinear")
 
     def forward(self, x):
-        f1, f2, f3, f4 = x
+        f1 = x[0]
         f1 = self.reduce_layer1(f1)
-        f2 = self.reduce_layer2(f2)
-        f3 = self.reduce_layer3(f3)
-        f4 = self.reduce_layer4(f4)
+        output_stages = [f1]
 
-        f2 = self._upsample(f2, f1)
-        f3 = self._upsample(f3, f1)
-        f4 = self._upsample(f4, f1)
-        f = torch.cat((f1, f2, f3, f4), 1)
+        for layer_ix in range(1, self.layers_count):
+            layer_out = getattr(self, f"reduce_layer{layer_ix + 1}")(x[layer_ix])
+            layer_out = self._upsample(layer_out, f1)
+            output_stages.append(layer_out)
+
+        f = torch.cat(output_stages, 1)
         return f
 
 
-class FASTHead(nn.Module):
+class FASTHead(FastPreTrainedModel):
     def __init__(self, config):
-        super(FASTHead, self).__init__()
+        super().__init__(config)
         self.conv = RepConvLayer(
             config.head_conv_in_channels,
             config.head_conv_out_channels,
@@ -693,28 +711,274 @@ class FASTHead(nn.Module):
     #     return bboxes, scores
 
 
-class FASTForImageCaptioning(PreTrainedModel):
+def emb_loss(emb, instance, kernel, training_mask, feature_dim=4, delta_v=0.5, delta_d=1.5, weights=(1.0, 1.0),
+             bg_sample=False):
+    training_mask = (training_mask > 0.5).long()
+    kernel = (kernel > 0.5).long()
+    instance = instance * training_mask
+    instance_kernel = (instance * kernel).view(-1)
+    instance = instance.view(-1)
+    emb = emb.view(feature_dim, -1)
+
+    unique_labels, unique_ids = torch.unique(instance_kernel, sorted=True, return_inverse=True)
+    num_instance = unique_labels.size(0)
+    if num_instance <= 1:
+        return 0
+
+    emb_mean = emb.new_zeros((feature_dim, num_instance), dtype=torch.float32)
+    for i, lb in enumerate(unique_labels):
+        if lb == 0:
+            continue
+        ind_k = instance_kernel == lb
+        emb_mean[:, i] = torch.mean(emb[:, ind_k], dim=1)
+
+    l_agg = emb.new_zeros(num_instance, dtype=torch.float32)  # bug
+    for i, lb in enumerate(unique_labels):
+        if lb == 0:
+            continue
+        ind = instance == lb
+        emb_ = emb[:, ind]
+        dist = (emb_ - emb_mean[:, i:i + 1]).norm(p=2, dim=0)
+        dist = F.relu(dist - delta_v) ** 2
+        l_agg[i] = torch.mean(torch.log(dist + 1.0))
+    l_agg = torch.mean(l_agg[1:])
+
+    if num_instance > 2:
+        emb_interleave = emb_mean.permute(1, 0).repeat(num_instance, 1)
+        emb_band = emb_mean.permute(1, 0).repeat(1, num_instance).view(-1, feature_dim)
+        # print(seg_band)
+
+        mask = (1 - torch.eye(num_instance, dtype=torch.int8)).view(-1, 1).repeat(1, feature_dim)
+        mask = mask.view(num_instance, num_instance, -1)
+        mask[0, :, :] = 0
+        mask[:, 0, :] = 0
+        mask = mask.view(num_instance * num_instance, -1)
+        # print(mask)
+
+        dist = emb_interleave - emb_band
+        dist = dist[mask > 0].view(-1, feature_dim).norm(p=2, dim=1)
+        dist = F.relu(2 * delta_d - dist) ** 2
+        l_dis = torch.mean(torch.log(dist + 1.0))
+
+        if bg_sample:
+            l_dis = [torch.log(dist + 1.0)]
+            emb_bg = emb[:, instance == 0].view(feature_dim, -1)
+            if emb_bg.size(1) > 100:
+                rand_ind = np.random.permutation(emb_bg.size(1))[:100]
+                emb_bg = emb_bg[:, rand_ind]
+            if emb_bg.size(1) > 0:
+                for i, lb in enumerate(unique_labels):
+                    if lb == 0:
+                        continue
+                    dist = (emb_bg - emb_mean[:, i:i + 1]).norm(p=2, dim=0)
+                    dist = F.relu(2 * delta_d - dist) ** 2
+                    l_dis_bg = torch.mean(torch.log(dist + 1.0), 0, keepdim=True)
+                    l_dis.append(l_dis_bg)
+            l_dis = torch.mean(torch.cat(l_dis))
+    else:
+        l_dis = 0
+
+    l_agg = weights[0] * l_agg
+    l_dis = weights[1] * l_dis
+    l_reg = torch.mean(torch.log(torch.norm(emb_mean, 2, 0) + 1.0)) * 0.001
+    loss = l_agg + l_dis + l_reg
+    return loss
+
+
+def emb_loss_batch(emb, instance, kernel, training_mask, reduce=True, loss_weight=0.25, bg_sample=False):
+    loss_batch = emb.new_zeros((emb.size(0)), dtype=torch.float32)
+
+    for i in range(loss_batch.size(0)):
+        loss_batch[i] = emb_loss(emb[i], instance[i], kernel[i], training_mask[i])
+
+    loss_batch = loss_weight * loss_batch
+
+    if reduce:
+        loss_batch = torch.mean(loss_batch)
+
+    return loss_batch
+
+
+def dice_loss_with_masks(input, target, mask, reduce=True):
+    loss_weight = 0.5
+    batch_size = input.size(0)
+    input = torch.sigmoid(input)
+
+    input = input.contiguous().view(batch_size, -1)
+    target = target.contiguous().view(batch_size, -1).float()
+    mask = mask.contiguous().view(batch_size, -1).float()
+
+    input = input * mask
+    target = target * mask
+
+    a = torch.sum(input * target, dim=1)
+    b = torch.sum(input * input, dim=1) + 0.001
+    c = torch.sum(target * target, dim=1) + 0.001
+    d = (2 * a) / (b + c)
+    loss = 1 - d
+
+    loss = loss_weight * loss
+
+    if reduce:
+        loss = torch.mean(loss)
+
+    return loss
+
+
+def ohem_single(score, gt_text, training_mask):
+    pos_num = int(torch.sum(gt_text > 0.5)) - int(torch.sum((gt_text > 0.5) & (training_mask <= 0.5)))
+
+    if pos_num == 0:
+        # selected_mask = gt_text.copy() * 0 # may be not good
+        selected_mask = training_mask
+        selected_mask = selected_mask.view(1, selected_mask.shape[0], selected_mask.shape[1]).float()
+        return selected_mask
+
+    neg_num = int(torch.sum(gt_text <= 0.5))
+    neg_num = int(min(pos_num * 3, neg_num))
+
+    if neg_num == 0:
+        selected_mask = training_mask
+        selected_mask = selected_mask.view(1, selected_mask.shape[0], selected_mask.shape[1]).float()
+        return selected_mask
+
+    neg_score = score[gt_text <= 0.5]
+    neg_score_sorted, _ = torch.sort(-neg_score)
+    threshold = -neg_score_sorted[neg_num - 1]
+
+    selected_mask = ((score >= threshold) | (gt_text > 0.5)) & (training_mask > 0.5)
+    selected_mask = selected_mask.reshape(1, selected_mask.shape[0], selected_mask.shape[1]).float()
+    return selected_mask
+
+
+def ohem_batch(scores, gt_texts, training_masks):
+    selected_masks = []
+    for i in range(scores.shape[0]):
+        selected_masks.append(ohem_single(scores[i, :, :], gt_texts[i, :, :], training_masks[i, :, :]))
+
+    selected_masks = torch.cat(selected_masks, 0).float()
+    return selected_masks
+
+
+def iou_single(a, b, mask, n_class):
+    EPS = 1e-6
+    valid = mask == 1
+    a = a[valid]
+    b = b[valid]
+    miou = []
+    for i in range(n_class):
+        inter = ((a == i) & (b == i)).float()
+        union = ((a == i) | (b == i)).float()
+
+        miou.append(torch.sum(inter) / (torch.sum(union) + EPS))
+    miou = sum(miou) / len(miou)
+    return miou
+
+
+def iou(a, b, mask, n_class=2, reduce=True):
+    batch_size = a.size(0)
+
+    a = a.view(batch_size, -1)
+    b = b.view(batch_size, -1)
+    mask = mask.view(batch_size, -1)
+
+    iou = a.new_zeros((batch_size,), dtype=torch.float32)
+    for i in range(batch_size):
+        iou[i] = iou_single(a[i], b[i], mask[i], n_class)
+
+    if reduce:
+        iou = torch.mean(iou)
+    return iou
+
+
+@dataclass
+class FASTForImageCaptioningOutput(ModelOutput):
+    """
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
+    scores.
+
+    Args:
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Languge modeling loss from the text decoder.
+        text_hidden (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional*):
+            The image hidden states.
+    """
+
+    loss: Optional[torch.Tensor] = None
+    hidden_states: Optional[torch.FloatTensor] = None
+
+
+class FASTForImageCaptioning(FastPreTrainedModel):
+
     def __init__(self, config):
         super().__init__(config)
         self.backbone = TextNet(config=config)
         self.neck = FASTNeck(config=config)
         self.det_head = FASTHead(config=config)
+        self.loss_bg = config.loss_bg
+
+        self.pooling_1s = nn.MaxPool2d(kernel_size=config.head_pooling_size, stride=1,
+                                       padding=(config.head_pooling_size - 1) // 2)
+        self.pooling_2s = nn.MaxPool2d(kernel_size=config.head_pooling_size // 2 + 1, stride=1,
+                                       padding=(config.head_pooling_size // 2) // 2)
+        self.post_init()
 
     def _upsample(self, x, size, scale=1):
         _, _, H, W = size
         return F.interpolate(x, size=(H // scale, W // scale), mode="bilinear")
 
-    def forward(self, imgs, img_metas=None):
-        outputs = {}
+    def _max_pooling(self, x, scale=1):
+        if scale == 1:
+            x = self.pooling_1s(x)
+        elif scale == 2:
+            x = self.pooling_2s(x)
+        return x
 
-        f = self.backbone(imgs)
+    def loss(self, hidden, labels):
+        gt_texts = labels['gt_texts']
+        gt_kernels = labels['gt_kernels']
+        training_masks = labels['training_masks']
+        gt_instances = labels['gt_instances']
+
+        kernels = hidden[:, 0, :, :]  # 4*640*640
+        texts = self._max_pooling(kernels, scale=1)  # 4*640*640
+        embs = hidden[:, 1:, :, :]  # 4*4*640*640
+
+        selected_masks = ohem_batch(texts, gt_texts, training_masks)
+        loss_text = dice_loss_with_masks(texts, gt_texts, selected_masks, reduce=False)
+
+        selected_masks = gt_texts * training_masks
+        loss_kernel = dice_loss_with_masks(kernels, gt_kernels, selected_masks, reduce=False)
+        loss_kernel = torch.mean(loss_kernel, dim=0)
+
+        loss_emb = emb_loss_batch(embs, gt_instances, gt_kernels, training_masks, reduce=False, bg_sample=self.loss_bg)
+
+        return torch.mean(loss_text) + torch.mean(loss_kernel) + torch.mean(loss_emb)
+
+    def forward(self,
+                pixel_values: torch.FloatTensor,
+                output_hidden_states: Optional[bool] = True,
+                return_dict: Optional[bool] = None,
+                labels: Dict = None
+                ):
+        # outputs = {}
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        f = self.backbone(pixel_values)
 
         f = self.neck(f)
 
         det_out = self.det_head(f)
 
-        det_out = self._upsample(det_out, imgs.size(), scale=4)
+        loss = None
+        if labels:
+            out = self._upsample(det_out, pixel_values.size(), scale=1)
+            loss = self.loss(out, labels)
         # det_res = self.det_head.get_results(det_out, img_metas, scale=2)
         # outputs.update(det_res)
+        det_out = self._upsample(det_out, pixel_values.size(), scale=4)
 
-        return det_out
+        if not return_dict:
+            return (loss, det_out) if loss is not None else (det_out,)
+
+        return FASTForImageCaptioningOutput(loss, det_out)

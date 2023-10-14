@@ -69,6 +69,8 @@ class FastConfig(PretrainedConfig):
             min_area=250,
             min_score=0.88,
             bbox_type='rect',
+            loss_bg=False,
+            initializer_range=0.02,
             **kwargs,
     ):
         super().__init__(**kwargs)
@@ -147,3 +149,5 @@ class FastConfig(PretrainedConfig):
         self.min_area = min_area
         self.min_score = min_score
         self.bbox_type = bbox_type
+        self.loss_bg = loss_bg
+        self.initializer_range = initializer_range
