@@ -72,13 +72,14 @@ BEIT3_MODEL = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        vision_masked_position (`torch.LongTensor` of shape `({1})`):
+        vision_masked_position (`torch.LongTensor` of shape pixel_values):
             Padding mask for input tokens , of same shape as `pixel_values`
 
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
         past_key_value (`Dict`):
-            A Dictionary containing the incremental states layerwise/
+            A Dictionary containing the incremental states layerwise.This can be used to when generating next token
+            in case of image captioning.
         text_end_positions (`int`):
             Position of where text representations end and image representation start.
         return_dict (`bool`, *optional*):

@@ -16,8 +16,8 @@ from transformers import PretrainedConfig
 
 
 BEIT3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/beit-base-patch16-224-pt22k": (
-        "https://huggingface.co/microsoft/beit-base-patch16-224-pt22k/resolve/main/config.json"
+    "Raghavan/beit3_base_patch16_224_in1k": (
+        "https://huggingface.co/Raghavan/beit3_base_patch16_224_in1k/blob/main/config.json"
     ),
     # See all BEiT models at https://huggingface.co/models?filter=beit
 }
