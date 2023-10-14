@@ -1219,7 +1219,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         >>> output = model(
         ...     input_ids=torch.tensor(input["input_ids"]),
         ...     pixel_values=torch.tensor(input["pixel_values"]),
-        ...     text_padding_mask=torch.ones(input["input_ids"].shape),
+        ...     attention_mask=torch.ones(input["input_ids"].shape),
         ... )
         >>> list(output.logits.shape)
         [1, 3129]
