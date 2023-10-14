@@ -39,7 +39,7 @@ import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Set, Tuple
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto import get_values
@@ -600,21 +600,24 @@ def check_all_models_are_tested():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
+def get_models_with_prefix(model: types.ModuleType, attr_prefix: str) -> Set[str]:
+    """Return the set of all models in class that start with prefix"""
+    result = set()
+    for attr_name in dir(model):
+        if attr_name.startswith(attr_prefix) and attr_name.endswith("MAPPING_NAMES"):
+            result = result | set(get_values(getattr(model, attr_name)))
+    return result
+
+
 def get_all_auto_configured_models() -> List[str]:
     """Return the list of all models in at least one auto class."""
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
     if is_torch_available():
-        for attr_name in dir(transformers.models.auto.modeling_auto):
-            if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING_NAMES"):
-                result = result | set(get_values(getattr(transformers.models.auto.modeling_auto, attr_name)))
+        result |= get_models_with_prefix(transformers.models.auto.modeling_auto, "MODEL_")
     if is_tf_available():
-        for attr_name in dir(transformers.models.auto.modeling_tf_auto):
-            if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
-                result = result | set(get_values(getattr(transformers.models.auto.modeling_tf_auto, attr_name)))
+        result |= get_models_with_prefix(transformers.models.auto.modeling_tf_auto, "TF_MODEL_")
     if is_flax_available():
-        for attr_name in dir(transformers.models.auto.modeling_flax_auto):
-            if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
-                result = result | set(get_values(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
+        result |= get_models_with_prefix(transformers.models.auto.modeling_flax_auto, "FLAX_MODEL_")
     return list(result)
 
 
