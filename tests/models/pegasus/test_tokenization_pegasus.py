@@ -227,7 +227,3 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("We have to use from_slow")
     def test_added_tokens_serialization(self):
         pass
-
-    @unittest.skip("We have to use from_slow")
-    def test_added_tokens_serialization(self):
-        pass
