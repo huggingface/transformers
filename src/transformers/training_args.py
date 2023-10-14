@@ -953,7 +953,7 @@ class TrainingArguments:
                 "Pass 'batch' or 'full' to indicate whether to run compute_metrics using batched predictions or"
                 "predictions across the full eval set. Full predictions for large eval sets may not fit in memory."
             )
-        }
+        },
     )
     dataloader_num_workers: int = field(
         default=0,
