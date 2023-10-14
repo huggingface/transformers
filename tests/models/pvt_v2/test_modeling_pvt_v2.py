@@ -18,7 +18,7 @@
 import inspect
 import unittest
 
-from transformers import is_torch_available, is_vision_available, PvtV2Config
+from transformers import PvtV2Config, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     require_accelerate,
@@ -222,8 +222,8 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(hidden_states[0].shape[-3:]),
                 [
                     self.model_tester.hidden_sizes[self.model_tester.out_indices[0]],
-                    self.model_tester.image_size // 2**(2*self.model_tester.out_indices[0] + 1),
-                    self.model_tester.image_size // 2**(2*self.model_tester.out_indices[0] + 1),
+                    self.model_tester.image_size // 2 ** (2 * self.model_tester.out_indices[0] + 1),
+                    self.model_tester.image_size // 2 ** (2 * self.model_tester.out_indices[0] + 1),
                 ],
             )
 

@@ -39,7 +39,9 @@ def create_rename_keys(config):
         # Remane embedings' paramters
         rename_keys.append((f"patch_embed{i + 1}.proj.weight", f"pvt_v2.encoder.patch_embeddings.{i}.proj.weight"))
         rename_keys.append((f"patch_embed{i + 1}.proj.bias", f"pvt_v2.encoder.patch_embeddings.{i}.proj.bias"))
-        rename_keys.append((f"patch_embed{i + 1}.norm.weight", f"pvt_v2.encoder.patch_embeddings.{i}.layer_norm.weight"))
+        rename_keys.append(
+            (f"patch_embed{i + 1}.norm.weight", f"pvt_v2.encoder.patch_embeddings.{i}.layer_norm.weight")
+        )
         rename_keys.append((f"patch_embed{i + 1}.norm.bias", f"pvt_v2.encoder.patch_embeddings.{i}.layer_norm.bias"))
         rename_keys.append((f"norm{i + 1}.weight", f"pvt_v2.encoder.layer_norms.{i}.weight"))
         rename_keys.append((f"norm{i + 1}.bias", f"pvt_v2.encoder.layer_norms.{i}.bias"))
@@ -49,9 +51,7 @@ def create_rename_keys(config):
             rename_keys.append(
                 (f"block{i + 1}.{j}.attn.q.weight", f"pvt_v2.encoder.block.{i}.{j}.attention.query.weight")
             )
-            rename_keys.append(
-                (f"block{i + 1}.{j}.attn.q.bias", f"pvt_v2.encoder.block.{i}.{j}.attention.query.bias")
-            )
+            rename_keys.append((f"block{i + 1}.{j}.attn.q.bias", f"pvt_v2.encoder.block.{i}.{j}.attention.query.bias"))
             rename_keys.append(
                 (f"block{i + 1}.{j}.attn.kv.weight", f"pvt_v2.encoder.block.{i}.{j}.attention.kv.weight")
             )
@@ -95,8 +95,15 @@ def create_rename_keys(config):
 
             rename_keys.append((f"block{i + 1}.{j}.mlp.fc1.weight", f"pvt_v2.encoder.block.{i}.{j}.mlp.dense1.weight"))
             rename_keys.append((f"block{i + 1}.{j}.mlp.fc1.bias", f"pvt_v2.encoder.block.{i}.{j}.mlp.dense1.bias"))
-            rename_keys.append((f"block{i + 1}.{j}.mlp.dwconv.dwconv.weight", f"pvt_v2.encoder.block.{i}.{j}.mlp.dwconv.dwconv.weight"))
-            rename_keys.append((f"block{i + 1}.{j}.mlp.dwconv.dwconv.bias", f"pvt_v2.encoder.block.{i}.{j}.mlp.dwconv.dwconv.bias"))
+            rename_keys.append(
+                (
+                    f"block{i + 1}.{j}.mlp.dwconv.dwconv.weight",
+                    f"pvt_v2.encoder.block.{i}.{j}.mlp.dwconv.dwconv.weight",
+                )
+            )
+            rename_keys.append(
+                (f"block{i + 1}.{j}.mlp.dwconv.dwconv.bias", f"pvt_v2.encoder.block.{i}.{j}.mlp.dwconv.dwconv.bias")
+            )
             rename_keys.append((f"block{i + 1}.{j}.mlp.fc2.weight", f"pvt_v2.encoder.block.{i}.{j}.mlp.dense2.weight"))
             rename_keys.append((f"block{i + 1}.{j}.mlp.fc2.bias", f"pvt_v2.encoder.block.{i}.{j}.mlp.dense2.bias"))
 
@@ -122,9 +129,7 @@ def read_in_k_v(state_dict, config):
             state_dict[f"pvt_v2.encoder.block.{i}.{j}.attention.key.weight"] = kv_weight[: config.hidden_sizes[i], :]
             state_dict[f"pvt_v2.encoder.block.{i}.{j}.attention.key.bias"] = kv_bias[: config.hidden_sizes[i]]
 
-            state_dict[f"pvt_v2.encoder.block.{i}.{j}.attention.value.weight"] = kv_weight[
-                config.hidden_sizes[i] :, :
-            ]
+            state_dict[f"pvt_v2.encoder.block.{i}.{j}.attention.value.weight"] = kv_weight[config.hidden_sizes[i] :, :]
             state_dict[f"pvt_v2.encoder.block.{i}.{j}.attention.value.bias"] = kv_bias[config.hidden_sizes[i] :]
 
 
@@ -162,7 +167,10 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
     elif pvt_v2_size == "b5":
         config_path = "FoamoftheSea/pvt_v2_b5"
     else:
-        raise ValueError(f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but " f"'{pvt_v2_size}' was given")
+        raise ValueError(
+            f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but "
+            f"'{pvt_v2_size}' was given"
+        )
     config = PvtV2Config.from_pretrained(config_path)
     # load original model from https://github.com/whai362/PVT
     state_dict = torch.load(pvt_v2_checkpoint, map_location="cpu")
@@ -188,18 +196,19 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
     elif pvt_v2_size == "b1":
         expected_slice_logits = torch.tensor([-0.4716, -0.7335, -0.4600])
     elif pvt_v2_size == "b2":
-        expected_slice_logits = torch.tensor([0.0795, -0.3170,  0.2247])
+        expected_slice_logits = torch.tensor([0.0795, -0.3170, 0.2247])
     elif pvt_v2_size == "b2-linear":
-        expected_slice_logits = torch.tensor([0.0968,  0.3937, -0.4252])
+        expected_slice_logits = torch.tensor([0.0968, 0.3937, -0.4252])
     elif pvt_v2_size == "b3":
-        expected_slice_logits = torch.tensor([-0.4595, -0.2870,  0.0940])
+        expected_slice_logits = torch.tensor([-0.4595, -0.2870, 0.0940])
     elif pvt_v2_size == "b4":
         expected_slice_logits = torch.tensor([-0.1769, -0.1747, -0.0143])
     elif pvt_v2_size == "b5":
-        expected_slice_logits = torch.tensor([-0.2943, -0.1008,  0.6812])
+        expected_slice_logits = torch.tensor([-0.2943, -0.1008, 0.6812])
     else:
         raise ValueError(
-            f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but " f"'{pvt_v2_size}' was given"
+            f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but "
+            f"'{pvt_v2_size}' was given"
         )
 
     assert torch.allclose(logits[0, :3], expected_slice_logits, atol=1e-4)
