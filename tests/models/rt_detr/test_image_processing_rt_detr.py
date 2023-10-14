@@ -112,11 +112,29 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_properties(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
+        self.assertTrue(hasattr(image_processing, "format"))
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
+        self.assertTrue(hasattr(image_processing, "resample"))
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
         self.assertTrue(hasattr(image_processing, "return_tensors"))
+    
+    def test_image_processor_outputs(self):
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        encoding = image_processing(images=image, return_tensors="pt")
+        
+        # verify pixel values: shape
+        expected_shape = torch.Size([1, 3, 640, 640])
+        self.assertEqual(encoding["pixel_values"].shape, expected_shape)
+        
+        # verify pixel values: output values
+        expected_slice = torch.tensor([0.5490196347236633, 0.5647059082984924, 0.572549045085907])
+        self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-5))
 
 
     
+
+
