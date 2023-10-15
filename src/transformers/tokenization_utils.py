@@ -474,11 +474,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if isinstance(token, str):
                 if token in self._added_tokens_encoder:
                     continue
-                # for legacy AddedTokens strip left and right by default
-                # TODO this will be remove to have the same default behavior as rust
                 else:
-                    token = AddedToken(token, rstrip=True, lstrip=True, special=special_tokens)
-            if special_tokens:
+                    token = AddedToken(token, rstrip=False, lstrip=False, normalized=not special_tokens,special=special_tokens)
+            elif special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
                 token.__setstate__({"special": True, "normalized": token.normalized})
             if token in self._added_tokens_decoder:

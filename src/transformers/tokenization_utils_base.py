@@ -947,7 +947,7 @@ class SpecialTokensMixin:
                 for token in value:
                     if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
-                        token = AddedToken(token, rstrip=True, lstrip=True, normalized=False, special=True)
+                        token = AddedToken(token, rstrip=False, lstrip=False, normalized=False, special=True)
                     if str(token) not in self.additional_special_tokens:
                         to_add.add(token)
                 if replace_additional_special_tokens:
@@ -961,7 +961,7 @@ class SpecialTokensMixin:
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
                     # for legacy purpose we default to stripping. `False` depends on this
-                    value = AddedToken(value, rstrip=True, lstrip=True, normalized=False, special=True)
+                    value = AddedToken(value, rstrip=False, lstrip=False, normalized=False, special=True)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
                 if value not in added_tokens:
@@ -2178,7 +2178,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     added_tokens_map[str(token)] = token
                 else:
                     raise ValueError(
-                        f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary or and AddedToken instance"
+                        f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary or an AddedToken instance"
                     )
         else:
             # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
@@ -2201,6 +2201,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             value = additional_special_tokens
                         init_kwargs[key] = value
 
+            # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
+            # this is for legacy purpose
+            if added_tokens_file is not None:
+                with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
+                    added_tok_encoder = json.load(added_tokens_handle)
+                for str_token, index in added_tok_encoder.items():
+                    # if index not in added_tokens_decoder and str_token not in added_tokens_map:
+                    added_tokens_decoder[index] = AddedToken(str_token, rstrip=False, lstrip=False, normalized=True)
+                    added_tokens_map[str(token)] = added_tokens_decoder[index]
+
             # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
             # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
             if "Fast" not in cls.__name__ and tokenizer_file is not None:
@@ -2212,16 +2222,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     idx = serialized_tokens.pop("id")
                     added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
                     added_tokens_map[str(token)] = token
-
-            # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
-            # this is for legacy purpose
-            if added_tokens_file is not None:
-                with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
-                    added_tok_encoder = json.load(added_tokens_handle)
-                for str_token, index in added_tok_encoder.items():
-                    if index not in added_tokens_decoder and str_token not in added_tokens_map:
-                        added_tokens_decoder[index] = AddedToken(str_token, rstrip=True, lstrip=True, normalized=True)
-                        added_tokens_map[str(token)] = token
             # end legacy
 
         # Passing AddedTokens only to the class to prevent it from changing the string tokens
