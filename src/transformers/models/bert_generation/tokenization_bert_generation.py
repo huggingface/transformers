@@ -51,15 +51,16 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The begin of sequence token.
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
+        sep_token (`<fill_type>`, *optional*, defaults to `"<::::>"`): <fill_docstring>
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
