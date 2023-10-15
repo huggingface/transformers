@@ -124,7 +124,7 @@ def _prepare_output_docstrings(output_type, config_class, min_indent=None):
         params_docstring = _convert_output_args_doc(params_docstring)
     else:
         raise ValueError(
-            f"No `Args` or `Parameters` section is found in the docstring of `{output_type.__name__}`. Make sure it has"
+            f"No `Args` or `Parameters` section is found in the docstring of `{output_type.__name__}`. Make sure it has "
             "docstring and contain either `Args` or `Parameters`."
         )
 
