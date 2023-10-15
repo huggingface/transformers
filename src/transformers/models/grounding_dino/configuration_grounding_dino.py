@@ -28,22 +28,20 @@ GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-# Modified from transformers.models.bert.configuration_bert.BertConfig with Bert->GroundingDINOTextPrenet
 class GroundingDINOTextPrenetConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroundingDINOTextPrenetModel`] or a
-    [`TFGroundingDINOTextPrenetModel`]. It is used to instantiate a BERT model according to the specified arguments,
-    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the BERT [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
+    This is the configuration class to store the configuration of a [`GroundingDINOTextPrenetModel`]. It is used to
+    instantiate a BERT model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the BERT
+    [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GroundingDINOTextPrenetModel`] or [`TFGroundingDINOTextPrenetModel`].
+            `inputs_ids` passed when calling [`GroundingDINOTextPrenetModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -63,8 +61,7 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`GroundingDINOTextPrenetModel`] or
-            [`TFGroundingDINOTextPrenetModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`GroundingDINOTextPrenetModel`].
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
@@ -153,7 +150,7 @@ class GroundingDINOConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GroundingDINOModel`]. It is used to instantiate a
     Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Grounding DINO
-    [SenseTime/deformable-detr](https://huggingface.co/SenseTime/deformable-detr) architecture.
+    [idea-research/grounding-dino-tiny](https://huggingface.co/idea-research/grounding-dino-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -267,10 +264,10 @@ class GroundingDINOConfig(PretrainedConfig):
     ```python
     >>> from transformers import GroundingDINOConfig, GroundingDINOModel
 
-    >>> # Initializing a Grounding DINO SenseTime/deformable-detr style configuration
+    >>> # Initializing a Grounding DINO idea-research/grounding-dino-tiny style configuration
     >>> configuration = GroundingDINOConfig()
 
-    >>> # Initializing a model (with random weights) from the SenseTime/deformable-detr style configuration
+    >>> # Initializing a model (with random weights) from the idea-research/grounding-dino-tiny style configuration
     >>> model = GroundingDINOModel(configuration)
 
     >>> # Accessing the model configuration

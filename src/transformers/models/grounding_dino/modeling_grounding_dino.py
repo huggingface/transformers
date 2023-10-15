@@ -2226,8 +2226,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         self,
         pixel_values: Tensor,
         input_ids: Tensor,
-        token_type_ids: Tensor,
-        attention_mask: Tensor,
+        token_type_ids: Tensor = None,
+        attention_mask: Tensor = None,
         pixel_mask: Optional[Tensor] = None,
         encoder_outputs=None,
         output_attentions=None,
@@ -2247,8 +2247,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = GroundingDINOModel.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("idea-research/grounding-dino-tiny")
+        >>> model = GroundingDINOModel.from_pretrained("idea-research/grounding-dino-tiny")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -2559,8 +2559,8 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = GroundingDINOForObjectDetection.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("idea-research/grounding-dino-tiny")
+        >>> model = GroundingDINOForObjectDetection.from_pretrained("idea-research/grounding-dino-tiny")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

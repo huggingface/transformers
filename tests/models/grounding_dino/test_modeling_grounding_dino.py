@@ -209,9 +209,6 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        for k, v in inputs_dict.items():
-            print(k, v.shape)
-
         if return_labels:
             if model_class.__name__ == "GroundingDINOForObjectDetection":
                 labels = []
@@ -413,7 +410,6 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 recursive_check(tuple_output, dict_output)
 
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -494,17 +490,13 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            if model.config.is_encoder_decoder:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
-                    else []
-                )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            else:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                self.assertListEqual(arg_names[:1], expected_arg_names)
+            expected_arg_names = ["pixel_values", "input_ids"]
+            expected_arg_names.extend(
+                ["head_mask", "decoder_head_mask", "encoder_outputs"]
+                if "head_mask" and "decoder_head_mask" in arg_names
+                else []
+            )
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_different_timm_backbone(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
