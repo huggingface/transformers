@@ -156,6 +156,7 @@ class PhiConfig(PretrainedConfig):
             **kwargs,
         )
 
+    # Copied from transformers.models.persimmon.configuration_persimmon.PersimmonConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
