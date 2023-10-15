@@ -24,7 +24,6 @@ import sentencepiece as spm
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
@@ -60,7 +59,10 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        sep_token (`<fill_type>`, *optional*, defaults to `"<::::>"`): <fill_docstring>
+        sep_token (`str`, *optional*, defaults to `"<::::>"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
