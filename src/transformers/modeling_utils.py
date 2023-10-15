@@ -70,7 +70,7 @@ from .utils import (
     is_accelerate_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
-    is_flash_attn_available,
+    is_flash_attn_2_available,
     is_offline_mode,
     is_optimum_available,
     is_peft_available,
@@ -693,7 +693,9 @@ def _load_state_dict_into_meta_model(
         if dtype is not None and torch.is_floating_point(param):
             if (
                 keep_in_fp32_modules is not None
-                and any(module_to_keep_in_fp32 in param_name for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                and any(
+                    module_to_keep_in_fp32 in param_name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
+                )
                 and dtype == torch.float16
             ):
                 param = param.to(torch.float32)
@@ -1267,7 +1269,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "request support for this architecture: https://github.com/huggingface/transformers/issues/new"
             )
 
-        if not is_flash_attn_available():
+        if not is_flash_attn_2_available():
             raise ImportError(
                 "Flash Attention 2.0 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
                 " installing it."
@@ -2633,8 +2635,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     raise RuntimeError("No GPU found. A GPU is needed for quantization.")
                 logger.info(
-                    "The device_map was not initialized."
-                    "Setting device_map to {'':torch.cuda.current_device()}."
+                    "The device_map was not initialized. "
+                    "Setting device_map to {'':torch.cuda.current_device()}. "
                     "If you want to use the model for inference, please set device_map ='auto' "
                 )
                 if low_cpu_mem_usage is None:
@@ -2760,8 +2762,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else:
                         raise RuntimeError("No GPU found. A GPU is needed for quantization.")
                     logger.info(
-                        "The device_map was not initialized."
-                        "Setting device_map to {'':torch.cuda.current_device()}."
+                        "The device_map was not initialized. "
+                        "Setting device_map to {'':torch.cuda.current_device()}. "
                         "If you want to use the model for inference, please set device_map ='auto' "
                     )
                     if low_cpu_mem_usage is None:
@@ -3147,7 +3149,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if load_in_8bit and torch_dtype is None:
             logger.warning(
-                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute."
+                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute. "
                 "All non-linear modules will be loaded in full precision."
                 " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
             )
@@ -3191,8 +3193,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     raise ValueError(
                         "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
-                        " the appropriate device map, you should upgrade your `accelerate` library,"
-                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
+                        " the appropriate device map, you should upgrade your `accelerate` library, "
+                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map "
                         "calculation. You may encounter unexpected behavior, or pass your own device map"
                     )
             elif load_in_8bit:
@@ -3200,7 +3202,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if model._no_split_modules is None:
                 raise ValueError(
-                    f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model"
+                    f"{model.__class__.__name__} does not support `device_map='{device_map}'`. To implement support, the model "
                     "class needs to implement the `_no_split_modules` attribute."
                 )
             no_split_modules = model._no_split_modules
@@ -3534,7 +3536,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if (
                     keep_in_fp32_modules is not None
                     and dtype == torch.float16
-                    and any(module_to_keep_in_fp32 in key for module_to_keep_in_fp32 in keep_in_fp32_modules)
+                    and any(
+                        module_to_keep_in_fp32 in key.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
+                    )
                 ):
                     target_dtype = torch.float32
 
@@ -3561,7 +3565,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Set some modules to fp32 if any
         if keep_in_fp32_modules is not None:
             for name, param in model.named_parameters():
-                if any(module_to_keep_in_fp32 in name for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                if any(module_to_keep_in_fp32 in name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 

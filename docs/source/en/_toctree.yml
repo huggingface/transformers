@@ -92,6 +92,8 @@
     sections:
     - local: tasks/idefics
       title: Image tasks with IDEFICS
+    - local: tasks/prompting
+      title: LLM prompting guide
     title: Prompting
   title: Task Guides
 - sections:
@@ -508,7 +510,7 @@
       - local: model_doc/dinat
         title: DiNAT
       - local: model_doc/dinov2
-        title: DINO V2
+        title: DINOV2
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -693,6 +695,8 @@
         title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
+      - local: model_doc/owlv2
+        title: OWLv2
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/pix2struct

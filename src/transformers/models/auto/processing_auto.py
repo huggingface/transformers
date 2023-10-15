@@ -65,6 +65,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mctct", "MCTCTProcessor"),
         ("mgp-str", "MgpstrProcessor"),
         ("oneformer", "OneFormerProcessor"),
+        ("owlv2", "Owlv2Processor"),
         ("owlvit", "OwlViTProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
         ("pop2piano", "Pop2PianoProcessor"),
@@ -314,7 +315,7 @@ class AutoProcessor:
 
         raise ValueError(
             f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
-            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains"
+            "tokenizer, an image processor or a feature extractor for this model. Make sure the repository contains "
             "the files of at least one of those processing classes."
         )
 
