@@ -199,8 +199,9 @@ class MPNetTokenizer(PreTrainedTokenizer):
         return len(self.vocab)
 
     def get_vocab(self):
-        vocab = self.vocab.copy()
-        vocab.update(self.added_tokens_encoder)
+        # "<mask>" is part of the vocab, but was wrongfully added at a wrong index in the fast saved version
+        vocab = self.added_tokens_encoder.copy()
+        vocab.update(self.vocab)
         return vocab
 
     def _tokenize(self, text):

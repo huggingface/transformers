@@ -149,16 +149,16 @@ class PegasusTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(vocab_file)
 
         self._added_tokens_decoder = {
-            0: AddedToken(str(pad_token), lstrip=True, rstrip=True),
-            1: AddedToken(str(eos_token), lstrip=True, rstrip=True),
+            0: AddedToken(str(pad_token), lstrip=True, rstrip=True, normalized=True, special=True),
+            1: AddedToken(str(eos_token), lstrip=True, rstrip=True, normalized=True, special=True),
         }
 
         if self.mask_token_sent is not None:
-            self._added_tokens_decoder[2] = AddedToken(mask_token_sent)
-            self._added_tokens_decoder[3] = AddedToken(str(mask_token))
+            self._added_tokens_decoder[2] = AddedToken(mask_token_sent, normalized=True, special=True)
+            self._added_tokens_decoder[3] = AddedToken(str(mask_token), normalized=True, special=True)
 
         for i in range(1, self.offset - 1):
-            self._added_tokens_decoder[len(self._added_tokens_decoder)] = AddedToken(f"<unk_{i}>")
+            self._added_tokens_decoder[len(self._added_tokens_decoder)] = AddedToken(f"<unk_{i}>", normalized=True, special=True)
 
         super().__init__(
             eos_token=eos_token,
