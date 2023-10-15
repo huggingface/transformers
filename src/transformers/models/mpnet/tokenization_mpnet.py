@@ -147,15 +147,43 @@ class MPNetTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
-        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False, normalized=False, special=True) if isinstance(sep_token, str) else sep_token
-        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False, normalized=False, special=True) if isinstance(cls_token, str) else cls_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        sep_token = (
+            AddedToken(sep_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(sep_token, str)
+            else sep_token
+        )
+        cls_token = (
+            AddedToken(cls_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(cls_token, str)
+            else cls_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
 
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False, special=True) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False, special=True)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         if not os.path.isfile(vocab_file):
             raise ValueError(

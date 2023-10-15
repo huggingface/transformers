@@ -158,7 +158,9 @@ class PegasusTokenizer(PreTrainedTokenizer):
             _added_tokens_decoder[3] = AddedToken(str(mask_token), normalized=False, special=True)
 
         for i in range(2, self.offset):
-            _added_tokens_decoder[len(_added_tokens_decoder)] = AddedToken(f"<unk_{i}>", normalized=False, special=True)
+            _added_tokens_decoder[len(_added_tokens_decoder)] = AddedToken(
+                f"<unk_{i}>", normalized=False, special=True
+            )
 
         # Force update as we want to make sure vocab is enforced (same as fast)
         self._added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})

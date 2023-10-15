@@ -893,7 +893,10 @@ class TokenizerTesterMixin:
                 # smaller than the original vocabs - let's not assert this
                 # self.assertEqual(vocab_size, all_size)
 
-                new_toks = [AddedToken("aaaaa bbbbbb", rstrip = True, lstrip = True), AddedToken("cccccccccdddddddd", rstrip=True, lstrip=True)]
+                new_toks = [
+                    AddedToken("aaaaa bbbbbb", rstrip=True, lstrip=True),
+                    AddedToken("cccccccccdddddddd", rstrip=True, lstrip=True),
+                ]
                 added_toks = tokenizer.add_tokens(new_toks)
                 vocab_size_2 = tokenizer.vocab_size
                 all_size_2 = len(tokenizer)
@@ -4036,7 +4039,13 @@ class TokenizerTesterMixin:
 
                 if not tokenizer.is_fast:
                     # bloom, gptneox etc only have a fast
-                    tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken(special_token, rstrip=True, lstrip=True, normalized=True, special=True)]})
+                    tokenizer.add_special_tokens(
+                        {
+                            "additional_special_tokens": [
+                                AddedToken(special_token, rstrip=True, lstrip=True, normalized=True, special=True)
+                            ]
+                        }
+                    )
                     encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
                     self.assertEqual(len(encoded_special_token), 1)
 
@@ -4051,11 +4060,6 @@ class TokenizerTesterMixin:
                     else:
                         self.assertTrue(len(encoded_split_special_token) > 1)
 
-
-
-
-
-
     def test_added_tokens_serialization(self):
         self.maxDiff = None
 
@@ -4068,47 +4072,66 @@ class TokenizerTesterMixin:
             self.assertDictEqual(expected, tokenizer.added_tokens_decoder)
             return tokenizer
 
-
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
-                with self.subTest(f"Hub -> Slow: Test loading a slow tokenizer from the hub)"):
+                with self.subTest("Hub -> Slow: Test loading a slow tokenizer from the hub)"):
                     self.assertEqual(tokenizer._eos_token, new_eos)
                     self.assertIn(new_eos, list(tokenizer.added_tokens_decoder.values()))
 
                 with tempfile.TemporaryDirectory() as tmp_dir_2:
                     tokenizer.save_pretrained(tmp_dir_2)
-                    with self.subTest(f"Hub -> Slow -> Slow: Test saving this slow tokenizer and reloading it in the fast class"):
-                        _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_2)
+                    with self.subTest(
+                        "Hub -> Slow -> Slow: Test saving this slow tokenizer and reloading it in the fast class"
+                    ):
+                        _test_added_vocab_and_eos(
+                            EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_2
+                        )
 
                     if self.rust_tokenizer_class is not None:
-                        with self.subTest(f"Hub -> Slow -> Fast: Test saving this slow tokenizer and reloading it in the fast class"):
-                            tokenizer_fast = _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_2)
+                        with self.subTest(
+                            "Hub -> Slow -> Fast: Test saving this slow tokenizer and reloading it in the fast class"
+                        ):
+                            tokenizer_fast = _test_added_vocab_and_eos(
+                                EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_2
+                            )
                             with tempfile.TemporaryDirectory() as tmp_dir_3:
                                 tokenizer_fast.save_pretrained(tmp_dir_3)
-                                with self.subTest(f"Hub -> Slow -> Fast -> Fast: Test saving this fast tokenizer and reloading it in the fast class"):
-                                    _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_3)
+                                with self.subTest(
+                                    "Hub -> Slow -> Fast -> Fast: Test saving this fast tokenizer and reloading it in the fast class"
+                                ):
+                                    _test_added_vocab_and_eos(
+                                        EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_3
+                                    )
 
-                                with self.subTest(f"Hub -> Slow -> Fast -> Slow: Test saving this slow tokenizer and reloading it in the slow class"):
-                                    _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_3)
+                                with self.subTest(
+                                    "Hub -> Slow -> Fast -> Slow: Test saving this slow tokenizer and reloading it in the slow class"
+                                ):
+                                    _test_added_vocab_and_eos(
+                                        EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_3
+                                    )
 
-                with self.subTest(f"Hub -> Fast: Test loading a fast tokenizer from the hub)"):
+                with self.subTest("Hub -> Fast: Test loading a fast tokenizer from the hub)"):
                     if self.rust_tokenizer_class is not None:
                         tokenizer_fast = self.rust_tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
                         self.assertEqual(tokenizer_fast._eos_token, new_eos)
                         self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
                         # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
-                        with self.subTest(f"Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
+                        with self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
                             self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
 
                         EXPECTED_ADDED_TOKENS_DECODER = tokenizer_fast.added_tokens_decoder
                         with tempfile.TemporaryDirectory() as tmp_dir_4:
                             tokenizer_fast.save_pretrained(tmp_dir_4)
-                            with self.subTest(f"Hub -> Fast -> Fast: saving Fast1 locally and loading"):
-                                _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_4)
-                            
-                            with self.subTest(f"Hub -> Fast -> Slow: saving Fast1 locally and loading"):
-                                _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_4)
+                            with self.subTest("Hub -> Fast -> Fast: saving Fast1 locally and loading"):
+                                _test_added_vocab_and_eos(
+                                    EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_4
+                                )
+
+                            with self.subTest("Hub -> Fast -> Slow: saving Fast1 locally and loading"):
+                                _test_added_vocab_and_eos(
+                                    EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_4
+                                )
