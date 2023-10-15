@@ -153,9 +153,9 @@ class T5Tokenizer(PreTrainedTokenizer):
         legacy=None,
         **kwargs,
     ) -> None:
-        pad_token = AddedToken(pad_token, rstrip=True, lstrip=True) if isinstance(pad_token, str) else pad_token
-        unk_token = AddedToken(unk_token, rstrip=True, lstrip=True) if isinstance(unk_token, str) else unk_token
-        eos_token = AddedToken(eos_token, rstrip=True, lstrip=True) if isinstance(eos_token, str) else eos_token
+        pad_token = AddedToken(pad_token, rstrip=False, lstrip=False, normalized=False,special=True) if isinstance(pad_token, str) else pad_token
+        unk_token = AddedToken(unk_token, rstrip=False, lstrip=False, normalized=False,special=True) if isinstance(unk_token, str) else unk_token
+        eos_token = AddedToken(eos_token, rstrip=False, lstrip=False, normalized=False,special=True) if isinstance(eos_token, str) else eos_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
