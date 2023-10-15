@@ -45,7 +45,8 @@ PHI_MAPPING = {
     "layers": "model.layers",
     "ln": "input_layernorm",
     "mixer": "self_attn",
-    "out_proj": "o_proj",
+    "Wqkv": "query_key_value",
+    "out_proj": "dense",
 }
 
 
@@ -64,20 +65,14 @@ def convert_weights(original_weights, mapping, config):
     for original_weights_key in original_weights_keys:
         new_key = original_weights_key
 
+        if "rotary_emb" in new_key:
+            continue
+
         for k, v in mapping.items():
             if k in new_key:
                 new_key = new_key.replace(k, v)
 
-        # we need to convert Wqkv to q, k, v weights.
-        if "Wqkv" not in new_key:
-            converted_weights[new_key] = original_weights.pop(original_weights_key)
-        else:
-            wqkv = original_weights.pop(original_weights_key)
-            q, k, v = wqkv.split(config.hidden_size)
-
-            converted_weights[new_key.replace("Wqkv", "q_proj")] = q
-            converted_weights[new_key.replace("Wqkv", "k_proj")] = k
-            converted_weights[new_key.replace("Wqkv", "v_proj")] = v
+        converted_weights[new_key] = original_weights.pop(original_weights_key)
 
     return converted_weights
 
@@ -161,5 +156,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
     convert_phi_weights(args.checkpoint_path, args.pytorch_dump_folder_path, args.use_cuda, args.save_weights_directly)

@@ -42,23 +42,27 @@ if is_torch_available():
     )
 
 
+# Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->Phi
 class PhiModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
+        use_token_type_ids=False,
         use_labels=True,
-        vocab_size=200,
-        hidden_size=128,
+        vocab_size=99,
+        hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=32,
-        hidden_act="gelu_new",
-        resid_pdrop=0.1,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
+        type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
@@ -71,6 +75,7 @@ class PhiModelTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
+        self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -78,8 +83,10 @@ class PhiModelTester:
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.resid_pdrop = resid_pdrop
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_labels = num_labels
@@ -94,6 +101,10 @@ class PhiModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
+        token_type_ids = None
+        if self.use_token_type_ids:
+            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+
         sequence_labels = None
         token_labels = None
         choice_labels = None
@@ -104,7 +115,7 @@ class PhiModelTester:
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
         return PhiConfig(
@@ -114,13 +125,18 @@ class PhiModelTester:
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
-            resid_pdrop=self.resid_pdrop,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
+            type_vocab_size=self.type_vocab_size,
+            is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
         )
 
-    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_model(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
         model = PhiModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -132,7 +148,13 @@ class PhiModelTester:
         self,
         config,
         input_ids,
+        token_type_ids,
         input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.add_cross_attention = True
         model = PhiModel(config)
@@ -140,6 +162,14 @@ class PhiModelTester:
         model.eval()
         result = model(
             input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+        )
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
@@ -148,8 +178,13 @@ class PhiModelTester:
         self,
         config,
         input_ids,
+        token_type_ids,
         input_mask,
+        sequence_labels,
         token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         model = PhiForCausalLM(config=config)
         model.to(torch_device)
@@ -161,10 +196,16 @@ class PhiModelTester:
         self,
         config,
         input_ids,
+        token_type_ids,
         input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.is_decoder = True
-        config.add_cross_attention = False
+        config.add_cross_attention = True
         model = PhiForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
@@ -173,6 +214,8 @@ class PhiModelTester:
         outputs = model(
             input_ids,
             attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -188,13 +231,15 @@ class PhiModelTester:
         output_from_no_past = model(
             next_input_ids,
             attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             output_hidden_states=True,
-        )[
-            "hidden_states"
-        ][0]
+        )["hidden_states"][0]
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
         )["hidden_states"][0]
@@ -214,6 +259,7 @@ class PhiModelTester:
         (
             config,
             input_ids,
+            token_type_ids,
             input_mask,
             sequence_labels,
             token_labels,
@@ -247,17 +293,21 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_headmasking = False
     test_pruning = False
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phi
     def setUp(self):
         self.model_tester = PhiModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PhiConfig)
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_model
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model with Llama->Phi,llama->phi
     def test_phi_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -270,6 +320,7 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_single_label with Llama->Phi,llama->phi
     def test_phi_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -283,6 +334,7 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_multi_label with Llama->Phi,llama->phi
     def test_phi_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -297,40 +349,6 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = PhiForCausalLM.from_pretrained(
-            "susnato/phi-1_dev",
-            torch_dtype=torch.float16,
-        ).to(torch_device)
-
-        tokenizer = CodeGenTokenizer.from_pretrained("susnato/phi-1_dev")
-
-        texts = ["hi", "Hello this is a very long sentence"]
-
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = tokenizer.batch_decode(output_native)
-
-        model = PhiForCausalLM.from_pretrained(
-            "susnato/phi-1_dev", torch_dtype=torch.float16, use_flash_attention_2=True
-        ).to(torch_device)
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
 
 
 @slow
