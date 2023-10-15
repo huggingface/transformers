@@ -161,7 +161,7 @@ class GroundingDINOModelTester:
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask, "input_ids": input_ids}
         return config, inputs_dict
 
-    def create_and_check_grounding_dino_model(self, config, pixel_values, pixel_mask, input_ids, labels):
+    def create_and_check_model(self, config, pixel_values, pixel_mask, input_ids, labels):
         model = GroundingDINOModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -171,9 +171,7 @@ class GroundingDINOModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
 
-    def create_and_check_grounding_dino_object_detection_head_model(
-        self, config, pixel_values, pixel_mask, input_ids, labels
-    ):
+    def create_and_check_object_detection_head_model(self, config, pixel_values, pixel_mask, input_ids, labels):
         model = GroundingDINOForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
@@ -244,13 +242,13 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
 
-    def test_grounding_dino_model(self):
+    def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_grounding_dino_model(*config_and_inputs)
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_grounding_dino_object_detection_head_model(self):
+    def test_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_grounding_dino_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_object_detection_head_model(*config_and_inputs)
 
     @unittest.skip(reason="Grounding DINO does not use inputs_embeds")
     def test_inputs_embeds(self):

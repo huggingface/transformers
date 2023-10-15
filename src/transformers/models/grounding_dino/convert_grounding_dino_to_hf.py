@@ -252,7 +252,7 @@ def create_rename_keys(state_dict, config):
             rename_keys.append((layer_name, layer_name.replace("input_proj", "model.input_proj_vision")))
         #### INPUT PROJ - PROJECT OUTPUT FEATURES FROM TEXT BACKBONE
         if "feat_map" in layer_name:
-            rename_keys.append((layer_name, layer_name.replace("feat_map", "model.input_proj_text")))
+            rename_keys.append((layer_name, layer_name.replace("feat_map", "model.text_projection")))
         #### DECODER REFERENCE POINT HEAD
         if "transformer.decoder.ref_point_head" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("transformer.decoder.ref_point_head",

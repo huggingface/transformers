@@ -1511,8 +1511,8 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p)
         elif isinstance(module, GroundingDINOModel):
-            nn.init.constant_(module.input_proj_text.bias.data, 0)
-            nn.init.xavier_uniform_(module.input_proj_text.weight.data)
+            nn.init.constant_(module.text_projection.bias.data, 0)
+            nn.init.xavier_uniform_(module.text_projection.weight.data)
             for proj in module.input_proj_vision:
                 nn.init.xavier_uniform_(proj[0].weight, gain=1)
                 nn.init.constant_(proj[0].bias, 0)
@@ -2108,7 +2108,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
 
         # Create text backbone
         self.text_backbone = GroundingDINOTextPrenet(config.text_backbone_config)
-        self.input_proj_text = nn.Linear(config.text_backbone_config.hidden_size, config.d_model)
+        self.text_projection = nn.Linear(config.text_backbone_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
             self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
@@ -2117,6 +2117,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         self.decoder = GroundingDINODecoder(config)
 
         self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
+
+        print("Two stage:", config.two_stage)
 
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
@@ -2286,7 +2288,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         text_features = self.text_backbone(input_ids, text_self_attention_masks, token_type_ids, position_ids)[
             "last_hidden_state"
         ]
-        text_features = self.input_proj_text(text_features)
+        text_features = self.text_projection(text_features)
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -3221,9 +3223,6 @@ class GroundingDINOTextEmbeddings(nn.Module):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
-
-
-# Classes for Text Backbone (It's just a BERT model)
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->GroundingDINOText
