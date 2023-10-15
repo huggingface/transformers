@@ -47,7 +47,7 @@ class FastConfig(PretrainedConfig):
             neck_dilation=[1, 1, 1, 1],
             neck_groups=[1, 1, 1, 1],
             head_pooling_size=9,
-            head_dropout_ratio=0.1,
+            head_dropout_ratio=0,
             head_conv_in_channels=512,
             head_conv_out_channels=128,
             head_conv_kernel_size=[3, 3],
