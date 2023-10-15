@@ -544,7 +544,11 @@ class BioGptModel(BioGptPreTrainedModel):
             inputs_embeds = self.embed_tokens(input) * self.embed_scale
 
         if attention_mask is None:
-            attention_mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
+            attention_mask = torch.ones(
+                (inputs_embeds.shape[0], inputs_embeds.shape[1] + past_key_values_length),
+                dtype=torch.bool,
+                device=inputs_embeds.device,
+            )
         elif attention_mask.shape[1] != past_key_values_length + input_shape[1]:
             raise ValueError(
                 f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
