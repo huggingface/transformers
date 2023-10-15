@@ -898,8 +898,13 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
 
 
 class GroundingDINOBiMultiHeadAttention(nn.Module):
-    def __init__(self, vision_dim: int, text_dim: int, embed_dim: int, num_heads: int, dropout: float = 0.1):
+    def __init__(self, config):
         super().__init__()
+
+        vision_dim = text_dim = config.d_model
+        embed_dim = config.encoder_ffn_dim // 2
+        num_heads = config.encoder_attention_heads // 2
+        dropout = config.fusion_dropout
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -907,9 +912,10 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         self.vision_dim = vision_dim
         self.text_dim = text_dim
 
-        assert (
-            self.head_dim * self.num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+            )
         self.scale = self.head_dim ** (-0.5)
         self.dropout = dropout
 
@@ -958,8 +964,6 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         Returns:
             _type_: _description_
         """
-        # if os.environ.get('IPDB_SHILONG_DEBUG', None) == 'INFO':
-        #     import ipdb; ipdb.set_trace()
         bsz, tgt_len, _ = vision_features.size()
 
         vision_query_states = self.vision_proj(vision_features) * self.scale
@@ -1097,13 +1101,7 @@ class GroundingDINOFusionLayer(nn.Module):
         # pre layer norm
         self.layer_norm_vision = nn.LayerNorm(config.d_model)
         self.layer_norm_text = nn.LayerNorm(config.d_model)
-        self.attn = GroundingDINOBiMultiHeadAttention(
-            vision_dim=config.d_model,
-            text_dim=config.d_model,
-            embed_dim=config.encoder_ffn_dim // 2,
-            num_heads=config.encoder_attention_heads // 2,
-            dropout=config.fusion_dropout,
-        )
+        self.attn = GroundingDINOBiMultiHeadAttention(config)
 
         # add layer scale for training stability
         self.drop_path = GroundingDINODropPath(drop_path) if drop_path > 0.0 else nn.Identity()
@@ -1241,6 +1239,9 @@ def get_sine_pos_embed(
 class GroundingDINOEncoderLayer(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
+
+        self.d_model = config.d_model
+
         self.text_enhancer_layer = GroundingDINOTextEnhancerLayer(config)
         self.fusion_layer = GroundingDINOFusionLayer(config)
         self.deformable_layer = GroundingDINODeformableLayer(config)
@@ -1248,15 +1249,21 @@ class GroundingDINOEncoderLayer(nn.Module):
     def get_text_position_embeddings(
         self, text_features: Tensor, text_position_embedding: Tensor, text_position_ids: Tensor
     ) -> Tensor:
-        bs, n_text, text_dim = text_features.shape
+        batch_size, seq_length, _ = text_features.shape
         if text_position_embedding is None and text_position_ids is None:
             text_position_embedding = (
-                torch.arange(n_text, device=text_features.device).float().unsqueeze(0).unsqueeze(-1).repeat(bs, 1, 1)
+                torch.arange(seq_length, device=text_features.device)
+                .float()
+                .unsqueeze(0)
+                .unsqueeze(-1)
+                .repeat(batch_size, 1, 1)
             )
-            text_position_embedding = get_sine_pos_embed(text_position_embedding, num_pos_feats=256, exchange_xy=False)
+            text_position_embedding = get_sine_pos_embed(
+                text_position_embedding, num_pos_feats=self.d_model, exchange_xy=False
+            )
         if text_position_ids is not None:
             text_position_embedding = get_sine_pos_embed(
-                text_position_ids[..., None], num_pos_feats=256, exchange_xy=False
+                text_position_ids[..., None], num_pos_feats=self.d_model, exchange_xy=False
             )
 
         return text_position_embedding
@@ -2258,6 +2265,13 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids)
+
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        if token_type_ids is None:
+            token_type_ids = torch.zeros_like(input_ids)
+
         text_token_mask = attention_mask.bool()  # just to avoid renaming everywhere
 
         max_text_len = self.config.max_text_len
@@ -2517,8 +2531,8 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor,
-        attention_mask: torch.LongTensor,
-        token_type_ids: torch.LongTensor,
+        attention_mask: torch.LongTensor = None,
+        token_type_ids: torch.LongTensor = None,
         pixel_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[Union[GroundingDINOEncoderOutput, Tuple]] = None,
         labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
