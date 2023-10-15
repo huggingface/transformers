@@ -893,7 +893,7 @@ class TokenizerTesterMixin:
                 # smaller than the original vocabs - let's not assert this
                 # self.assertEqual(vocab_size, all_size)
 
-                new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd"]
+                new_toks = [AddedToken("aaaaa bbbbbb", rstrip = True, lstrip = True), AddedToken("cccccccccdddddddd", rstrip=True, lstrip=True)]
                 added_toks = tokenizer.add_tokens(new_toks)
                 vocab_size_2 = tokenizer.vocab_size
                 all_size_2 = len(tokenizer)
@@ -4036,7 +4036,7 @@ class TokenizerTesterMixin:
 
                 if not tokenizer.is_fast:
                     # bloom, gptneox etc only have a fast
-                    tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
+                    tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken(special_token, rstrip=True, lstrip=True, normalized=True, special=True)]})
                     encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
                     self.assertEqual(len(encoded_special_token), 1)
 
@@ -4051,115 +4051,64 @@ class TokenizerTesterMixin:
                     else:
                         self.assertTrue(len(encoded_split_special_token) > 1)
 
-    # TODO split this test
+
+
+
+
+
     def test_added_tokens_serialization(self):
         self.maxDiff = None
+
+        # Utility to test the added vocab
+        def _test_added_vocab_and_eos(expected, tokenizer_class, expected_eos, temp_dir):
+            tokenizer = tokenizer_class.from_pretrained(temp_dir)
+            self.assertTrue(str(expected_eos) not in tokenizer.additional_special_tokens)
+            self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
+            self.assertEqual(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
+            self.assertDictEqual(expected, tokenizer.added_tokens_decoder)
+            return tokenizer
+
+
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
-                self.assertEquals(tokenizer._eos_token, new_eos)
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
-                # make sure the exact added token made it to the added tokens decoder
-                self.assertIn(new_eos, list(tokenizer.added_tokens_decoder.values()))
+                with self.subTest(f"Hub -> Slow: Test loading a slow tokenizer from the hub)"):
+                    self.assertEqual(tokenizer._eos_token, new_eos)
+                    self.assertIn(new_eos, list(tokenizer.added_tokens_decoder.values()))
 
                 with tempfile.TemporaryDirectory() as tmp_dir_2:
                     tokenizer.save_pretrained(tmp_dir_2)
-                    tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_2)
-                    self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
-                    self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
-                    if self.rust_tokenizer_class is not None:
-                        # fast from pretrained ignore the lstrip rstrip
-                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
-                        self.assertEquals(tokenizer_fast.added_tokens_decoder[tokenizer_fast.eos_token_id], new_eos)
-                        self.assertIn(new_eos, tokenizer_fast.added_tokens_decoder.values())
-                        self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
-                        with tempfile.TemporaryDirectory() as tmp_dir_3:
-                            tokenizer_fast.save_pretrained(tmp_dir_3)
-                            tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
-                                pretrained_name, eos_token=new_eos, use_fast=True
-                            )
-                            self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
-                            self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
-                            self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
-
-                            tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_3)
-                            self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
-                            self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
-                            self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
-
-                if self.rust_tokenizer_class is not None:
-                    tokenizer_fast = self.rust_tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
-                    self.assertEquals(tokenizer_fast._eos_token, new_eos)
-                    # make sure the exact added token made it to the added tokens decoder
-                    self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
-                    # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
-                    # self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
-                    EXPECTED_ADDED_TOKENS_DECODER = tokenizer_fast.added_tokens_decoder
-                    with tempfile.TemporaryDirectory() as tmp_dir_4:
-                        tokenizer_fast.save_pretrained(tmp_dir_4)
-                        tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_4)
-                        self.assertEquals(tokenizer.added_tokens_decoder[tokenizer.eos_token_id], new_eos)
-                        self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer.added_tokens_decoder)
-
-                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_4)
-                        self.assertEquals(tokenizer_fast.added_tokens_decoder[tokenizer_fast.eos_token_id], new_eos)
-                        self.assertEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
-
-            # make sure the special tokens are marked as special in the fast tokenizer.json and in the slow as well of course. Read the jsons
-            # MAKE SURE THE ONLY WAY TO CHANGE AN ADDEDTOKEN IS THROUGH add_tokens!
-            # Allow re-building the regex?
-            # make sure we don't cast anything in another type
-            # SPLIT INTO MORE SUBTESTs!!!
-
-    def test_additional_special_tokens_serialization(self):
-        self.maxDiff = None
-        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False)
-        # you CAN'T set the additional special tokens once loaded but can after load
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                # Load a slow tokenizer from the hub, init with the new token for fast to also include it
-                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, additional_special_tokens=[new_eos])
-                # self.assertEquals(tokenizer._additional_special_tokens[-1], new_eos)
-
-                # make sure the token was added
-                self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
-                self.assertEqual(new_eos, tokenizer.added_tokens_decoder[tokenizer.added_tokens_encoder[str(new_eos)]])
-
-                # At this point if you save the tokenizer and reload it, the token will be saved as special
-                # it does not matter if you set the attribute
-                tokenizer.additional_special_tokens = None
-                with tempfile.TemporaryDirectory() as tmp_dir_2:
-                    tokenizer.save_pretrained(tmp_dir_2)
-                    # We did not save any additional special tokens in the list, but added tokens decoder has
-                    # special tokens. Check what happens
-                    tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_2)
-                    # Make sure the additional special tokens does not include any special attribute token
-                    self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
+                    with self.subTest(f"Hub -> Slow -> Slow: Test saving this slow tokenizer and reloading it in the fast class"):
+                        _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_2)
 
                     if self.rust_tokenizer_class is not None:
-                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
-                        self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
+                        with self.subTest(f"Hub -> Slow -> Fast: Test saving this slow tokenizer and reloading it in the fast class"):
+                            tokenizer_fast = _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_2)
+                            with tempfile.TemporaryDirectory() as tmp_dir_3:
+                                tokenizer_fast.save_pretrained(tmp_dir_3)
+                                with self.subTest(f"Hub -> Slow -> Fast -> Fast: Test saving this fast tokenizer and reloading it in the fast class"):
+                                    _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_3)
 
-                if self.rust_tokenizer_class is not None:
-                    tokenizer_fast = self.rust_tokenizer_class.from_pretrained(
-                        pretrained_name, eos_token=new_eos, use_fast=True
-                    )
-                    self.assertIn(new_eos, tokenizer.added_tokens_decoder.values())
+                                with self.subTest(f"Hub -> Slow -> Fast -> Slow: Test saving this slow tokenizer and reloading it in the slow class"):
+                                    _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_3)
 
-                    with tempfile.TemporaryDirectory() as tmp_dir_2:
-                        tokenizer_fast.save_pretrained(tmp_dir_2)  # save only fast version
-                        # New format, additional_special_tokens
-                        tokenizer = self.tokenizer_class.from_pretrained(tmp_dir_2)
+                with self.subTest(f"Hub -> Fast: Test loading a fast tokenizer from the hub)"):
+                    if self.rust_tokenizer_class is not None:
+                        tokenizer_fast = self.rust_tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
+                        self.assertEqual(tokenizer_fast._eos_token, new_eos)
+                        self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
+                        # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
+                        with self.subTest(f"Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
+                            self.assertDictEqual(EXPECTED_ADDED_TOKENS_DECODER, tokenizer_fast.added_tokens_decoder)
 
-                # Make sure the additional special tokens does not include any special attribute token
-                self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
-                self.assertTrue(new_eos not in tokenizer.special_tokens_map)
-
-                if self.rust_tokenizer_class is not None:
-                    # from fast
-                    tokenizer = self.tokenizer_class.from_pretrained(pretrained_name)
-                    # Make sure the additional special tokens does not include any special attribute token
-                    self.assertTrue(str(new_eos) not in tokenizer.additional_special_tokens)
-                    self.assertTrue(new_eos not in tokenizer.special_tokens_map)
+                        EXPECTED_ADDED_TOKENS_DECODER = tokenizer_fast.added_tokens_decoder
+                        with tempfile.TemporaryDirectory() as tmp_dir_4:
+                            tokenizer_fast.save_pretrained(tmp_dir_4)
+                            with self.subTest(f"Hub -> Fast -> Fast: saving Fast1 locally and loading"):
+                                _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.rust_tokenizer_class, new_eos, tmp_dir_4)
+                            
+                            with self.subTest(f"Hub -> Fast -> Slow: saving Fast1 locally and loading"):
+                                _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_4)
