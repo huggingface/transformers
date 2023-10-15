@@ -84,7 +84,8 @@ class CodeGenConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         bos_token_id (`int`, *optional*, defaults to 50256): Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 50256): End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`): Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
             model has a output word embedding layer.
 
     Example:
