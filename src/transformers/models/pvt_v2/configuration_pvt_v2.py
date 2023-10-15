@@ -18,9 +18,10 @@
 
 import warnings
 from collections import OrderedDict
-from typing import Callable, Dict, List, Mapping, Union
+from typing import Callable, Dict, List, Mapping, Union, Sequence
 
 from packaging import version
+from torch.nn.modules.utils import _ntuple
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -116,7 +117,7 @@ class PvtV2Config(PretrainedConfig):
 
     def __init__(
         self,
-        image_size: Dict[str, int] = {"height": 224, "width": 224},
+        image_size: Union[int, Sequence[int], Dict[str, int]] = {"height": 224, "width": 224},
         num_channels: int = 3,
         num_encoder_blocks: int = 4,
         depths: List[int] = [2, 2, 2, 2],
@@ -148,6 +149,13 @@ class PvtV2Config(PretrainedConfig):
                 FutureWarning,
             )
 
+        if isinstance(image_size, int):
+            image_size = _ntuple(2)(image_size)
+        if isinstance(image_size, dict):
+            req_keys = ("height", "width")
+            assert all([k in req_keys for k in image_size.keys()]), f"Image size dict must have keys: {req_keys}"
+        elif isinstance(image_size, Sequence):
+            image_size = {"height": image_size[0], "width": image_size[1]}
         self.image_size = image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
