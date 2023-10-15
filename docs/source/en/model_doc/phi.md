@@ -86,8 +86,7 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> # use the model to generate new tokens
 >>> generated_output = model.generate(**tokens, use_cache=True, eos_token_id=tokenizer.eos_token_id, max_new_tokens=512)
 
->>> # print out the generated text.
->>> sys.stdout.write(tokenizer.batch_decode(generated_output)[0])
+>>> generated_code = tokenizer.batch_decode(generated_output)[0]
 ```
 
 - Example of Natural English Text generation using `Phi-1.5`
@@ -108,8 +107,7 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> # use the model to generate new tokens
 >>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=512)
 
->>> # print out the generated text.
->>> print(tokenizer.batch_decode(generated_output)[0])
+>>> generated_text = tokenizer.batch_decode(generated_output)[0]
 ```
 
 
