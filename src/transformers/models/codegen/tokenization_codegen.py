@@ -140,11 +140,13 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
-        pad_token (`<fill_type>`, *optional*): <fill_docstring>
+        pad_token (`str`, *optional*):
+            A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
+            attention mechanisms or loss computation
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).
-        add_bos_token (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        add_bos_token (`bool`, *optional*, defaults to `False`): Whether to add a beginning of sequence token at the start of sequences.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

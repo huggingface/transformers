@@ -57,7 +57,7 @@ class CodeGenConfig(PretrainedConfig):
         n_positions (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_ctx (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        n_ctx (`int`, *optional*, defaults to 2048): Number of tokens provided in a single pass.
         n_embd (`int`, *optional*, defaults to 4096):
             Dimensionality of the embeddings and hidden states.
         n_layer (`int`, *optional*, defaults to 28):
@@ -82,9 +82,10 @@ class CodeGenConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        bos_token_id (`<fill_type>`, *optional*, defaults to 50256): <fill_docstring>
-        eos_token_id (`<fill_type>`, *optional*, defaults to 50256): <fill_docstring>
-        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        bos_token_id (`int`, *optional*, defaults to 50256): Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 50256): End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`): Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
+            model has a output word embedding layer.
 
     Example:
 
