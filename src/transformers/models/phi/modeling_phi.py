@@ -20,7 +20,6 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -38,16 +37,10 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_phi import PhiConfig
-
-
-if is_flash_attn_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
 logger = logging.get_logger(__name__)
@@ -430,7 +423,6 @@ class PhiDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            # padding_mask=padding_mask,
         )
         attn_outputs = self.resid_dropout(attn_outputs)
 
@@ -651,11 +643,8 @@ class PhiModel(PhiPreTrainedModel):
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(
-                past_key_values_length, seq_length_with_past, dtype=torch.long, device=device
-            )
+            position_ids = torch.arange(past_key_values_length, seq_length_with_past, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
-
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -694,7 +683,6 @@ class PhiModel(PhiPreTrainedModel):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        # None for past_key_value
                         return module(*inputs, past_key_value, output_attentions)
 
                     return custom_forward
@@ -902,7 +890,6 @@ class PhiForCausalLM(PhiPreTrainedModel):
             }
         )
         return model_inputs
-
 
     @staticmethod
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache

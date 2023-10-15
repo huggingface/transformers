@@ -18,10 +18,8 @@
 
 import unittest
 
-from pytest import mark
-
 from transformers import PhiConfig, is_torch_available
-from transformers.testing_utils import require_flash_attn, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -33,7 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        CodeGenTokenizer,
         PhiForCausalLM,
         PhiForQuestionAnswering,
         PhiForSequenceClassification,
@@ -296,7 +293,7 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Phi
     def setUp(self):
         self.model_tester = PhiModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PhiConfig)
+        self.config_tester = ConfigTester(self, config_class=PhiConfig, hidden_size=37)
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):
@@ -365,6 +362,7 @@ class PhiIntegrationTest(unittest.TestCase):
         model.eval()
 
         output = model(**input_ids).logits
+
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([[2.2671,  6.7684, -2.0107, -1.2440, -1.5335, -2.3828,  6.9186,  6.4245,
                                          3.1548,  0.9998,  0.0760,  4.4653,  4.9857,  4.2956,  1.2308, -1.4178,
@@ -391,6 +389,7 @@ class PhiIntegrationTest(unittest.TestCase):
         model.eval()
 
         output = model(**input_ids).logits
+
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([[12.2922, 13.3507,  8.6963,  9.1355,  9.3502,  9.2667, 14.2027, 13.1363,
                                          13.5446, 11.1337,  9.9279, 16.7195, 13.0768, 14.9141, 11.9965,  8.0233,
