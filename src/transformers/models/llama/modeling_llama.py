@@ -41,7 +41,7 @@ from ...utils import (
 from .configuration_llama import LlamaConfig
 
 
-class AttentionMask2DTo4D:
+class AttentionMaskMapper:
     def __init__(self, is_causal: bool):
         self.is_causal = is_causal
         self.cache = {}
@@ -52,6 +52,10 @@ class AttentionMask2DTo4D:
         key_value_length) shape and by adding a -10,000 bias to not-attended positions. If cached 4D attention mask can
         be reused, no new memory will be allocated.
         """
+        # If the attention_mask does not match, but there is still a tensor in the cache, empty the cache
+        if attention_mask_2d not in self.cache and len(self.cache) > 0:
+            self.cache = {}
+
         # If 2d shape doesn't match or expected 4d shape doesn't match or 2d attention_mask values don't match,
         # a new (bsz, head_dim=1, query_length, key_value_length) 4D mask is created and cached
         if attention_mask_2d not in self.cache:
@@ -309,7 +313,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: LlamaConfig, mask_converter=None):
+    def __init__(self, config: LlamaConfig, attn_mask_4d_mapper=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -319,7 +323,7 @@ class LlamaAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
-        self.mask_converter = mask_converter
+        self.attn_mask_4d_mapper = attn_mask_4d_mapper
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -425,7 +429,7 @@ class LlamaAttention(nn.Module):
 
         if attention_mask is not None:
             # convert 2d -> 4d. Re-use cached mask if available
-            attention_mask = self.mask_converter(attention_mask, q_len, kv_seq_len, attn_weights.dtype)
+            attention_mask = self.attn_mask_4d_mapper(attention_mask, q_len, kv_seq_len, attn_weights.dtype)
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
@@ -586,7 +590,7 @@ class LlamaFlashAttention2(LlamaAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=self.mask_converter.is_causal,
+                causal=self.attn_mask_4d_mapper.is_causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
@@ -637,13 +641,13 @@ class LlamaFlashAttention2(LlamaAttention):
 
 
 class LlamaDecoderLayer(nn.Module):
-    def __init__(self, config: LlamaConfig, mask_converter=None):
+    def __init__(self, config: LlamaConfig, attn_mask_4d_mapper=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = (
-            LlamaAttention(config=config, mask_converter=mask_converter)
+            LlamaAttention(config=config, attn_mask_4d_mapper=attn_mask_4d_mapper)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else LlamaFlashAttention2(config=config, mask_converter=mask_converter)
+            else LlamaFlashAttention2(config=config, attn_mask_4d_mapper=attn_mask_4d_mapper)
         )
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -830,13 +834,13 @@ class LlamaModel(LlamaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        # create attn_mask converter that trickles down to each attention layer
+        # create attn_mask mapper that trickles down to each attention layer
         # so that the attention_mask cache can be shared among layers
-        mask_converter = AttentionMask2DTo4D(is_causal=True)
+        attn_mask_4d_mapper = AttentionMaskMapper(is_causal=True)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [LlamaDecoderLayer(config, mask_converter) for _ in range(config.num_hidden_layers)]
+            [LlamaDecoderLayer(config, attn_mask_4d_mapper) for _ in range(config.num_hidden_layers)]
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
