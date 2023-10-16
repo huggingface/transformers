@@ -148,8 +148,8 @@ class IdeficsProcessorTest(TestCasePlus):
         processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         predicted_tokens = [
-            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
-            "<s>Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
         ]
 
         prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
