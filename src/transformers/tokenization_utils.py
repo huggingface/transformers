@@ -476,15 +476,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     continue
                 else:
                     # very important for fast and slow equivalence!
+                    is_special = token in self.all_special_tokens or special_tokens
                     token = AddedToken(
-                        token, rstrip=False, lstrip=False, normalized=not special_tokens, special=special_tokens
+                        token, rstrip=False, lstrip=False, normalized=not is_special, special=is_special
                     )
             elif special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
                 token.__setstate__({"special": True, "normalized": token.normalized})
             if token in self._added_tokens_decoder:
                 continue
-            if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
+            if not token.special and token.normalized and getattr(self, "do_lower_case", False):
                 # Normalize if requested
                 token.content = token.content.lower()
             if token.content not in current_vocab:
