@@ -4,7 +4,7 @@ name: Self-hosted runner (push-caller)
 on:
   push:
     branches:
-      - main
+      - try_run_amd_push_ci_caller
     paths:
       - "src/**"
       - "tests/**"

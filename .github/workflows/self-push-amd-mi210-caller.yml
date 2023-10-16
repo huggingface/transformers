@@ -3,7 +3,7 @@ name: Self-hosted runner (AMD mi210 CI caller)
 on:
   workflow_run:
     workflows: ["Self-hosted runner (push-caller)"]
-    branches: ["main"]
+    branches: ["try_run_amd_push_ci_caller"]
     types: [completed]
   push:
     branches:
