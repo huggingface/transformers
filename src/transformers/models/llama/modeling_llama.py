@@ -41,57 +41,99 @@ from ...utils import (
 from .configuration_llama import LlamaConfig
 
 
-class AttentionMaskMapper:
+class AttentionMaskCache:
     def __init__(self, is_causal: bool):
         self.is_causal = is_causal
-        self.cache = {}
+        self.cache_4d_mask = {}
+        self.cache_4d_mask_only_causal = {}
+        self.cache_has_mask = {}
 
-    def __call__(self, attention_mask_2d: torch.Tensor, query_length: int, key_value_length: int, dtype: torch.dtype):
+    def has_mask(self, attention_mask_2d: torch.Tensor) -> bool:
+        """
+        Checks whether the attention_mask actually has a padding token or whether it has only non-padding tokens.
+        """
+        if attention_mask_2d not in self.cache_has_mask and len(self.cache_has_mask) > 0:
+            self.cache_has_mask = {}
+
+        if attention_mask_2d not in self.cache_has_mask:
+            self.cache_has_mask[attention_mask_2d] = 0 in attention_mask_2d
+
+        return self.cache_has_mask[attention_mask_2d]
+
+    def to_causal_4d(
+        self, batch_size: int, query_length: int, key_value_length: int, dtype: torch.dtype, device: torch.device
+    ) -> torch.Tensor:
+        """
+        Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
+        bias to upper right hand triangular matrix (causal mask). If cached 4D attention mask can be reused, no new
+        memory will be allocated.
+        """
+        expected_shape = (batch_size, 1, query_length, key_value_length)
+
+        # If the attention_mask shape does not match, but there is still a tensor in the cache, empty the cache
+        if expected_shape not in self.cache_4d_mask_only_causal and len(self.cache_4d_mask_only_causal) > 0:
+            self.cache_4d_mask_only_causal = {}
+
+        # If shape is not cached, create a new causal mask and cache it
+        if expected_shape not in self.cache_4d_mask:
+            input_shape = (batch_size, query_length)
+            past_key_values_length = key_value_length - query_length
+
+            # create causal mask
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            causal_4d_mask = None
+            if input_shape[-1] > 1 and self.is_causal:
+                past_key_values_length = key_value_length - query_length
+                causal_4d_mask = self._make_causal_mask(
+                    input_shape,
+                    dtype,
+                    device=device,
+                    past_key_values_length=past_key_values_length,
+                )
+
+            self.cache_4d_mask_only_causal[expected_shape] = causal_4d_mask
+
+        return self.cache_4d_mask_only_causal[expected_shape]
+
+    def to_4d(
+        self, attention_mask_2d: torch.Tensor, query_length: int, key_value_length: int, dtype: torch.dtype
+    ) -> torch.Tensor:
         """
         Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
-        key_value_length) shape and by adding a -10,000 bias to not-attended positions. If cached 4D attention mask can
-        be reused, no new memory will be allocated.
+        key_value_length) shape and by adding a large negative bias to not-attended positions. If attention_mask is
+        causal, a causal mask will be added. If cached 4D attention mask can be reused, no new memory will be
+        allocated.
         """
         # If the attention_mask does not match, but there is still a tensor in the cache, empty the cache
-        if attention_mask_2d not in self.cache and len(self.cache) > 0:
-            self.cache = {}
+        if attention_mask_2d not in self.cache_4d_mask and len(self.cache_4d_mask) > 0:
+            self.cache_4d_mask = {}
 
-        # If 2d shape doesn't match or expected 4d shape doesn't match or 2d attention_mask values don't match,
-        # a new (bsz, head_dim=1, query_length, key_value_length) 4D mask is created and cached
-        if attention_mask_2d not in self.cache:
+        # If attention_mask is not cached, create a new one and cache it
+        if attention_mask_2d not in self.cache_4d_mask:
             input_shape = (attention_mask_2d.shape[0], query_length)
             past_key_values_length = key_value_length - query_length
 
-            cached_4d_mask = self._prepare_decoder_attention_mask(
-                attention_mask_2d, input_shape, past_key_values_length, dtype
-            )
-            self.cache[attention_mask_2d] = cached_4d_mask
-
-        return self.cache[attention_mask_2d]
-
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length, dtype):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1 and self.is_causal:
-            combined_attention_mask = self._make_causal_mask(
-                input_shape,
-                dtype,
-                device=attention_mask.device,
-                past_key_values_length=past_key_values_length,
-            )
-
-        if attention_mask is not None:
+            # create causal mask
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = self._expand_mask(attention_mask, dtype, tgt_len=input_shape[-1]).to(
-                attention_mask.device
-            )
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
+            causal_4d_mask = None
+            if input_shape[-1] > 1 and self.is_causal:
+                past_key_values_length = key_value_length - query_length
+                causal_4d_mask = self._make_causal_mask(
+                    input_shape,
+                    dtype,
+                    device=attention_mask_2d.device,
+                    past_key_values_length=past_key_values_length,
+                )
 
-        return combined_attention_mask
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
+                attention_mask_2d.device
+            )
+            cached_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
+
+            self.cache_4d_mask[attention_mask_2d] = cached_4d_mask
+
+        return self.cache_4d_mask[attention_mask_2d]
 
     # Copied from transformers.models.bart.modeling_bart._make_causal_mask
     def _make_causal_mask(
@@ -313,7 +355,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: LlamaConfig, attn_mask_4d_mapper=None):
+    def __init__(self, config: LlamaConfig, attention_mask_cache=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -323,7 +365,7 @@ class LlamaAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
-        self.attn_mask_4d_mapper = attn_mask_4d_mapper
+        self.attention_mask_cache = attention_mask_cache
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -429,7 +471,14 @@ class LlamaAttention(nn.Module):
 
         if attention_mask is not None:
             # convert 2d -> 4d. Re-use cached mask if available
-            attention_mask = self.attn_mask_4d_mapper(attention_mask, q_len, kv_seq_len, attn_weights.dtype)
+            attention_mask = self.attention_mask_cache.to_4d(attention_mask, q_len, kv_seq_len, attn_weights.dtype)
+        elif self.attention_mask_cache.is_causal:
+            # create 4d causal mask. Re-use cached mask if available
+            attention_mask = self.attention_mask_cache.to_causal_4d(
+                bsz, q_len, kv_seq_len, attn_weights.dtype, attn_weights.device
+            )
+
+        if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
@@ -571,7 +620,7 @@ class LlamaFlashAttention2(LlamaAttention):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
         # Contains at least one padding token in the sequence
-        if attention_mask is not None:
+        if attention_mask is not None and self.attention_mask_cache.has_mask(attention_mask):
             batch_size = query_states.shape[0]
             query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
                 query_states, key_states, value_states, attention_mask, query_length
@@ -590,7 +639,7 @@ class LlamaFlashAttention2(LlamaAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=self.attn_mask_4d_mapper.is_causal,
+                causal=self.attention_mask_cache.is_causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
@@ -641,13 +690,13 @@ class LlamaFlashAttention2(LlamaAttention):
 
 
 class LlamaDecoderLayer(nn.Module):
-    def __init__(self, config: LlamaConfig, attn_mask_4d_mapper=None):
+    def __init__(self, config: LlamaConfig, attention_mask_cache=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = (
-            LlamaAttention(config=config, attn_mask_4d_mapper=attn_mask_4d_mapper)
+            LlamaAttention(config=config, attention_mask_cache=attention_mask_cache)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else LlamaFlashAttention2(config=config, attn_mask_4d_mapper=attn_mask_4d_mapper)
+            else LlamaFlashAttention2(config=config, attention_mask_cache=attention_mask_cache)
         )
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -836,11 +885,11 @@ class LlamaModel(LlamaPreTrainedModel):
 
         # create attn_mask mapper that trickles down to each attention layer
         # so that the attention_mask cache can be shared among layers
-        attn_mask_4d_mapper = AttentionMaskMapper(is_causal=True)
+        attention_mask_cache = AttentionMaskCache(is_causal=True)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [LlamaDecoderLayer(config, attn_mask_4d_mapper) for _ in range(config.num_hidden_layers)]
+            [LlamaDecoderLayer(config, attention_mask_cache) for _ in range(config.num_hidden_layers)]
         )
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -879,18 +928,15 @@ class LlamaModel(LlamaPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            seq_length = input_ids.shape[1]
+            batch_size, seq_length = input_ids.shape[:2]
         elif inputs_embeds is not None:
-            seq_length = inputs_embeds.shape[1]
+            batch_size, seq_length = inputs_embeds.shape[:2]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        seq_length_with_past = seq_length
         past_key_values_length = 0
-
         if past_key_values is not None:
             past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -901,6 +947,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
         # embed positions
         hidden_states = inputs_embeds
 
