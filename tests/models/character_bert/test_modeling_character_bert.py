@@ -12,19 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 import copy
+import os
 import tempfile
 import unittest
 
 from torch import nn
-from transformers.models.character_bert.modeling_character_bert import CharacterCnn
+
 from transformers import CharacterBertConfig, is_torch_available
-from transformers.models.auto import get_values, AutoModel, AutoModelForSequenceClassification
+from transformers.models.auto import AutoModel, AutoModelForSequenceClassification, get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
-    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
 )
+from transformers.models.character_bert.modeling_character_bert import CharacterCnn
 from transformers.testing_utils import CaptureLogger, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -377,7 +378,9 @@ class CharacterBertModelTester:
             labels=token_labels,
             next_sentence_label=sequence_labels,
         )
-        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.mlm_vocab_size))
+        self.parent.assertEqual(
+            result.prediction_logits.shape, (self.batch_size, self.seq_length, self.mlm_vocab_size)
+        )
         self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
@@ -692,7 +695,9 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             if return_labels:
                 inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
         else:
-            inputs_dict = super()._prepare_for_class(inputs_dict=inputs_dict, model_class=model_class, return_labels=return_labels)
+            inputs_dict = super()._prepare_for_class(
+                inputs_dict=inputs_dict, model_class=model_class, return_labels=return_labels
+            )
 
         if return_labels:
             if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
@@ -743,7 +748,7 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
                     # NOTE: no vocabulary so no problem here
-                    #self.assertIn("the shapes did not match", cl.out)
+                    # self.assertIn("the shapes did not match", cl.out)
 
                     input_ids = ids_tensor((2, 8, self.model_tester.max_word_length), 10)
                     new_model_without_prefix.to(torch_device)
@@ -762,32 +767,33 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
+
 @require_torch
 class CharacterBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
         model = CharacterBertModel.from_pretrained("helboukkouri/character-bert-base-uncased")
         input_ids = torch.tensor(
-            [[
-                [259, 257, 260, 261, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
-                [259, 81, 98, 115, 106, 116, 260, 261, 261, 261]   + [261] * (model.config.max_word_length - 10),
-                [259, 106, 116, 260, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
-                [259, 117, 105, 102, 260, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
-                [259, 100, 98, 113, 106, 117, 98, 109, 260, 261]   + [261] * (model.config.max_word_length - 10),
-                [259, 112, 103, 260, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
-                [259, 262, 260, 261, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
-                [259, 258, 260, 261, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
-            ]]
+            [
+                [
+                    [259, 257, 260, 261, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
+                    [259, 81, 98, 115, 106, 116, 260, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
+                    [259, 106, 116, 260, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
+                    [259, 117, 105, 102, 260, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
+                    [259, 100, 98, 113, 106, 117, 98, 109, 260, 261] + [261] * (model.config.max_word_length - 10),
+                    [259, 112, 103, 260, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
+                    [259, 262, 260, 261, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
+                    [259, 258, 260, 261, 261, 261, 261, 261, 261, 261] + [261] * (model.config.max_word_length - 10),
+                ]
+            ]
         )
         attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
             output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size([1, 8, 768])
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[
-            [ 0.0430, -0.3031,  0.2274],
-            [ 0.1547, -0.2594,  0.3634],
-            [-0.2890, -0.2062,  0.2870]]
-        ])
+        expected_slice = torch.tensor(
+            [[[0.0430, -0.3031, 0.2274], [0.1547, -0.2594, 0.3634], [-0.2890, -0.2062, 0.2870]]]
+        )
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))

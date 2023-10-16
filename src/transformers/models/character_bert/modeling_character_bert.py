@@ -20,7 +20,7 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union, Callable
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -82,7 +82,6 @@ CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "helboukkouri/character-bert-base-uncased",
     # See all CharacterBERT models at https://huggingface.co/models?filter=character_bert
 ]
-
 
 
 # Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->character_bert
@@ -1327,7 +1326,8 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """CharacterBert Model with a `language modeling` head on top for CLM fine-tuning.""", CHARACTER_BERT_START_DOCSTRING
+    """CharacterBert Model with a `language modeling` head on top for CLM fine-tuning.""",
+    CHARACTER_BERT_START_DOCSTRING,
 )
 class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
@@ -1471,7 +1471,9 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""CharacterBert Model with a `language modeling` head on top.""", CHARACTER_BERT_START_DOCSTRING)
+@add_start_docstrings(
+    """CharacterBert Model with a `language modeling` head on top.""", CHARACTER_BERT_START_DOCSTRING
+)
 class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1807,7 +1809,9 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,

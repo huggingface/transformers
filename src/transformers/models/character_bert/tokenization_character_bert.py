@@ -15,36 +15,26 @@
 """Tokenization classes for CharacterBert."""
 
 
-import warnings
 import collections
 import os
 import unicodedata
+import warnings
+from collections.abc import Mapping, Sized
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from typing import List, Optional, Tuple, Union, Dict
-from collections.abc import Mapping, Sized
-
-from ...tokenization_utils_base import (
-    TruncationStrategy,
-    BatchEncoding,
-    EncodedInput,
-    LARGE_INTEGER
-)
-from ...tokenization_utils import (
-    PreTrainedTokenizer,
-    _is_control,
-    _is_punctuation,
-    _is_whitespace
-)
+from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils_base import LARGE_INTEGER, BatchEncoding, EncodedInput, TruncationStrategy
 from ...utils import (
-    logging,
     PaddingStrategy,
     TensorType,
     is_tf_tensor,
     is_torch_tensor,
+    logging,
     to_py_obj,
 )
+
 
 logger = logging.get_logger(__name__)
 
@@ -88,13 +78,8 @@ def whitespace_tokenize(text):
     tokens = text.split()
     return tokens
 
-def special_token_character_ids(
-    index,
-    bow_character_id,
-    eow_character_id,
-    pad_character_id,
-    max_word_length
-):
+
+def special_token_character_ids(index, bow_character_id, eow_character_id, pad_character_id, max_word_length):
     """Generates the character id sequence for a special token with a given index."""
     assert index > 255, "index range 0-255 is reserved for actual characters"
     character_ids = [pad_character_id] * max_word_length
@@ -103,8 +88,9 @@ def special_token_character_ids(
     character_ids[2] = eow_character_id
     # NOTE: we shift everything so that the PAD token
     #       can be assigned the all zeros vector
-    character_ids = [(index + 1) for index in character_ids] 
+    character_ids = [(index + 1) for index in character_ids]
     return character_ids
+
 
 class CharacterBertTokenizer(PreTrainedTokenizer):
     r"""
@@ -117,7 +103,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         mlm_vocab_file (`str`, *optional*, defaults to `None`):
             File containing the vocabulary for Masked Language Modeling.
         max_word_length (`int`, *optional*, defaults to `50`):
-            The maximum token length in characters (or bytes since any non-ascii characters 
+            The maximum token length in characters (or bytes since any non-ascii characters
             are eventually converted into a sequence of UTF-8 bytes).
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
@@ -172,7 +158,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
-        self.vocab = dict()
+        self.vocab = {}
         if mlm_vocab_file:
             if not os.path.isfile(mlm_vocab_file):
                 raise ValueError(
@@ -181,7 +167,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 )
             self.mlm_vocab = load_vocab(mlm_vocab_file)
         else:
-            self.mlm_vocab = dict()
+            self.mlm_vocab = {}
 
         self.mlm_ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.mlm_vocab.items()])
         self.do_basic_tokenize = do_basic_tokenize
@@ -211,7 +197,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
 
         # NOTE: this is to force the use of our custom character ids for
         # CLS/SEP/MASK/PAD instead of the default ones
-        self._added_tokens_encoder = dict()
+        self._added_tokens_encoder = {}
 
         # Maximum number of characters (utf-8 bytes) per word
         if max_word_length < 3:
@@ -224,14 +210,14 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         self.eow_character_id = 259
         # Pads a TOKEN up to the maximum character length
         self.pad_character_id = PAD_CHARACTER_ID
-        
+
         # Token delimiting the BEGINNING of a TEXT
         self.cls_character_ids = special_token_character_ids(
             index=256,
             bow_character_id=self.bow_character_id,
             eow_character_id=self.eow_character_id,
             pad_character_id=self.pad_character_id,
-            max_word_length=max_word_length
+            max_word_length=max_word_length,
         )
         # Token delimiting the END of a TEXT
         self.sep_character_ids = special_token_character_ids(
@@ -239,7 +225,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             bow_character_id=self.bow_character_id,
             eow_character_id=self.eow_character_id,
             pad_character_id=self.pad_character_id,
-            max_word_length=max_word_length
+            max_word_length=max_word_length,
         )
         # Masks a subset of TOKENS for Maked Language Modeling
         self.mask_character_ids = special_token_character_ids(
@@ -247,7 +233,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             bow_character_id=self.bow_character_id,
             eow_character_id=self.eow_character_id,
             pad_character_id=self.pad_character_id,
-            max_word_length=max_word_length
+            max_word_length=max_word_length,
         )
 
         # Pads a sequence of TOKENS up to a desired length
@@ -307,9 +293,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         elif token == self.pad_token:
             character_ids = self.pad_character_ids
         else:
-            token_bytes = token.encode("utf-8", "ignore")[
-                : (self.max_word_length - 2)
-            ]
+            token_bytes = token.encode("utf-8", "ignore")[: (self.max_word_length - 2)]
             character_ids = [self.pad_character_id] * self.max_word_length
             character_ids[0] = self.bow_character_id
             for k, index in enumerate(token_bytes, start=1):
@@ -340,9 +324,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             utf8_codes = list(
                 filter(
                     lambda x: (
-                        (x != self.pad_character_id) and
-                        (x != self.bow_character_id) and
-                        (x != self.eow_character_id)
+                        (x != self.pad_character_id) and (x != self.bow_character_id) and (x != self.eow_character_id)
                     ),
                     character_ids_,
                 )
@@ -368,9 +350,9 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             `str` or `List[str]`: The decoded token(s).
         """
         if isinstance(ids, list) and isinstance(ids[0], int):
-            #if ids in self._added_tokens_decoder:
+            # if ids in self._added_tokens_decoder:
             #    return self._added_tokens_decoder[ids].content
-            #else:
+            # else:
             return self._convert_id_to_token(ids)
         tokens = []
         for character_ids in ids:
@@ -382,11 +364,10 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
-
-    #TODO: check the methods below
+    # TODO: check the methods below
     def build_inputs_with_special_tokens(
-            self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None
-        ) -> List[List[int]]:
+        self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None
+    ) -> List[List[int]]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CHARACTER_BERT sequence has the following format:
@@ -410,7 +391,10 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[List[int]], token_ids_1: Optional[List[List[int]]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[List[int]],
+        token_ids_1: Optional[List[List[int]]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -476,7 +460,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["mlm_vocab_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["mlm_vocab_file"],
             )
         else:
             vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
@@ -503,12 +488,11 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             save_directory=save_directory,
             file_names=file_names,
             legacy_format=legacy_format,
-            filename_prefix=filename_prefix
+            filename_prefix=filename_prefix,
         )
 
         mlm_vocab_files = self.save_mlm_vocabulary(save_directory, filename_prefix=filename_prefix)
         return file_names + mlm_vocab_files
-
 
     # NOTE: this override is a workaround to make the attention mask computation
     # rely on the tokens axis (number of tokens in the sequence) rather than the
@@ -651,12 +635,8 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         required_input = encoded_inputs[self.model_input_names[0]]
         # NOTE: this condition is the workaround. Previously:
         # `if required_input and not isinstance(required_input[0], (list, tuple))`
-        if (
-            required_input
-            and not (
-                isinstance(required_input[0], (list, tuple))
-                and isinstance(required_input[0][0], (list, tuple))
-            )
+        if required_input and not (
+            isinstance(required_input[0], (list, tuple)) and isinstance(required_input[0][0], (list, tuple))
         ):
             encoded_inputs = self._pad(
                 encoded_inputs,
@@ -693,7 +673,6 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 batch_outputs[key].append(value)
 
         return BatchEncoding(batch_outputs, tensor_type=return_tensors)
-
 
     def _get_padding_truncation_strategies(
         self, padding=False, truncation=None, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
@@ -813,15 +792,9 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         # Test if we have a padding token
         # NOTE: this is also a workaround because otherwise we check for a negative
         # `self.pad_token_id` while in this case we have a padding character id list
-        if (
-            padding_strategy != PaddingStrategy.DO_NOT_PAD
-            and (
-                (self.pad_token is None)
-                or (
-                    (not isinstance(self.pad_token_id, (list, tuple)))
-                    and (self.pad_token_id < 0)
-                )
-            )
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (
+            (self.pad_token is None)
+            or ((not isinstance(self.pad_token_id, (list, tuple))) and (self.pad_token_id < 0))
         ):
             raise ValueError(
                 "Asking to pad but the tokenizer does not have a padding token. "

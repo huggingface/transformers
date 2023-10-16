@@ -29,7 +29,6 @@ CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class CharacterBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CharacterBertModel`] or a [`TFCharacterBertModel`]. It is used to
@@ -143,22 +142,13 @@ class CharacterBertConfig(PretrainedConfig):
 
         if tie_word_embeddings:
             raise ValueError(
-                "Cannot tie word embeddings in CharacterBERT. "
-                "Please set `config.tie_word_embeddings=False`."
+                "Cannot tie word embeddings in CharacterBERT. " "Please set `config.tie_word_embeddings=False`."
             )
         self.tie_word_embeddings = tie_word_embeddings
 
         self.character_embeddings_dim = character_embeddings_dim
         self.cnn_activation = cnn_activation
-        self.cnn_filters = cnn_filters or [
-            [1, 32],
-            [2, 32],
-            [3, 64],
-            [4, 128],
-            [5, 256],
-            [6, 512],
-            [7, 1024]
-        ]
+        self.cnn_filters = cnn_filters or [[1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]
         self.num_highway_layers = num_highway_layers
         self.max_word_length = max_word_length
         self.mlm_vocab_size = mlm_vocab_size

@@ -4364,13 +4364,6 @@ if TYPE_CHECKING:
         BertTokenizer,
         WordpieceTokenizer,
     )
-    from .models.character_bert import (
-        CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BasicTokenizer,
-        CharacterBertConfig,
-        CharacterBertTokenizer,
-        WordpieceTokenizer,
-    )
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
@@ -4410,6 +4403,13 @@ if TYPE_CHECKING:
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
+    from .models.character_bert import (
+        CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BasicTokenizer,
+        CharacterBertConfig,
+        CharacterBertTokenizer,
+        WordpieceTokenizer,
+    )
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
@@ -4973,12 +4973,12 @@ if TYPE_CHECKING:
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
-        from .models.character_bert import CharacterBertTokenizerFast
         from .models.big_bird import BigBirdTokenizerFast
         from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
+        from .models.character_bert import CharacterBertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.code_llama import CodeLlamaTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
@@ -5347,21 +5347,6 @@ if TYPE_CHECKING:
             BertPreTrainedModel,
             load_tf_weights_in_bert,
         )
-        from .models.character_bert import (
-            CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CharacterBertForMaskedLM,
-            CharacterBertForMultipleChoice,
-            CharacterBertForNextSentencePrediction,
-            CharacterBertForPreTraining,
-            CharacterBertForQuestionAnswering,
-            CharacterBertForSequenceClassification,
-            CharacterBertForTokenClassification,
-            CharacterBertLayer,
-            # CharacterBertLMHeadModel,
-            CharacterBertModel,
-            CharacterBertPreTrainedModel,
-            load_tf_weights_in_character_bert,
-        )
         from .models.bert_generation import (
             BertGenerationDecoder,
             BertGenerationEncoder,
@@ -5485,6 +5470,21 @@ if TYPE_CHECKING:
             CanineModel,
             CaninePreTrainedModel,
             load_tf_weights_in_canine,
+        )
+        from .models.character_bert import (
+            CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CharacterBertForMaskedLM,
+            CharacterBertForMultipleChoice,
+            CharacterBertForNextSentencePrediction,
+            CharacterBertForPreTraining,
+            CharacterBertForQuestionAnswering,
+            CharacterBertForSequenceClassification,
+            CharacterBertForTokenClassification,
+            CharacterBertLayer,
+            # CharacterBertLMHeadModel,
+            CharacterBertModel,
+            CharacterBertPreTrainedModel,
+            load_tf_weights_in_character_bert,
         )
         from .models.chinese_clip import (
             CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,

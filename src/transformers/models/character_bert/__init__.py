@@ -24,7 +24,11 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_character_bert": ["CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CharacterBertConfig", "CharacterBertOnnxConfig"],
+    "configuration_character_bert": [
+        "CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CharacterBertConfig",
+        "CharacterBertOnnxConfig",
+    ],
     "tokenization_character_bert": ["BasicTokenizer", "CharacterBertTokenizer", "WordpieceTokenizer"],
 }
 
@@ -67,7 +71,11 @@ else:
     _import_structure["tokenization_character_bert_tf"] = ["TFCharacterBertTokenizer"]
 
 if TYPE_CHECKING:
-    from .configuration_character_bert import CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CharacterBertConfig, CharacterBertOnnxConfig
+    from .configuration_character_bert import (
+        CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CharacterBertConfig,
+        CharacterBertOnnxConfig,
+    )
     from .tokenization_character_bert import BasicTokenizer, CharacterBertTokenizer, WordpieceTokenizer
 
     try:

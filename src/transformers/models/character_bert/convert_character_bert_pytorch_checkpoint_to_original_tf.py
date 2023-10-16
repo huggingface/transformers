@@ -91,7 +91,9 @@ def convert_pytorch_checkpoint_to_tf(model: CharacterBertModel, ckpt_dir: str, m
 
 def main(raw_args=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, required=True, help="model name e.g. helboukkouri/character-bert-base-uncased")
+    parser.add_argument(
+        "--model_name", type=str, required=True, help="model name e.g. helboukkouri/character-bert-base-uncased"
+    )
     parser.add_argument(
         "--cache_dir", type=str, default=None, required=False, help="Directory containing pytorch model"
     )

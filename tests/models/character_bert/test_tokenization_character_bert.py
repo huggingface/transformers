@@ -16,8 +16,8 @@
 
 import os
 import unittest
-
 from typing import Tuple
+
 from transformers import PreTrainedTokenizerFast
 from transformers.models.character_bert.tokenization_character_bert import (
     VOCAB_FILES_NAMES,
@@ -28,7 +28,6 @@ from transformers.models.character_bert.tokenization_character_bert import (
     _is_whitespace,
 )
 from transformers.testing_utils import require_tokenizers, slow
-from transformers.tokenization_utils import AddedToken
 
 from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 
@@ -67,10 +66,7 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [259, 45, 260, 261, 261, 261, 261, 261, 261, 261, 261] + [261] * (tokenizer.max_word_length - 11),
             [259, 115, 118, 111, 111, 106, 111, 104, 260, 261, 261] + [261] * (tokenizer.max_word_length - 11),
         ]
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(expected_tokens),
-            expected_character_ids
-        )
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(expected_tokens), expected_character_ids)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
@@ -344,7 +340,10 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     tokenizer.sep_token,
                     tokenizer.pad_token,
                     tokenizer.mask_token,
-                    "some", "other", "random", "words"
+                    "some",
+                    "other",
+                    "random",
+                    "words",
                 ]:
                     if word == tokenizer.unk_token:
                         continue
@@ -361,7 +360,6 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         output_ids = tokenizer.encode(output_txt, add_special_tokens=False)
         return output_txt, output_ids
-
 
     def test_add_special_tokens(self):
         # NOTE: right now there is no support for adding/replacing special tokens
@@ -773,19 +771,25 @@ class CharacterBertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.skipTest("This model does not use attention mask.")
 
                 features = [
-                    {"input_ids": [
-                        [259, 1, 261] + [261] * (tokenizer.max_word_length - 3),
-                        [259, 2, 261] + [261] * (tokenizer.max_word_length - 3),
-                        [259, 3, 261] + [261] * (tokenizer.max_word_length - 3),
-                        [259, 4, 261] + [261] * (tokenizer.max_word_length - 3),
-                        [259, 5, 261] + [261] * (tokenizer.max_word_length - 3),
-                        [259, 6, 261] + [261] * (tokenizer.max_word_length - 3),
-                    ], "attention_mask": [1, 1, 1, 1, 1, 0]},
-                    {"input_ids": [
-                        [259, 1, 261] + [261] * (tokenizer.max_word_length - 3),
-                        [259, 2, 261] + [261] * (tokenizer.max_word_length - 3),
-                        [259, 3, 261] + [261] * (tokenizer.max_word_length - 3),
-                    ], "attention_mask": [1, 1, 0]},
+                    {
+                        "input_ids": [
+                            [259, 1, 261] + [261] * (tokenizer.max_word_length - 3),
+                            [259, 2, 261] + [261] * (tokenizer.max_word_length - 3),
+                            [259, 3, 261] + [261] * (tokenizer.max_word_length - 3),
+                            [259, 4, 261] + [261] * (tokenizer.max_word_length - 3),
+                            [259, 5, 261] + [261] * (tokenizer.max_word_length - 3),
+                            [259, 6, 261] + [261] * (tokenizer.max_word_length - 3),
+                        ],
+                        "attention_mask": [1, 1, 1, 1, 1, 0],
+                    },
+                    {
+                        "input_ids": [
+                            [259, 1, 261] + [261] * (tokenizer.max_word_length - 3),
+                            [259, 2, 261] + [261] * (tokenizer.max_word_length - 3),
+                            [259, 3, 261] + [261] * (tokenizer.max_word_length - 3),
+                        ],
+                        "attention_mask": [1, 1, 0],
+                    },
                 ]
                 padded_features = tokenizer.pad(features)
                 if tokenizer.padding_side == "right":

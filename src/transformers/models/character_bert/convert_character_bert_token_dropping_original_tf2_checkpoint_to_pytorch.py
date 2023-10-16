@@ -135,8 +135,12 @@ def convert_checkpoint_to_pytorch(tf_checkpoint_path: str, config_path: str, pyt
         character_bert_output.LayerNorm.bias.data = get_encoder_layer_array(layer_index, "_output_layer_norm/beta")
 
     # Embeddings
-    model.character_bert.embeddings.position_embeddings.weight.data = get_encoder_array("_position_embedding_layer/embeddings")
-    model.character_bert.embeddings.token_type_embeddings.weight.data = get_encoder_array("_type_embedding_layer/embeddings")
+    model.character_bert.embeddings.position_embeddings.weight.data = get_encoder_array(
+        "_position_embedding_layer/embeddings"
+    )
+    model.character_bert.embeddings.token_type_embeddings.weight.data = get_encoder_array(
+        "_type_embedding_layer/embeddings"
+    )
     model.character_bert.embeddings.LayerNorm.weight.data = get_encoder_array("_embedding_norm_layer/gamma")
     model.character_bert.embeddings.LayerNorm.bias.data = get_encoder_array("_embedding_norm_layer/beta")
 
