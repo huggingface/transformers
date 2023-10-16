@@ -134,11 +134,6 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
-        mask_token = (
-            AddedToken(mask_token, rstrip=False, lstrip=False, single_word=False, normalized=False, special=True)
-            if isinstance(mask_token, str)
-            else mask_token
-        )
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
