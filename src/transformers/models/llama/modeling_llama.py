@@ -44,6 +44,7 @@ from .configuration_llama import LlamaConfig
 class AttentionMaskCache:
     def __init__(self, is_causal: bool):
         self.is_causal = is_causal
+
         self.cache_4d_mask = {}
         self.cache_4d_mask_only_causal = {}
         self.cache_has_mask = {}
@@ -75,7 +76,7 @@ class AttentionMaskCache:
             self.cache_4d_mask_only_causal = {}
 
         # If shape is not cached, create a new causal mask and cache it
-        if expected_shape not in self.cache_4d_mask:
+        if expected_shape not in self.cache_4d_mask_only_causal:
             input_shape = (batch_size, query_length)
             past_key_values_length = key_value_length - query_length
 
