@@ -209,6 +209,8 @@
     title: Pipelines for webserver inference
   - local: model_memory_anatomy
     title: Model training anatomy
+  - local: llm_tutorial_optimization
+    title: Getting the most out of LLMs
   title: Conceptual guides
 - sections:
   - sections:
