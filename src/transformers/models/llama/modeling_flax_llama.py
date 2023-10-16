@@ -202,7 +202,7 @@ class FlaxLlamaAttention(nn.Module):
         dense = partial(
             nn.Dense,
             self.embed_dim,
-            use_bias=False,
+            use_bias=config.attention_bias,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
