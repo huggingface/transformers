@@ -58,7 +58,7 @@ As of writing this document, the largest GPU chip on the market is the A100 & H1
 🤗 Transformers does not support tensor parallelism out of the box as it requires the model architecture to be written in a specific way. If you're interested in writing models in a tensor-parallelism-friendly way, feel free to have a look at [the text-generation-inference library](https://github.com/huggingface/text-generation-inference/tree/main/server/text_generation_server/models/custom_modeling).
 
 Naive pipeline parallelism is supported out of the box. For this, simply load the model with `device="auto"` which will automatically place the different layers on the available GPUs as explained [here](https://huggingface.co/docs/accelerate/v0.22.0/en/concept_guides/big_model_inference).
-Note, however that while very effective, this naive pipeline parallelism does not tackle the issues of GPU idling. For this more advanced pipeline parallelism is required as explained [here](https://huggingface.co/docs/transformers/v4.15.0/parallelism#naive-model-parallel-vertical-and-pipeline-parallel).
+Note, however that while very effective, this naive pipeline parallelism does not tackle the issues of GPU idling. For this more advanced pipeline parallelism is required as explained [here](https://huggingface.co/docs/transformers/v4.34.0/en/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism).
 
 If you have access to an 8 x 80GB A100 node, you could load BLOOM as follows
 
@@ -485,7 +485,7 @@ We can observe that we only use roughly 100MB more GPU memory when passing a ver
 ```py
 flush()
 ```
-
+For more information on how to use Flash Attention, please have a look at [this doc page](https://huggingface.co/docs/transformers/v4.34.0/en/perf_infer_gpu_one#flash-attention-2).
 ## 3. Architectural Innovations
 
 So far we have looked into improving computational and memory efficiency by:
