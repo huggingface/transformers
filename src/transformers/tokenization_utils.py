@@ -482,6 +482,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     )
             elif special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
+                # this is important and the only reason why the AddedTokens in each class are normalized by default
                 token.__setstate__({"special": True, "normalized": token.normalized})
             if token in self._added_tokens_decoder:
                 continue
