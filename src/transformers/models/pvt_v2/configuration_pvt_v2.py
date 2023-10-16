@@ -44,10 +44,10 @@ PVT_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PvtV2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PvtModel`]. It is used to instantiate an Pvt
+    This is the configuration class to store the configuration of a [`PvtV2Model`]. It is used to instantiate an Pvt
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Pvt
-    [Xrenya/pvt-tiny-224](https://huggingface.co/Xrenya/pvt-tiny-224) architecture.
+    defaults will yield a similar configuration to that of the Pvt-b0
+    [FoamoftheSea/pvt_v2_b0](https://huggingface.co/FoamoftheSea/pvt_v2_b0) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
