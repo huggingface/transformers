@@ -168,17 +168,21 @@ class PatchTSMixerNormLayer(nn.Module):
         if "batch" in self.norm_mlp.lower():
             if self.mode in ["common_channel", "mix_channel"]:
                 # reshape the data
-                x_tmp = torch.reshape(
+                inputs_reshaped = torch.reshape(
                     inputs, (inputs.shape[0] * inputs.shape[1], inputs.shape[2], inputs.shape[3])
-                )  # x_tmp: [batch_size*num_channels, num_patches, num_features]
+                )  # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
             else:
-                x_tmp = inputs
-            x_tmp = self.norm(x_tmp)  # x_tmp: [batch_size*num_channels, num_patches, num_features]
+                inputs_reshaped = inputs
+            inputs_reshaped = self.norm(
+                inputs_reshaped
+            )  # inputs_reshaped: [batch_size*num_channels, num_patches, num_features]
             # put back data to the original shape
             if self.mode in ["common_channel", "mix_channel"]:
-                inputs = torch.reshape(x_tmp, (inputs.shape[0], inputs.shape[1], inputs.shape[2], inputs.shape[3]))
+                inputs = torch.reshape(
+                    inputs_reshaped, (inputs.shape[0], inputs.shape[1], inputs.shape[2], inputs.shape[3])
+                )
             else:
-                inputs = x_tmp
+                inputs = inputs_reshaped
         else:
             inputs = self.norm(inputs)
 
@@ -345,13 +349,13 @@ class PatchMixerBlock(nn.Module):
         x = self.norm(x)
 
         if self.self_attn:
-            x_tmp = x
+            inputs_reshaped = x
             if self.mode in ["common_channel", "mix_channel"]:
-                x_tmp = torch.reshape(x, (x.shape[0] * x.shape[1], x.shape[2], x.shape[3]))
+                inputs_reshaped = torch.reshape(x, (x.shape[0] * x.shape[1], x.shape[2], x.shape[3]))
                 #  (batch_size, num_patches, num_features) if flatten
                 #  (batch_size, n_vars, num_patches, num_features) if common_channel
 
-            x_attn, _ = self.self_attn_layer(x_tmp, x_tmp, x_tmp, need_weights=False)
+            x_attn, _ = self.self_attn_layer(inputs_reshaped, inputs_reshaped, inputs_reshaped, need_weights=False)
 
             if self.mode in ["common_channel", "mix_channel"]:
                 x_attn = torch.reshape(x_attn, (x.shape[0], x.shape[1], x.shape[2], x.shape[3]))
