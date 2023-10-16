@@ -44,8 +44,8 @@ from .configuration_llama import LlamaConfig
 class AttentionMask2DTo4D:
     def __init__(self, is_causal: bool):
         self.is_causal = is_causal
-        self.cached_2d_tensor = None
-        self.cached_4d_tensor = None
+        self.cached_2d_mask = None
+        self.cached_4d_mask = None
 
     def __call__(self, attention_mask_2d: torch.Tensor, query_length: int, key_value_length: int, dtype: torch.dtype):
         """
@@ -56,20 +56,20 @@ class AttentionMask2DTo4D:
         # If 2d shape doesn't match or expected 4d shape doesn't match or 2d attention_mask values don't match,
         # a new (bsz, head_dim=1, query_length, key_value_length) 4D mask is created and cached
         if (
-            self.cached_2d_tensor is None
-            or attention_mask_2d.shape != self.cached_2d_tensor.shape
-            or (query_length, key_value_length) != self.cached_4d_tensor.shape[-2:]
-            or (attention_mask_2d != self.cached_2d_tensor).any()
+            self.cached_2d_mask is None
+            or attention_mask_2d.shape != self.cached_2d_mask.shape
+            or (query_length, key_value_length) != self.cached_4d_mask.shape[-2:]
+            or (attention_mask_2d != self.cached_2d_mask).any()
         ):
-            self.cached_2d_tensor = attention_mask_2d
+            self.cached_2d_mask = attention_mask_2d
             input_shape = (attention_mask_2d.shape[0], query_length)
             past_key_values_length = key_value_length - query_length
 
-            self.cached_4d_tensor = self._prepare_decoder_attention_mask(
+            self.cached_4d_mask = self._prepare_decoder_attention_mask(
                 attention_mask_2d, input_shape, past_key_values_length, dtype
             )
 
-        return self.cached_4d_tensor
+        return self.cached_4d_mask
 
     # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length, dtype):
