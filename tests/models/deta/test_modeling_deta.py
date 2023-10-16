@@ -21,7 +21,7 @@ import unittest
 
 from transformers import DetaConfig, ResNetConfig, is_torch_available, is_torchvision_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torchvision, require_vision, slow, torch_device
+from transformers.testing_utils import require_accelerate, require_torchvision, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -500,6 +500,45 @@ class DetaModelIntegrationTests(unittest.TestCase):
         expected_boxes = torch.tensor(
             [[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]]
         ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+
+        expected_shape_boxes = torch.Size((1, 300, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+
+        # verify postprocessing
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+        )[0]
+        expected_scores = torch.tensor([0.6392, 0.6276, 0.5546, 0.5260, 0.4706], device=torch_device)
+        expected_labels = [75, 17, 17, 75, 63]
+        expected_slice_boxes = torch.tensor([40.5866, 73.2107, 176.1421, 117.1751], device=torch_device)
+
+        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
+        self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
+        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
+    
+    @require_accelerate
+    def test_inference_object_detection_head_using_device_map(self):
+        model = DetaForObjectDetection.from_pretrained("jozhang97/deta-resnet-50", device_map="auto")
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+
+        expected_logits = torch.tensor(
+            [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
+        )
+        expected_boxes = torch.tensor(
+            [[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]]
+        )
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
 

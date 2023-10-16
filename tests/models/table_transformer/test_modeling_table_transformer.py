@@ -22,7 +22,7 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import ResNetConfig, TableTransformerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_accelerate, require_timm, require_torch, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -537,5 +537,31 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
 
         expected_boxes = torch.tensor(
             [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-3))
+    
+    @require_accelerate
+    def test_table_detection_using_device_map(self):
+        image_processor = AutoImageProcessor.from_pretrained("microsoft/table-transformer-detection")
+        model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-detection", device_map="auto")
+
+        file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
+        image = Image.open(file_path).convert("RGB")
+        inputs = image_processor(image, return_tensors="pt")
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape = (1, 15, 3)
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_logits = torch.tensor(
+            [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]],
+        )
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+
+        expected_boxes = torch.tensor(
+            [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]],
         )
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-3))
