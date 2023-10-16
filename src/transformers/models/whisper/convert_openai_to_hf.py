@@ -130,7 +130,7 @@ def _download(url: str, root: str) -> str:
 
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     if ".pt" not in checkpoint_path:
-        root = os.path.dirname(pytorch_dump_folder_path) or '.'
+        root = os.path.dirname(pytorch_dump_folder_path) or "."
         checkpoint_path = _download(_MODELS[checkpoint_path], root)
     original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
     dimensions = original_checkpoint["dims"]
