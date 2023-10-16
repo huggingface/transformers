@@ -45,6 +45,7 @@ from typing import List
 import math
 
 from torchvision.transforms import ConvertImageDtype, Normalize, Compose
+import PIL.Image
 
 
 class PaddedSampleTransform:
@@ -117,7 +118,9 @@ class AspectRatioPreservingScalingWithPad:
                            (padding_left, padding_right)), mode=self.padding_mode)
         return padded_image
 
-    def apply_transformation(self, image: np.ndarray) -> np.ndarray:
+    def apply_transformation(self, image: Union[np.ndarray, PIL.Image.Image]) -> np.ndarray:
+        if isinstance(image, PIL.Image.Image):
+            image = to_numpy_array(image)
         scaled_image = self._scale_to_target_aspect_ratio(image)
         padded_image = self._pad_to_target_size(scaled_image)
         return padded_image

@@ -823,7 +823,6 @@ class FuyuModel(FuyuPreTrainedModel):
 
         output_embeddings = word_embeddings.clone()
         for batch_idx in range(word_embeddings.shape[0]):
-            breakpoint()
             # First, find the positions of all the non-negative values in image_patch_input_indices, those are the
             # positions in word_embeddings that we want to replace with content from continuous_embeddings.
             dst_indices = torch.nonzero(image_patch_input_indices[batch_idx] >= 0, as_tuple=True)[0]

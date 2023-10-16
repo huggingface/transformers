@@ -279,7 +279,6 @@ def construct_full_unpacked_stream(
         # and append to lists. We use lists rather than tensors because each subsequence is variable-sized.
         for si in range(num_sub_sequences):
             image_adjustment = image_tokens[bi][si]
-            breakpoint()
             si_stream = torch.cat([image_adjustment, input_stream[bi, si]], dim=0)
             num_real_tokens = image_adjustment.shape[0] + num_real_text_tokens[bi][si]
 
