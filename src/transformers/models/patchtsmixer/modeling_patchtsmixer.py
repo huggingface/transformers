@@ -273,7 +273,6 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
 
         inputs = self.mlp(inputs)
 
-        # inputs.shape == (batch_size, num_channels, num_patches, num_features)
         inputs = inputs.permute(0, 3, 2, 1)
 
         out = inputs + residual
@@ -342,8 +341,6 @@ class PatchMixerBlock(nn.Module):
             self.norm_attn = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
     def forward(self, x):
-        # x.shape == (batch_size, num_patches, num_features) if flatten
-        # x.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
         residual = x
 
         x = self.norm(x)
@@ -368,29 +365,16 @@ class PatchMixerBlock(nn.Module):
         elif self.mode in ["common_channel", "mix_channel"]:
             x = x.transpose(2, 3)
 
-        # x.shape == (batch_size, num_features, num_patches) if flatten
-        # x.shape == (batch_size, n_vars, num_features, num_patches) if common_channel
-
-        # if self.gated_attn:
-        #     x = self.gab(x)
-
         x = self.mlp(x)
 
         if self.gated_attn:
             x = self.gab(x)
-
-        # if self.gated_attn:
-        #     attn_weight = self.attn_softmax(self.attn_layer(x))
-        #     x = x * attn_weight
 
         # Transpose back
         if self.mode == "flatten":
             x = x.transpose(1, 2)
         elif self.mode in ["common_channel", "mix_channel"]:
             x = x.transpose(2, 3)
-
-        # x.shape == (batch_size, num_patches, num_features) if flatten
-        # x.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
 
         if self.self_attn:
             x = self.norm_attn(x + x_attn)
@@ -440,19 +424,11 @@ class FeatureMixerBlock(nn.Module):
             self.gab = PatchTSMixerGatedAttention(in_size=num_features, out_size=num_features)
 
     def forward(self, x):
-        # x.shape == (batch_size, num_patches, num_features) if flatten
-        # x.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
-
         residual = x
 
         x = self.norm(x)
 
-        # if self.gated_attn:
-        #     x = self.gab(x)
-
         x = self.mlp(x)
-        # x.shape == (batch_size, num_patches, num_features) if flatten
-        # x.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
 
         if self.gated_attn:
             x = self.gab(x)
@@ -624,8 +600,6 @@ class PatchTSMixerBackbone(nn.Module):
         )
 
     def forward(self, x, output_hidden_states: Optional[bool] = False):
-        # flatten: [bs x num_patch x num_features]   common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
-
         all_hidden_states = []
 
         logger.debug(x.shape)
@@ -636,9 +610,6 @@ class PatchTSMixerBackbone(nn.Module):
             embedding = mod(embedding)
             if output_hidden_states is True:
                 all_hidden_states.append(embedding)
-
-        # embedding.shape == (batch_size, num_patches, num_features) if flatten
-        # embedding.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
 
         if output_hidden_states is True:
             return embedding, all_hidden_states
@@ -741,9 +712,6 @@ class PatchTSMixer(nn.Module):
                 x, (batch_size, self.num_patches, self.in_channels * self.patch_size)
             )  # x: [bs x num_patch x patch_len * n_vars]
 
-        # elif self.mode in ["common_channel", "mix_channel"]:
-        #     x = x.permute(0, 2, 1, 3)  # x: [bs x n_vars x num_patch x patch_len]
-
         logger.debug(x.shape)
         patches = self.patcher(
             x
@@ -757,8 +725,6 @@ class PatchTSMixer(nn.Module):
         embedding, all_hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
 
         logger.debug(x.shape)
-        # embedding.shape == (batch_size, num_patches, num_features) if flatten
-        # embedding.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
 
         return embedding, all_hidden_states
 
