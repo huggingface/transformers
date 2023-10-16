@@ -522,7 +522,7 @@ class PatchTSMixerLayer(nn.Module):
 
 
 class PatchTSMixerBackbone(nn.Module):
-    """PatchTSMixerBackbone
+    """PatchTSMixer Backbone. The main coputing framework of the `PatchTSMixer` model.
 
     Args:
         num_patches (`int`): Number of patches to segment
