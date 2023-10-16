@@ -169,7 +169,7 @@ def monotonic_align_max_path(neg_cent, mask):
     text_length_maxs = mask.sum(1)[:, 0]
     latent_length_maxs = mask.sum(2)[:, 0]
 
-    indexes = text_length_maxs - 1
+    indexes = latent_length_maxs - 1
 
     max_neg_val = -1e9
 
@@ -957,9 +957,14 @@ class VitsStochasticDurationPredictor(nn.Module):
                 torch.randn(durations.size(0), 2, durations.size(2)).to(device=inputs.device, dtype=inputs.dtype)
                 * padding_mask
             )
-            log_determinant_posterior_sum = 0
             latents_posterior = random_posterior
-            for flow in self.post_flows:
+            
+            latents_posterior, log_determinant = self.post_flows[0](
+                    latents_posterior, padding_mask, global_conditioning=inputs + hidden_states
+                )
+            log_determinant_posterior_sum = log_determinant
+
+            for flow in self.post_flows[1:]:
                 latents_posterior, log_determinant = flow(
                     latents_posterior, padding_mask, global_conditioning=inputs + hidden_states
                 )
@@ -981,7 +986,10 @@ class VitsStochasticDurationPredictor(nn.Module):
             log_determinant_sum = torch.sum(-first_half, [1, 2])
 
             latents = torch.cat([first_half, second_half], dim=1)
-            for flow in self.flows:
+            latents, log_determinant = self.flows[0](latents, padding_mask, global_conditioning=inputs)
+            
+            log_determinant_sum += log_determinant
+            for flow in self.flows[1:]:
                 latents, log_determinant = flow(latents, padding_mask, global_conditioning=inputs)
                 latents = torch.flip(latents, [1])
                 log_determinant_sum += log_determinant
@@ -1880,7 +1888,9 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         if labels_attention_mask is not None:
             labels_padding_mask = labels_attention_mask.unsqueeze(1).float()
         else:
-            labels_padding_mask = torch.ones((labels.shape[0], labels.shape[2])).unsqueeze(1).float().to(self.device)
+            labels_attention_mask = torch.ones((labels.shape[0], labels.shape[2])).float().to(self.device)
+            labels_padding_mask = labels_attention_mask.unsqueeze(1)
+            
 
         text_encoder_output = self.text_encoder(
             input_ids=input_ids,
@@ -1896,24 +1906,11 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         prior_means = text_encoder_output[1] if not return_dict else text_encoder_output.prior_means
         prior_log_variances = text_encoder_output[2] if not return_dict else text_encoder_output.prior_log_variances
 
-        # TODO: pass through posterior encoder
-        # ATTENTION: not same input as the text_encoder !!!
-        # should be labels padding_mask
-        # z: latents
-        # z, m_q, logs_q, y_mask = self.enc_q(y, y_lengths, g=g)
         latents, posterior_means, posterior_log_variances = self.posterior_encoder(
             labels, labels_padding_mask, speaker_embeddings
         )
-        # TODO: generate y_mask
-        # LABELS !!!
-
-        # TODO: flow - g is speaker embeddings
-        # z_p: prior_latents
-        # z_p = self.flow(z, y_mask, g=g)
         prior_latents = self.flow(latents, labels_padding_mask, speaker_embeddings, reverse=False)
 
-        # TODO: probably should transpose(1,2) of prior_log_variances and prior_means
-        # TODO: MAKE SURE IT SHOULD BE LIKE IN THE SUITE
         prior_means, prior_log_variances = prior_means.transpose(1, 2), prior_log_variances.transpose(1, 2)
         with torch.no_grad():
             # negative cross-entropy
@@ -1932,11 +1929,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             # [batch_size, text_length, latent_length]
             neg_cent = neg_cent1 + neg_cent2 + neg_cent3 + neg_cent4
 
-            # TODO: first padding mask is related to text_encoder and second to posterior encoder, might not be the same at the end of the day
-            attn_mask = (torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1)).transpose(
-                2, 3
-            )
-            # TODO: why transpose 2,3 ??
+            attn_mask = (torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1))
 
             attn = monotonic_align_max_path(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
 
