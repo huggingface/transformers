@@ -473,8 +473,6 @@ class LlamaFlashAttention2(LlamaAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
-        import pdb; pdb.set_trace()
-
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
             # Handle the case where the model is quantized
