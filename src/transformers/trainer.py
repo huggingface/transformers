@@ -83,6 +83,7 @@ from .trainer_pt_utils import (
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
+    get_dataloader_sampler,
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
@@ -1737,14 +1738,7 @@ class Trainer:
         # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
         if not args.ignore_data_skip:
             for epoch in range(epochs_trained):
-                from torch.utils.data import BatchSampler
-
-                # sampler = get_dataloader_sampler(train_dataloader)
-                sampler_is_batch_sampler = isinstance(train_dataloader.sampler, BatchSampler)
-                if sampler_is_batch_sampler:
-                    sampler = train_dataloader.sampler.sampler
-                else:
-                    sampler = train_dataloader.batch_sampler.sampler
+                sampler = get_dataloader_sampler(train_dataloader)
                 is_random_sampler = isinstance(sampler, (RandomSampler, SeedableRandomSampler))
                 if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
