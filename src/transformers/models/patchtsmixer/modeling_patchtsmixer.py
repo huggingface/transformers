@@ -212,7 +212,7 @@ class PatchTSMixerMLP(nn.Module):
         return inputs
 
 
-class ChannelFeatureMixerBlock(nn.Module):
+class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
     """ChannelFeatureMixerBlock
 
     Args:
