@@ -128,9 +128,9 @@ class TextToAudioPipeline(Pipeline):
         return output
 
     def _forward(self, model_inputs, **kwargs):
+        kwargs = self._ensure_tensor_on_device(forward_params, device=self.device)
         forward_params = kwargs["forward_params"]
         generate_kwargs = kwargs["generate_kwargs"]
-
         # we expect some kwargs to be additional tensors which need to be on the right device
         forward_params = self._ensure_tensor_on_device(forward_params, device=self.device)
 
