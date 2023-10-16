@@ -110,7 +110,8 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         stft = torch.stft(
             waveform,
             self.n_fft,
-            self.hop_length,
+            hop_length=self.hop_length,
+            win_length=self.n_fft,
             window=window,
             center=False,
             pad_mode="reflect",
@@ -270,10 +271,10 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(1, 2).transpose(0, 1)
 
-        input_features = [self._torch_extract_fbank_features(waveform) for waveform in input_features[0]]
+        input_features = self._torch_extract_fbank_features(input_features[0])
 
-        mel_scaled_input_features = [inputs[1] for inputs in input_features]
-        input_features = [inputs[0].squeeze() for inputs in input_features]
+        mel_scaled_input_features = input_features[1]
+        input_features = input_features[0]
 
         padded_inputs["input_features"] = input_features
         padded_inputs["mel_scaled_input_features"] = mel_scaled_input_features

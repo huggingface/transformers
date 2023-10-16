@@ -556,7 +556,7 @@ class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
         self.period = period
 
         self.convs = nn.ModuleList()
-        for in_channels, out_channels in [(1, 32), (32, 128), (128, 512), (512, 1024), (1024, 1024)]:
+        for in_channels, out_channels in [(1, 32), (32, 128), (128, 512), (512, 1024)]:
             self.convs.append(
                 nn.Conv2d(
                     in_channels,
@@ -566,6 +566,9 @@ class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
                     padding=(self.get_padding(kernel_size, 1), 0),
                 )
             )
+        self.convs.append(
+            nn.Conv2d(1024, 1024, (kernel_size, 1), 1, padding=(self.get_padding(kernel_size, 1), 0))
+        )
         self.final_conv = nn.Conv2d(1024, 1, (3, 1), 1, padding=(1, 0))
 
     def get_padding(self, kernel_size, dilation=1):
@@ -1877,7 +1880,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         if labels_attention_mask is not None:
             labels_padding_mask = labels_attention_mask.unsqueeze(1).float()
         else:
-            labels_padding_mask = torch.ones((labels.shape[0], labels.shape[1])).unsqueeze(-1).float()
+            labels_padding_mask = torch.ones((labels.shape[0], labels.shape[2])).unsqueeze(1).float().to(self.device)
 
         text_encoder_output = self.text_encoder(
             input_ids=input_ids,
@@ -1910,6 +1913,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         prior_latents = self.flow(latents, labels_padding_mask, speaker_embeddings, reverse=False)
 
         # TODO: probably should transpose(1,2) of prior_log_variances and prior_means
+        # TODO: MAKE SURE IT SHOULD BE LIKE IN THE SUITE
         prior_means, prior_log_variances = prior_means.transpose(1, 2), prior_log_variances.transpose(1, 2)
         with torch.no_grad():
             # negative cross-entropy
@@ -1932,6 +1936,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             attn_mask = (torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1)).transpose(
                 2, 3
             )
+            # TODO: why transpose 2,3 ??
 
             attn = monotonic_align_max_path(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
 
@@ -1976,6 +1981,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
                     (
                         waveform,
                         log_duration,
+                        attn,
                         ids_slice,
                         input_padding_mask,
                         labels_padding_mask,
@@ -1998,6 +2004,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             training_outputs=(
                 waveform,
                 log_duration,
+                attn,
                 ids_slice,
                 input_padding_mask,
                 labels_padding_mask,
