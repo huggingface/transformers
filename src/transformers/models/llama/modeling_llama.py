@@ -42,6 +42,16 @@ from .configuration_llama import LlamaConfig
 
 
 class AttentionMaskCache:
+    """
+    A utility attention mask class that allows:
+        - Create a causal mask 4d mask
+        - Convert a 2D attention mask (batch_size, query_length) to a 4D attention mask (batch_size, 1, query_length,
+          key_value_length) that can be multiplied with attention scores
+        - Check whether 2D attention mask has any padding tokens or not
+
+    To avoid unnecessary memory allocation, attention masks are cached and can be easily reused.
+    """
+
     def __init__(self, is_causal: bool):
         self.is_causal = is_causal
 
@@ -884,7 +894,7 @@ class LlamaModel(LlamaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        # create attn_mask mapper that trickles down to each attention layer
+        # create attention mask cache that trickles down to each attention layer
         # so that the attention_mask cache can be shared among layers
         attention_mask_cache = AttentionMaskCache(is_causal=True)
 
