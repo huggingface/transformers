@@ -779,8 +779,8 @@ class FuyuModel(FuyuPreTrainedModel):
 
         # vision tokens
 
-        self.vision_embed_tokens = nn.Linear(config.patch_size * config.patch_size *
-                                             config.num_channels, config.hidden_size)
+        self.vision_embed_tokens = nn.Sequential[nn.Linear(config.patch_size * config.patch_size *
+                                                           config.num_channels, config.hidden_size),]
 
         # text tokens # TODO can we just use AutoModel there?
 

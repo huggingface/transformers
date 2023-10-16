@@ -617,7 +617,7 @@ def _tokenize_prompts_with_image_and_batch(
         bos_token = tokenizer.vocab['<s>']
     else:
         bos_token = tokenizer.vocab['|ENDOFTEXT|']
-        prompts_tokens = [[[bos_token] + x for x in prompt_seq] for prompt_seq in prompts_tokens]
+    prompts_tokens = [[[bos_token] + x for x in prompt_seq] for prompt_seq in prompts_tokens]
     if add_beginning_of_answer_token:
         boa = tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
         # Only add bbox open token to the last subsequence since that is what will be completed

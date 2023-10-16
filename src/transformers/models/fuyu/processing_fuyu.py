@@ -1,4 +1,4 @@
-from .fuyu_processing_utils import tokenize_prompts_with_images, construct_full_unpacked_stream
+from .fuyu_processing_utils import tokenize_prompts_with_images, construct_full_unpacked_stream, full_unpacked_stream_to_tensor
 
 import math
 import warnings
@@ -100,7 +100,7 @@ def make_pixel_mask(
     return mask
 
 
-class FuyuProcessor(ProcessorMixin):
+class FuyuProcessor():  # ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
 
@@ -113,14 +113,15 @@ class FuyuProcessor(ProcessorMixin):
         tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
     """
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "FuyuImageProcessor"
-    tokenizer_class = "LlamaTokenizerFast"
+    # attributes = ["image_processor", "tokenizer"]
+    # image_processor_class = "FuyuImageProcessor"
+    # tokenizer_class = "LlamaTokenizerFast"
+    # FIXME How are these requirements propagated? currently getting AttributeError: module transformers has no attribute FuyuImageProcessor
 
-    def __init__(self, pretrained_path: str):
-        super().__init__()
-        # self.image_processor
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_path)
+    def __init__(self, image_processor, tokenizer):
+        # super().__init__(image_processor=image_processor, tokenizer=tokenizer)
+        self.image_processor = image_processor
+        self.tokenizer = tokenizer  # AutoTokenizer.from_pretrained(pretrained_path)
         self.max_tokens_to_generate = 4096
         self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
         self.image_processor = FuyuImageProcessor()
@@ -172,7 +173,21 @@ class FuyuProcessor(ProcessorMixin):
                     prompts = [text]
             batch_images = []
             if isinstance(images, list):
+                image_unpadded_heights = []
+                image_unpadded_widths = []
                 for image in images:
+                    image = to_numpy_array(image)
+                    channel_dimension = infer_channel_dimension_format(image, 3)
+                    if channel_dimension == ChannelDimension.FIRST:
+                        width_index = 2
+                        height_index = 1
+                    elif channel_dimension == ChannelDimension.LAST:
+                        width_index = 1
+                        height_index = 0
+                    # FIXME add format CHW or HWC detection and cast here
+                    image_unpadded_widths.append(image.shape[width_index])
+                    image_unpadded_heights.append(image.shape[height_index])
+
                     # reproduct adept padding sampler
                     padded_image = self.image_processor.aspectratio_preserving_padding.apply_transformation(image)
 
@@ -180,81 +195,100 @@ class FuyuProcessor(ProcessorMixin):
 
                     tensor_img = torch.Tensor(padded_image).permute(2, 0, 1)
                     batch_images.append(tensor_img)
-                else:
-                    raise ValueError("images must be a list of ndarrays or PIL Images to be processed.")
+                image_unpadded_heights = torch.Tensor([image_unpadded_heights])
+                image_unpadded_widths = torch.Tensor([image_unpadded_widths])
+                batch_images = [batch_images]
+            else:
+                raise ValueError("images must be a list of ndarrays or PIL Images to be processed.")
+
+            # Note: the original adept code has a handling of image_unpadded_h and w, but it doesn't seem to hold
+            # when there are several different size subsequences per batch. The current implementation reflects
+            # that limitation and should be documented.
+            #
+            first_image_sequence_length = len(batch_images[0])
+
+            for image_sample, text_sample in zip(batch_images, prompts):
+                # get length of sequences within a batch
+                assert first_image_sequence_length == len(image_sample) == len(
+                    text_sample), "The current implementation only supports batches with the same number of subsequences."
+
+            self.subsequence_length = first_image_sequence_length
+
             assert len(prompts) == len(images)
-            self.batch_size = len(images)
-        prompts_tokens_long_tensor, prompts_length_long_tensor = tokenize_prompts_with_images(tokenizer=self.tokenizer,
-                                                                                              prompts=prompts,
-                                                                                              transformed_images=[
-                                                                                                  [tensor_img]],
-                                                                                              max_tokens_to_generate=self.max_tokens_to_generate,
-                                                                                              max_position_embeddings=self.max_position_embeddings,
-                                                                                              add_BOS=True,
-                                                                                              add_beginning_of_answer_token=True,
-                                                                                              rank=0)
+            self.batch_size = len(batch_images)
 
-        image_input = tensor_img
+            prompt_tokens, prompts_length = tokenize_prompts_with_images(tokenizer=self.tokenizer,
+                                                                         prompts=prompts,
+                                                                         transformed_images=[
+                                                                             [tensor_img]],
+                                                                         max_tokens_to_generate=self.max_tokens_to_generate,
+                                                                         max_position_embeddings=self.max_position_embeddings,
+                                                                         add_BOS=True,
+                                                                         add_beginning_of_answer_token=True,
+                                                                         rank=0)
 
-        # This is 1 if there is an image per subsequence, else 0. [batch, subsequence, presence]
-        image_present = torch.ones(batch_size, 1, 1)
+            image_input = tensor_img
 
-        image_placeholder_id = tokenizer('|SPEAKER|', add_special_tokens=False)['input_ids'][1]
-        image_newline_id = tokenizer('|NEWLINE|', add_special_tokens=False)['input_ids'][1]
+            # This is 1 if there is an image per subsequence, else 0. [batch, subsequence, presence]
+            image_present = torch.ones(self.batch_size, 1, 1)
 
-        model_image_input = processor.process_images_for_model_input(
-            image_input=image_input.unsqueeze(0).unsqueeze(0),
-            image_present=image_present,
-            image_unpadded_h=image_unpadded_h,
-            image_unpadded_w=image_unpadded_w,
-            image_patch_dim_h=30,
-            image_patch_dim_w=30,
-            image_placeholder_id=image_placeholder_id,
-            image_newline_id=image_newline_id,
-            variable_sized=True
-        )
+            image_placeholder_id = self.tokenizer('|SPEAKER|', add_special_tokens=False)['input_ids'][1]
+            image_newline_id = self.tokenizer('|NEWLINE|', add_special_tokens=False)['input_ids'][1]
 
-        image_padded_unpacked_tokens = construct_full_unpacked_stream(
-            num_real_text_tokens=prompts_length_long_tensor,
-            input_stream=prompts_tokens_long_tensor,
-            image_tokens=model_image_input['image_input_ids'],
-            batch_size=batch_size,
-            num_sub_sequences=num_sub_sequences,
-        )
-        # Construct inputs for image patch indices.
-        unpacked_image_patch_indices_per_batch = construct_full_unpacked_stream(
-            num_real_text_tokens=prompts_length_long_tensor,
-            input_stream=torch.full_like(prompts_tokens_long_tensor, -1),
-            image_tokens=model_image_input['image_patch_indices_per_batch'],
-            batch_size=batch_size,
-            num_sub_sequences=num_sub_sequences,
-        )
+            model_image_input = self.image_processor.process_images_for_model_input(
+                image_input=image_input.unsqueeze(0).unsqueeze(0),
+                image_present=image_present,
+                image_unpadded_h=image_unpadded_heights,
+                image_unpadded_w=image_unpadded_widths,
+                image_patch_dim_h=30,
+                image_patch_dim_w=30,
+                image_placeholder_id=image_placeholder_id,
+                image_newline_id=image_newline_id,
+                variable_sized=True
+            )
 
-        max_prompt_length = max(x.shape[-1] for x in image_padded_unpacked_tokens)
-        max_seq_len_batch = min(max_prompt_length + max_tokens_to_generate, max_position_embeddings)
+            image_padded_unpacked_tokens = construct_full_unpacked_stream(
+                num_real_text_tokens=prompts_length,
+                input_stream=prompt_tokens,
+                image_tokens=model_image_input['image_input_ids'],
+                batch_size=self.batch_size,
+                num_sub_sequences=self.subsequence_length,
+            )
+            # Construct inputs for image patch indices.
+            unpacked_image_patch_indices_per_batch = construct_full_unpacked_stream(
+                num_real_text_tokens=prompts_length,
+                input_stream=torch.full_like(prompt_tokens, -1),
+                image_tokens=model_image_input['image_patch_indices_per_batch'],
+                batch_size=self.batch_size,
+                num_sub_sequences=self.subsequence_length,
+            )
 
-        all_bi_tokens_to_place = []
-        for bi in range(batch_size):
-            tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[bi].shape[0]))
-            all_bi_tokens_to_place.append(tokens_to_place)
+            max_prompt_length = max(x.shape[-1] for x in image_padded_unpacked_tokens)
+            max_seq_len_batch = min(max_prompt_length + self.max_tokens_to_generate, self.max_position_embeddings)
 
-        image_padded_unpacked_tokens_tensor = full_unpacked_stream_to_tensor(
-            all_bi_tokens_to_place=all_bi_tokens_to_place,
-            full_unpacked_stream=image_padded_unpacked_tokens,
-            fill_value=tokenizer.eos_token_id,
-            batch_size=batch_size,
-            new_seq_len=max_seq_len_batch,
-            offset=0,
-        )
-        # Use same packing logic for the image patch indices.
-        image_patch_input_indices = full_unpacked_stream_to_tensor(
-            all_bi_tokens_to_place=all_bi_tokens_to_place,
-            full_unpacked_stream=unpacked_image_patch_indices_per_batch,
-            fill_value=-1,
-            batch_size=batch_size,
-            new_seq_len=max_seq_len_batch,
-            offset=0,
-        )
+            all_bi_tokens_to_place = []
+            for bi in range(self.batch_size):
+                tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[bi].shape[0]))
+                all_bi_tokens_to_place.append(tokens_to_place)
+
+            image_padded_unpacked_tokens_tensor = full_unpacked_stream_to_tensor(
+                all_bi_tokens_to_place=all_bi_tokens_to_place,
+                full_unpacked_stream=image_padded_unpacked_tokens,
+                fill_value=self.tokenizer.eos_token_id,
+                batch_size=self.batch_size,
+                new_seq_len=max_seq_len_batch,
+                offset=0,
+            )
+            # Use same packing logic for the image patch indices.
+            image_patch_input_indices = full_unpacked_stream_to_tensor(
+                all_bi_tokens_to_place=all_bi_tokens_to_place,
+                full_unpacked_stream=unpacked_image_patch_indices_per_batch,
+                fill_value=-1,
+                batch_size=self.batch_size,
+                new_seq_len=max_seq_len_batch,
+                offset=0,
+            )
+            return {"model_image_input": model_image_input, "image_padded_unpacked_tokens_tensor": image_padded_unpacked_tokens_tensor, "image_patch_input_indices": image_patch_input_indices}
 
         if text is not None:
             encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
