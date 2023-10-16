@@ -127,12 +127,23 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
             Type of word tokenizer. Choose from ["basic", "mecab", "sudachi", "jumanpp"].
         subword_tokenizer_type (`str`, *optional*, defaults to `"wordpiece"`):
             Type of subword tokenizer. Choose from ["wordpiece", "character", "sentencepiece",].
-        never_split (`<fill_type>`, *optional*): <fill_docstring>
-        unk_token (`<fill_type>`, *optional*, defaults to `"[UNK]"`): <fill_docstring>
-        sep_token (`<fill_type>`, *optional*, defaults to `"[SEP]"`): <fill_docstring>
-        pad_token (`<fill_type>`, *optional*, defaults to `"[PAD]"`): <fill_docstring>
-        cls_token (`<fill_type>`, *optional*, defaults to `"[CLS]"`): <fill_docstring>
-        mask_token (`<fill_type>`, *optional*, defaults to `"[MASK]"`): <fill_docstring>
+        never_split (`List[str]`, *optional*):
+            Kept for backward compatibility purposes. Now implemented directly at the base class level (see
+            [`PreTrainedTokenizer.tokenize`]) List of token not to split.
+        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens
+        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
+        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
+            The token used for masking values. This is the token used when training this model with masked language
         mecab_kwargs (`dict`, *optional*):
             Dictionary passed to the `MecabTokenizer` constructor.
         sudachi_kwargs (`dict`, *optional*):
