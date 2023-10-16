@@ -29,7 +29,7 @@ PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PatchTSMixerConfig(PretrainedConfig):
     r"""
-    PatchTSMixer is a lightweight time-series modelling backbone based on the MLP-Mixer architecture. Our [KDD 2023
+    PatchTSMixer is a lightweight time-series modelling backbone based on the MLP-Mixer architecture. The [KDD 2023
     paper](https://arxiv.org/abs/2306.09364) demonstrates its state-of-the-art performance for time series tasks, with
     reduced computational and memory demands. PatchTSMixer's distinguishing feature lies in its capacity to
     effortlessly facilitate lightweight mixing across patches, channels, and hidden features. This unique capability
