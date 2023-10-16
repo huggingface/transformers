@@ -18,7 +18,7 @@ import json
 import math
 import os
 import warnings
-from dataclasses import FrozenInstanceError, asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
@@ -34,7 +34,6 @@ from .trainer_utils import (
     HubStrategy,
     IntervalStrategy,
     SchedulerType,
-    ShardedDDPOption,
 )
 from .utils import (
     ExplicitEnum,
@@ -50,6 +49,7 @@ from .utils import (
     is_torch_npu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_torch_xpu_available,
     logging,
     requires_backends,
 )
@@ -139,6 +139,7 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_TORCH = "adamw_torch"
     ADAMW_TORCH_FUSED = "adamw_torch_fused"
     ADAMW_TORCH_XLA = "adamw_torch_xla"
+    ADAMW_TORCH_NPU_FUSED = "adamw_torch_npu_fused"
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_ANYPRECISION = "adamw_anyprecision"
@@ -152,8 +153,10 @@ class OptimizerNames(ExplicitEnum):
     PAGED_ADAMW_8BIT = "paged_adamw_8bit"
     PAGED_LION = "paged_lion_32bit"
     PAGED_LION_8BIT = "paged_lion_8bit"
+    RMSPROP = "rmsprop"
 
 
+# TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
 @dataclass
 class TrainingArguments:
     """
@@ -193,9 +196,9 @@ class TrainingArguments:
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU/MPS/NPU core/CPU for training.
+            The batch size per GPU/XPU/TPU/MPS/NPU core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU/MPS/NPU core/CPU for evaluation.
+            The batch size per GPU/XPU/TPU/MPS/NPU core/CPU for evaluation.
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -208,7 +211,7 @@ class TrainingArguments:
 
         eval_accumulation_steps (`int`, *optional*):
             Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
-            left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
+            left unset, the whole predictions are accumulated on GPU/NPU/TPU before being moved to the CPU (faster but
             requires more memory).
         eval_delay (`float`, *optional*):
             Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
@@ -315,7 +318,7 @@ class TrainingArguments:
             installation](https://github.com/intel/intel-extension-for-pytorch).
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture or using CPU (use_cpu). This is an experimental API and it may change.
+            NVIDIA architecture or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
@@ -324,9 +327,9 @@ class TrainingArguments:
         fp16_backend (`str`, *optional*, defaults to `"auto"`):
             This argument is deprecated. Use `half_precision_backend` instead.
         half_precision_backend (`str`, *optional*, defaults to `"auto"`):
-            The backend to use for mixed precision training. Must be one of `"auto", "cuda_amp", "apex", "cpu_amp"`.
-            `"auto"` will use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices
-            will force the requested backend.
+            The backend to use for mixed precision training. Must be one of `"auto", "apex", "cpu_amp"`. `"auto"` will
+            use CPU/CUDA AMP or APEX depending on the PyTorch version detected, while the other choices will force the
+            requested backend.
         bf16_full_eval (`bool`, *optional*, defaults to `False`):
             Whether to use full bfloat16 evaluation instead of 32-bit. This will be faster and save memory but can harm
             metric values. This is an experimental API and it may change.
@@ -341,7 +344,7 @@ class TrainingArguments:
         local_rank (`int`, *optional*, defaults to -1):
             Rank of the process during distributed training.
         ddp_backend (`str`, *optional*):
-            The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"ccl"`, `"gloo"`.
+            The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"ccl"`, `"gloo"`, `"hccl"`.
         tpu_num_cores (`int`, *optional*):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
         dataloader_drop_last (`bool`, *optional*, defaults to `False`):
@@ -406,21 +409,6 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        sharded_ddp (`bool`, `str` or list of [`~trainer_utils.ShardedDDPOption`], *optional*, defaults to `''`):
-            Use Sharded DDP training from [FairScale](https://github.com/facebookresearch/fairscale) (in distributed
-            training only). This is an experimental feature.
-
-            A list of options along the following:
-
-            - `"simple"`: to use first instance of sharded DDP released by fairscale (`ShardedDDP`) similar to ZeRO-2.
-            - `"zero_dp_2"`: to use the second instance of sharded DPP released by fairscale (`FullyShardedDDP`) in
-              Zero-2 mode (with `reshard_after_forward=False`).
-            - `"zero_dp_3"`: to use the second instance of sharded DPP released by fairscale (`FullyShardedDDP`) in
-              Zero-3 mode (with `reshard_after_forward=True`).
-            - `"offload"`: to add ZeRO-offload (only compatible with `"zero_dp_2"` and `"zero_dp_3"`).
-
-            If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
-            list for `False` and `["simple"]` for `True`.
         fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `''`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
@@ -482,6 +470,10 @@ class TrainingArguments:
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
+                - activation_checkpointing (`bool`, *optional*, defaults to `False`):
+                    If True, activation checkpointing is a technique to reduce memory usage by clearing activations of
+                    certain layers and recomputing them during a backward pass. Effectively, this trades extra
+                    computation time for reduced memory usage.
 
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
@@ -627,6 +619,12 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
+        include_tokens_per_second (`bool`, *optional*):
+            Whether or not to compute the number of tokens per second per device for training speed metrics.
+
+            This will iterate over the entire training dataloader once beforehand,
+
+            and will slow down the entire process.
     """
 
     framework = "pt"
@@ -758,7 +756,7 @@ class TrainingArguments:
         default=500,
         metadata={
             "help": (
-                "Log every X updates steps. Should be an integer or a float in range `[0,1)`."
+                "Log every X updates steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
@@ -772,7 +770,7 @@ class TrainingArguments:
         default=500,
         metadata={
             "help": (
-                "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`."
+                "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
@@ -842,7 +840,7 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA"
-                " architecture or using CPU (use_cpu). This is an experimental API and it may change."
+                " architecture or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change."
             )
         },
     )
@@ -863,7 +861,7 @@ class TrainingArguments:
         default="auto",
         metadata={
             "help": "The backend to be used for half precision.",
-            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+            "choices": ["auto", "apex", "cpu_amp"],
         },
     )
     bf16_full_eval: bool = field(
@@ -893,7 +891,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "The backend to be used for distributed training",
-            "choices": ["nccl", "gloo", "mpi", "ccl"],
+            "choices": ["nccl", "gloo", "mpi", "ccl", "hccl"],
         },
     )
     tpu_num_cores: Optional[int] = field(
@@ -925,7 +923,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Run an evaluation every X steps. Should be an integer or a float in range `[0,1)`."
+                "Run an evaluation every X steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
@@ -982,17 +980,6 @@ class TrainingArguments:
             )
         },
     )
-    sharded_ddp: Optional[Union[List[ShardedDDPOption], str]] = field(
-        default="",
-        metadata={
-            "help": (
-                "Whether or not to use sharded DDP training (in distributed training only). The base option should be"
-                " `simple`, `zero_dp_2` or `zero_dp_3` and you can add CPU-offload to `zero_dp_2` or `zero_dp_3` like"
-                " this: zero_dp_2 offload` or `zero_dp_3 offload`. You can add auto-wrap to `zero_dp_2` or `zero_dp_3`"
-                " with the same syntax: zero_dp_2 auto_wrap` or `zero_dp_3 auto_wrap`."
-            ),
-        },
-    )
     fsdp: Optional[Union[List[FSDPOption], str]] = field(
         default="",
         metadata={
@@ -1019,7 +1006,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a"
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a "
                 "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
             )
         },
@@ -1140,7 +1127,7 @@ class TrainingArguments:
         default="auto",
         metadata={
             "help": "Deprecated. Use half_precision_backend instead",
-            "choices": ["auto", "cuda_amp", "apex", "cpu_amp"],
+            "choices": ["auto", "apex", "cpu_amp"],
         },
     )
     push_to_hub_model_id: Optional[str] = field(
@@ -1220,10 +1207,15 @@ class TrainingArguments:
     dispatch_batches: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
+            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process "
             "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
             "underlying dataset is an `IterableDataset`, `False` otherwise."
         },
+    )
+
+    include_tokens_per_second: Optional[bool] = field(
+        default=False,
+        metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
     )
 
     def __post_init__(self):
@@ -1305,7 +1297,7 @@ class TrainingArguments:
                     if not (self.eval_steps < 1 and self.save_steps < 1):
                         raise ValueError(
                             "--load_best_model_at_end requires the saving steps to be a multiple of the evaluation "
-                            "steps, which cannot get guaranteed when mixing ratio and absolute steps for save_steps"
+                            "steps, which cannot get guaranteed when mixing ratio and absolute steps for save_steps "
                             f"{self.save_steps} and eval_steps {self.eval_steps}."
                         )
                     # Work around floating point precision issues
@@ -1352,11 +1344,29 @@ class TrainingArguments:
                 if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
-                elif not self.use_cpu and torch.cuda.is_available() and not is_torch_bf16_gpu_available():
-                    # gpu
-                    raise ValueError(
-                        "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
-                    )
+                elif not self.use_cpu:
+                    if torch.cuda.is_available() and not is_torch_bf16_gpu_available():
+                        # gpu
+                        raise ValueError(
+                            "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+                        )
+                    elif is_torch_npu_available():
+                        # npu
+                        from .pytorch_utils import is_torch_greater_or_equal_than_1_11
+
+                        if not is_torch_greater_or_equal_than_1_11:
+                            raise ValueError(
+                                "Your setup doesn't support bf16/npu. You need torch>=1.11, using Ascend NPU with "
+                                "`torch_npu` installed"
+                            )
+                    elif not is_torch_xpu_available():
+                        # xpu
+                        from .pytorch_utils import is_torch_greater_or_equal_than_1_12
+
+                        if not is_torch_greater_or_equal_than_1_12:
+                            raise ValueError(
+                                "Your setup doesn't support bf16/xpu. You need torch>=1.12, using Intel XPU/GPU with IPEX installed"
+                            )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -1370,8 +1380,6 @@ class TrainingArguments:
                     " `--half_precision_backend apex`: GPU bf16 is not supported by apex. Use"
                     " `--half_precision_backend cuda_amp` instead"
                 )
-            if not (self.sharded_ddp == "" or not self.sharded_ddp):
-                raise ValueError("sharded_ddp is not supported with bf16")
 
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
             if self.evaluation_strategy == IntervalStrategy.NO:
@@ -1399,18 +1407,21 @@ class TrainingArguments:
             and is_torch_available()
             and (self.device.type != "cuda")
             and (self.device.type != "npu")
+            and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) != "GPU")
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices."
+                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices or certain XPU devices (with IPEX)."
             )
 
         if (
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "npu")
+            and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) != "GPU")
             and (get_xla_device_type(self.device) != "TPU")
             and (self.device.type != "cpu")
@@ -1418,7 +1429,7 @@ class TrainingArguments:
         ):
             raise ValueError(
                 "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
-                " (`--bf16_full_eval`) can only be used on CUDA or CPU/TPU/NeuronCore devices."
+                " (`--bf16_full_eval`) can only be used on CUDA, XPU (with IPEX), NPU or CPU/TPU/NeuronCore devices."
             )
 
         if self.torchdynamo is not None:
@@ -1468,7 +1479,7 @@ class TrainingArguments:
                 # no need to assert on else
 
         # if training args is specified, it will override the one specified in the accelerate config
-        if self.half_precision_backend != "apex" and len(self.sharded_ddp) == 0:
+        if self.half_precision_backend != "apex":
             mixed_precision_dtype = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
             if self.fp16:
                 mixed_precision_dtype = "fp16"
@@ -1501,26 +1512,6 @@ class TrainingArguments:
                 " during training"
             )
 
-        if not (self.sharded_ddp == "" or not self.sharded_ddp):
-            warnings.warn(
-                "using `sharded_ddp` is deprecated and will be removed in version 4.33"
-                " of 🤗 Transformers. Use `fsdp` instead",
-                FutureWarning,
-            )
-        if isinstance(self.sharded_ddp, bool):
-            self.sharded_ddp = "simple" if self.sharded_ddp else ""
-        if isinstance(self.sharded_ddp, str):
-            self.sharded_ddp = [ShardedDDPOption(s) for s in self.sharded_ddp.split()]
-        if self.sharded_ddp == [ShardedDDPOption.OFFLOAD]:
-            raise ValueError(
-                "`--sharded_ddp offload` can't work on its own. It needs to be added to `--sharded_ddp zero_dp_2` or "
-                '`--sharded_ddp zero_dp_3`. For example, `--sharded_ddp "zero_dp_2 offload"`.'
-            )
-        elif len(self.sharded_ddp) > 1 and ShardedDDPOption.SIMPLE in self.sharded_ddp:
-            raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
-        elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
-            raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
-
         if isinstance(self.fsdp, bool):
             self.fsdp = "full_shard" if self.fsdp else ""
         if isinstance(self.fsdp, str):
@@ -1541,10 +1532,10 @@ class TrainingArguments:
                 warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
             with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
-                for k, v in self.fsdp_config.items():
+                for k in list(self.fsdp_config.keys()):
                     if k.startswith("fsdp_"):
-                        self.fsdp_config[k.replace("fsdp_", "")] = v
-                        del self.fsdp_config[k]
+                        v = self.fsdp_config.pop(k)
+                        self.fsdp_config[k[5:]] = v
 
         if self.fsdp_min_num_params > 0:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
@@ -1647,7 +1638,7 @@ class TrainingArguments:
             # - must be run before the model is created.
             if not is_accelerate_available():
                 raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
-            from transformers.deepspeed import HfTrainerDeepSpeedConfig
+            from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
@@ -1702,16 +1693,6 @@ class TrainingArguments:
                 f"{self.hub_model_id}).",
                 FutureWarning,
             )
-
-        # Finally set the `TrainingArguments` to be immutable
-        self._frozen = True
-
-    def __setattr__(self, name, value):
-        # Once fully through the `__post_init__`, `TrainingArguments` are immutable
-        if not name.startswith("_") and getattr(self, "_frozen", False):
-            raise FrozenInstanceError(f"cannot assign to field {name}")
-        else:
-            super().__setattr__(name, value)
 
     def __str__(self):
         self_as_dict = asdict(self)
@@ -1784,6 +1765,11 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
             torch.cuda.set_device(device)
+        elif is_torch_xpu_available() and "ACCELERATE_USE_XPU" not in os.environ:
+            os.environ["ACCELERATE_USE_XPU"] = "true"
+            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
+            device = torch.device("xpu:0")
+            self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
             self.distributed_state = PartialState(_use_sagemaker_dp=True)
             self._n_gpu = 1
@@ -1812,10 +1798,16 @@ class TrainingArguments:
         elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
             # Already set _n_gpu
             pass
+        elif self.distributed_state.distributed_type == DistributedType.MULTI_XPU:
+            if "ACCELERATE_USE_XPU" not in os.environ:
+                os.environ["ACCELERATE_USE_XPU"] = "true"
+            self._n_gpu = torch.xpu.device_count()
+            device = torch.device("xpu:0")
+            torch.xpu.set_device(device)
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 warnings.warn(
-                    "`use_mps_device` is deprecated and will be removed in version 5.0 of 🤗 Transformers."
+                    "`use_mps_device` is deprecated and will be removed in version 5.0 of 🤗 Transformers. "
                     "`mps` device will be used by default if available similar to the way `cuda` device is used."
                     "Therefore, no action from user is required. "
                 )
@@ -1829,6 +1821,10 @@ class TrainingArguments:
             elif self.use_cpu:
                 device = torch.device("cpu")
                 self._n_gpu = 0
+            elif is_torch_xpu_available():
+                device = torch.device("xpu:0")
+                torch.xpu.set_device(device)
+                self._n_gpu = 1
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
                 torch.npu.set_device(device)
@@ -2349,10 +2345,11 @@ class TrainingArguments:
                 Logger log level to use on the main process. Possible choices are the log levels as strings: `"debug"`,
                 `"info"`, `"warning"`, `"error"` and `"critical"`, plus a `"passive"` level which doesn't set anything
                 and lets the application set the level.
-            report_to (`str` or `List[str]`, *optional*, defaults to `"none"`):
+            report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-                `"comet_ml"`, `"mlflow"`, `"neptune"`, `"tensorboard"`,`"clearml"` and `"wandb"`. Use `"all"` to report
-                to all integrations installed, `"none"` for no integrations.
+                `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"flyte"`, `"mlflow"`, `"neptune"`,
+                `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"` for no
+                integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):

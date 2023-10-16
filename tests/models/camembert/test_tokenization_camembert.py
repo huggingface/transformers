@@ -43,13 +43,19 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = CamembertTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
 
+    @unittest.skip(
+        "Token maps are not equal because someone set the probability of ('<unk>NOTUSED', -100), so it's never encoded for fast"
+    )
+    def test_special_tokens_map_equal(self):
+        return
+
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
         token = "<pad>"
-        token_id = 1
+        token_id = 1  # 1 is the offset id, but in the spm vocab it's 3
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
-        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+        self.assertEqual(self.get_tokenizer().convert_tokens_to_ids(token), token_id)
+        self.assertEqual(self.get_tokenizer().convert_ids_to_tokens(token_id), token)
 
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
@@ -57,10 +63,10 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(vocab_keys[0], "<s>NOTUSED")
         self.assertEqual(vocab_keys[1], "<pad>")
         self.assertEqual(vocab_keys[-1], "<mask>")
-        self.assertEqual(len(vocab_keys), 1_004)
+        self.assertEqual(len(vocab_keys), 1_005)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 1_005)
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
 
     def test_rust_and_python_bpe_tokenizers(self):
         tokenizer = CamembertTokenizer(SAMPLE_BPE_VOCAB)

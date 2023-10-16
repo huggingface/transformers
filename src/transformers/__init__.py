@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.33.0.dev0"
+__version__ = "4.35.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -94,6 +94,7 @@ _import_structure = {
     "data.metrics": [],
     "data.processors": [],
     "debug_utils": [],
+    "deepspeed": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "dynamic_module_utils": [],
@@ -115,8 +116,6 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
-    "lib_integrations": [],
-    "lib_integrations.peft": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
@@ -222,6 +221,7 @@ _import_structure = {
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
     ],
+    "models.bros": ["BROS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BrosConfig", "BrosProcessor"],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -254,6 +254,7 @@ _import_structure = {
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
     ],
+    "models.code_llama": [],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
@@ -357,7 +358,12 @@ _import_structure = {
         "GPTSanJapaneseTokenizer",
     ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
-    "models.grounding_dino": ["GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GroundingDINOConfig", "GroundingDINOTextPrenetConfig"],
+    "models.grounding_dino": [
+        "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GroundingDINOConfig",
+        "GroundingDINOProcessor",
+        "GroundingDINOTextPrenetConfig",
+    ],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -433,6 +439,7 @@ _import_structure = {
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
     "models.mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig", "MgpstrProcessor", "MgpstrTokenizer"],
+    "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
     "models.mluke": [],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mobilenet_v1": ["MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV1Config"],
@@ -453,6 +460,7 @@ _import_structure = {
     "models.nezha": ["NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP", "NezhaConfig"],
     "models.nllb": [],
     "models.nllb_moe": ["NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "NllbMoeConfig"],
+    "models.nougat": ["NougatProcessor"],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
@@ -460,6 +468,13 @@ _import_structure = {
     "models.oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig", "OneFormerProcessor"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
+    "models.owlv2": [
+        "OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Owlv2Config",
+        "Owlv2Processor",
+        "Owlv2TextConfig",
+        "Owlv2VisionConfig",
+    ],
     "models.owlvit": [
         "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OwlViTConfig",
@@ -470,6 +485,7 @@ _import_structure = {
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
+    "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -587,6 +603,13 @@ _import_structure = {
     "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
+    "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
+    "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
+    "models.vits": [
+        "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VitsConfig",
+        "VitsTokenizer",
+    ],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VivitConfig",
@@ -645,6 +668,7 @@ _import_structure = {
         "FillMaskPipeline",
         "ImageClassificationPipeline",
         "ImageSegmentationPipeline",
+        "ImageToImagePipeline",
         "ImageToTextPipeline",
         "JsonPipelineDataFormat",
         "NerPipeline",
@@ -743,10 +767,10 @@ _import_structure = {
         "is_torch_npu_available",
         "is_torch_tpu_available",
         "is_torchvision_available",
+        "is_torch_xpu_available",
         "is_vision_available",
         "logging",
     ],
-    "utils.bitsandbytes": [],
     "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
 }
 
@@ -767,6 +791,7 @@ else:
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
+    _import_structure["models.code_llama"].append("CodeLlamaTokenizer")
     _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
     _import_structure["models.ernie_m"].append("ErnieMTokenizer")
@@ -815,6 +840,7 @@ else:
     _import_structure["models.bloom"].append("BloomTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
+    _import_structure["models.code_llama"].append("CodeLlamaTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
@@ -848,6 +874,7 @@ else:
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.mvp"].append("MvpTokenizerFast")
     _import_structure["models.nllb"].append("NllbTokenizerFast")
+    _import_structure["models.nougat"].append("NougatTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
@@ -962,7 +989,9 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
+    _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
+    _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
@@ -976,6 +1005,7 @@ else:
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
     _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
+    _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
@@ -1003,20 +1033,28 @@ else:
         "TextDataset",
         "TextDatasetForNextSentencePrediction",
     ]
-    _import_structure["deepspeed"] = []
     _import_structure["generation"].extend(
         [
+            "AlternatingCodebooksLogitsProcessor",
             "BeamScorer",
             "BeamSearchScorer",
+            "ClassifierFreeGuidanceLogitsProcessor",
             "ConstrainedBeamSearchScorer",
             "Constraint",
             "ConstraintListState",
             "DisjunctiveConstraint",
+            "EncoderNoRepeatNGramLogitsProcessor",
+            "EncoderRepetitionPenaltyLogitsProcessor",
+            "EpsilonLogitsWarper",
+            "EtaLogitsWarper",
+            "ExponentialDecayLengthPenalty",
             "ForcedBOSTokenLogitsProcessor",
             "ForcedEOSTokenLogitsProcessor",
+            "ForceTokensLogitsProcessor",
             "GenerationMixin",
             "HammingDiversityLogitsProcessor",
             "InfNanRemoveLogitsProcessor",
+            "LogitNormalization",
             "LogitsProcessor",
             "LogitsProcessorList",
             "LogitsWarper",
@@ -1032,10 +1070,14 @@ else:
             "SequenceBiasLogitsProcessor",
             "StoppingCriteria",
             "StoppingCriteriaList",
+            "SuppressTokensAtBeginLogitsProcessor",
+            "SuppressTokensLogitsProcessor",
             "TemperatureLogitsWarper",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
+            "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+            "WhisperTimeStampLogitsProcessor",
             "top_k_top_p_filtering",
         ]
     )
@@ -1097,6 +1139,7 @@ else:
             "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
+            "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING",
             "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
             "MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
@@ -1134,6 +1177,7 @@ else:
             "AutoModelForDocumentQuestionAnswering",
             "AutoModelForImageClassification",
             "AutoModelForImageSegmentation",
+            "AutoModelForImageToImage",
             "AutoModelForInstanceSegmentation",
             "AutoModelForMaskedImageModeling",
             "AutoModelForMaskedLM",
@@ -1333,6 +1377,17 @@ else:
             "BridgeTowerForMaskedLM",
             "BridgeTowerModel",
             "BridgeTowerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bros"].extend(
+        [
+            "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BrosForTokenClassification",
+            "BrosModel",
+            "BrosPreTrainedModel",
+            "BrosProcessor",
+            "BrosSpadeEEForTokenClassification",
+            "BrosSpadeELForTokenClassification",
         ]
     )
     _import_structure["models.camembert"].extend(
@@ -1611,6 +1666,7 @@ else:
     _import_structure["models.dinov2"].extend(
         [
             "DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Dinov2Backbone",
             "Dinov2ForImageClassification",
             "Dinov2Model",
             "Dinov2PreTrainedModel",
@@ -2189,6 +2245,9 @@ else:
             "MgpstrPreTrainedModel",
         ]
     )
+    _import_structure["models.mistral"].extend(
+        ["MistralForCausalLM", "MistralForSequenceClassification", "MistralModel", "MistralPreTrainedModel"]
+    )
     _import_structure["models.mobilebert"].extend(
         [
             "MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2384,6 +2443,16 @@ else:
             "OPTPreTrainedModel",
         ]
     )
+    _import_structure["models.owlv2"].extend(
+        [
+            "OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Owlv2ForObjectDetection",
+            "Owlv2Model",
+            "Owlv2PreTrainedModel",
+            "Owlv2TextModel",
+            "Owlv2VisionModel",
+        ]
+    )
     _import_structure["models.owlvit"].extend(
         [
             "OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2419,6 +2488,9 @@ else:
             "PerceiverModel",
             "PerceiverPreTrainedModel",
         ]
+    )
+    _import_structure["models.persimmon"].extend(
+        ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
     )
     _import_structure["models.pix2struct"].extend(
         [
@@ -2921,6 +2993,28 @@ else:
             "ViTMSNPreTrainedModel",
         ]
     )
+    _import_structure["models.vitdet"].extend(
+        [
+            "VITDET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitDetBackbone",
+            "VitDetModel",
+            "VitDetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vitmatte"].extend(
+        [
+            "VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitMatteForImageMatting",
+            "VitMattePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vits"].extend(
+        [
+            "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitsModel",
+            "VitsPreTrainedModel",
+        ]
+    )
     _import_structure["models.vivit"].extend(
         [
             "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3124,6 +3218,7 @@ else:
         [
             "TFForcedBOSTokenLogitsProcessor",
             "TFForcedEOSTokenLogitsProcessor",
+            "TFForceTokensLogitsProcessor",
             "TFGenerationMixin",
             "TFLogitsProcessor",
             "TFLogitsProcessorList",
@@ -3132,6 +3227,8 @@ else:
             "TFNoBadWordsLogitsProcessor",
             "TFNoRepeatNGramLogitsProcessor",
             "TFRepetitionPenaltyLogitsProcessor",
+            "TFSuppressTokensAtBeginLogitsProcessor",
+            "TFSuppressTokensLogitsProcessor",
             "TFTemperatureLogitsWarper",
             "TFTopKLogitsWarper",
             "TFTopPLogitsWarper",
@@ -3330,6 +3427,7 @@ else:
         [
             "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFDebertaV2ForMaskedLM",
+            "TFDebertaV2ForMultipleChoice",
             "TFDebertaV2ForQuestionAnswering",
             "TFDebertaV2ForSequenceClassification",
             "TFDebertaV2ForTokenClassification",
@@ -3845,14 +3943,18 @@ else:
         [
             "FlaxForcedBOSTokenLogitsProcessor",
             "FlaxForcedEOSTokenLogitsProcessor",
+            "FlaxForceTokensLogitsProcessor",
             "FlaxGenerationMixin",
             "FlaxLogitsProcessor",
             "FlaxLogitsProcessorList",
             "FlaxLogitsWarper",
             "FlaxMinLengthLogitsProcessor",
             "FlaxTemperatureLogitsWarper",
+            "FlaxSuppressTokensAtBeginLogitsProcessor",
+            "FlaxSuppressTokensLogitsProcessor",
             "FlaxTopKLogitsWarper",
             "FlaxTopPLogitsWarper",
+            "FlaxWhisperTimeStampLogitsProcessor",
         ]
     )
     _import_structure["generation_flax_utils"] = []
@@ -3974,6 +4076,7 @@ else:
             "FlaxCLIPPreTrainedModel",
             "FlaxCLIPTextModel",
             "FlaxCLIPTextPreTrainedModel",
+            "FlaxCLIPTextModelWithProjection",
             "FlaxCLIPVisionModel",
             "FlaxCLIPVisionPreTrainedModel",
         ]
@@ -4284,6 +4387,7 @@ if TYPE_CHECKING:
         BridgeTowerTextConfig,
         BridgeTowerVisionConfig,
     )
+    from .models.bros import BROS_PRETRAINED_CONFIG_ARCHIVE_MAP, BrosConfig, BrosProcessor
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
@@ -4413,7 +4517,12 @@ if TYPE_CHECKING:
         GPTSanJapaneseTokenizer,
     )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
-    from .models.grounding_dino import GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP, GroundingDINOConfig, GroundingDINOTextPrenetConfig
+    from .models.grounding_dino import (
+        GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GroundingDINOConfig,
+        GroundingDINOProcessor,
+        GroundingDINOTextPrenetConfig,
+    )
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -4484,6 +4593,7 @@ if TYPE_CHECKING:
     from .models.mega import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, MegaConfig
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig, MgpstrProcessor, MgpstrTokenizer
+    from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config
     from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
@@ -4502,10 +4612,18 @@ if TYPE_CHECKING:
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nllb_moe import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, NllbMoeConfig
+    from .models.nougat import NougatProcessor
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig, OneFormerProcessor
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
+    from .models.owlv2 import (
+        OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Owlv2Config,
+        Owlv2Processor,
+        Owlv2TextConfig,
+        Owlv2VisionConfig,
+    )
     from .models.owlvit import (
         OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OwlViTConfig,
@@ -4516,6 +4634,7 @@ if TYPE_CHECKING:
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
+    from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4621,6 +4740,13 @@ if TYPE_CHECKING:
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
+    from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
+    from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
+    from .models.vits import (
+        VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VitsConfig,
+        VitsTokenizer,
+    )
     from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4671,6 +4797,7 @@ if TYPE_CHECKING:
         FillMaskPipeline,
         ImageClassificationPipeline,
         ImageSegmentationPipeline,
+        ImageToImagePipeline,
         ImageToTextPipeline,
         JsonPipelineDataFormat,
         NerPipeline,
@@ -4775,6 +4902,7 @@ if TYPE_CHECKING:
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
+        is_torch_xpu_available,
         is_torchvision_available,
         is_vision_available,
         logging,
@@ -4795,6 +4923,7 @@ if TYPE_CHECKING:
         from .models.bert_generation import BertGenerationTokenizer
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
+        from .models.code_llama import CodeLlamaTokenizer
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.ernie_m import ErnieMTokenizer
@@ -4837,6 +4966,7 @@ if TYPE_CHECKING:
         from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
+        from .models.code_llama import CodeLlamaTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
@@ -4868,6 +4998,7 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
         from .models.nllb import NllbTokenizerFast
+        from .models.nougat import NougatTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.realm import RealmTokenizerFast
@@ -4953,7 +5084,9 @@ if TYPE_CHECKING:
         from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
+        from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
+        from .models.owlv2 import Owlv2ImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
@@ -4967,6 +5100,7 @@ if TYPE_CHECKING:
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.vit_hybrid import ViTHybridImageProcessor
+        from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
 
@@ -4992,17 +5126,26 @@ if TYPE_CHECKING:
             TextDatasetForNextSentencePrediction,
         )
         from .generation import (
+            AlternatingCodebooksLogitsProcessor,
             BeamScorer,
             BeamSearchScorer,
+            ClassifierFreeGuidanceLogitsProcessor,
             ConstrainedBeamSearchScorer,
             Constraint,
             ConstraintListState,
             DisjunctiveConstraint,
+            EncoderNoRepeatNGramLogitsProcessor,
+            EncoderRepetitionPenaltyLogitsProcessor,
+            EpsilonLogitsWarper,
+            EtaLogitsWarper,
+            ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
+            ForceTokensLogitsProcessor,
             GenerationMixin,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
+            LogitNormalization,
             LogitsProcessor,
             LogitsProcessorList,
             LogitsWarper,
@@ -5018,10 +5161,14 @@ if TYPE_CHECKING:
             SequenceBiasLogitsProcessor,
             StoppingCriteria,
             StoppingCriteriaList,
+            SuppressTokensAtBeginLogitsProcessor,
+            SuppressTokensLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
             TypicalLogitsWarper,
+            UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WhisperTimeStampLogitsProcessor,
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
@@ -5071,6 +5218,7 @@ if TYPE_CHECKING:
             MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
+            MODEL_FOR_IMAGE_TO_IMAGE_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
             MODEL_FOR_MASK_GENERATION_MAPPING,
             MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
@@ -5108,6 +5256,7 @@ if TYPE_CHECKING:
             AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
+            AutoModelForImageToImage,
             AutoModelForInstanceSegmentation,
             AutoModelForMaskedImageModeling,
             AutoModelForMaskedLM,
@@ -5275,6 +5424,15 @@ if TYPE_CHECKING:
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,
+        )
+        from .models.bros import (
+            BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BrosForTokenClassification,
+            BrosModel,
+            BrosPreTrainedModel,
+            BrosProcessor,
+            BrosSpadeEEForTokenClassification,
+            BrosSpadeELForTokenClassification,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5504,6 +5662,7 @@ if TYPE_CHECKING:
         )
         from .models.dinov2 import (
             DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Dinov2Backbone,
             Dinov2ForImageClassification,
             Dinov2Model,
             Dinov2PreTrainedModel,
@@ -5967,6 +6126,12 @@ if TYPE_CHECKING:
             MgpstrModel,
             MgpstrPreTrainedModel,
         )
+        from .models.mistral import (
+            MistralForCausalLM,
+            MistralForSequenceClassification,
+            MistralModel,
+            MistralPreTrainedModel,
+        )
         from .models.mobilebert import (
             MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileBertForMaskedLM,
@@ -6126,6 +6291,14 @@ if TYPE_CHECKING:
             OPTModel,
             OPTPreTrainedModel,
         )
+        from .models.owlv2 import (
+            OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Owlv2ForObjectDetection,
+            Owlv2Model,
+            Owlv2PreTrainedModel,
+            Owlv2TextModel,
+            Owlv2VisionModel,
+        )
         from .models.owlvit import (
             OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OwlViTForObjectDetection,
@@ -6158,6 +6331,12 @@ if TYPE_CHECKING:
             PerceiverLayer,
             PerceiverModel,
             PerceiverPreTrainedModel,
+        )
+        from .models.persimmon import (
+            PersimmonForCausalLM,
+            PersimmonForSequenceClassification,
+            PersimmonModel,
+            PersimmonPreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6557,6 +6736,22 @@ if TYPE_CHECKING:
             ViTMSNModel,
             ViTMSNPreTrainedModel,
         )
+        from .models.vitdet import (
+            VITDET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitDetBackbone,
+            VitDetModel,
+            VitDetPreTrainedModel,
+        )
+        from .models.vitmatte import (
+            VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitMatteForImageMatting,
+            VitMattePreTrainedModel,
+        )
+        from .models.vits import (
+            VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitsModel,
+            VitsPreTrainedModel,
+        )
         from .models.vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VivitForVideoClassification,
@@ -6727,6 +6922,7 @@ if TYPE_CHECKING:
         from .generation import (
             TFForcedBOSTokenLogitsProcessor,
             TFForcedEOSTokenLogitsProcessor,
+            TFForceTokensLogitsProcessor,
             TFGenerationMixin,
             TFLogitsProcessor,
             TFLogitsProcessorList,
@@ -6735,6 +6931,8 @@ if TYPE_CHECKING:
             TFNoBadWordsLogitsProcessor,
             TFNoRepeatNGramLogitsProcessor,
             TFRepetitionPenaltyLogitsProcessor,
+            TFSuppressTokensAtBeginLogitsProcessor,
+            TFSuppressTokensLogitsProcessor,
             TFTemperatureLogitsWarper,
             TFTopKLogitsWarper,
             TFTopPLogitsWarper,
@@ -6904,6 +7102,7 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import (
             TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaV2ForMaskedLM,
+            TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForQuestionAnswering,
             TFDebertaV2ForSequenceClassification,
             TFDebertaV2ForTokenClassification,
@@ -7300,14 +7499,18 @@ if TYPE_CHECKING:
         from .generation import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
+            FlaxForceTokensLogitsProcessor,
             FlaxGenerationMixin,
             FlaxLogitsProcessor,
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
             FlaxMinLengthLogitsProcessor,
+            FlaxSuppressTokensAtBeginLogitsProcessor,
+            FlaxSuppressTokensLogitsProcessor,
             FlaxTemperatureLogitsWarper,
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
+            FlaxWhisperTimeStampLogitsProcessor,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
 
@@ -7404,6 +7607,7 @@ if TYPE_CHECKING:
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,
             FlaxCLIPTextModel,
+            FlaxCLIPTextModelWithProjection,
             FlaxCLIPTextPreTrainedModel,
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,

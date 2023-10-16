@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Transformers Agent
+# Transformers Agents
 
 <Tip warning={true}>
 
-Transformers Agent is an experimental API which is subject to change at any time. Results returned by the agents
+Transformers Agents is an experimental API which is subject to change at any time. Results returned by the agents
 can vary as the APIs or underlying models are prone to change.
 
 </Tip>
@@ -206,24 +206,12 @@ This method can also take arguments if you would like to pass non-text types or 
 
 ### ⚠️ Remote execution
 
-For demonstration purposes and so that this can be used with all setups, we have created remote executors for several 
-of the default tools the agent has access. These are created using 
-[inference endpoints](https://huggingface.co/inference-endpoints). To see how to set up remote executors tools yourself,
+For demonstration purposes and so that it could be used with all setups, we had created remote executors for several 
+of the default tools the agent has access for the release. These are created using 
+[inference endpoints](https://huggingface.co/inference-endpoints).
+
+We have turned these off for now, but in order to see how to set up remote executors tools yourself,
 we recommend reading the [custom tool guide](./custom_tools).
-
-In order to run with remote tools, specifying `remote=True` to either [`~Agent.run`] or [`~Agent.chat`] is sufficient.
-
-For example, the following command could be run on any device efficiently, without needing significant RAM or GPU:
-
-```py
-agent.run("Draw me a picture of rivers and lakes", remote=True)
-```
-
-The same can be said for [`~Agent.chat`]:
-
-```py
-agent.chat("Draw me a picture of rivers and lakes", remote=True)
-```
 
 ### What's happening here? What are tools, and what are agents?
 

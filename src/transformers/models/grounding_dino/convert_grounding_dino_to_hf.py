@@ -14,8 +14,7 @@
 # limitations under the License.
 """Convert GroundingDINO SimMIM checkpoints from the original repository.
 
-URL:
-https://github.com/microsoft/GroundingDINO-Transformer/blob/main/MODELHUB.md#simmim-pretrained-grounding_dino-v1-models"""
+URL: https://github.com/IDEA-Research/GroundingDINO"""
 
 import argparse
 
@@ -24,7 +23,13 @@ import torch
 from PIL import Image
 from torchvision import transforms as T
 
-from transformers import AutoTokenizer, GroundingDINOConfig, GroundingDINOForObjectDetection
+from transformers import (
+    AutoTokenizer,
+    DeformableDetrImageProcessor,
+    GroundingDINOConfig,
+    GroundingDINOForObjectDetection,
+    GroundingDINOProcessor,
+)
 
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -247,7 +252,7 @@ def create_rename_keys(state_dict, config):
             rename_keys.append((layer_name, layer_name.replace("input_proj", "model.input_proj_vision")))
         #### INPUT PROJ - PROJECT OUTPUT FEATURES FROM TEXT BACKBONE
         if "feat_map" in layer_name:
-            rename_keys.append((layer_name, layer_name.replace("feat_map", "model.input_proj_text")))
+            rename_keys.append((layer_name, layer_name.replace("feat_map", "model.text_projection")))
         #### DECODER REFERENCE POINT HEAD
         if "transformer.decoder.ref_point_head" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("transformer.decoder.ref_point_head",
@@ -319,37 +324,30 @@ def prepare_img():
     return image
 
 
-def text_processor(text: str, config):
-    def preprocess_caption(caption: str) -> str:
-        result = caption.lower().strip()
-        if result.endswith("."):
-            return result
-        return result + "."
+def preprocess_caption(caption: str) -> str:
+    result = caption.lower().strip()
+    if result.endswith("."):
+        return result
+    return result + "."
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased") # Using just for now since I didn't finish the tokenizer
-    text = preprocess_caption(text)
-    tokenized = tokenizer([text], padding="longest", return_tensors="pt")
-
-    return tokenized
 
 @torch.no_grad()
 def convert_grounding_dino_checkpoint(args):
-
     model_name = args.model_name
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
     push_to_hub = args.push_to_hub
 
     checkpoint_mapping = {
-        "grounding-dino-tiny": "/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_tiny_clean.pth",
-        "grounding-dino-base": "/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_base_clean.pth",
+        "grounding-dino-tiny": "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth",
+        "grounding-dino-base": "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swinb_cogcoor.pth",
     }
     # Define default GroundingDINO configuation
     config = get_grounding_dino_config(model_name)
 
-    checkpoint_path = checkpoint_mapping[model_name]
-
     # Load original checkpoint
-    original_state_dict = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint_url = checkpoint_mapping[model_name]
+    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
+    original_state_dict = {k.replace("module.", ""): v for k, v in original_state_dict.items()}
 
     # Rename keys
     new_state_dict = original_state_dict.copy()
@@ -359,46 +357,52 @@ def convert_grounding_dino_checkpoint(args):
         rename_key(new_state_dict, src, dest)
     read_in_q_k_v(new_state_dict, config)
 
-    # Load HF implementation with default config and converted state dict
-    model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny").eval()
-    # model = GroundingDINOForObjectDetection(config=config).eval()
-    model.load_state_dict(new_state_dict, strict=False)
+    # Load HF model
+    model = GroundingDINOForObjectDetection(config)
+    model.eval()
+    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
 
     # Load and process test image
     image = prepare_img()
+    transforms = T.Compose([T.Resize(size=800, max_size=1333), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
+    original_pixel_values = transforms(image).unsqueeze(0)
+
+    image_processor = DeformableDetrImageProcessor()
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    processor = GroundingDINOProcessor(image_processor=image_processor, tokenizer=tokenizer)
+
     text = "a cat"
-    image_processor = T.Compose(
-        [T.Resize(size=800, max_size=1333), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)]
-    )
-    image_inputs = image_processor(image)
-    text_inputs = text_processor(text, config)
+    inputs = processor(images=image, text=preprocess_caption(text), return_tensors="pt")
+
+    assert torch.allclose(original_pixel_values, inputs.pixel_values, atol=1e-4)
 
     # Running forward
-    output = model(
-        pixel_values=image_inputs.unsqueeze(0),
-        **text_inputs
-    )
+    with torch.no_grad():
+        outputs = model(**inputs)
 
-    # output.pred_boxes[:, :3, :]
-    # tensor([[[0.7674, 0.4136, 0.4572, 0.7305],
-    #      [0.2566, 0.5463, 0.4760, 0.8777],
-    #      [0.2585, 0.5442, 0.4640, 0.8683]]])
-    #
-    # output.logits[:, :3, :4]
-    # tensor([[[-4.8913, -0.1900, -0.2161, -4.2374],
-    #      [-4.9652, -0.3719, -0.3950, -4.2315],
-    #      [-5.9599, -3.3765, -3.3104, -5.9752]]])
+    print("First values of logits:", outputs.logits[0, :3, :3])
+    print("First values of boxes:", outputs.pred_boxes[0, :3, :3])
+
+    # verify outputs
+    expected_boxes = torch.tensor([[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]])
+    expected_logits = torch.tensor(
+        [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
+    )
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-
-        print(f"Saving image processor to {pytorch_dump_folder_path}")
-        image_processor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and image processor for {model_name} to hub")
+        print(f"Pushing model and processor for {model_name} to hub")
         model.push_to_hub(f"EduardoPacheco/{model_name}")
+        processor.push_to_hub(f"EduardoPacheco/{model_name}")
 
 
 if __name__ == "__main__":
@@ -411,12 +415,6 @@ if __name__ == "__main__":
         choices=["grounding-dino-tiny", "grounding-dino-base"],
         help="Name of the GroundingDINO model you'd like to convert.",
     )
-    # parser.add_argument(
-    #     "--checkpoint_path",
-    #     default="/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_base_clean.pth",
-    #     type=str,
-    #     help="Path to the original PyTorch checkpoint (.pth file).",
-    # )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )

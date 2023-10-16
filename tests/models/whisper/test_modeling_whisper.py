@@ -49,7 +49,7 @@ if is_torch_available():
         WhisperProcessor,
         set_seed,
     )
-    from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
+    from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder, sinusoids
 
 if is_flax_available():
     import jax.numpy as jnp
@@ -350,6 +350,20 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             self.assertFalse(all(encoder_grads))
             self.assertTrue(all(decoder_grads))
+
+    def test_requires_grad_encoder_embed_positions(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            encoder = model.get_encoder()
+            self.assertFalse(encoder.embed_positions.weight.requires_grad)
+
+    def test_encoder_sinusoidal_embed_positions(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            embeds = model.get_encoder().embed_positions.weight
+            self.assertTrue(torch.allclose(embeds, sinusoids(*embeds.shape)))
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1074,6 +1088,29 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         ]
         for row in output.tolist():
             self.assertListEqual(row[: len(expected_output_start)], expected_output_start)
+
+    def test_generate_with_prompt_ids_max_length(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.max_target_positions = 5
+
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+        input_features = input_dict["input_features"]
+        prompt_ids = np.asarray(range(4))
+        sliced_prompt_ids = prompt_ids[1:]
+        sliced_prompt_ids = sliced_prompt_ids[-config.max_target_positions // 2 - 1 :]
+        max_new_tokens = 5
+
+        with self.assertRaisesRegex(
+            ValueError,
+            f"The length of the sliced `prompt_ids` is {len(sliced_prompt_ids)}, and the `max_new_tokens` "
+            f"{max_new_tokens}. Thus, the combined length of the sliced `prompt_ids` and `max_new_tokens` is: "
+            f"{len(sliced_prompt_ids) + max_new_tokens}. This exceeds the `max_target_positions` of the Whisper model: "
+            f"{config.max_target_positions}. You should either reduce the length of your prompt, or reduce the "
+            f"value of `max_new_tokens`, so that their combined length is less that {config.max_target_positions}.",
+        ):
+            model.generate(input_features, max_new_tokens=max_new_tokens, prompt_ids=prompt_ids)
+
+        model.generate(input_features, max_new_tokens=1, prompt_ids=prompt_ids)
 
 
 @require_torch

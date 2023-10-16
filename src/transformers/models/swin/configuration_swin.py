@@ -55,15 +55,15 @@ class SwinConfig(BackboneConfigMixin, PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
-        depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
+        depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depth of each layer in the Transformer encoder.
-        num_heads (`list(int)`, *optional*, defaults to [3, 6, 12, 24]):
+        num_heads (`list(int)`, *optional*, defaults to `[3, 6, 12, 24]`):
             Number of attention heads in each layer of the Transformer encoder.
         window_size (`int`, *optional*, defaults to 7):
             Size of windows.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
-        qkv_bias (`bool`, *optional*, defaults to True):
+        qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not a learnable bias should be added to the queries, keys and values.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings and encoder.
@@ -74,13 +74,13 @@ class SwinConfig(BackboneConfigMixin, PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
-        use_absolute_embeddings (`bool`, *optional*, defaults to False):
+        use_absolute_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to add absolute position embeddings to the patch embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        encoder_stride (`int`, `optional`, defaults to 32):
+        encoder_stride (`int`, *optional*, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.

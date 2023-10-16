@@ -38,6 +38,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
 class CpmTokenizer(PreTrainedTokenizer):
     """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
 
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+
     def __init__(
         self,
         vocab_file,
@@ -121,24 +124,6 @@ class CpmTokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        super().__init__(
-            do_lower_case=do_lower_case,
-            remove_space=remove_space,
-            keep_accents=keep_accents,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
-
-        self._pad_token_type_id = 3
-
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
@@ -156,6 +141,24 @@ class CpmTokenizer(PreTrainedTokenizer):
             )
         self.jieba = jieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
+
+        super().__init__(
+            do_lower_case=do_lower_case,
+            remove_space=remove_space,
+            keep_accents=keep_accents,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
+
+        self._pad_token_type_id = 3
 
     @property
     # Copied from transformers.models.xlnet.tokenization_xlnet.XLNetTokenizer.vocab_size

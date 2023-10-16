@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 SenseTime and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 IDEA Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,7 +41,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithPooling,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
@@ -898,8 +898,13 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
 
 
 class GroundingDINOBiMultiHeadAttention(nn.Module):
-    def __init__(self, vision_dim: int, text_dim: int, embed_dim: int, num_heads: int, dropout: float = 0.1):
+    def __init__(self, config):
         super().__init__()
+
+        vision_dim = text_dim = config.d_model
+        embed_dim = config.encoder_ffn_dim // 2
+        num_heads = config.encoder_attention_heads // 2
+        dropout = config.fusion_dropout
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -907,9 +912,10 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         self.vision_dim = vision_dim
         self.text_dim = text_dim
 
-        assert (
-            self.head_dim * self.num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+            )
         self.scale = self.head_dim ** (-0.5)
         self.dropout = dropout
 
@@ -958,8 +964,6 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         Returns:
             _type_: _description_
         """
-        # if os.environ.get('IPDB_SHILONG_DEBUG', None) == 'INFO':
-        #     import ipdb; ipdb.set_trace()
         bsz, tgt_len, _ = vision_features.size()
 
         vision_query_states = self.vision_proj(vision_features) * self.scale
@@ -1097,13 +1101,7 @@ class GroundingDINOFusionLayer(nn.Module):
         # pre layer norm
         self.layer_norm_vision = nn.LayerNorm(config.d_model)
         self.layer_norm_text = nn.LayerNorm(config.d_model)
-        self.attn = GroundingDINOBiMultiHeadAttention(
-            vision_dim=config.d_model,
-            text_dim=config.d_model,
-            embed_dim=config.encoder_ffn_dim // 2,
-            num_heads=config.encoder_attention_heads // 2,
-            dropout=config.fusion_dropout,
-        )
+        self.attn = GroundingDINOBiMultiHeadAttention(config)
 
         # add layer scale for training stability
         self.drop_path = GroundingDINODropPath(drop_path) if drop_path > 0.0 else nn.Identity()
@@ -1241,6 +1239,9 @@ def get_sine_pos_embed(
 class GroundingDINOEncoderLayer(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
+
+        self.d_model = config.d_model
+
         self.text_enhancer_layer = GroundingDINOTextEnhancerLayer(config)
         self.fusion_layer = GroundingDINOFusionLayer(config)
         self.deformable_layer = GroundingDINODeformableLayer(config)
@@ -1248,15 +1249,21 @@ class GroundingDINOEncoderLayer(nn.Module):
     def get_text_position_embeddings(
         self, text_features: Tensor, text_position_embedding: Tensor, text_position_ids: Tensor
     ) -> Tensor:
-        bs, n_text, text_dim = text_features.shape
+        batch_size, seq_length, _ = text_features.shape
         if text_position_embedding is None and text_position_ids is None:
             text_position_embedding = (
-                torch.arange(n_text, device=text_features.device).float().unsqueeze(0).unsqueeze(-1).repeat(bs, 1, 1)
+                torch.arange(seq_length, device=text_features.device)
+                .float()
+                .unsqueeze(0)
+                .unsqueeze(-1)
+                .repeat(batch_size, 1, 1)
             )
-            text_position_embedding = get_sine_pos_embed(text_position_embedding, num_pos_feats=256, exchange_xy=False)
+            text_position_embedding = get_sine_pos_embed(
+                text_position_embedding, num_pos_feats=self.d_model, exchange_xy=False
+            )
         if text_position_ids is not None:
             text_position_embedding = get_sine_pos_embed(
-                text_position_ids[..., None], num_pos_feats=256, exchange_xy=False
+                text_position_ids[..., None], num_pos_feats=self.d_model, exchange_xy=False
             )
 
         return text_position_embedding
@@ -1504,8 +1511,8 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
                 if p.dim() > 1:
                     nn.init.xavier_uniform_(p)
         elif isinstance(module, GroundingDINOModel):
-            nn.init.constant_(module.input_proj_text.bias.data, 0)
-            nn.init.xavier_uniform_(module.input_proj_text.weight.data)
+            nn.init.constant_(module.text_projection.bias.data, 0)
+            nn.init.xavier_uniform_(module.text_projection.weight.data)
             for proj in module.input_proj_vision:
                 nn.init.xavier_uniform_(proj[0].weight, gain=1)
                 nn.init.constant_(proj[0].bias, 0)
@@ -1932,7 +1939,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                     text_encoder_hidden_states,
                     text_encoder_attention_mask,
                     self_attn_mask,
-                    None
+                    None,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -2012,7 +2019,10 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
             text_cross_attentions=all_cross_attns_text,
         )
 
+
 SPECIAL_TOKENS = [101, 102, 1012, 1029]
+
+
 def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTensor) -> Tuple[Tensor, Tensor]:
     """Generate attention mask between each pair of special tokens and positional ids.
     Args:
@@ -2098,7 +2108,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
 
         # Create text backbone
         self.text_backbone = GroundingDINOTextPrenet(config.text_backbone_config)
-        self.input_proj_text = nn.Linear(config.text_backbone_config.hidden_size, config.d_model)
+        self.text_projection = nn.Linear(config.text_backbone_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
             self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
@@ -2107,6 +2117,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         self.decoder = GroundingDINODecoder(config)
 
         self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
+
+        print("Two stage:", config.two_stage)
 
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
@@ -2216,8 +2228,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         self,
         pixel_values: Tensor,
         input_ids: Tensor,
-        token_type_ids: Tensor,
-        attention_mask: Tensor,
+        token_type_ids: Tensor = None,
+        attention_mask: Tensor = None,
         pixel_mask: Optional[Tensor] = None,
         encoder_outputs=None,
         output_attentions=None,
@@ -2237,8 +2249,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = GroundingDINOModel.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("idea-research/grounding-dino-tiny")
+        >>> model = GroundingDINOModel.from_pretrained("idea-research/grounding-dino-tiny")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -2255,7 +2267,14 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids)
-        text_token_mask = attention_mask.bool() # just to avoid renaming everywhere
+
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        if token_type_ids is None:
+            token_type_ids = torch.zeros_like(input_ids)
+
+        text_token_mask = attention_mask.bool()  # just to avoid renaming everywhere
 
         max_text_len = self.config.max_text_len
         if text_self_attention_masks.shape[1] > max_text_len:
@@ -2269,7 +2288,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         text_features = self.text_backbone(input_ids, text_self_attention_masks, token_type_ids, position_ids)[
             "last_hidden_state"
         ]
-        text_features = self.input_proj_text(text_features)
+        text_features = self.text_projection(text_features)
 
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -2514,8 +2533,8 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         input_ids: torch.LongTensor,
-        attention_mask: torch.LongTensor,
-        token_type_ids: torch.LongTensor,
+        attention_mask: torch.LongTensor = None,
+        token_type_ids: torch.LongTensor = None,
         pixel_mask: Optional[torch.BoolTensor] = None,
         encoder_outputs: Optional[Union[GroundingDINOEncoderOutput, Tuple]] = None,
         labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
@@ -2542,8 +2561,8 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = GroundingDINOForObjectDetection.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("idea-research/grounding-dino-tiny")
+        >>> model = GroundingDINOForObjectDetection.from_pretrained("idea-research/grounding-dino-tiny")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -3206,9 +3225,6 @@ class GroundingDINOTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Classes for Text Backbone (It's just a BERT model)
-
-
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->GroundingDINOText
 class GroundingDINOTextSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
@@ -3643,17 +3659,6 @@ class GroundingDINOTextPooler(nn.Module):
 
 
 class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
-    """
-
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
-    """
     config_class = GroundingDINOTextPrenetConfig
 
     def __init__(self, config, add_pooling_layer=True):
@@ -3690,44 +3695,15 @@ class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        """
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -3742,11 +3718,8 @@ class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
@@ -3760,17 +3733,6 @@ class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -3783,16 +3745,11 @@ class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -3803,11 +3760,9 @@ class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPoolingAndCrossAttentions(
+        return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
         )

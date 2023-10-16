@@ -779,7 +779,7 @@ class SwitchTransformersBlock(nn.Module):
         if isinstance(hidden_states, tuple):
             hidden_states, router_tuple = hidden_states
         else:
-            router_tuple = (torch.tensor([0], device=hidden_states.device),)
+            router_tuple = (torch.zeros((1,), device=hidden_states.device, dtype=torch.int64),)
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -1727,9 +1727,18 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         encoder_outputs=None,
         **kwargs,
     ):
-        # cut decoder_input_ids if past is used
+        # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
         return {
             "decoder_input_ids": input_ids,
@@ -1765,13 +1774,13 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
             if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
                 raise ValueError(
-                    "expected reordered_layer_past_states to have the same shape than layer_past_states"
+                    "expected reordered_layer_past_states to have the same shape than layer_past_states, "
                     f"but got {reordered_layer_past_states[0].shape} and {layer_past_states[0].shape}"
                 )
             if len(reordered_layer_past_states) != len(layer_past_states):
                 raise ValueError(
-                    "expected layer_past_states to have the same length as reordered_layer_past_states"
-                    f"got {len(layer_past_states)} and {len(reordered_layer_past_states)}"
+                    "expected layer_past_states to have the same length as reordered_layer_past_states, "
+                    f"but got {len(layer_past_states)} and {len(reordered_layer_past_states)}"
                 )
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)

@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
+from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken
 from ...utils import (
     ModelOutput,
@@ -143,6 +143,18 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         phonemizer_backend="espeak",
         **kwargs,
     ):
+        self._word_delimiter_token = word_delimiter_token
+        self._phone_delimiter_token = phone_delimiter_token
+        self.do_phonemize = do_phonemize
+        self.phonemizer_lang = phonemizer_lang
+        self.phonemizer_backend = phonemizer_backend
+
+        if do_phonemize:
+            self.init_backend(self.phonemizer_lang)
+
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.encoder = json.load(vocab_handle)
+        self.decoder = {v: k for k, v in self.encoder.items()}
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -156,25 +168,25 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self._word_delimiter_token = word_delimiter_token
-        self._phone_delimiter_token = phone_delimiter_token
-        self.do_phonemize = do_phonemize
-        self.phonemizer_lang = phonemizer_lang
-        self.phonemizer_backend = phonemizer_backend
-
-        if do_phonemize:
-            self.init_backend(self.phonemizer_lang)
-
-        with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
-        self.decoder = {v: k for k, v in self.encoder.items()}
-
     @property
     def vocab_size(self) -> int:
         return len(self.decoder)
 
     def get_vocab(self) -> Dict:
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = dict(self.encoder)
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+        # Overwritten to never strip!
+        to_add = []
+        for token in new_tokens:
+            if isinstance(token, str):
+                to_add.append(AddedToken(token, rstrip=False, lstrip=False, normalize=True))
+            else:
+                to_add.append(token)
+
+        return super()._add_tokens(to_add, special_tokens)
 
     def init_backend(self, phonemizer_lang: str):
         """
@@ -576,61 +588,3 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
-
-    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
-        """
-        Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary.
-
-        Args:
-            new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
-                Token(s) to add in vocabulary. A token is only added if it's not already in the vocabulary (tested by
-                checking if the tokenizer assign the index of the `unk_token` to them).
-            special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the tokens should be added as special tokens.
-
-        Returns:
-            `int`: The number of tokens actually added to the vocabulary.
-
-        Examples:
-
-        ```python
-        # Let's see how to increase the vocabulary of Bert model and tokenizer
-        tokenizer = Wav2Vec2PhonemeCTCTokenizer.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
-        model = Wav2Vec2PhonemeForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
-
-        num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
-        print("We have added", num_added_toks, "tokens")
-        # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
-        model.resize_token_embeddings(len(tokenizer))
-        ```"""
-        new_tokens = [str(tok) for tok in new_tokens]
-
-        tokens_to_add = []
-        for token in new_tokens:
-            if not isinstance(token, str):
-                raise ValueError(f"Token {token} has to be of type string, but is of type {type(token)}.")
-            assert isinstance(token, str)
-            if (
-                token != self.unk_token
-                and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
-                and token not in tokens_to_add
-            ):
-                tokens_to_add.append(token)
-                if self.verbose:
-                    logger.info(f"Adding {token} to the vocabulary")
-
-        added_tok_encoder = {tok: len(self) + i for i, tok in enumerate(tokens_to_add)}
-        added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
-        self.added_tokens_encoder.update(added_tok_encoder)
-        self.added_tokens_decoder.update(added_tok_decoder)
-
-        # Make sure we don't split on any special tokens (even they were already in the vocab before)
-        for token in tokens_to_add:
-            if len(token) > 1:
-                self._additional_special_tokens.append(AddedToken(token))
-                _insert_one_token_to_ordered_list(self.unique_no_split_tokens, token)
-
-        self._create_trie(self.unique_no_split_tokens)
-
-        return len(tokens_to_add)

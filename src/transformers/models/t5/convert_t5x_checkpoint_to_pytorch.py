@@ -139,7 +139,7 @@ def convert_t5x_to_pytorch(variables: dict, *, num_layers: int, is_encoder_only:
                 new[f"decoder.block.{i}.layer.2.DenseReluDense.wi_0.weight"] = wi[0].T
                 new[f"decoder.block.{i}.layer.2.DenseReluDense.wi_1.weight"] = wi[1].T
             else:
-                new[f"encoder.block.{i}.layer.2.DenseReluDense.wi.weight"] = wi.T
+                new[f"decoder.block.{i}.layer.2.DenseReluDense.wi.weight"] = wi.T
             new[f"decoder.block.{i}.layer.2.DenseReluDense.wo.weight"] = wo.T
 
         new["decoder.final_layer_norm.weight"] = old["decoder/decoder_norm/scale"]

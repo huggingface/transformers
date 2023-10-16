@@ -27,6 +27,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -51,22 +52,22 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 346, "width": 346}`):
             Size of the image after `resize`. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.NEAREST`):
+        resample (`PILImageResampling` filter, *optional*, defaults to 0):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
             is padded with 0's and then center cropped. Can be overridden by `do_center_crop` in `preprocess`.
         crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 289, "width": 289}`):
             Desired output size when applying center-cropping. Can be overridden by `crop_size` in `preprocess`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
         rescale_offset (`bool`, *optional*, defaults to `False`):
             Whether to rescale the image between [-scale_range, scale_range] instead of [0, scale_range]. Can be
             overridden by the `rescale_factor` parameter in the `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
@@ -231,7 +232,8 @@ class EfficientNetImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -314,6 +316,12 @@ class EfficientNetImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
+        if is_scaled_image(images[0]) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.

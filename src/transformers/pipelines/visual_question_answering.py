@@ -124,19 +124,28 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         return model_inputs
 
     def _forward(self, model_inputs):
-        model_outputs = self.model(**model_inputs)
+        if self.model.can_generate():
+            model_outputs = self.model.generate(**model_inputs)
+        else:
+            model_outputs = self.model(**model_inputs)
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=5):
-        if top_k > self.model.config.num_labels:
-            top_k = self.model.config.num_labels
-
-        if self.framework == "pt":
-            probs = model_outputs.logits.sigmoid()[0]
-            scores, ids = probs.topk(top_k)
+        if self.model.can_generate():
+            return [
+                {"answer": self.tokenizer.decode(output_ids, skip_special_tokens=True).strip()}
+                for output_ids in model_outputs
+            ]
         else:
-            raise ValueError(f"Unsupported framework: {self.framework}")
+            if top_k > self.model.config.num_labels:
+                top_k = self.model.config.num_labels
 
-        scores = scores.tolist()
-        ids = ids.tolist()
-        return [{"score": score, "answer": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
+            if self.framework == "pt":
+                probs = model_outputs.logits.sigmoid()[0]
+                scores, ids = probs.topk(top_k)
+            else:
+                raise ValueError(f"Unsupported framework: {self.framework}")
+
+            scores = scores.tolist()
+            ids = ids.tolist()
+            return [{"score": score, "answer": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]

@@ -20,7 +20,7 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-from transformers import GroundingDINOConfig, SwinConfig, is_torch_available, is_vision_available
+from transformers import GroundingDINOConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
@@ -33,7 +33,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -53,56 +53,61 @@ class GroundingDINOModelTester:
     def __init__(
         self,
         parent,
-        image_size=196,
         batch_size=8,
-        is_training=False,
-        use_labels=False,
+        is_training=True,
+        use_labels=True,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=8,
-        hidden_act="relu",
+        intermediate_size=8,
+        hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         num_queries=12,
         num_channels=3,
+        image_size=196,
         n_targets=8,
+        num_labels=91,
         num_feature_levels=4,
-        intermediate_size=32
+        encoder_n_points=2,
+        decoder_n_points=6,
+        max_text_len=256,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.is_training = is_training
         self.use_labels = use_labels
-        self.image_size = image_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.num_queries = num_queries
         self.num_channels = num_channels
+        self.image_size = image_size
         self.n_targets = n_targets
+        self.num_labels = num_labels
         self.num_feature_levels = num_feature_levels
-        self.intermediate_size = intermediate_size
+        self.encoder_n_points = encoder_n_points
+        self.decoder_n_points = decoder_n_points
+        self.max_text_len = max_text_len
 
+        # we also set the expected seq length for both encoder and decoder
+        self.encoder_seq_length = (
+            math.ceil(self.image_size / 8) ** 2
+            + math.ceil(self.image_size / 16) ** 2
+            + math.ceil(self.image_size / 32) ** 2
+            + math.ceil(self.image_size / 64) ** 2
+        )
+        self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
 
-        input_ids = torch.Tensor([[101, 1037, 4937, 1012, 102]]).long()
-        text_token_mask = torch.ones_like(input_ids).bool()
-        text_self_attention_masks = torch.Tensor([
-                [[ True, False, False, False, False],
-                [False,  True,  True,  True, False],
-                [False,  True,  True,  True, False],
-                [False,  True,  True,  True, False],
-                [False, False, False, False,  True]]
-            ]
-         ).bool()
-        token_type_ids = torch.zeros_like(input_ids).long()
-        position_ids = torch.Tensor([[0, 0, 1, 2, 0]]).long()
+        input_ids = ids_tensor([self.batch_size, self.max_text_len], self.num_labels)
 
         labels = None
         if self.use_labels:
@@ -118,16 +123,16 @@ class GroundingDINOModelTester:
                 labels.append(target)
 
         config = self.get_config()
-        return config, pixel_values, pixel_mask, input_ids, text_token_mask, text_self_attention_masks, text_self_attention_masks.copy(), token_type_ids, position_ids, labels
+        return config, pixel_values, pixel_mask, input_ids, labels
 
     def get_config(self):
-        swin_config = SwinConfig(
+        resnet_config = ResNetConfig(
             num_channels=3,
-            hidden_size=128,
-            embed_dim=96,
-            image_size=self.image_size,
-            window_size=7,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
             depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
@@ -147,67 +152,37 @@ class GroundingDINOModelTester:
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
             use_timm_backbone=False,
-            backbone_config=swin_config,
+            backbone_config=resnet_config,
+            max_text_len=self.max_text_len,
         )
 
     def prepare_config_and_inputs_for_common(self):
-        config, pixel_values, pixel_mask, input_ids, text_token_mask, text_self_attention_masks, attention_mask, token_type_ids, position_ids, labels = self.prepare_config_and_inputs()
-        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask,
-                       "input_ids": input_ids, "text_token_mask": text_token_mask, 
-                       "text_self_attention_masks": text_self_attention_masks, "token_type_ids": token_type_ids, 
-                       "position_ids": position_ids, "attention_mask": attention_mask
-        }
+        config, pixel_values, pixel_mask, input_ids, labels = self.prepare_config_and_inputs()
+        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask, "input_ids": input_ids}
         return config, inputs_dict
 
-    def create_and_check_grounding_dino_model(self, config, pixel_values, pixel_mask, input_ids, text_token_mask, text_self_attention_masks, attention_mask, token_type_ids, position_ids, labels):
+    def create_and_check_model(self, config, pixel_values, pixel_mask, input_ids, labels):
         model = GroundingDINOModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, 
-                       input_ids=input_ids, text_token_mask=text_token_mask, 
-                       text_self_attention_masks=text_self_attention_masks, 
-                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
-                       position_ids=position_ids
-        )
-
-        result = model(pixel_values=pixel_values, 
-                       input_ids=input_ids, text_token_mask=text_token_mask, 
-                       text_self_attention_masks=text_self_attention_masks, 
-                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
-                       position_ids=position_ids
-        )
-        
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids)
+        result = model(pixel_values)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
 
-    def create_and_check_grounding_dino_object_detection_head_model(self, config, pixel_values, pixel_mask, input_ids, text_token_mask, text_self_attention_masks, attention_mask, token_type_ids, position_ids, labels):
+    def create_and_check_object_detection_head_model(self, config, pixel_values, pixel_mask, input_ids, labels):
         model = GroundingDINOForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, 
-                       input_ids=input_ids, text_token_mask=text_token_mask, 
-                       text_self_attention_masks=text_self_attention_masks, 
-                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
-                       position_ids=position_ids
-        )
-        result = model(pixel_values=pixel_values, 
-                       input_ids=input_ids, text_token_mask=text_token_mask, 
-                       text_self_attention_masks=text_self_attention_masks, 
-                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
-                       position_ids=position_ids
-        )
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids)
+        result = model(pixel_values)
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, 
-                       input_ids=input_ids, text_token_mask=text_token_mask, 
-                       text_self_attention_masks=text_self_attention_masks, 
-                       attention_mask=attention_mask, token_type_ids=token_type_ids, 
-                       position_ids=position_ids, labels=labels
-        )
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
@@ -222,6 +197,11 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    pipeline_model_mapping = (
+        {"feature-extraction": GroundingDINOModel, "object-detection": GroundingDINOForObjectDetection}
+        if is_torch_available()
+        else {}
+    )
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -262,13 +242,13 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
 
-    def test_grounding_dino_model(self):
+    def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_grounding_dino_model(*config_and_inputs)
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_grounding_dino_object_detection_head_model(self):
+    def test_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_grounding_dino_object_detection_head_model(*config_and_inputs)
+        self.model_tester.create_and_check_object_detection_head_model(*config_and_inputs)
 
     @unittest.skip(reason="Grounding DINO does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -428,7 +408,6 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 recursive_check(tuple_output, dict_output)
 
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -509,17 +488,13 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            if model.config.is_encoder_decoder:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
-                    else []
-                )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            else:
-                expected_arg_names = ["pixel_values", "pixel_mask"]
-                self.assertListEqual(arg_names[:1], expected_arg_names)
+            expected_arg_names = ["pixel_values", "input_ids"]
+            expected_arg_names.extend(
+                ["head_mask", "decoder_head_mask", "encoder_outputs"]
+                if "head_mask" and "decoder_head_mask" in arg_names
+                else []
+            )
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_different_timm_backbone(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
