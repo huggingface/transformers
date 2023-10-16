@@ -4417,6 +4417,7 @@ class GenerationMixin:
 
         position_ids = torch.arange(max_len, device=input_ids.device, dtype=torch.long)[None, :].broadcast_to(batch_size, max_len) if batch_size > 1 else None
         n_matches = None
+        assistant_token_is_eos = torch.zeros((batch_size, 1), device=input_ids.device, dtype=torch.bool)
         # from transformers import AutoProcessor; processor = AutoProcessor.from_pretrained("sanchit-gandhi/large-32-2-gpu-flat-lr")
 
         while True:
@@ -4486,14 +4487,13 @@ class GenerationMixin:
 
                 # 1.3. stop assistant generation on EOS
                 if eos_token_id_tensor is not None:
-                    last_assistant_token_is_eos = new_token.tile(eos_token_id_tensor.shape[0], 1)
-                    last_assistant_token_is_eos = (
-                        ~last_assistant_token_is_eos.ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0).bool()
+                    ssistant_token_is_eos = new_token.tile(eos_token_id_tensor.shape[0], 1)
+                    assistant_token_is_eos = (
+                        ~assistant_token_is_eos.ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0).bool()
                     )
-                    if torch.logical_or(~unfinished_sequences.bool(), last_assistant_token_is_eos).all():
+                    if assistant_token_is_eos.all():
                         break
                 else:
-                    last_assistant_token_is_eos = torch.zeros((1, 1), device=candidate_input_ids.device, dtype=torch.int8)
 
             # print("Out", out)
 
@@ -4550,27 +4550,10 @@ class GenerationMixin:
 
             # 5.1. Ensure we don't generate beyond max_len or an EOS token
             n_matches -= last_assistant_token_is_eos.int() * (n_matches == candidate_length).int()
-            # make sure than already finished sequences always match until longest "still active" sequence
             n_matches = torch.clamp(n_matches, max=max_len - cur_len - 1)
 
             # 5.2. Get the valid continuation, after the matching tokens
             valid_tokens = selected_tokens[:, : n_matches.max() + 1]
-
-            # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
-                eos_tokens = valid_tokens.eq(eos_token_id_tensor)
-                finished_seq_mask = ~(unfinished_sequences.bool()[:, None].broadcast_to(valid_tokens.shape))
-                eos_tokens_mask = torch.logical_or(eos_tokens.cumsum(-1).bool(), finished_seq_mask)
-                valid_tokens = torch.where(eos_tokens_mask, eos_token_id_tensor, valid_tokens)
-
-                unfinished_sequences = (1 - eos_tokens_mask.any(-1).int())
-
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
-                    this_peer_finished = True
-
-            n_matches = unfinished_sequences * n_matches + (1 - unfinished_sequences) * (unfinished_sequences * n_matches).max()
-
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
 
             for i, n in enumerate(n_matches):
@@ -4650,6 +4633,19 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
+
+            # if eos_token was found in one sentence, set sentence to finished
+            if eos_token_id_tensor is not None:
+                unfinished_sequences = unfinished_sequences.mul(
+                    input_ids[:, -1]
+                    .tile(eos_token_id_tensor.shape[0], 1)
+                    .ne(eos_token_id_tensor.unsqueeze(1))
+                    .prod(dim=0)
+                )
+
+                # stop when each sentence is finished
+                if unfinished_sequences.max() == 0:
+                    this_peer_finished = True
 
             # stop if we exceed the maximum length
             if stopping_criteria(input_ids, scores):

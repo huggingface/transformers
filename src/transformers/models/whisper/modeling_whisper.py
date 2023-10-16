@@ -1831,6 +1831,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
+            if decoder_position_ids is not None and decoder_position_ids.shape[1] > decoder_input_ids.shape[1]:
+                decoder_position_ids = decoder_position_ids[:, remove_prefix_length:]
+
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,

@@ -1078,7 +1078,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, position_ids=None, **kwargs
     ):
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -1092,7 +1092,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
             input_ids = input_ids[:, remove_prefix_length:]
 
-        position_ids = kwargs.get("position_ids", None)
+            if position_ids is not None and position_ids.shape[1] > input_ids.shape[1]:
+                position_ids = position_ids[:, remove_prefix_length:]
+
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
