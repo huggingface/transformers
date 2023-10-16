@@ -23,7 +23,7 @@ import torchaudio.compliance.kaldi as ta_kaldi
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import PaddingStrategy, TensorType, logging
 from .image_processing_imagebind import ImageBindImageProcessor
 
 
@@ -129,6 +129,9 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
             Number of Mel-frequency bins.
         max_length (`int`, *optional*, defaults to 204):
             Maximum length to which to pad/truncate the extracted features.
+        padding_value (`float`, *optional*, defaults to 0.0):
+            The value to pad with when applying the padding strategy defined by the `padding` argument to
+            [ImageBindAudioFeatureExtractor.__call__`].
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the log-Mel features using `mean` and `std`.
         mean (`float`, *optional*, defaults to -4.268):
@@ -137,7 +140,7 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
             The standard deviation value used to normalize the log-Mel features. Uses the AudioSet standard deviation
             by default.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+            Whether or not [`~ImageBindAudioFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -292,6 +295,176 @@ class ImageBindAudioFeatureExtractor(SequenceFeatureExtractor):
 
 class ImageBindImuFeatureExtractor(SequenceFeatureExtractor):
     """
-    Feature extractor for ImageBind IMU data.
+    Constructs a ImageBind IMU feature extractor.
+
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
+
+    This class takes in raw IMU time series data, converts it to a standard sampling rate, and pads/truncates it to a
+    fixed length.
+
+    Args:
+        feature_size (`int`, *optional*, defaults to 6):
+            The feature dimension of the extracted features.
+        sampling_rate (`int`, *optional*, defaults to 200):
+            The sampling rate at which the IMU data should be digitalized expressed in hertz (Hz).
+        padding_value (`float`, *optional*, defaults to 0.0):
+            The value to pad with when applying the padding strategy defined by the `padding` argument to
+            [`ImageBindImuFeatureExtractor.__call__`].
+        imu_len_in_s (`float`, *optional*, defaults to 10):
+            Maximum length to which to pad/truncate the extracted features.
+        return_attention_mask (`bool`, *optional*, defaults to `False`):
+            Whether or not [`~ImageBindImuFeatureExtractor.__call__`] should return `attention_mask`.
     """
-    pass
+
+    model_input_names = ["input_features", "attention_mask"]
+
+    def __init__(
+        self,
+        feature_size=6,
+        sampling_rate=200,
+        padding_value=0.0,
+        imu_len_in_s=10,
+        return_attention_mask=False,
+        **kwargs,
+    ):
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+
+        self.imu_len_in_s = imu_len_in_s
+        self.return_attention_mask = return_attention_mask
+
+    def __call__(
+        self,
+        raw_imu: Union[np.ndarray, List[np.ndarray], List[List[float]], List[List[List[float]]]],
+        sampling_rate: Optional[int] = None,
+        padding: Union[bool, str, PaddingStrategy] = "max_length",
+        max_length: Optional[int] = None,
+        truncation: bool = True,
+        pad_to_multiple_of: Optional[int] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs,
+    ):
+        """
+        Main method to featurize and prepare for the model one or several sequence(s).
+
+        Args:
+            raw_imu (`np.ndarray`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`):
+                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of numpy
+                arrays or a (possibly nested) list of float values. The supported input types are as follows:
+
+                - unbatched: `List[List[float]]`, `List[np.ndarray]` (`ndim=1`), `np.ndarray` (`ndim=2`),
+                - batched: `List[List[List[float]]]`, `List[np.ndarray]` (`ndim=2`), `np.ndarray` (`ndim=3`)
+
+                The input will always be interpreted as a multiple-channel time series signal.
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the `raw_imu` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `'max_length'`):
+                Select a strategy to pad the input `raw_speech` waveforms (according to the model's padding side and
+                padding index) among:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
+            truncation (`bool`, *optional*, defaults to `True`):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the sequence to a multiple of the provided value.
+
+                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+            return_attention_mask (`bool`, *optional*):
+                Whether to return the attention mask. If left to the default, will return the attention mask according
+                to the specific feature_extractor's default.
+
+                [What are attention masks?](../glossary#attention-mask)
+
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+        """
+
+        if sampling_rate is not None:
+            if sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
+                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
+                    f" {self.sampling_rate} and not {sampling_rate}."
+                )
+        else:
+            logger.warning(
+                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                "Failing to do so can result in silent errors that might be hard to debug."
+            )
+
+        if isinstance(raw_imu, (list, tuple)) and isinstance(raw_imu[0], float):
+            raise ValueError(
+                "The expected IMU input is a multichannel (rather than single channel) time series, so `List[float]`"
+                " inputs are not accepted."
+            )
+
+        # Handle nested list inputs
+        if isinstance(raw_imu, (list, tuple)) and isinstance(raw_imu[0], (list, tuple)):
+            if isinstance(raw_imu[0][0], float):
+                # List[List[float]] -> unbatched IMU input
+                raw_imu = [np.asarray(raw_imu, dtype=np.float32)]
+            elif isinstance(raw_imu[0][0], (list, tuple)):
+                # List[List[List[float]]] -> batched IMU input
+                raw_imu = [np.asarray(imu, dtype=np.float32) for imu in raw_imu]
+
+        # Handle inputs with ndarrays
+        if isinstance(raw_imu, (list, tuple)) and isinstance(raw_imu[0], np.ndarray):
+            if raw_imu[0].ndim == 1:
+                # Unbatched IMU input
+                raw_imu = [np.asarray(raw_imu, dtype=np.float32)]
+            elif raw_imu[0].ndim != 2:
+                raise ValueError(
+                    f"For `List[np.ndarray]` inputs expected the internal arrays to have dim 1 or 2, but got"
+                    f" {raw_imu[0].ndim}"
+                )
+
+        if isinstance(raw_imu, np.ndarray):
+            if raw_imu.ndim == 2:
+                # Unbatched IMU input
+                raw_imu = [raw_imu.astype(np.float32)]
+            elif raw_imu.ndim == 3:
+                # Batched IMU input
+                raw_imu = [np.asarray(imu, dtype=np.float32) for imu in raw_imu]
+            else:
+                raise ValueError(
+                    f"For `np.ndarray` inputs expected the array to have dim 2 or 3, but got {raw_imu.ndim}"
+                )
+
+        # raw_imu should be of form `List[np.ndarray]` where raw_imu[0].ndim == 2
+        # convert into BatchFeature
+        batched_imu = BatchFeature({"input_features": raw_imu})
+
+        # Pad/truncate batched features
+        padded_inputs = self.pad(
+            batched_imu,
+            padding=padding,
+            max_length=max_length if max_length is not None else self.imu_len_in_s,
+            truncation=truncation,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_attention_mask=return_attention_mask,
+        )
+
+        # Convert attention_mask to correct format
+        attention_mask = padded_inputs.get("attention_mask")
+        if attention_mask is not None:
+            batched_imu["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+
+        # Convert tensors if desired
+        if return_tensors is not None:
+            batched_imu = batched_imu.convert_to_tensors(return_tensors)
+
+        return batched_imu
