@@ -159,7 +159,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
         # uses the information stored in `added_tokens_decoder`.
         # this is costly for fast tokenizers as we re-compute the regex again. But not all tokens are added tokens
-        tokens_to_add = [token for token in added_tokens_decoder.values() if token not in self.added_tokens_decoder]
+        tokens_to_add = [token for index, token in sorted(added_tokens_decoder.items(), key= lambda x:x[0]) if token not in self.added_tokens_decoder]
         encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
         tokens_to_add += [
             token for token in self.all_special_tokens_extended if token not in encoder and token not in tokens_to_add
