@@ -820,11 +820,20 @@ class GenerationMixin:
         # instantiate warpers list
         warpers = LogitsProcessorList()
 
+        # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
+        # better score (i.e. keep len(generation_config.eos_token_id) + 1)
+        if generation_config.num_beams > 1:
+            if isinstance(generation_config.eos_token_id, list):
+                min_tokens_to_keep = len(generation_config.eos_token_id) + 1
+            else:
+                min_tokens_to_keep = 2
+        else:
+            min_tokens_to_keep = 1
+
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
         if generation_config.temperature is not None and generation_config.temperature != 1.0:
             warpers.append(TemperatureLogitsWarper(generation_config.temperature))
-        min_tokens_to_keep = 2 * generation_config.num_beams if generation_config.num_beams > 1 else 1
         if generation_config.top_k is not None and generation_config.top_k != 0:
             warpers.append(TopKLogitsWarper(top_k=generation_config.top_k, min_tokens_to_keep=min_tokens_to_keep))
         if generation_config.top_p is not None and generation_config.top_p < 1.0:
