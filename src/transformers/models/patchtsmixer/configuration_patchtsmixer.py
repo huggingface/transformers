@@ -38,8 +38,8 @@ class PatchTSMixerConfig(PretrainedConfig):
     based on the input data requirements. PatchTSMixer backbone can currently be extended for various downstream tasks
     such as forecasting, classification and regression.
 
-    This is the configuration class to store the configuration of an [`PatchTSMixerModel`]. It is used to instantiate
-    a PatchTSMixer model according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of an [`PatchTSMixerModel`]. It is used to instantiate a
+    PatchTSMixer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the PatchTSMixer
     [ibm/patchtsmixer-etth1-pretrain](https://huggingface.co/ibm/patchtsmixer-etth1-pretrain) architecture.
 

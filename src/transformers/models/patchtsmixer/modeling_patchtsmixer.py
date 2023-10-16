@@ -117,7 +117,7 @@ class PatchTSMixerGatedAttention(nn.Module):
 class PatchTSMixerTranspose(nn.Module):
     """
     Transpose the tensor to the dimension defined in **dims**
-    
+
     Args:
         dims (`list`, *optional*, defaults to `False`):
                List of dimensions to be transposed contiguous. if True, the transposed tensor is contiguous.
@@ -843,9 +843,6 @@ class ForecastHead(nn.Module):
         """
         if self.mode in ["common_channel", "mix_channel"]:
             x = self.flatten(x)  # [batch_size x n_vars x num_patch * num_features]
-            # x = torch.reshape(
-            #     x, (x.shape[0], x.shape[1], x.shape[2] * x.shape[3])
-            # )  # [batch_size x n_vars x num_patch * num_features]
 
             forecast = self.base_forecast_block(x)  # [batch_size x n_vars x forecast_len]
             if isinstance(forecast, tuple):
