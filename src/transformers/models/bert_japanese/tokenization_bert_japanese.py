@@ -117,7 +117,7 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         spm_file (`str`, *optional*):
             Path to [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm or .model
             extension) that contains the vocabulary.
-        do_lower_case (`bool`, *optional*, defaults to `True`):
+        do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether to lower case the input. Only has an effect when do_basic_tokenize=True.
         do_word_tokenize (`bool`, *optional*, defaults to `True`):
             Whether to do word tokenization.
@@ -127,6 +127,12 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
             Type of word tokenizer. Choose from ["basic", "mecab", "sudachi", "jumanpp"].
         subword_tokenizer_type (`str`, *optional*, defaults to `"wordpiece"`):
             Type of subword tokenizer. Choose from ["wordpiece", "character", "sentencepiece",].
+        never_split (`<fill_type>`, *optional*): <fill_docstring>
+        unk_token (`<fill_type>`, *optional*, defaults to `"[UNK]"`): <fill_docstring>
+        sep_token (`<fill_type>`, *optional*, defaults to `"[SEP]"`): <fill_docstring>
+        pad_token (`<fill_type>`, *optional*, defaults to `"[PAD]"`): <fill_docstring>
+        cls_token (`<fill_type>`, *optional*, defaults to `"[CLS]"`): <fill_docstring>
+        mask_token (`<fill_type>`, *optional*, defaults to `"[MASK]"`): <fill_docstring>
         mecab_kwargs (`dict`, *optional*):
             Dictionary passed to the `MecabTokenizer` constructor.
         sudachi_kwargs (`dict`, *optional*):
