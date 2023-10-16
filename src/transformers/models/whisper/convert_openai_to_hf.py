@@ -151,7 +151,7 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
         encoder_layers=dimensions["n_audio_layer"],
         encoder_attention_heads=dimensions["n_audio_head"],
         decoder_layers=dimensions["n_text_layer"],
-        decoder_attention_heads=dimensions["n_text_state"],
+        decoder_attention_heads=dimensions["n_text_head"],
         max_source_positions=dimensions["n_audio_ctx"],
     )
 
