@@ -197,6 +197,7 @@ class FlaxLlamaAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
+        self.attention_softmax_in_fp32 = self.dtype is not jnp.float32
 
         dense = partial(
             nn.Dense,
@@ -300,13 +301,17 @@ class FlaxLlamaAttention(nn.Module):
         )
 
         # usual dot product attention
+        attention_dtype = jnp.float32 if self.attention_softmax_in_fp32 else self.dtype
         attn_weights = dot_product_attention_weights(
             query,
             key,
             bias=attention_bias,
             deterministic=deterministic,
-            dtype=self.dtype,
+            dtype=attention_dtype,
         )
+
+        if self.attention_softmax_in_fp32:
+            attn_weights = attn_weights.astype(self.dtype)
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
