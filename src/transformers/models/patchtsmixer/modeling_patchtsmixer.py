@@ -1736,7 +1736,7 @@ class PatchTSMixerForMaskPreTrainingOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
 
 
-class PatchTSMixerForMaskPretraining(PatchTSMixerPreTrainedModel):
+class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
     r"""
     `PatchTSMixer` for mask pretraining.
 

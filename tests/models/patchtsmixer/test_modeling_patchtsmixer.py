@@ -42,7 +42,7 @@ if is_torch_available():
         PatchTSMixerConfig,
         PatchTSMixerForClassification,
         PatchTSMixerForForecasting,
-        PatchTSMixerForMaskPretraining,
+        PatchTSMixerForPretraining,
         PatchTSMixerForRegression,
         PatchTSMixerModel,
     )
@@ -210,7 +210,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         (
             PatchTSMixerModel,
             PatchTSMixerForForecasting,
-            PatchTSMixerForMaskPretraining,
+            PatchTSMixerForPretraining,
             PatchTSMixerForClassification,
             PatchTSMixerForRegression,
         )
@@ -218,7 +218,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else ()
     )
     all_generative_model_classes = (
-        (PatchTSMixerForForecasting, PatchTSMixerForMaskPretraining) if is_torch_available() else ()
+        (PatchTSMixerForForecasting, PatchTSMixerForPretraining) if is_torch_available() else ()
     )
     pipeline_model_mapping = {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
     is_encoder_decoder = False
@@ -264,7 +264,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             # inputs_dict["labels"] = labels
             inputs_dict["target_values"] = labels
             # inputs_dict.pop("target_values")
-        elif model_class in [PatchTSMixerModel, PatchTSMixerForMaskPretraining]:
+        elif model_class in [PatchTSMixerModel, PatchTSMixerForPretraining]:
             inputs_dict.pop("target_values")
 
         inputs_dict["output_hidden_states"] = True
@@ -351,7 +351,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             expected_arg_names_without_target = ["context_values", "observed_mask", "output_hidden_states"]
 
             expected_arg_names = expected_arg_names_with_target
-            if model_class == PatchTSMixerForMaskPretraining:
+            if model_class == PatchTSMixerForPretraining:
                 expected_arg_names = expected_arg_names_without_target + ["return_loss"]
             if model_class == PatchTSMixerModel:
                 expected_arg_names = expected_arg_names_without_target
@@ -379,7 +379,7 @@ def prepare_batch(repo_id="ibm/patchtsmixer-etth1-test-data", file="pretrain_bat
 class PatchTSMixerModelIntegrationTests(unittest.TestCase):
     def test_pretrain_head(self):
         # TODO: Make repo public
-        model = PatchTSMixerForMaskPretraining.from_pretrained("ibm/patchtsmixer-etth1-pretrain").to(torch_device)
+        model = PatchTSMixerForPretraining.from_pretrained("ibm/patchtsmixer-etth1-pretrain").to(torch_device)
         batch = prepare_batch()
 
         torch.manual_seed(0)
@@ -553,7 +553,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
 
     def test_pretrain_full(self):
         config = PatchTSMixerConfig(**self.__class__.params)
-        mdl = PatchTSMixerForMaskPretraining(config)
+        mdl = PatchTSMixerForPretraining(config)
         output = mdl(self.__class__.data)
         self.assertEqual(output.prediction_logits.shape, self.__class__.correct_pretrain_output.shape)
         self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
@@ -604,7 +604,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
             target_output = self.__class__.correct_regression_output
             ref_samples = target_output.unsqueeze(1).expand(-1, config.num_parallel_samples, -1)
         elif task == "pretrain":
-            mdl = PatchTSMixerForMaskPretraining(config)
+            mdl = PatchTSMixerForPretraining(config)
             target_input = None
             target_output = self.__class__.correct_pretrain_output
         else:
