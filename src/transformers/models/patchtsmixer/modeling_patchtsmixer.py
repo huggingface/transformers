@@ -116,10 +116,11 @@ class PatchTSMixerGatedAttention(nn.Module):
 
 class PatchTSMixerTranspose(nn.Module):
     """
-    Parameters:
     Transpose the tensor to the dimension defined in **dims**
-        dims (`list`): list of dimensions to be transposed contiguous (`bool`): if True, the transposed tensor is
-        contiguous
+    
+    Args:
+        dims (`list`, *optional*, defaults to `False`):
+               List of dimensions to be transposed contiguous. if True, the transposed tensor is contiguous.
     """
 
     def __init__(self, *dims, contiguous=False):
