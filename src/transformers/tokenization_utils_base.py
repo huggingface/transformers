@@ -2208,7 +2208,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
                     if init_kwargs[key] is not None:
                         if key == "additional_special_tokens":
-                            special_tokens.append([str(token) for token in init_kwargs[key]])
+                            special_tokens += [str(token) for token in init_kwargs[key]]
                         else:
                             special_tokens.append(str(init_kwargs[key]))
 
