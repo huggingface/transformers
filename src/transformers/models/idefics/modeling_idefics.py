@@ -913,8 +913,9 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
             output_attentions=output_attentions,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
-        # cross_attention_mask: zero-ing out any attention that is equal to 0.0 (image masks are composed of either very negative numbers or 0s).
-        # If the batch contains no image, everything is zeroed out and hidden_states = residual
+        # cross_attention_gate: Image masks have shape [bsz, num_images, hidden_size] and elements are equal to either 0.0 or a very negative number, so if there are elements == 0.0 along the num_images dimension,
+        # then the image should be attended by the cross_attention. otherwise. the hidden_states comming out of the cross-attention should be zeroed-out.
+        # If the batch contains no images, everything is zeroed out and hidden_states = residual
         cross_attention_gate = (
             ((image_attention_mask == 0.0).sum(dim=-1) > 0.0).to(dtype=hidden_states.dtype)
         ).permute(0, 2, 1)
