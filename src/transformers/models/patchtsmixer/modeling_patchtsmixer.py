@@ -801,7 +801,7 @@ class ForecastHead(nn.Module):
 
             self.flatten = nn.Flatten(start_dim=1)
 
-    def forward(self, hidden_features, y=None):
+    def forward(self, hidden_features, target=None):
         """
         # hidden_features: [batch_size x num_patch x num_features] flatten mode or
             [batch_size x n_vars x num_patch x num_features] common_channel/mix_channel
@@ -906,7 +906,7 @@ class LinearHead(nn.Module):
 
         self.dropout = nn.Dropout(head_dropout)
 
-    def forward(self, hidden_features, y=None):
+    def forward(self, hidden_features, target=None):
         """
         # hidden_features: [batch_size x num_patch x num_features] flatten mode or
             [batch_size x n_vars x num_patch x num_features] common_channel/mix_channel
@@ -1004,7 +1004,7 @@ class PretrainHead(nn.Module):
                 nn.Linear(num_features, patch_size * input_size),
             )
 
-    def forward(self, hidden_features, y=None):
+    def forward(self, hidden_features, target=None):
         """
         # flatten mode: [batch_size x num_patch x num_features] or
             common_channel/mix_channel mode: [batch_size x n_vars x num_patch x num_features]
@@ -1013,7 +1013,9 @@ class PretrainHead(nn.Module):
         """
 
         if self.mode == "flatten":
-            hidden_features = self.base_pt_block(hidden_features)  # hidden_features: [batch_size x num_patch x n_vars*patch_size]
+            hidden_features = self.base_pt_block(
+                hidden_features
+            )  # hidden_features: [batch_size x num_patch x n_vars*patch_size]
             hidden_features = torch.reshape(
                 hidden_features, (hidden_features.shape[0], hidden_features.shape[1], self.patch_size, self.input_size)
             )  # [batch_size x num_patch x patch_size x n_vars]
