@@ -2202,17 +2202,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         init_kwargs[key] = value
 
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
-            # this is for legacy purpose
+            # this is for legacy purpose. We don't add the tokens after init for efficiency.
             if added_tokens_file is not None:
+                special_tokens = []
+                for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
+                    if init_kwargs[key] is not None:
+                        if key == "additional_special_tokens":
+                            special_tokens.append([str(token) for token in init_kwargs[key]])
+                        else:
+                            special_tokens.append(str(init_kwargs[key]))
+
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
                 for str_token, index in added_tok_encoder.items():
                     # if index not in added_tokens_decoder and str_token not in added_tokens_map:
-                    added_tokens_decoder[index] = AddedToken(str_token, rstrip=False, lstrip=False, normalized=True)
+                    special = str_token not in special_tokens
+                    added_tokens_decoder[index] = AddedToken(str_token, rstrip=False, lstrip=False, normalized=not special, special=special)
                     added_tokens_map[str(token)] = added_tokens_decoder[index]
 
             # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
-            # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
+            # if `tokenizer_config.json` is `None`
             if "Fast" not in cls.__name__ and tokenizer_file is not None:
                 # This is for slow so can be done before
                 with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
@@ -2221,10 +2230,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 for serialized_tokens in added_tokens:
                     idx = serialized_tokens.pop("id")
                     added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
-                    added_tokens_map[str(token)] = token
+                    added_tokens_map[str(added_tokens_decoder[idx])] = added_tokens_decoder[idx]
             # end legacy
 
-        # Passing AddedTokens only to the class to prevent it from changing the string tokens
+        # Passing AddedTokens and not strings to the class to prevent it from casting the string to a different AddedToken
         for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
             if added_tokens_map != {} and init_kwargs[key] is not None:
                 if key != "additional_special_tokens":
