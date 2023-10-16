@@ -4130,4 +4130,6 @@ class TokenizerTesterMixin:
                                 )
 
                             with self.subTest("Hub -> Fast -> Slow: saving Fast1 locally and loading"):
-                                _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER,self.tokenizer_class,new_eos,tmp_dir_4)
+                                _test_added_vocab_and_eos(
+                                    EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_4
+                                )
