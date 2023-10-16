@@ -967,12 +967,12 @@ class T5Stack(T5PreTrainedModel):
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
-        self.position_embedding_definitions = config.position_embedding_definitions 
+        self.position_embedding_definitions = config.position_embedding_definitions if hasattr(config, "position_embedding_definitions") else {}
 
         self.abs_position_embedding_dict = nn.ModuleDict()
         relative_position_embedding_definitions = {}
        
-        for position_embedding_name, embedding_config in config.position_embedding_definitions.items():
+        for position_embedding_name, embedding_config in self.position_embedding_definitions.items():
             if embedding_config.is_relative:
                 relative_position_embedding_definitions[position_embedding_name] = {k:v for k,v in embedding_config.items() if k!= "is_relative"}
             else:
@@ -1674,7 +1674,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         # collect info on declared position types, for input validity test during forward
-        self.position_embedding_is_relative_dict = {k: v.is_relative for k,v in config.position_embedding_definitions.items()}  
+        position_embedding_definitions = config.position_embedding_definitions if hasattr(config, "position_embedding_definitions") else {}
+        self.position_embedding_is_relative_dict = {k: v.is_relative for k,v in position_embedding_definitions.items()}  
         self.position_embedding_is_relative_dict[POSITION_EMBEDDING_SINUSOIDAL] = False
 
         encoder_config = copy.deepcopy(config)
