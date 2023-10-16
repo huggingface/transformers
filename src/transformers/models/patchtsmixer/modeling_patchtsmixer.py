@@ -268,7 +268,6 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
         residual = inputs
         inputs = self.norm(inputs)
 
-        # inputs.shape == (batch_size, num_features, num_patches, num_channels)
         inputs = inputs.permute(0, 3, 2, 1)
 
         if self.gated_attn:
