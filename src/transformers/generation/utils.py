@@ -4417,7 +4417,7 @@ class GenerationMixin:
 
         position_ids = torch.arange(max_len, device=input_ids.device, dtype=torch.long)[None, :].broadcast_to(batch_size, max_len) if batch_size > 1 else None
         n_matches = None
-        # from transformers import AutoProcessor; processor = AutoProcessor.from_pretrained("sanchit-gandhi/large-32-2-gpu-flat-lr")
+        from transformers import AutoProcessor; processor = AutoProcessor.from_pretrained("sanchit-gandhi/large-32-2-gpu-flat-lr")
 
         while True:
             if synced_gpus:
@@ -4579,7 +4579,7 @@ class GenerationMixin:
                     input_ids[i][diff:] = input_ids[i][:-diff].clone()
                     input_ids[i][:diff] = self.config.pad_token_id
 
-            # print("input_ids:", processor.batch_decode(input_ids))
+            print("input_ids:", processor.batch_decode(input_ids))
             # import ipdb; ipdb.set_trace()
 
             if streamer is not None:
