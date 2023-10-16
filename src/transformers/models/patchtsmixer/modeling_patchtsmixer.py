@@ -343,46 +343,46 @@ class PatchMixerBlock(nn.Module):
             )
             self.norm_attn = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
-    def forward(self, x):
-        residual = x
+    def forward(self, data):
+        residual = data
 
-        x = self.norm(x)
+        data = self.norm(data)
 
         if self.self_attn:
-            inputs_reshaped = x
+            data_reshaped = data
             if self.mode in ["common_channel", "mix_channel"]:
-                inputs_reshaped = torch.reshape(x, (x.shape[0] * x.shape[1], x.shape[2], x.shape[3]))
+                data_reshaped = torch.reshape(data, (data.shape[0] * data.shape[1], data.shape[2], data.shape[3]))
                 #  (batch_size, num_patches, num_features) if flatten
                 #  (batch_size, n_vars, num_patches, num_features) if common_channel
 
-            x_attn, _ = self.self_attn_layer(inputs_reshaped, inputs_reshaped, inputs_reshaped, need_weights=False)
+            x_attn, _ = self.self_attn_layer(data_reshaped, data_reshaped, data_reshaped, need_weights=False)
 
             if self.mode in ["common_channel", "mix_channel"]:
-                x_attn = torch.reshape(x_attn, (x.shape[0], x.shape[1], x.shape[2], x.shape[3]))
+                x_attn = torch.reshape(x_attn, (data.shape[0], data.shape[1], data.shape[2], data.shape[3]))
                 #  (batch_size, num_patches, num_features) if flatten
                 #  (batch_size, n_vars, num_patches, num_features) if common_channel
 
         # Transpose so that num_patches is the last dimension
         if self.mode == "flatten":
-            x = x.transpose(1, 2)
+            data = data.transpose(1, 2)
         elif self.mode in ["common_channel", "mix_channel"]:
-            x = x.transpose(2, 3)
+            data = data.transpose(2, 3)
 
-        x = self.mlp(x)
+        data = self.mlp(data)
 
         if self.gated_attn:
-            x = self.gab(x)
+            data = self.gab(data)
 
         # Transpose back
         if self.mode == "flatten":
-            x = x.transpose(1, 2)
+            data = data.transpose(1, 2)
         elif self.mode in ["common_channel", "mix_channel"]:
-            x = x.transpose(2, 3)
+            data = data.transpose(2, 3)
 
         if self.self_attn:
-            x = self.norm_attn(x + x_attn)
+            data = self.norm_attn(data + x_attn)
 
-        out = x + residual
+        out = data + residual
         return out
 
 
@@ -426,17 +426,17 @@ class FeatureMixerBlock(nn.Module):
         if self.gated_attn:
             self.gab = PatchTSMixerGatedAttention(in_size=num_features, out_size=num_features)
 
-    def forward(self, x):
-        residual = x
+    def forward(self, data):
+        residual = data
 
-        x = self.norm(x)
+        data = self.norm(data)
 
-        x = self.mlp(x)
+        data = self.mlp(data)
 
         if self.gated_attn:
-            x = self.gab(x)
+            data = self.gab(data)
 
-        out = x + residual
+        out = data + residual
         return out
 
 
@@ -511,17 +511,16 @@ class PatchTSMixerLayer(nn.Module):
                 ffn=ffn,
             )
 
-    def forward(self, x):
-        # x.shape == (batch_size, num_patches, num_features)
+    def forward(self, data):
+        # data.shape == (batch_size, num_patches, num_features)
         if self.mode == "mix_channel":
-            # x = self.channel_token_mixer(x)
-            x = self.channel_feature_mixer(x)
+            data = self.channel_feature_mixer(data)
 
-        x = self.patch_mixer(x)
-        x = self.feature_mixer(x)
+        data = self.patch_mixer(data)
+        data = self.feature_mixer(data)
 
-        # x.shape == (batch_size, num_patches, num_features)
-        return x
+        # data.shape == (batch_size, num_patches, num_features)
+        return data
 
 
 class PatchTSMixerBackbone(nn.Module):
@@ -602,12 +601,12 @@ class PatchTSMixerBackbone(nn.Module):
             ]
         )
 
-    def forward(self, x, output_hidden_states: Optional[bool] = False):
+    def forward(self, data, output_hidden_states: Optional[bool] = False):
         all_hidden_states = []
 
-        logger.debug(x.shape)
+        logger.debug(data.shape)
 
-        embedding = x
+        embedding = data
 
         for mod in self.mixers:
             embedding = mod(embedding)
@@ -704,30 +703,30 @@ class PatchTSMixer(nn.Module):
         if use_pe:
             self.W_pos = positional_encoding(pe, learn_pe, num_patches, num_features)
 
-    def forward(self, x, output_hidden_states: Optional[bool] = False):
-        # x: [bs  x n_vars x num_patch x patch_len]
-        batch_size = x.shape[0]
-        logger.debug(x.shape)
+    def forward(self, input_ts, output_hidden_states: Optional[bool] = False):
+        # input_ts: [bs  x n_vars x num_patch x patch_len]
+        batch_size = input_ts.shape[0]
+        logger.debug(input_ts.shape)
 
         if self.mode == "flatten":
-            x = x.permute(0, 2, 1, 3)  # x: [bs  x num_patch x n_vars  x patch_len]
-            x = torch.reshape(
-                x, (batch_size, self.num_patches, self.in_channels * self.patch_size)
-            )  # x: [bs x num_patch x patch_len * n_vars]
+            input_ts = input_ts.permute(0, 2, 1, 3)  # input_ts: [bs  x num_patch x n_vars  x patch_len]
+            input_ts = torch.reshape(
+                input_ts, (batch_size, self.num_patches, self.in_channels * self.patch_size)
+            )  # input_ts: [bs x num_patch x patch_len * n_vars]
 
-        logger.debug(x.shape)
+        logger.debug(input_ts.shape)
         patches = self.patcher(
-            x
+            input_ts
         )  # flatten: [bs x num_patch x num_features]   common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
 
-        logger.debug(x.shape)
+        logger.debug(input_ts.shape)
 
         if self.use_pe:
             patches = patches + self.W_pos
 
         embedding, all_hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states=output_hidden_states)
 
-        logger.debug(x.shape)
+        logger.debug(input_ts.shape)
 
         return embedding, all_hidden_states
 
@@ -802,26 +801,26 @@ class ForecastHead(nn.Module):
 
             self.flatten = nn.Flatten(start_dim=1)
 
-    def forward(self, x, y=None):
+    def forward(self, hidden_features, y=None):
         """
-        # x: [batch_size x num_patch x num_features] flatten mode or
+        # hidden_features: [batch_size x num_patch x num_features] flatten mode or
             [batch_size x n_vars x num_patch x num_features] common_channel/mix_channel
 
         Output: [batch_size x forecast_len x nvars]
 
         """
         if self.mode in ["common_channel", "mix_channel"]:
-            x = self.flatten(x)  # [batch_size x n_vars x num_patch * num_features]
+            hidden_features = self.flatten(hidden_features)  # [batch_size x n_vars x num_patch * num_features]
 
-            forecast = self.base_forecast_block(x)  # [batch_size x n_vars x forecast_len]
+            forecast = self.base_forecast_block(hidden_features)  # [batch_size x n_vars x forecast_len]
             if isinstance(forecast, tuple):
                 forecast = tuple(z.transpose(-1, -2) for z in forecast)
             else:
                 forecast = forecast.transpose(-1, -2)  # [batch_size x forecast_len x n_vars]
 
         else:
-            x = self.flatten(x)  # x: [batch_size x num_patches*num_features]
-            forecast = self.base_forecast_block(x)  # [batch_size x forecast_len * self.nvars]
+            hidden_features = self.flatten(hidden_features)  # hidden_features: [batch_size x num_patches*num_features]
+            forecast = self.base_forecast_block(hidden_features)  # [batch_size x forecast_len * self.nvars]
 
             if isinstance(forecast, tuple):
                 forecast = tuple(z.reshape(-1, self.forecast_len, self.nvars) for z in forecast)
@@ -907,36 +906,38 @@ class LinearHead(nn.Module):
 
         self.dropout = nn.Dropout(head_dropout)
 
-    def forward(self, x, y=None):
+    def forward(self, hidden_features, y=None):
         """
-        # x: [batch_size x num_patch x num_features] flatten mode or
+        # hidden_features: [batch_size x num_patch x num_features] flatten mode or
             [batch_size x n_vars x num_patch x num_features] common_channel/mix_channel
         Output: [batch_size x output_dim]
         """
-        x = x.transpose(
+        hidden_features = hidden_features.transpose(
             -1, -2
         )  # batch_size x num_features x num_patch or batch_size x n_vars x num_features x num_patch
         if self.head_agg == "use_last":
-            x = x[
+            hidden_features = hidden_features[
                 ..., -1
             ]  # # batch_size x num_features (flatten) or # batch_size x n_vars x num_features (common_channel)
-            # if self.mode  == "flatten":
-            #     x = x[:,:,-1] # batch_size x num_features
-            # else:
-            #     x = x[:,:,:,-1] # batch_size x n_vars x num_features
         elif self.head_agg == "max_pool":
-            x = x.max(dim=-1).values  # batch_size x n_vars x num_features or batch_size x num_features
+            hidden_features = hidden_features.max(
+                dim=-1
+            ).values  # batch_size x n_vars x num_features or batch_size x num_features
         elif self.head_agg == "avg_pool":
-            x = x.mean(dim=-1)  # batch_size x n_vars x num_features or batch_size x num_features
+            hidden_features = hidden_features.mean(
+                dim=-1
+            )  # batch_size x n_vars x num_features or batch_size x num_features
 
         if self.flatten:
-            x = self.flatten(x)
-        x = self.dropout(x)
-        x = self.projection(x)  # batch_size x output_dim
+            hidden_features = self.flatten(hidden_features)
+        hidden_features = self.dropout(hidden_features)
+        hidden_features = self.projection(hidden_features)  # batch_size x output_dim
 
         if (self.distribution_output is None) and (self.output_range is not None):
-            x = torch.sigmoid(x) * (self.output_range[1] - self.output_range[0]) + self.output_range[0]
-        return x
+            hidden_features = (
+                torch.sigmoid(hidden_features) * (self.output_range[1] - self.output_range[0]) + self.output_range[0]
+            )
+        return hidden_features
 
 
 class PatchTSMixerPreTrainedModel(PreTrainedModel):
@@ -1003,7 +1004,7 @@ class PretrainHead(nn.Module):
                 nn.Linear(num_features, patch_size * input_size),
             )
 
-    def forward(self, x, y=None):
+    def forward(self, hidden_features, y=None):
         """
         # flatten mode: [batch_size x num_patch x num_features] or
             common_channel/mix_channel mode: [batch_size x n_vars x num_patch x num_features]
@@ -1012,14 +1013,14 @@ class PretrainHead(nn.Module):
         """
 
         if self.mode == "flatten":
-            x = self.base_pt_block(x)  # x: [batch_size x num_patch x n_vars*patch_size]
-            x = torch.reshape(
-                x, (x.shape[0], x.shape[1], self.patch_size, self.input_size)
+            hidden_features = self.base_pt_block(hidden_features)  # hidden_features: [batch_size x num_patch x n_vars*patch_size]
+            hidden_features = torch.reshape(
+                hidden_features, (hidden_features.shape[0], hidden_features.shape[1], self.patch_size, self.input_size)
             )  # [batch_size x num_patch x patch_size x n_vars]
-            x = x.permute(0, 3, 1, 2)  # [batch_size x nvars x num_patch  x patch_len]
-            return x
+            hidden_features = hidden_features.permute(0, 3, 1, 2)  # [batch_size x nvars x num_patch  x patch_len]
+            return hidden_features
         elif self.mode in ["common_channel", "mix_channel"]:
-            forecast = self.base_pt_block(x)  # [batch_size x n_vars x num_patch x patch_size]
+            forecast = self.base_pt_block(hidden_features)  # [batch_size x n_vars x num_patch x patch_size]
             return forecast
 
 
