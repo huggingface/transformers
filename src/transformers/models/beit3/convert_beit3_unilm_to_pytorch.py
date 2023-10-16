@@ -88,7 +88,7 @@ def get_large_config_image_classification():
     id2label, label2id = get_id2label_for_imagenet_1k()
     return Beit3Config(
         embed_dim=1024,
-        layers=24,
+        num_hidden_layers=24,
         num_attention_heads=16,
         hidden_size=1024 * 4,
         num_labels=1000,
@@ -106,7 +106,7 @@ def get_large_config_vqa(img_size):
     id2label, label2id = get_id2label_for_vqa()
     return Beit3Config(
         embed_dim=1024,
-        layers=24,
+        num_hidden_layers=24,
         num_attention_heads=16,
         hidden_size=1024 * 4,
         num_labels=3129,
@@ -136,7 +136,7 @@ def get_large_config_visual_reasoning(img_size):
     label2id = {v: k for k, v in id2label.items()}
     return Beit3Config(
         embed_dim=1024,
-        layers=24,
+        num_hidden_layers=24,
         num_attention_heads=16,
         hidden_size=1024 * 4,
         num_labels=2,
@@ -157,7 +157,7 @@ def get_base_config_captioning(img_size):
 def get_large_config_captioning(img_size):
     return Beit3Config(
         embed_dim=1024,
-        layers=24,
+        num_hidden_layers=24,
         num_attention_heads=16,
         hidden_size=1024 * 4,
         num_labels=2,
@@ -176,7 +176,7 @@ def get_base_config_image_text_retrieval(img_size):
 def get_large_config_image_text_retrieval(img_size):
     return Beit3Config(
         embed_dim=1024,
-        layers=24,
+        num_hidden_layers=24,
         num_attention_heads=16,
         hidden_size=1024 * 4,
         num_labels=2,
@@ -346,13 +346,12 @@ if __name__ == "__main__":
         "--beit3_model_type",
         default=None,
         type=str,
-        help="Beit3 model type, it has to be one of image_classification, vqa,visual_reasoning,"
+        help="Beit3 model type, it has to be one of image_classification, vqa, visual_reasoning,"
         "image_captioning,image_text_retrieval",
     )
     parser.add_argument(
         "--validate_logits",
-        default=False,
-        type=bool,
+        action="store_false",
         help="whether to assert logits outputs",
     )
     args = parser.parse_args()

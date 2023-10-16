@@ -15,7 +15,7 @@
 """ PyTorch BEiT3 model."""
 
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -25,8 +25,9 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from transformers import PreTrainedModel, add_start_docstrings
 from transformers.activations import get_activation
 from transformers.modeling_outputs import (
+    BaseModelOutput,
     CausalLMOutputWithPast,
-    ImageClassifierOutputWithNoAttention,
+    ImageClassifierOutput,
     SequenceClassifierOutput,
 )
 from transformers.models.beit3.configuration_beit3 import Beit3Config
@@ -213,32 +214,6 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-class Beit3ModelOutput(ModelOutput):
-    """
-    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
-    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
-    scores.
-
-    Args:
-        encoder_out (`torch.Tensor` of shape `(1,)`):
-            Output of Encoder
-        encoder_embedding (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
-            encoder embedding states
-        encoder_padding_mask (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
-            Padding mask used in encoder
-        hidden_states (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
-            Encoder hidden states
-        multiway_split_position (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
-            Split position denoting the point of split between text and image
-    """
-
-    encoder_out: Optional[torch.Tensor] = None
-    encoder_embedding: Optional[torch.FloatTensor] = None
-    encoder_padding_mask: Optional[torch.FloatTensor] = None
-    hidden_states: List[Any] = None
-
-
-@dataclass
 class Beit3ImageTextMatchingModelOutput(ModelOutput):
     """
     Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
@@ -262,8 +237,8 @@ class Beit3ImageTextMatchingModelOutput(ModelOutput):
 class Beit3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        in_features = config.embed_dim * 4
-        hidden_features = config.embed_dim * 2
+        in_features = config.hidden_size * 4
+        hidden_features = config.hidden_size * 2
 
         self.norm1 = nn.LayerNorm(in_features, eps=config.layer_norm_eps)
 
@@ -304,8 +279,8 @@ class Beit3MultiwayFeedForwardNetwork(nn.Module):
 class Beit3AttentiionLinear(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.text = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
-        self.image = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
+        self.text = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+        self.image = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
 
     def forward(self, hidden_states: torch.Tensor, split_position: int = -1):
         if split_position == -1:
@@ -324,8 +299,8 @@ class Beit3AttentiionLinear(nn.Module):
 class Beit3LayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.text = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
-        self.image = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
+        self.text = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.image = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor, split_position: int = -1):
         if split_position == -1:
@@ -345,16 +320,17 @@ class Beit3LayerNorm(nn.Module):
         return hidden_states
 
 
-class Beit3Embedder(nn.Module):
+class Beit3PositionEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        img_size = (config.img_size, config.img_size)
+        image_size = (config.image_size, config.image_size)
         patch_size = (config.patch_size, config.patch_size)
-        self.num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0]) + 1
+        self.num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0]) + 1
 
         # being consistent with original implementation with Fairseq, which starts from 2 for position embedding
-        self.text = nn.Embedding(self.num_patches + 2, config.embed_dim)
-        self.image = nn.Embedding(config.max_source_positions, config.embed_dim)
+        # this needs to be reversed it seems
+        self.text = nn.Embedding(self.num_patches + 2, config.hidden_size)
+        self.image = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, text_end_position: int, multiway_split_position: int = -1):
         if text_end_position is None:
@@ -386,21 +362,21 @@ class Beit3VisionEmbedding(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        img_size = (config.img_size, config.img_size)
+        image_size = (config.image_size, config.image_size)
         patch_size = (config.patch_size, config.patch_size)
-        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
-        self.patch_shape = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
-        self.img_size = img_size
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
+        self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
 
-        self.proj = nn.Conv2d(config.num_channels, config.embed_dim, kernel_size=patch_size, stride=patch_size)
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim))
+        self.projection = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.num_position_embeddings = self.num_patches + 1
 
     def forward(self, hidden_states: torch.Tensor, masked_position: bool = None) -> torch.Tensor:
-        hidden_states = self.proj(hidden_states).flatten(2).transpose(1, 2)
+        hidden_states = self.projection(hidden_states).flatten(2).transpose(1, 2)
 
         batch_size, seq_len, _ = hidden_states.size()
 
@@ -418,7 +394,7 @@ class Beit3VisionEmbedding(nn.Module):
 class Beit3MultiheadAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.embed_dim = config.embed_dim
+        self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
         self.scaling = self.head_dim**-0.5
@@ -440,7 +416,11 @@ class Beit3MultiheadAttention(nn.Module):
         attention_mask: torch.Tensor = None,
         relative_pos: torch.Tensor = None,
         multiway_split_position=-1,
+        output_attentions: bool = None,
     ):
+        print("Shape of queries:", query.shape)
+        print("Shape of keys:", key.shape)
+
         batch_size, target_length, embed_dim = query.size()
 
         key_batch_size, src_len, _ = key.size()
@@ -481,8 +461,11 @@ class Beit3MultiheadAttention(nn.Module):
             attention_mask = attention_mask.unsqueeze(0)
             attn_weights += attention_mask
 
+        print("Shape of key_padding_mask: ", key_padding_mask.shape)
+
         if key_padding_mask is not None:
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len)
+            print("Shape of attn_weights: ", attn_weights.shape)
             attn_weights = attn_weights.masked_fill(
                 key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
                 float("-inf"),
@@ -553,13 +536,15 @@ class Beit3PreTrainedModel(PreTrainedModel):
 class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.embed_dim = config.embed_dim
+        self.embed_dim = config.hidden_size
         self.activation_fn = get_activation(config.activation_fn)
         self.activation_dropout = nn.Dropout(config.activation_dropout)
         self.dropout = nn.Dropout(config.dropout)
-        self.fc1 = nn.Linear(self.embed_dim, config.hidden_size)
-        self.fc2 = nn.Linear(config.hidden_size, self.embed_dim)
-        self.ffn_layernorm = LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.sub_layernorm else None
+        self.fc1 = nn.Linear(self.embed_dim, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, self.embed_dim)
+        self.ffn_layernorm = (
+            LayerNorm(config.intermediate_size, eps=config.layer_norm_eps) if config.sub_layernorm else None
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         x_shape = hidden_states.shape
@@ -578,13 +563,13 @@ class Beit3FeedForwardNetwork(Beit3PreTrainedModel):
 class Beit3EncoderLayer(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.embed_dim = config.embed_dim
+        self.embed_dim = config.hidden_size
         self.self_attn = Beit3MultiheadAttention(config)
         self.self_attn_layer_norm = Beit3LayerNorm(config)
         self.dropout_module = nn.Dropout(config.dropout)
 
         self.normalize_before = config.normalize_before
-        self.ffn_dim = config.hidden_size
+        self.ffn_dim = config.intermediate_size
 
         self.ffn = Beit3MultiwayFeedForwardNetwork(config)
         self.final_layer_norm = Beit3LayerNorm(config)
@@ -601,6 +586,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         relative_pos=None,
         multiway_split_position=None,
         past_key_value=None,
+        output_attentions=None,
     ):
         if attention_mask is not None:
             attention_mask = attention_mask.masked_fill(attention_mask.to(torch.bool), -1e8)
@@ -608,7 +594,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         residual = hidden_states
         split_position = multiway_split_position if multiway_split_position is not None else -1
         hidden_states = self.self_attn_layer_norm(hidden_states, split_position=split_position)
-        hidden_states, _ = self.self_attn(
+        hidden_states, attention_weights = self.self_attn(
             query=hidden_states,
             key=hidden_states,
             value=hidden_states,
@@ -617,6 +603,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
             relative_pos=relative_pos,
             past_key_value=past_key_value,
             multiway_split_position=split_position,
+            output_attentions=output_attentions,
         )
         hidden_states = self.dropout_module(hidden_states)
 
@@ -627,7 +614,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         hidden_states = self.ffn(hidden_states, split_position=split_position)
 
         hidden_states = self.residual_connection(hidden_states, residual)
-        if not self.normalize_before:
+        if self.final_layer_norm is not None:
             hidden_states = self.final_layer_norm(hidden_states, split_position=split_position)
         return hidden_states
 
@@ -638,69 +625,51 @@ class Beit3Encoder(nn.Module):
 
         self.config = config
         self.dropout_module = nn.Dropout(config.dropout)
-        self.embed_positions = Beit3Embedder(config)
-        self.layers = nn.ModuleList([])
+        self.embed_positions = Beit3PositionEmbeddings(config)
 
-        for layer_idx in range(config.layers):
-            self.layers.append(Beit3EncoderLayer(config))
+        self.layers = nn.ModuleList([Beit3EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.num_layers = len(self.layers)
-        if config.normalize_before and config.encoder_normalize_before:
-            self.fc_norm = Beit3LayerNorm(config)
-        else:
-            self.fc_norm = None
+
+        self.fc_norm = Beit3LayerNorm(config) if config.normalize_before and config.encoder_normalize_before else None
         self.relative_position = None
 
-    def forward_embedding(
+        self.gradient_checkpointing = False
+
+    def add_position_embeddings(
         self,
-        src_tokens,
-        combined_embeddings=None,
+        hidden_state,
         text_end_positions=None,
         multiway_split_position=None,
     ):
-        hidden_state = embed = combined_embeddings
         if self.embed_positions is not None:
-            if src_tokens is not None:
-                hidden_state = embed + self.embed_positions(
-                    src_tokens, positions=text_end_positions, multiway_split_position=multiway_split_position
-                )
-            else:
-                hidden_state = embed + self.embed_positions(
-                    hidden_state, text_end_position=text_end_positions, multiway_split_position=multiway_split_position
-                )
+            hidden_state = hidden_state + self.embed_positions(
+                hidden_state, text_end_position=text_end_positions, multiway_split_position=multiway_split_position
+            )
         hidden_state = self.dropout_module(hidden_state)
-        return hidden_state, embed
+        return hidden_state
 
     def forward(
         self,
-        src_tokens,
+        hidden_state,
         encoder_padding_mask=None,
         attention_mask=None,
-        return_all_hiddens=True,
-        combined_embeddings=None,
+        output_hidden_states=None,
+        output_attentions=None,
         multiway_split_position=None,
         past_key_value=None,
         text_end_positions=None,
         return_dict=None,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
         if encoder_padding_mask is None:
-            if src_tokens is not None:
-                encoder_padding_mask = torch.zeros_like(src_tokens, device=src_tokens.device).bool()
-            else:
-                encoder_padding_mask = torch.zeros(
-                    [combined_embeddings.size(0), combined_embeddings.size(1)],
-                    device=combined_embeddings.device,
-                ).bool()
+            encoder_padding_mask = torch.zeros(hidden_state.shape[:2], device=hidden_state.device).bool()
 
-        hidden_state, encoder_embedding = self.forward_embedding(
-            src_tokens, combined_embeddings, text_end_positions, multiway_split_position
-        )
+        print("Shape of encoder_padding_mask: ", encoder_padding_mask.shape)
+
+        hidden_state = self.add_position_embeddings(hidden_state, text_end_positions, multiway_split_position)
         hidden_state = hidden_state * (1 - encoder_padding_mask.unsqueeze(-1).type_as(hidden_state))
-
-        hidden_states = []
-
-        if return_all_hiddens:
-            hidden_states.append(hidden_state)
 
         relative_pos_bias = None
         if self.relative_position is not None:
@@ -710,6 +679,9 @@ class Beit3Encoder(nn.Module):
 
         # past_key_value is not None during inference if we use the bidirectional encoder as a generator as in s2s-ft (https://arxiv.org/abs/2110.13640)
         for idx, layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_state,)
+
             hidden_state = layer(
                 hidden_state,
                 encoder_padding_mask=encoder_padding_mask if past_key_value is None else None,
@@ -717,20 +689,30 @@ class Beit3Encoder(nn.Module):
                 relative_pos=relative_pos_bias,
                 multiway_split_position=multiway_split_position,
                 past_key_value=past_key_value[idx] if past_key_value is not None else None,
+                output_attentions=output_attentions,
             )
-            if return_all_hiddens:
-                hidden_states.append(hidden_state)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_state,)
 
         if self.fc_norm is not None:
             hidden_state = self.fc_norm(hidden_state, split_position=multiway_split_position)
 
         if not return_dict:
-            return [hidden_state, encoder_embedding, hidden_states]
+            return tuple(
+                v
+                for v in [
+                    hidden_state,
+                    all_hidden_states,
+                    all_self_attentions,
+                ]
+                if v is not None
+            )
 
-        return Beit3ModelOutput(
-            encoder_out=hidden_state,
-            encoder_embedding=encoder_embedding,
-            hidden_states=hidden_states,
+        return BaseModelOutput(
+            last_hidden_state=hidden_state,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -744,11 +726,9 @@ class Beit3Encoder(nn.Module):
 class Beit3Model(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.text_embedding = nn.Embedding(config.vocab_size, config.embed_dim)
+        self.text_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.vision_embedding = Beit3VisionEmbedding(config)
-        Beit3Embedder(config)
         self.encoder = Beit3Encoder(config)
-        self.gradient_checkpointing = False
         self.post_init()
 
     def get_input_embeddings(self):
@@ -770,10 +750,19 @@ class Beit3Model(Beit3PreTrainedModel):
         vision_masked_position=None,
         past_key_value=None,
         text_end_positions=None,
+        output_hidden_states=None,
+        output_attentions=None,
         return_dict=None,
-        output_hidden_states=True,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is None and pixel_values is None:
+            raise ValueError("You have to specify at least input_ids or pixel_values")
+
         if input_ids is None:
             embeddings = self.vision_embedding(pixel_values, vision_masked_position)
             encoder_padding_mask = None
@@ -801,22 +790,28 @@ class Beit3Model(Beit3PreTrainedModel):
                 )
             else:
                 encoder_padding_mask = None
-        encoder_out = self.encoder(
-            src_tokens=None,
+
+        print("Shape of embeddings:", embeddings.shape)
+        if encoder_padding_mask is not None:
+            print("Shape of encoder padding mask:", encoder_padding_mask.shape)
+
+        outputs = self.encoder(
+            hidden_state=embeddings,
             encoder_padding_mask=encoder_padding_mask,
             attention_mask=attention_mask,
-            combined_embeddings=embeddings,
             multiway_split_position=multiway_split_position,
             past_key_value=past_key_value,
             text_end_positions=text_end_positions,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
             return_dict=return_dict,
         )
         if not return_dict:
-            encoder_out.append(multiway_split_position)
+            outputs.append(multiway_split_position)
         else:
-            encoder_out["multiway_split_position"] = multiway_split_position
+            outputs["multiway_split_position"] = multiway_split_position
 
-        return encoder_out
+        return outputs
 
 
 @add_start_docstrings(
@@ -890,31 +885,32 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
             pixel_values=vision_input,
             text_padding_mask=text_padding_mask,
         )
-        x = outputs.encoder_out
-        multiway_split_position = outputs.multiway_split_position
+        last_hidden_state = outputs.last_hidden_state
 
-        vision_cls = x[:, 0, :]
-        language_cls = x[:, multiway_split_position, :]
+        text_seq_length = input_ids.size()[1]
+
+        vision_cls = last_hidden_state[:, 0, :]
+        language_cls = last_hidden_state[:, text_seq_length, :]
         cls_rep = torch.cat((vision_cls, language_cls), dim=-1)
         vision_cls_rep, language_cls_rep = torch.split(cls_rep, split_size_or_sections=[batch_size, batch_size], dim=0)
         cls_rep = torch.cat((vision_cls_rep, language_cls_rep), dim=-1)
 
         logits = self.classifier(cls_rep)
-        reshaped_logits = logits.contiguous()
 
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(reshaped_logits, labels.view(-1))
+            loss = loss_fct(logits, labels.view(-1))
 
         if not return_dict:
-            output = (reshaped_logits,) + (outputs.hidden_states,) if output_hidden_states else (reshaped_logits,)
+            output = (logits,) + (outputs.hidden_states,) if output_hidden_states else (logits,)
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
-            logits=reshaped_logits,
+            logits=logits,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -929,7 +925,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 
     def __init__(self, config):
         super(Beit3ForImageClassification, self).__init__(config)
-        embed_dim = config.embed_dim
+        embed_dim = config.hidden_size
         self.beit3 = Beit3Model(config)
         self.fc_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.classifier = nn.Linear(embed_dim, config.num_labels) if config.num_labels > 0 else nn.Identity()
@@ -937,21 +933,22 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[Any], ImageClassifierOutputWithNoAttention]:
+    ) -> Union[Tuple[Any], ImageClassifierOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import Beit3ForImageClassification, Beit3Processor
+        >>> from transformers import Beit3Processor, Beit3ForImageClassification
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -959,12 +956,10 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-
+        >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
         >>> model = Beit3ForImageClassification.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
 
-
-        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_in1k")
-        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+        >>> input = processor(text=["This is photo of a cat"], images=image)
 
         >>> # forward pass
         >>> output = model(pixel_values=torch.tensor(input["pixel_values"]))
@@ -973,9 +968,16 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        encoder_outputs = self.beit3(input_ids=None, pixel_values=pixel_values)
-        encoder_out = encoder_outputs.encoder_out
-        logits = self.classifier(self.fc_norm(encoder_out[:, 1:, :].mean(1)))
+        outputs = self.beit3(
+            input_ids=None,
+            pixel_values=pixel_values,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
+        )
+        last_hidden_state = outputs.last_hidden_state
+        logits = self.classifier(self.fc_norm(last_hidden_state[:, 1:, :].mean(1)))
+
         loss = None
         if labels is not None:
             if self.config.problem_type is None:
@@ -1000,13 +1002,14 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
                 loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,)
-            output = (output + (encoder_outputs.hidden_states,)) if output_hidden_states else output
+            output = (output + (outputs.hidden_states,)) if output_hidden_states else output
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(
+        return ImageClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=encoder_outputs.hidden_states,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1019,12 +1022,10 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 class Beit3ForCaptioning(Beit3PreTrainedModel):
     def __init__(self, config):
         super(Beit3ForCaptioning, self).__init__(config)
-        embed_dim = config.embed_dim
+
         self.beit3 = Beit3Model(config)
-        self.label_smoothing = config.label_smoothing
-        self.mlm_classifier = nn.Linear(embed_dim, config.vocab_size)
-        self.log_soft = nn.LogSoftmax(dim=1)
-        self.kl_loss = nn.KLDivLoss(reduction="none")
+        self.mlm_classifier = nn.Linear(config.hidden_size, config.vocab_size)
+
         self.post_init()
 
     @add_start_docstrings_to_model_forward(BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING)
@@ -1118,9 +1119,9 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             text_end_positions=text_end_positions,
         )
         if pixel_values is not None:
-            text_feats = outputs.encoder_out[:, image_len:]
+            text_feats = outputs.last_hidden_state[:, image_len:]
         else:
-            text_feats = outputs.encoder_out
+            text_feats = outputs.last_hidden_state
 
         if language_masked_pos is not None:
             text_feats = text_feats[language_masked_pos.bool()]
@@ -1130,12 +1131,16 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         loss = None
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
-            eps = self.label_smoothing
+            eps = self.config.label_smoothing
             n_class = logits.size(1)
             one_hot = torch.zeros_like(logits).scatter(1, labels.view(-1, 1), 1)
             one_hot = one_hot * (1 - eps) + (1 - one_hot) * eps / (n_class - 1)
-            log_prb = self.log_soft(logits)
-            loss = self.kl_loss(log_prb, one_hot).sum(1)
+
+            log_softmax = nn.LogSoftmax(dim=1)
+            kl_loss = nn.KLDivLoss(reduction="none")
+
+            log_prb = log_softmax(logits)
+            loss = kl_loss(log_prb, one_hot).sum(1)
             loss = loss.mean()
 
         if not return_dict:
@@ -1153,14 +1158,14 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
 class Beit3Pooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.norm = nn.LayerNorm(config.embed_dim, eps=config.layer_norm_eps)
-        self.dense = nn.Linear(config.embed_dim, config.embed_dim)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(self, x):
-        cls_rep = x[:, 0, :]
-        cls_rep = self.norm(cls_rep)
-        pooled_output = self.dense(cls_rep)
+    def forward(self, hidden_state):
+        cls_embedding = hidden_state[:, 0, :]
+        cls_embedding = self.norm(cls_embedding)
+        pooled_output = self.dense(cls_embedding)
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
@@ -1174,11 +1179,10 @@ class Beit3Pooler(nn.Module):
 class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        embed_dim = config.embed_dim
+        embed_dim = config.hidden_size
         self.num_labels = config.num_labels
         self.beit3 = Beit3Model(config)
         self.pooler = Beit3Pooler(config)
-        self.pooler.apply(self._init_weights)
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim * 2),
             nn.LayerNorm(embed_dim * 2, eps=config.layer_norm_eps),
@@ -1225,16 +1229,16 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         >>> list(output.logits.shape)
         [1, 3129]
         ```"""
-        encoder_outputs = self.beit3(
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.beit3(
             input_ids=input_ids,
             pixel_values=pixel_values,
             text_padding_mask=attention_mask,
         )
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        x = encoder_outputs.encoder_out
-        cls_rep = self.pooler(x)
+        last_hidden_state = outputs.last_hidden_state
+        cls_rep = self.pooler(last_hidden_state)
         logits = self.classifier(cls_rep)
         reshaped_logits = logits.view(-1, self.num_labels)
 
@@ -1246,14 +1250,15 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
             loss = loss_fct(reshaped_logits, labels.contiguous())
         if not return_dict:
             output = (
-                (reshaped_logits,) + (encoder_outputs.hidden_states,) if output_hidden_states else (reshaped_logits,)
+                (reshaped_logits,) + (outputs.hidden_states,) if output_hidden_states else (reshaped_logits,)
             )
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
             loss=loss,
             logits=reshaped_logits,
-            hidden_states=encoder_outputs.hidden_states,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1269,16 +1274,13 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @add_start_docstrings(
-    """Beit 3 Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
-    visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
-    predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
-    will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
+    """BEiT-3 Transformer model with language and image classifier heads on top for image-text retrieval.""",
     BEIT3_START_DOCSTRING,
 )
 class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        embed_dim = config.embed_dim
+        embed_dim = config.hidden_size
         self.beit3 = Beit3Model(config)
         self.language_classifier = nn.Linear(embed_dim, embed_dim, bias=False)
         self.vision_classifier = nn.Linear(embed_dim, embed_dim, bias=False)
@@ -1322,15 +1324,15 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         >>> float(output.loss.detach().numpy())
         1.8435165
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         outputs = self.beit3(
             input_ids=None,
             pixel_values=pixel_values,
             text_padding_mask=None,
         )
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        vision_out = outputs.encoder_out
+        vision_out = outputs.last_hidden_state
         vision_cls = self.vision_classifier(vision_out[:, 0, :])
         vision_cls = F.normalize(vision_cls, dim=-1)
 
@@ -1339,7 +1341,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
             pixel_values=None,
             text_padding_mask=text_padding_mask,
         )
-        text_out = outputs.encoder_out
+        text_out = outputs.last_hidden_state
         text_cls = self.language_classifier(text_out[:, 0, :])
         text_cls = F.normalize(text_cls, dim=-1)
 

@@ -48,9 +48,9 @@ if is_torch_available():
 class Beit3ModelTester:
     def __init__(
         self,
-        embed_dim=200,
+        hidden_size=37,
         attention_heads=1,
-        hidden_size=2,
+        intermediate_size=2,
         num_hidden_layers=1,
         normalize_before=True,
         activation_fn="gelu",
@@ -65,19 +65,19 @@ class Beit3ModelTester:
         max_source_positions=16,
         layernorm_eps=1e-5,
         vocab_size=50,
-        img_size=16,
+        image_size=16,
         patch_size=2,
-        in_chans=3,
+        num_channels=3,
         num_labels=2,
         batch_size=1,
         seq_length=7,
         use_labels=True,
         is_training=True,
     ):
-        self.embed_dim = embed_dim
-        self.attention_heads = attention_heads
-        self.attention_heads = attention_heads
         self.hidden_size = hidden_size
+        self.attention_heads = attention_heads
+        self.attention_heads = attention_heads
+        self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.normalize_before = normalize_before
         self.activation_fn = activation_fn
@@ -94,9 +94,9 @@ class Beit3ModelTester:
         # Text
         self.vocab_size = vocab_size
         # Vision
-        self.img_size = img_size
+        self.image_size = image_size
         self.patch_size = patch_size
-        self.in_chans = in_chans
+        self.num_channels = num_channels
 
         self.num_labels = num_labels
         self.batch_size = batch_size
@@ -106,9 +106,9 @@ class Beit3ModelTester:
 
     def get_config(self):
         return Beit3Config(
-            embed_dim=self.embed_dim,
-            num_attention_heads=self.attention_heads,
             hidden_size=self.hidden_size,
+            num_attention_heads=self.attention_heads,
+            intermediate_size=self.intermediate_size,
             layers=self.num_hidden_layers,
             normalize_before=self.normalize_before,
             activation_fn=self.activation_fn,
@@ -123,15 +123,15 @@ class Beit3ModelTester:
             max_source_positions=self.max_source_positions,
             layer_norm_eps=self.layernorm_eps,
             vocab_size=self.vocab_size,
-            img_size=self.img_size,
+            image_size=self.image_size,
             patch_size=self.patch_size,
-            num_channels=self.in_chans,
+            num_channels=self.num_channels,
             num_labels=self.num_labels,
         )
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
         return self.get_config(), {
             "input_ids": input_ids,
@@ -141,7 +141,7 @@ class Beit3ModelTester:
 
     def prepare_config_and_inputs_for_visual_reasoning(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor([self.batch_size, 2, self.in_chans, self.img_size, self.img_size])
+        pixel_values = floats_tensor([self.batch_size, 2, self.num_channels, self.image_size, self.image_size])
         text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
         config = self.get_config()
         model_input = {
@@ -156,7 +156,7 @@ class Beit3ModelTester:
         return config, model_input
 
     def prepare_config_and_inputs_for_image_classification(self):
-        pixel_value = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
+        pixel_value = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.seq_length
         labels = torch.zeros(self.batch_size, dtype=torch.long, device=torch_device)
         model_input = {"pixel_values": pixel_value}
@@ -182,7 +182,7 @@ class Beit3ModelTester:
 
     def prepare_config_and_inputs_for_visual_question_answering(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
         return self.get_config(), {
             "input_ids": input_ids,
@@ -192,7 +192,7 @@ class Beit3ModelTester:
 
     def prepare_config_and_inputs_for_text_retrieval(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size, self.img_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         text_padding_mask = torch.zeros((self.batch_size, self.seq_length))
         return self.get_config(), {
             "input_ids": input_ids,
@@ -239,8 +239,6 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     test_torchscript = False
     test_pruning = False
-    test_attention_outputs = False
-    has_attentions = False
     test_inputs_embeds = False
     test_head_masking = False
 
@@ -336,12 +334,12 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     seq_length = seq_length * self.model_tester.chunk_length
             else:
                 seq_length = self.model_tester.seq_length
-            total_seq_length = ((self.model_tester.img_size // self.model_tester.patch_size) ** 2) + 1
+            total_seq_length = ((self.model_tester.image_size // self.model_tester.patch_size) ** 2) + 1
             if model_class.__name__ != "Beit3ForImageClassification":
                 total_seq_length = total_seq_length + seq_length
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [total_seq_length, self.model_tester.embed_dim],
+                [total_seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
