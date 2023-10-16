@@ -315,9 +315,9 @@ class CharacterCnn(torch.nn.Module):
         # final projection  (batch_size * sequence_length, embedding_dim)
         token_embedding = self._projection(token_embedding)
 
-        # reshape to (batch_size, sequence_length, embedding_dim)
-        batch_size, sequence_length, _ = inputs.size()
-        output = token_embedding.view(batch_size, sequence_length, -1)
+        # reshape to (axis_1, .., axis_n, embedding_dim)
+        axes = inputs.size()[:-1]
+        output = token_embedding.view(*axes, -1)
 
         return output
 
@@ -902,18 +902,21 @@ class CharacterBertPreTrainedModel(PreTrainedModel):
     load_tf_weights = None
     base_model_prefix = "character_bert"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = None
+
+    def resize_token_embeddings(*args, **kwargs):
+        raise NotImplementedError("Resizing CharacterBERT embeddings is not supported.")
 
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, CharacterCnn):
             # We need to handle the case of these parameters since it is not an actual module
-            module._char_embedding_weights.data.normal_()
+            module._char_embedding_weights.data.normal_(mean=0.0, std=self.config.initializer_range)
             # token padding
             module._char_embedding_weights.data[0].fill_(0.0)
             # character padding
             module._char_embedding_weights.data[PAD_CHARACTER_ID + 1].fill_(0.0)
-        elif isinstance(module, nn.Linear):
+        elif isinstance(module, nn.Linear) or isinstance(module, nn.Conv1d):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -1330,6 +1333,7 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):
+        raise NotImplementedError("There is currently no support for generation using CharacterBERT.")
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1394,6 +1398,7 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
         """
+        raise NotImplementedError("There is currently no support for generation using CharacterBERT.")
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
@@ -1830,7 +1835,7 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        input_ids = input_ids.view(-1, input_ids.size(-2), input_ids.size(-1)) if input_ids is not None else None
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None

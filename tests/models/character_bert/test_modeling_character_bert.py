@@ -13,11 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
+import copy
 import tempfile
 import unittest
 
+from torch import nn
+from transformers.models.character_bert.modeling_character_bert import CharacterCnn
 from transformers import CharacterBertConfig, is_torch_available
-from transformers.models.auto import get_values
+from transformers.models.auto import get_values, AutoModel, AutoModelForSequenceClassification
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+)
 from transformers.testing_utils import CaptureLogger, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -38,7 +45,7 @@ if is_torch_available():
         CharacterBertForQuestionAnswering,
         CharacterBertForSequenceClassification,
         CharacterBertForTokenClassification,
-        CharacterBertLMHeadModel,
+        # CharacterBertLMHeadModel,
         CharacterBertModel,
         logging,
     )
@@ -50,6 +57,7 @@ class CharacterBertModelTester:
         self,
         parent,
         max_word_length=50,
+        cnn_filters=[[1, 16], [2, 32]],
         batch_size=13,
         seq_length=7,
         is_training=True,
@@ -57,6 +65,7 @@ class CharacterBertModelTester:
         use_token_type_ids=True,
         use_labels=True,
         vocab_size=99,
+        mlm_vocab_size=999,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -74,6 +83,7 @@ class CharacterBertModelTester:
     ):
         self.parent = parent
         self.max_word_length = max_word_length
+        self.cnn_filters = cnn_filters
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
@@ -81,6 +91,7 @@ class CharacterBertModelTester:
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
+        self.mlm_vocab_size = mlm_vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -126,6 +137,8 @@ class CharacterBertModelTester:
         """
         return CharacterBertConfig(
             vocab_size=self.vocab_size,
+            mlm_vocab_size=self.mlm_vocab_size,
+            cnn_filters=self.cnn_filters,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -223,11 +236,13 @@ class CharacterBertModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
+        # NOTE: no current support for generation
+        return
         model = CharacterBertLMHeadModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.mlm_vocab_size))
 
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -236,7 +251,7 @@ class CharacterBertModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.mlm_vocab_size))
 
     def create_and_check_model_for_causal_lm_as_decoder(
         self,
@@ -250,6 +265,8 @@ class CharacterBertModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
+        # NOTE: no current support for generation
+        return
         config.add_cross_attention = True
         model = CharacterBertLMHeadModel(config=config)
         model.to(torch_device)
@@ -269,7 +286,7 @@ class CharacterBertModelTester:
             labels=token_labels,
             encoder_hidden_states=encoder_hidden_states,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.mlm_vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -283,6 +300,8 @@ class CharacterBertModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
+        # NOTE: no current support for generation
+        return
         config.is_decoder = True
         config.add_cross_attention = True
         model = CharacterBertLMHeadModel(config=config).to(torch_device).eval()
@@ -298,7 +317,7 @@ class CharacterBertModelTester:
         past_key_values = outputs.past_key_values
 
         # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_tokens = ids_tensor((self.batch_size, 3, self.max_word_length), config.mlm_vocab_size)
         next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and
@@ -358,7 +377,7 @@ class CharacterBertModelTester:
             labels=token_labels,
             next_sentence_label=sequence_labels,
         )
-        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.mlm_vocab_size))
         self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
@@ -404,7 +423,7 @@ class CharacterBertModelTester:
         model = CharacterBertForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1, -1).contiguous()
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         result = model(
@@ -435,7 +454,7 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     all_model_classes = (
         (
             CharacterBertModel,
-            CharacterBertLMHeadModel,
+            # CharacterBertLMHeadModel,
             CharacterBertForMaskedLM,
             CharacterBertForMultipleChoice,
             CharacterBertForNextSentencePrediction,
@@ -447,22 +466,23 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (CharacterBertLMHeadModel,) if is_torch_available() else ()
+    # all_generative_model_classes = (CharacterBertLMHeadModel,) if is_torch_available() else ()
+    all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": CharacterBertModel,
+            "fill-mask": CharacterBertForMaskedLM,
+            "question-answering": CharacterBertForQuestionAnswering,
+            "text-classification": CharacterBertForSequenceClassification,
+            # "text-generation": CharacterBertLMHeadModel,
+            "token-classification": CharacterBertForTokenClassification,
+            "zero-shot": CharacterBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
-
-    # special case for ForPreTraining model
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
-                )
-                inputs_dict["next_sentence_label"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-        return inputs_dict
+    test_resize_embeddings = False  # NOTE: cannot resize CharacterBERT embeddings
 
     def setUp(self):
         self.model_tester = CharacterBertModelTester(self)
@@ -474,6 +494,16 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_tie_model_weights(self):
+        # NOTE: cannot tie input/output embeddings since the input is handled
+        # by a CharacterCNN and the output is a standard matrix
+        return
+
+    def test_tied_weights_keys(self):
+        # NOTE: cannot tie input/output embeddings since the input is handled
+        # by a CharacterCNN and the output is a standard matrix
+        return
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -612,6 +642,125 @@ class CharacterBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 loaded = torch.jit.load(os.path.join(tmp, "character_bert.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
+    def _get_input_ids_and_config(self, batch_size=2):
+        # NOTE: this override is necessary because otherwise we look at the last
+        # axis for sequence length and get word length instead with CharacterBERT
+        # Moreover, the attention mask is a 2D tensor and input ids are 3D, which
+        # can also cause some issues.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict[self.input_name]
+
+        # cut to half length & take max batch_size 3
+        sequence_length = input_ids.shape[1] // 2
+        input_ids = input_ids[:batch_size, :sequence_length]
+
+        # generate max 3 tokens
+        max_length = input_ids.shape[1] + 3
+        if config.eos_token_id is not None and config.pad_token_id is None:
+            # hack to allow generate for models such as GPT2 as is done in `generate()`
+            if isinstance(config.eos_token_id, int):
+                config.eos_token_id = [config.eos_token_id]
+            config.pad_token_id = config.eos_token_id[0]
+        # TransfoXL has no attention mask
+        if "transfoxl" in config.__class__.__name__.lower():
+            attention_mask = None
+        else:
+            attention_mask = torch.ones_like(input_ids[:, :, 0], dtype=torch.long)[:batch_size, :sequence_length]
+
+        return config, input_ids, attention_mask, max_length
+
+    def test_assisted_decoding_sample(self):
+        # NOTE: generation is not supported
+        return
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        # NOTE: needed to adapt this for 3D input ids
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
+            inputs_dict = {
+                k: (
+                    v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+                    if isinstance(v, torch.Tensor) and v.ndim > 1 and k != "input_ids"
+                    else (
+                        v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1, -1).contiguous()
+                        if k == "input_ids"
+                        else v
+                    )
+                )
+                for k, v in inputs_dict.items()
+            }
+            if return_labels:
+                inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+        else:
+            inputs_dict = super()._prepare_for_class(inputs_dict=inputs_dict, model_class=model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["next_sentence_label"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
+
+    def test_load_with_mismatched_shapes(self):
+        # NOTE: this is because the test using vocabulary does not raise an error as expected due
+        # to the model not having a vocabulary anyway.
+        if not self.test_mismatched_shapes:
+            return
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
+                continue
+
+            with self.subTest(msg=f"Testing {model_class}"):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    model = model_class(config)
+                    model.save_pretrained(tmp_dir)
+
+                    # Fails when we don't set ignore_mismatched_sizes=True
+                    with self.assertRaises(RuntimeError):
+                        new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+                    # with self.assertRaises(RuntimeError):
+                    #     new_model_without_prefix = AutoModel.from_pretrained(tmp_dir, vocab_size=10)
+
+                    logger = logging.get_logger("transformers.modeling_utils")
+
+                    with CaptureLogger(logger) as cl:
+                        new_model = AutoModelForSequenceClassification.from_pretrained(
+                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+                    new_model.to(torch_device)
+                    inputs = self._prepare_for_class(inputs_dict, model_class)
+                    logits = new_model(**inputs).logits
+                    self.assertEqual(logits.shape[1], 42)
+
+                    with CaptureLogger(logger) as cl:
+                        new_model_without_prefix = AutoModel.from_pretrained(
+                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
+                        )
+                    # NOTE: no vocabulary so no problem here
+                    #self.assertIn("the shapes did not match", cl.out)
+
+                    input_ids = ids_tensor((2, 8, self.model_tester.max_word_length), 10)
+                    new_model_without_prefix.to(torch_device)
+                    if self.is_encoder_decoder:
+                        new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
+                    else:
+                        new_model_without_prefix(input_ids)
+
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (CharacterCnn,))
+            model.set_input_embeddings(nn.Embedding(10, 10))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
 @require_torch
 class CharacterBertModelIntegrationTest(unittest.TestCase):
