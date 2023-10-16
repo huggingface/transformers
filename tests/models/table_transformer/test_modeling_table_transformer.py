@@ -558,7 +558,7 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
         image = Image.open(file_path).convert("RGB")
         inputs = image_processor(image, return_tensors="pt")
 
-        # forward pass
+        # forward pass 
         with torch.no_grad():
             outputs = model(**inputs)
 
