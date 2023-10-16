@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_monza": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "MonzaConfig"],
+    "configuration_fuyu": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
 }
 
 
@@ -31,16 +31,16 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_monza"] = [
-        "MonzaForCausalLM",
-        "MonzaModel",
-        "MonzaPreTrainedModel",
-        "MonzaForSequenceClassification",
+    _import_structure["modeling_fuyu"] = [
+        "FuyuForCausalLM",
+        "FuyuModel",
+        "FuyuPreTrainedModel",
+        "FuyuForSequenceClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_monza import MONZA_PRETRAINED_CONFIG_ARCHIVE_MAP, MonzaConfig
+    from .configuration_fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig
 
     try:
         if not is_torch_available():
@@ -48,11 +48,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_monza import (
-            MonzaForCausalLM,
-            MonzaForSequenceClassification,
-            MonzaModel,
-            MonzaPreTrainedModel,
+        from .modeling_fuyu import (
+            FuyuForCausalLM,
+            FuyuForSequenceClassification,
+            FuyuModel,
+            FuyuPreTrainedModel,
         )
 
 

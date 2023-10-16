@@ -18,7 +18,7 @@ import warnings
 import flatdict
 import torch
 
-from transformers import LlamaTokenizer, MonzaConfig, MonzaForCausalLM
+from transformers import LlamaTokenizer, FuyuConfig, FuyuForCausalLM
 
 
 try:
@@ -34,21 +34,21 @@ except ImportError as e:
 
 """
 Sample usage:
-# TODO fix clone links from persimmon to monza
+# TODO fix clone links from persimmon to fuyu
 ```
 git clone https://github.com/adept-ai-labs/adept-inference
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_base_model_release.tar
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_chat_model_release.tar
-python src/transformers/models/monza/convert_monza_weights_to_hf.py  --input_dir /path/to/downloaded/monza/weights/ --output_dir /output/path
+python src/transformers/models/fuyu/convert_fuyu_weights_to_hf.py  --input_dir /path/to/downloaded/fuyu/weights/ --output_dir /output/path
 ```
 
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import MonzaForCausalLM, MonzaTokenizer
+from transformers import FuyuForCausalLM, FuyuTokenizer
 
-model = MonzaForCausalLM.from_pretrained("/output/path")
-tokenizer = MonzaTokenizer.from_pretrained("/output/path")
+model = FuyuForCausalLM.from_pretrained("/output/path")
+tokenizer = FuyuTokenizer.from_pretrained("/output/path")
 ```
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
@@ -80,7 +80,7 @@ def rename_state_dict(state_dict):
     return model_state_dict
 
 
-def convert_monza_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path, safe_serialization=False):
+def convert_fuyu_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path, safe_serialization=False):
     import sys
 
     sys.path.insert(0, ada_lib_path)
@@ -88,8 +88,8 @@ def convert_monza_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_pa
     state_dict = flatdict.FlatDict(model_state_dict_base["model"], ".")
     state_dict = rename_state_dict(state_dict)
 
-    transformers_config = MonzaConfig()
-    model = MonzaForCausalLM(transformers_config, eos_token_id=71013, bos_token_id=71013).to(torch.bfloat16)
+    transformers_config = FuyuConfig()
+    model = FuyuForCausalLM(transformers_config, eos_token_id=71013, bos_token_id=71013).to(torch.bfloat16)
     model.load_state_dict(state_dict)
     model.save_pretrained(pytorch_dump_folder_path, safe_serialization=safe_serialization)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
@@ -99,11 +99,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        help="Location of Monza weights, which contains tokenizer.model and model folders",
+        help="Location of Fuyu weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--pt_model_path",
-        help="Location of Monza `model_optim_rng.pt`",
+        help="Location of Fuyu `model_optim_rng.pt`",
     )
     parser.add_argument(
         "--output_dir",
@@ -117,7 +117,7 @@ def main():
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "adept_vocab.model")
 
-    convert_monza_checkpoint(
+    convert_fuyu_checkpoint(
         pytorch_dump_folder_path=args.output_dir,
         pt_model_path=args.pt_model_path,
         safe_serialization=args.safe_serialization,

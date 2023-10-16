@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Monza model configuration"""
+""" Fuyu model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,17 +20,17 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MONZA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "adept/monza-8b-base": "https://huggingface.co/adept/monza-8b-base/resolve/main/config.json",
+FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "adept/fuyu-8b-base": "https://huggingface.co/adept/fuyu-8b-base/resolve/main/config.json",
 }
 
 
-class MonzaConfig(PretrainedConfig):
+class FuyuConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MonzaModel`]. It is used to instantiate an
-    Monza model according to the specified arguments, defining the model architecture. Instantiating a
+    This is the configuration class to store the configuration of a [`FuyuModel`]. It is used to instantiate an
+    Fuyu model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [adept/monza-8b-base](https://huggingface.co/adept/monza-8b-base).
+    [adept/fuyu-8b-base](https://huggingface.co/adept/fuyu-8b-base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -38,8 +38,8 @@ class MonzaConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 262144):
-            Vocabulary size of the Monza model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`MonzaModel`]
+            Vocabulary size of the Fuyu model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`FuyuModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 16384):
@@ -75,7 +75,7 @@ class MonzaConfig(PretrainedConfig):
             is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
-            https://www.reddit.com/r/LocalMonza/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This
+            https://www.reddit.com/r/LocalFuyu/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This
             is an experimental feature, subject to breaking API changes in future versions.
         qk_layernorm (`bool`, *optional*, default to `True`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states
@@ -89,12 +89,12 @@ class MonzaConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import MonzaModel, MonzaConfig
+    >>> from transformers import FuyuModel, FuyuConfig
 
-    >>> # Initializing a Monza monza-7b style configuration
-    >>> configuration = MonzaConfig()
+    >>> # Initializing a Fuyu fuyu-7b style configuration
+    >>> configuration = FuyuConfig()
     ```"""
-    model_type = "monza"
+    model_type = "fuyu"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

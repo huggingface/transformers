@@ -440,7 +440,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
-    "models.monza": ["MONZA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MonzaConfig"],
+    "models.fuyu": ["FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
     "models.mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig"],
     "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"],
@@ -1857,6 +1857,9 @@ else:
             "load_tf_weights_in_funnel",
         ]
     )
+    _import_structure["models.fuyu"].extend(
+        ["FuyuForCausalLM", "FuyuForSequenceClassification", "FuyuModel", "FuyuPreTrainedModel"]
+    )
     _import_structure["models.git"].extend(
         [
             "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2279,9 +2282,6 @@ else:
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
         ]
-    )
-    _import_structure["models.monza"].extend(
-        ["MonzaForCausalLM", "MonzaForSequenceClassification", "MonzaModel", "MonzaPreTrainedModel"]
     )
     _import_structure["models.mpnet"].extend(
         [
@@ -4475,6 +4475,7 @@ if TYPE_CHECKING:
     from .models.focalnet import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FocalNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig
     from .models.git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitProcessor, GitVisionConfig
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
@@ -4565,7 +4566,6 @@ if TYPE_CHECKING:
     from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
-    from .models.monza import MONZA_PRETRAINED_CONFIG_ARCHIVE_MAP, MonzaConfig
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
     from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
@@ -5786,6 +5786,12 @@ if TYPE_CHECKING:
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
         )
+        from .models.fuyu import (
+            FuyuForCausalLM,
+            FuyuForSequenceClassification,
+            FuyuModel,
+            FuyuPreTrainedModel,
+        )
         from .models.git import (
             GIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             GitForCausalLM,
@@ -6127,12 +6133,6 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
-        )
-        from .models.monza import (
-            MonzaForCausalLM,
-            MonzaForSequenceClassification,
-            MonzaModel,
-            MonzaPreTrainedModel,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -17,16 +17,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Monza model."""
+""" PyTorch Fuyu model."""
 import math
 import collections
 from typing import List, Optional, Tuple, Union
 import einops
+from PIL import Image
+import numpy as np
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from dataclasses import dataclass
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
@@ -34,12 +37,24 @@ from ...modeling_utils import PreTrainedModel
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_monza import MonzaConfig
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    infer_channel_dimension_format,
+    is_scaled_image,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
+from .configuration_fuyu import FuyuConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "MonzaConfig"
+_CONFIG_FOR_DOC = "FuyuConfig"
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -64,45 +79,6 @@ class GatherContinuousEmbeddingsException(Exception):
     pass
 
 
-def gather_continuous_embeddings(
-    word_embeddings: torch.Tensor,
-    continuous_embeddings: List[torch.Tensor],
-    image_patch_input_indices: torch.Tensor,
-) -> torch.Tensor:
-    """This function places the continuous_embeddings into the word_embeddings at the locations
-    indicated by image_patch_input_indices.
-    Different batch elements can have different numbers of continuous embeddings.
-
-    Args:
-        word_embeddings: Tensor of word embeddings. Shape: [b, s, h]
-        continuous_embeddings: Tensor of continuous embeddings. The length of the list is the batch size. Each entry is
-          shape [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
-          indices in image_patch_input_indices for that batch element.
-        image_patch_input_indices: Tensor of indices of the image patches in the input_ids tensor. Shape: [b, s]
-    """
-    if not (word_embeddings.shape[0] == len(continuous_embeddings)):
-        raise GatherContinuousEmbeddingsException(
-            f"Batch sizes must match! Got {len(continuous_embeddings)=} and {word_embeddings.shape[0]=}"
-        )
-
-    output_embeddings = word_embeddings.clone()
-    for batch_idx in range(word_embeddings.shape[0]):
-        # First, find the positions of all the non-negative values in image_patch_input_indices, those are the
-        # positions in word_embeddings that we want to replace with content from continuous_embeddings.
-        dst_indices = torch.nonzero(image_patch_input_indices[batch_idx] >= 0, as_tuple=True)[0]
-        # Next look up those indices in image_patch_input_indices to find the indices in continuous_embeddings that we
-        # want to use to replace the values in word_embeddings.
-        src_indices = image_patch_input_indices[batch_idx][dst_indices]
-        # Check if we have more indices than embeddings. Note that we could have fewer indices if images got truncated.
-        if src_indices.shape[0] > continuous_embeddings[batch_idx].shape[0]:
-            raise GatherContinuousEmbeddingsException(
-                f"Number of continuous embeddings {continuous_embeddings[batch_idx].shape=} does not match "
-                f"number of continuous token ids {src_indices.shape=} in batch element {batch_idx}."
-            )
-        output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx][src_indices]
-    return output_embeddings
-
-
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -118,8 +94,8 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Monza
-class MonzaRotaryEmbedding(nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Fuyu
+class FuyuRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -155,9 +131,9 @@ class MonzaRotaryEmbedding(nn.Module):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Monza
-class MonzaLinearScalingRotaryEmbedding(MonzaRotaryEmbedding):
-    """MonzaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Fuyu
+class FuyuLinearScalingRotaryEmbedding(FuyuRotaryEmbedding):
+    """FuyuRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -175,9 +151,9 @@ class MonzaLinearScalingRotaryEmbedding(MonzaRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Monza
-class MonzaDynamicNTKScalingRotaryEmbedding(MonzaRotaryEmbedding):
-    """MonzaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Fuyu
+class FuyuDynamicNTKScalingRotaryEmbedding(FuyuRotaryEmbedding):
+    """FuyuRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -219,190 +195,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     return q_embed, k_embed
 
 
-class MonzaProcessor(nn.Module):
-    """
-    This class should handle the image processing part before the main MonzaModel.
-    In particular, it should handle:
-
-    - Processing Images:
-        Taking a batch of images as input.
-        If the images are variable-sized, it resizes them based on the desired patch dimensions.
-        Then, it patches up these images using the patchify_image function.
-
-    - Creating Image Input IDs:
-        For each patch, a placeholder ID is given to identify where these patches belong in a token sequence.
-        For variable-sized images, each line of patches is terminated with a newline ID.
-
-    - Image Patch Indices:
-        For each image patch, the code maintains an index where these patches should be inserted in a token stream.
+# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->FuyuViT
 
 
-    - Then, comes the ViT part. Typically one would just do
-
-
-    config = ViTConfig(
-        hidden_size=args.hidden_size,
-        num_hidden_layers=args.num_layers,
-        num_attention_heads=args.num_attention_heads,
-    )
-
-    # Instantiate the model
-    model = ViTModel(config)
-
-    # Forward pass
-    outputs = model(pixel_values=input_images)  # Assuming input_images
-
-    """
-    # TODO make patchify logic consistent with MonzaViTModel
-
-    def get_num_patches(self, img_h: int, img_w: int, patch_dim_h: int, patch_dim_w: int) -> int:
-        """Calculate number of patches required to encode an image."""
-        assert img_h % patch_dim_h == 0, f"{img_h=} must be divisible by {patch_dim_h=}"
-        assert img_w % patch_dim_w == 0, f"{img_w=} must be divisible by {patch_dim_w=}"
-
-        num_patches_per_dim_h = img_h // patch_dim_h
-        num_patches_per_dim_w = img_w // patch_dim_w
-        num_patches = num_patches_per_dim_h * num_patches_per_dim_w
-
-        return num_patches
-
-    def patchify_image(self, image: torch.Tensor, patch_dim_h: int, patch_dim_w: int) -> torch.Tensor:
-        """Convert an image into a tensor of patches.
-
-        Args:
-            image: Image to convert. Shape: [batch, channels, height, width]
-            patch_dim_h: Height of each patch.
-            patch_dim_w: Width of each patch.
-        """
-        rearranged_input = einops.rearrange(
-            image,
-            "b c (h p1) (w p2) -> b (h w) (p1 p2 c)",
-            p1=patch_dim_h,
-            p2=patch_dim_w,
-        )
-        assert rearranged_input.shape[1] == self.get_num_patches(
-            img_h=image.shape[2], img_w=image.shape[3], patch_dim_h=patch_dim_h, patch_dim_w=patch_dim_w
-        )
-        return rearranged_input
-
-    def process_images_for_model_input(
-        self,
-        image_input: torch.Tensor,
-        image_present: torch.Tensor,
-        image_unpadded_h: torch.Tensor,
-        image_unpadded_w: torch.Tensor,
-        image_patch_dim_h: int,
-        image_patch_dim_w: int,
-        image_placeholder_id: int,
-        image_newline_id: int,
-        variable_sized: bool,
-    ) -> dict:
-        """Process images for model input. In particular, variable-sized images are handled here.
-
-        Args:
-            image_input: [batch_size, num_sub_sequences, c, h, w] tensor of images.
-            image_present: [batch_size, num_sub_sequences] tensor of 1s and 0s indicating whether an image is present.
-            image_unpadded_h: [batch_size, num_sub_sequences] tensor of unpadded image heights.
-            image_unpadded_w: [batch_size, num_sub_sequences] tensor of unpadded image widths.
-            image_patch_dim_h: The height of the image patches.
-            image_patch_dim_w: The width of the image patches.
-            image_placeholder_id: The id of the image placeholder token.
-            image_newline_id: The id of the image newline token.
-            variable_sized: Whether to process images as variable-sized.
-        """
-        # Only images that are present.
-        images: List[List[torch.Tensor]] = []
-        image_patches: List[List[torch.Tensor]] = []
-        # Image input ids for every subsequence, including ones with no image present.
-        image_input_ids: List[List[torch.Tensor]] = []
-        for bi in range(image_input.shape[0]):
-            images.append([])
-            image_input_ids.append([])
-            image_patches.append([])
-            for si in range(image_input.shape[1]):
-                if image_present[bi, si]:
-                    image = image_input[bi, si]
-                    if variable_sized:
-                        # The min() is required here due to floating point issues:
-                        # math.ceil(torch.tensor(300).cuda() / 30) == 11
-                        new_h = min(
-                            image.shape[1], math.ceil(image_unpadded_h[bi, si] / image_patch_dim_h) * image_patch_dim_h
-                        )
-                        new_w = min(
-                            image.shape[2], math.ceil(image_unpadded_w[bi, si] / image_patch_dim_w) * image_patch_dim_w
-                        )
-                        image = image[:, :new_h, :new_w]
-                    images[bi].append(image)
-                    num_patches = self.get_num_patches(
-                        img_h=image.shape[1],
-                        img_w=image.shape[2],
-                        patch_dim_h=image_patch_dim_h,
-                        patch_dim_w=image_patch_dim_w,
-                    )
-                    ids = torch.full([num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device)
-                    patches = self.patchify_image(
-                        image=image.unsqueeze(0), patch_dim_h=image_patch_dim_h, patch_dim_w=image_patch_dim_w
-                    ).squeeze(0)
-                    if variable_sized:
-                        # Now terminate each line with |NEWLINE|.
-                        ids = ids.reshape(-1, new_w // image_patch_dim_w)
-                        ids = torch.cat(
-                            [
-                                ids,
-                                torch.full(
-                                    [ids.shape[0], 1], image_newline_id, dtype=torch.int32, device=image_input.device
-                                ),
-                            ],
-                            dim=1,
-                        )
-                        ids = ids.reshape(-1)
-                    image_input_ids[bi].append(ids)
-                    image_patches[bi].append(patches)
-                else:
-                    image_input_ids[bi].append(torch.tensor([], dtype=torch.int32, device=image_input.device))
-
-        # Create image_patch_input_indices, where non-negative values correspond to image patches to be inserted in
-        # the stream.
-        image_patch_indices_per_batch: List[List[torch.Tensor]] = []
-        image_patch_indices_per_subsequence: List[List[torch.Tensor]] = []
-        for bi in range(len(image_input_ids)):
-            image_patch_indices_per_batch.append([])
-            image_patch_indices_per_subsequence.append([])
-            index_offset = 0
-            for si in range(len(image_input_ids[bi])):
-                # Indices of image patches.
-                num_patches = torch.count_nonzero(image_input_ids[bi][si] == image_placeholder_id)
-                indices = torch.arange(
-                    num_patches,
-                    dtype=image_input_ids[bi][si].dtype,
-                    device=image_input_ids[bi][si].device,
-                )
-
-                # Place those indices in the image input ids token stream, with -1 representing non-index tokens.
-                indices_in_stream_per_batch = torch.full_like(image_input_ids[bi][si], -1)
-                indices_in_stream_per_subsequence = torch.full_like(image_input_ids[bi][si], -1)
-                indices_in_stream_per_batch[
-                    torch.nonzero(image_input_ids[bi][si] == image_placeholder_id, as_tuple=True)[0]
-                ] = (indices + index_offset)
-                indices_in_stream_per_subsequence[
-                    torch.nonzero(image_input_ids[bi][si] == image_placeholder_id, as_tuple=True)[0]
-                ] = indices
-
-                image_patch_indices_per_batch[bi].append(indices_in_stream_per_batch)
-                image_patch_indices_per_subsequence[bi].append(indices_in_stream_per_subsequence)
-                index_offset += num_patches
-
-        return {'images': images,
-                'image_input_ids': image_input_ids,
-                'image_patches': image_patches,
-                'image_patch_indices_per_batch': image_patch_indices_per_batch,
-                'image_patch_indices_per_subsequence': image_patch_indices_per_subsequence}
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->MonzaViT
-
-
-class MonzaViTPatchEmbeddings(nn.Module):
+class FuyuViTPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -440,10 +236,10 @@ class MonzaViTPatchEmbeddings(nn.Module):
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXMLP with GPTNeoX->Monza
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXMLP with GPTNeoX->Fuyu
 
 
-class MonzaMLP(nn.Module):
+class FuyuMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -457,10 +253,10 @@ class MonzaMLP(nn.Module):
         return hidden_states
 
 
-class MonzaAttention(nn.Module):
+class FuyuAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: MonzaConfig):
+    def __init__(self, config: FuyuConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -491,7 +287,7 @@ class MonzaAttention(nn.Module):
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
-            self.rotary_emb = MonzaRotaryEmbedding(
+            self.rotary_emb = FuyuRotaryEmbedding(
                 int(self.partial_rotary_factor * self.head_dim),
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
@@ -500,14 +296,14 @@ class MonzaAttention(nn.Module):
             scaling_type = self.config.rope_scaling["type"]
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
-                self.rotary_emb = MonzaLinearScalingRotaryEmbedding(
+                self.rotary_emb = FuyuLinearScalingRotaryEmbedding(
                     int(self.partial_rotary_factor * self.head_dim),
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
-                self.rotary_emb = MonzaDynamicNTKScalingRotaryEmbedding(
+                self.rotary_emb = FuyuDynamicNTKScalingRotaryEmbedding(
                     int(self.partial_rotary_factor * self.head_dim),
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
@@ -625,12 +421,12 @@ class MonzaAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class MonzaDecoderLayer(nn.Module):
-    def __init__(self, config: MonzaConfig):
+class FuyuDecoderLayer(nn.Module):
+    def __init__(self, config: FuyuConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = MonzaAttention(config=config)
-        self.mlp = MonzaMLP(config)
+        self.self_attn = FuyuAttention(config=config)
+        self.mlp = FuyuMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
@@ -698,7 +494,7 @@ class MonzaDecoderLayer(nn.Module):
         return outputs
 
 
-MONZA_START_DOCSTRING = r"""
+FUYU_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -708,7 +504,7 @@ MONZA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`MonzaConfig`]):
+        config ([`FuyuConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -716,14 +512,14 @@ MONZA_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Monza Model outputting raw hidden-states without any specific head on top.",
-    MONZA_START_DOCSTRING,
+    "The bare Fuyu Model outputting raw hidden-states without any specific head on top.",
+    FUYU_START_DOCSTRING,
 )
-class MonzaPreTrainedModel(PreTrainedModel):
-    config_class = MonzaConfig
+class FuyuPreTrainedModel(PreTrainedModel):
+    config_class = FuyuConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MonzaDecoderLayer"]
+    _no_split_modules = ["FuyuDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
@@ -738,11 +534,11 @@ class MonzaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MonzaModel):
+        if isinstance(module, FuyuModel):
             module.gradient_checkpointing = value
 
 
-MONZA_INPUTS_DOCSTRING = r"""
+FUYU_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -910,44 +706,88 @@ if model_image_input is not None:
                 new_seq_len=max_seq_len_batch,
                 offset=0,
             )
-            image_input = MonzaImageInput(
+            image_input = FuyuImageInput(
                 images=model_image_input.images, image_patch_input_indices=image_patch_input_indices
             )
 """
 
 
-@add_start_docstrings(
-    "The bare Monza Model outputting raw hidden-states without any specific head on top.",
-    MONZA_START_DOCSTRING,
-)
-class MonzaModel(MonzaPreTrainedModel):
+@dataclass
+class FuyuBaseModelOutputWithPast(BaseModelOutputWithPast):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MonzaDecoderLayer`]
+    Base class for Fuyu model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
     Args:
-        config: MonzaConfig
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+            sequence_length, hidden_size)`.
+
+            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel.__init__ with LLAMA->MONZA,Llama->Monza,MonzaRMSNorm->nn.LayerNorm,norm->final_layernorm,rms_final_layernorm_eps->layer_norm_eps
-    def __init__(self, config: MonzaConfig):
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@add_start_docstrings(
+    "The bare Fuyu Model outputting raw hidden-states without any specific head on top.",
+    FUYU_START_DOCSTRING,
+)
+class FuyuModel(FuyuPreTrainedModel):
+    """
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`FuyuDecoderLayer`]
+
+    Args:
+        config: FuyuConfig
+    """
+
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel.__init__ with LLAMA->FUYU,Llama->Fuyu,FuyuRMSNorm->nn.LayerNorm,norm->final_layernorm,rms_final_layernorm_eps->layer_norm_eps
+    def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.processor = MonzaProcessor()
+
+        # self.processor = FuyuProcessor()
 
         # vision tokens
-
-        # self.persimmon_model = AutoModel.
 
         self.vision_embed_tokens = nn.Linear(config.patch_size * config.patch_size *
                                              config.num_channels, config.hidden_size)
 
-        # text tokens
+        # text tokens # TODO can we just use AutoModel there?
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
         # combine
-        self.layers = nn.ModuleList([MonzaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([FuyuDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
@@ -959,6 +799,45 @@ class MonzaModel(MonzaPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
+
+    def gather_continuous_embeddings(
+            self,
+            word_embeddings: torch.Tensor,
+            continuous_embeddings: List[torch.Tensor],
+            image_patch_input_indices: torch.Tensor) -> torch.Tensor:
+        """This function places the continuous_embeddings into the word_embeddings at the locations
+        indicated by image_patch_input_indices.
+        Different batch elements can have different numbers of continuous embeddings.
+
+        Args:
+            word_embeddings: Tensor of word embeddings. Shape: [b, s, h]
+            continuous_embeddings: Tensor of continuous embeddings. The length of the list is the batch size. Each entry is
+            shape [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
+            indices in image_patch_input_indices for that batch element.
+            image_patch_input_indices: Tensor of indices of the image patches in the input_ids tensor. Shape: [b, s]
+        """
+        if not (word_embeddings.shape[0] == len(continuous_embeddings)):
+            raise GatherContinuousEmbeddingsException(
+                f"Batch sizes must match! Got {len(continuous_embeddings)=} and {word_embeddings.shape[0]=}"
+            )
+
+        output_embeddings = word_embeddings.clone()
+        for batch_idx in range(word_embeddings.shape[0]):
+            breakpoint()
+            # First, find the positions of all the non-negative values in image_patch_input_indices, those are the
+            # positions in word_embeddings that we want to replace with content from continuous_embeddings.
+            dst_indices = torch.nonzero(image_patch_input_indices[batch_idx] >= 0, as_tuple=True)[0]
+            # Next look up those indices in image_patch_input_indices to find the indices in continuous_embeddings that we
+            # want to use to replace the values in word_embeddings.
+            src_indices = image_patch_input_indices[batch_idx][dst_indices]
+            # Check if we have more indices than embeddings. Note that we could have fewer indices if images got truncated.
+            if src_indices.shape[0] > continuous_embeddings[batch_idx].shape[0]:
+                raise GatherContinuousEmbeddingsException(
+                    f"Number of continuous embeddings {continuous_embeddings[batch_idx].shape=} does not match "
+                    f"number of continuous token ids {src_indices.shape=} in batch element {batch_idx}."
+                )
+            output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx][src_indices]
+        return output_embeddings
 
     # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
@@ -984,7 +863,7 @@ class MonzaModel(MonzaPreTrainedModel):
 
         return combined_attention_mask
 
-    @add_start_docstrings_to_model_forward(MONZA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1035,9 +914,9 @@ class MonzaModel(MonzaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
             if image_patches is not None:
                 patch_embeddings = self.vision_embed_tokens(image_patches)
-                inputs_embeds = gather_continuous_embeddings(word_embeddings=inputs_embeds,
-                                                             continuous_embeddings=patch_embeddings,
-                                                             image_patch_input_indices=image_patches_indices)
+                inputs_embeds = self.gather_continuous_embeddings(
+                    word_embeddings=inputs_embeds, continuous_embeddings=patch_embeddings,
+                    image_patch_input_indices=image_patches_indices)
             # processed_images = self.image_processor.process_images_for_model_input(images, )
 
         # embed positions
@@ -1121,13 +1000,13 @@ class MonzaModel(MonzaPreTrainedModel):
         )
 
 
-class MonzaForCausalLM(MonzaPreTrainedModel):
+class FuyuForCausalLM(FuyuPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with LLAMA->MONZA,Llama->Monza
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with LLAMA->FUYU,Llama->Fuyu
     def __init__(self, config):
         super().__init__(config)
-        self.model = MonzaModel(config)
+        self.model = FuyuModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1158,7 +1037,7 @@ class MonzaForCausalLM(MonzaPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(MONZA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1174,6 +1053,7 @@ class MonzaForCausalLM(MonzaPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
+        # TODO finish documentation
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1185,18 +1065,22 @@ class MonzaForCausalLM(MonzaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, MonzaForCausalLM
+        >>> from transformers import FuyuProcessor, FuyuForCausalLM
 
-        >>> model = MonzaForCausalLM.from_pretrained("adept/monzamodel-8b-base")
-        >>> tokenizer = AutoTokenizer.from_pretrained("adept/monzamodel-8b-base")
+        >>> model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
+        >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
 
-        >>> prompt = "human: Hey, what should I eat for dinner?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> prompt = "Hi, my name is Max"
+        >>> input_ids = processor(text=prompt, return_tensors="pt").input_ids
+
+        >>> file_path = "image_test.jpeg"
+        >>> image = Image.open(file_path)
+        >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'human: Hey, what should I eat for dinner?\n\ncat: 🐱\n\nhuman: 😐\n\n'
+        '
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1289,9 +1173,9 @@ class MonzaForCausalLM(MonzaPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The Monza transformer with a sequence classification head on top (linear layer).
+    The Fuyu transformer with a sequence classification head on top (linear layer).
 
-    [`MonzaForSequenceClassification`] uses the last token in order to do the classification, as other causal
+    [`FuyuForSequenceClassification`] uses the last token in order to do the classification, as other causal
     models (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
@@ -1300,14 +1184,14 @@ class MonzaForCausalLM(MonzaPreTrainedModel):
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
     """,
-    MONZA_START_DOCSTRING,
+    FUYU_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->MONZA,Llama->Monza
-class MonzaForSequenceClassification(MonzaPreTrainedModel):
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->FUYU,Llama->Fuyu
+class FuyuForSequenceClassification(FuyuPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = MonzaModel(config)
+        self.model = FuyuModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -1319,7 +1203,7 @@ class MonzaForSequenceClassification(MonzaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(MONZA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
