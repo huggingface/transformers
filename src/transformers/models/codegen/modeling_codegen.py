@@ -52,9 +52,9 @@ CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
-def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
+def create_sinusoidal_positions(num_pos: int, dim: int, dtype: torch.dtype) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.float), inv_freq).float()
+    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.float), inv_freq).to(dtype)
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
@@ -103,7 +103,9 @@ class CodeGenAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
         pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.embed_positions = create_sinusoidal_positions(max_positions, pos_embd_dim)
+        self.embed_positions = create_sinusoidal_positions(
+            max_positions, pos_embd_dim, dtype=self.qkv_proj.weight.dtype
+        )
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
         reshaped = x.reshape(x.shape[:-1] + (n_head // mp_num, dim_head))
