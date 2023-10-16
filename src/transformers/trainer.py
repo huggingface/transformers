@@ -83,7 +83,6 @@ from .trainer_pt_utils import (
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
-    get_dataloader_sampler,
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
@@ -1733,12 +1732,20 @@ class Trainer:
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
+        from accelerate.data_loader import SeedableRandomSampler
 
         # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
         if not args.ignore_data_skip:
             for epoch in range(epochs_trained):
-                sampler = get_dataloader_sampler(train_dataloader)
-                is_random_sampler = isinstance(sampler, RandomSampler)
+                from torch.utils.data import BatchSampler
+
+                # sampler = get_dataloader_sampler(train_dataloader)
+                sampler_is_batch_sampler = isinstance(train_dataloader.sampler, BatchSampler)
+                if sampler_is_batch_sampler:
+                    sampler = train_dataloader.sampler.sampler
+                else:
+                    sampler = train_dataloader.batch_sampler.sampler
+                is_random_sampler = isinstance(sampler, (RandomSampler, SeedableRandomSampler))
                 if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
                     for _ in train_dataloader:
@@ -1752,6 +1759,8 @@ class Trainer:
         total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
             epoch_iterator = train_dataloader
+            if hasattr(epoch_iterator, "set_epoch"):
+                epoch_iterator.set_epoch(epoch)
 
             # Reset the past mems state at the beginning of each epoch if necessary.
             if args.past_index >= 0:
