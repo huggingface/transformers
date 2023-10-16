@@ -360,8 +360,12 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
         The output should look something like:
 
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
         <bos>[INST] Prompt [/INST]
+
+        The reference for this chat template is [this code
+        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
+        in the original repository.
         """
 
         template = (
