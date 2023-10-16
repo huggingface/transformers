@@ -194,7 +194,9 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             # assert error if generate_kwargs with forward-only models
-            outputs = speech_generator("This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs)
+            outputs = speech_generator(
+                "This is a test", forward_params=forward_params, generate_kwargs=generate_kwargs
+            )
         self.assertTrue(np.abs(outputs["audio"] - audio).max() < 1e-5)
 
     @slow

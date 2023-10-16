@@ -128,11 +128,10 @@ class TextToAudioPipeline(Pipeline):
         return output
 
     def _forward(self, model_inputs, **kwargs):
-        kwargs = self._ensure_tensor_on_device(forward_params, device=self.device)
+        # we expect some kwargs to be additional tensors which need to be on the right device
+        kwargs = self._ensure_tensor_on_device(kwargs, device=self.device)
         forward_params = kwargs["forward_params"]
         generate_kwargs = kwargs["generate_kwargs"]
-        # we expect some kwargs to be additional tensors which need to be on the right device
-        forward_params = self._ensure_tensor_on_device(forward_params, device=self.device)
 
         if self.model.can_generate():
             # we expect some kwargs to be additional tensors which need to be on the right device
@@ -144,9 +143,12 @@ class TextToAudioPipeline(Pipeline):
             output = self.model.generate(**model_inputs, **forward_params)
         else:
             if len(generate_kwargs):
-                raise ValueError(f"""You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non empty. 
-                                 For forward-only TTA models, please use `forward_params` instead of of `generate_kwargs`.
-                                 For reference, here are the `generate_kwargs` used here: {generate_kwargs.keys()} """)
+                raise ValueError(
+                    f"""You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non empty.
+                                 For forward-only TTA models, please use `forward_params` instead of of
+                                 `generate_kwargs`. For reference, here are the `generate_kwargs` used here:
+                                 {generate_kwargs.keys()}"""
+                )
             output = self.model(**model_inputs, **forward_params)[0]
 
         if self.vocoder is not None:
