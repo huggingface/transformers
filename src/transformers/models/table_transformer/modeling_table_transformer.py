@@ -250,7 +250,7 @@ def replace_batch_norm(model):
     for name, module in model.named_children():
         if isinstance(module, nn.BatchNorm2d):
             new_module = TableTransformerFrozenBatchNorm2d(module.num_features)
-            
+
             if not module.weight.device == torch.device("meta"):
                 new_module.weight.data.copy_(module.weight)
                 new_module.bias.data.copy_(module.bias)
@@ -814,7 +814,11 @@ class TableTransformerPreTrainedModel(PreTrainedModel):
     config_class = TableTransformerConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    _no_split_modules = [r"TableTransformerConvEncoder", r"TableTransformerEncoderLayer", r"TableTransformerDecoderLayer"]
+    _no_split_modules = [
+        r"TableTransformerConvEncoder",
+        r"TableTransformerEncoderLayer",
+        r"TableTransformerDecoderLayer",
+    ]
 
     def _init_weights(self, module):
         std = self.config.init_std

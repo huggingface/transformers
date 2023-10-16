@@ -22,7 +22,14 @@ import unittest
 from huggingface_hub import hf_hub_download
 
 from transformers import ResNetConfig, TableTransformerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_accelerate, require_timm, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -539,11 +546,13 @@ class TableTransformerModelIntegrationTests(unittest.TestCase):
             [[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]], device=torch_device
         )
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-3))
-    
+
     @require_accelerate
     def test_table_detection_using_device_map(self):
         image_processor = AutoImageProcessor.from_pretrained("microsoft/table-transformer-detection")
-        model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-detection", device_map="auto")
+        model = TableTransformerForObjectDetection.from_pretrained(
+            "microsoft/table-transformer-detection", device_map="auto"
+        )
 
         file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
         image = Image.open(file_path).convert("RGB")

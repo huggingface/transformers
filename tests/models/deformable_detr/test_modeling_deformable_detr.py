@@ -618,7 +618,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
-    
+
     @require_accelerate
     def test_inference_object_detection_head_using_device_map(self):
         model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr", device_map="auto")
@@ -638,9 +638,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         expected_logits = torch.tensor(
             [[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]]
         )
-        expected_boxes = torch.tensor(
-            [[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]]
-        )
+        expected_boxes = torch.tensor([[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]])
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
 

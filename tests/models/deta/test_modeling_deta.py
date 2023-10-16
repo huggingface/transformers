@@ -518,7 +518,7 @@ class DetaModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
-    
+
     @require_accelerate
     def test_inference_object_detection_head_using_device_map(self):
         model = DetaForObjectDetection.from_pretrained("jozhang97/deta-resnet-50", device_map="auto")
@@ -536,9 +536,7 @@ class DetaModelIntegrationTests(unittest.TestCase):
         expected_logits = torch.tensor(
             [[-7.3978, -2.5406, -4.1668], [-8.2684, -3.9933, -3.8096], [-7.0515, -3.7973, -5.8516]]
         )
-        expected_boxes = torch.tensor(
-            [[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]]
-        )
+        expected_boxes = torch.tensor([[0.5043, 0.4973, 0.9998], [0.2542, 0.5489, 0.4748], [0.5490, 0.2765, 0.0570]])
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
 
