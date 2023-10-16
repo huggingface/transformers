@@ -20,7 +20,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn.modules.activation import MultiheadAttention
 
@@ -205,7 +204,7 @@ class PatchTSMixerMLP(nn.Module):
         Returns:
             `torch.Tensor` of the same shape as `inputs`
         """
-        inputs = self.dropout1(F.gelu(self.fc1(inputs)))
+        inputs = self.dropout1(nn.functional.gelu(self.fc1(inputs)))
         inputs = self.fc2(inputs)
         if self.last_dropout:
             inputs = self.dropout2(inputs)
