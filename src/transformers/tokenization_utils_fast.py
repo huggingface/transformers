@@ -155,12 +155,17 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
-        # We add the additional tokens that are not part of the vocab
+        # The following logic will be replace with a single add_tokens once a fix is pushed to tokenizers
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
         # uses the information stored in `added_tokens_decoder`.
         # this is costly for fast tokenizers as we re-compute the regex again. But not all tokens are added tokens
-        tokens_to_add = [token for index, token in sorted(added_tokens_decoder.items(), key= lambda x:x[0]) if token not in self.added_tokens_decoder]
+        tokens_to_add = [
+            token
+            for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])
+            if token not in self.added_tokens_decoder
+        ]
         encoder = list(self.added_tokens_encoder.keys()) + [str(token) for token in tokens_to_add]
+        # if some of the special tokens are strings, we check if we don't already have a token
         tokens_to_add += [
             token for token in self.all_special_tokens_extended if token not in encoder and token not in tokens_to_add
         ]
