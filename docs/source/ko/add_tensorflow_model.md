@@ -175,7 +175,6 @@ git push -u origin add_tf_brand_new_bert
 
 - `src/transformers/__init__.py`에 *BrandNewBert*의 모든 공개 클래스를 포함합니다.
 - `src/transformers/models/auto/modeling_tf_auto.py`에서 *BrandNewBert* 클래스를 해당 Auto 클래스에 추가합니다.
-- `utils/documentation_tests.txt`에 모델 파일을 문서화하는 테스트 파일 목록을 추가합니다.
 - `src/transformers/utils/dummy_tf_objects.py`에 *BrandNewBert*와 관련된 레이지 로딩 클래스를 추가합니다.
 - `src/transformers/models/brand_new_bert/__init__.py`에서 공개 클래스에 대한 import 구조를 업데이트합니다.
 - `docs/source/en/model_doc/brand_new_bert.md`에서 *BrandNewBert*의 공개 메서드에 대한 문서 포인터를 추가합니다.

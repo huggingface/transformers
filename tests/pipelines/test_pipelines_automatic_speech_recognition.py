@@ -299,7 +299,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
+    @slow
     @require_torch
+    @slow
     def test_return_timestamps_in_preprocess(self):
         pipe = pipeline(
             task="automatic-speech-recognition",
@@ -318,28 +320,28 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             res,
             {
                 "text": " Conquered returned to its place amidst the tents.",
-                "chunks": [{"text": " Conquered returned to its place amidst the tents.", "timestamp": (0.0, 3.36)}],
+                "chunks": [{"timestamp": (0.0, 3.36), "text": " Conquered returned to its place amidst the tents."}],
             },
         )
         pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
         res = pipe(sample["audio"]["array"], return_timestamps="word")
+
         # fmt: off
-        # Note that the word-level timestamps predicted here are pretty bad.
         self.assertEqual(
             res,
             {
                 "text": " Conquered returned to its place amidst the tents.",
                 "chunks": [
-                    {'text': ' Conquered', 'timestamp': (29.78, 29.9)},
-                    {'text': ' returned', 'timestamp': (29.9, 29.9)},
-                    {'text': ' to', 'timestamp': (29.9, 29.9)},
-                    {'text': ' its', 'timestamp': (29.9, 29.9)},
-                    {'text': ' place', 'timestamp': (29.9, 29.9)},
-                    {'text': ' amidst', 'timestamp': (29.9, 29.9)},
-                    {'text': ' the', 'timestamp': (29.9, 29.9)},
-                    {'text': ' tents.', 'timestamp': (29.9, 29.9)}
-                ]
-            }
+                    {"text": " Conquered", "timestamp": (0.5, 1.2)},
+                    {"text": " returned", "timestamp": (1.2, 1.64)},
+                    {"text": " to", "timestamp": (1.64, 1.84)},
+                    {"text": " its", "timestamp": (1.84, 2.02)},
+                    {"text": " place", "timestamp": (2.02, 2.28)},
+                    {"text": " amidst", "timestamp": (2.28, 2.78)},
+                    {"text": " the", "timestamp": (2.78, 2.96)},
+                    {"text": " tents.", "timestamp": (2.96, 3.48)},
+                ],
+            },
         )
         # fmt: on
 
@@ -901,6 +903,26 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
 
+    @slow
+    @require_torch_gpu
+    def test_wav2vec2_conformer_float16(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/wav2vec2-conformer-rope-large-960h-ft",
+            device="cuda:0",
+            torch_dtype=torch.float16,
+            framework="pt",
+        )
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        output = speech_recognizer(sample)
+        self.assertEqual(
+            output,
+            {"text": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL"},
+        )
+
     @require_torch
     def test_chunking_fast(self):
         speech_recognizer = pipeline(
@@ -1150,7 +1172,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # CTC models must specify return_timestamps type - cannot set `return_timestamps=True` blindly
         with self.assertRaisesRegex(
             ValueError,
-            "^CTC can either predict character level timestamps, or word level timestamps."
+            "^CTC can either predict character level timestamps, or word level timestamps. "
             "Set `return_timestamps='char'` or `return_timestamps='word'` as required.$",
         ):
             _ = speech_recognizer(audio, return_timestamps=True)

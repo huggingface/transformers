@@ -134,10 +134,6 @@ def is_dagshub_available():
     return None not in [importlib.util.find_spec("dagshub"), importlib.util.find_spec("mlflow")]
 
 
-def is_fairscale_available():
-    return importlib.util.find_spec("fairscale") is not None
-
-
 def is_neptune_available():
     return _has_neptune
 
@@ -205,10 +201,16 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
         timeout = kwargs.pop("timeout", None)
         n_jobs = kwargs.pop("n_jobs", 1)
-        study = optuna.create_study(direction=direction, **kwargs)
+        directions = direction if isinstance(direction, list) else None
+        direction = None if directions is not None else direction
+        study = optuna.create_study(direction=direction, directions=directions, **kwargs)
         study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
-        best_trial = study.best_trial
-        return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
+        if not study._is_multi_objective():
+            best_trial = study.best_trial
+            return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
+        else:
+            best_trials = study.best_trials
+            return [BestRun(str(best.number), best.values, best.params) for best in best_trials]
     else:
         for i in range(n_trials):
             trainer.objective = None
@@ -747,6 +749,7 @@ class WandbCallback(TrainerCallback):
             _watch_model = os.getenv("WANDB_WATCH", "false")
             if not is_torch_tpu_available() and _watch_model in ("all", "parameters", "gradients"):
                 self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
+            self._wandb.run._label(code="transformers_trainer")
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
@@ -1309,7 +1312,7 @@ class NeptuneCallback(TrainerCallback):
                 target_path = consistent_checkpoint_path
             except IOError as e:
                 logger.warning(
-                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'."
+                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'. "
                     "Could fail trying to upload.".format(e)
                 )
 
@@ -1440,6 +1443,7 @@ class ClearMLCallback(TrainerCallback):
             raise RuntimeError("ClearMLCallback requires 'clearml' to be installed. Run `pip install clearml`.")
 
         self._initialized = False
+        self._initialized_externally = False
         self._clearml_task = None
 
         self._log_model = os.getenv("CLEARML_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
@@ -1457,6 +1461,7 @@ class ClearMLCallback(TrainerCallback):
                 if self._clearml.Task.current_task():
                     self._clearml_task = self._clearml.Task.current_task()
                     self._initialized = True
+                    self._initialized_externally = True
                     logger.info("External ClearML Task has been connected.")
                 else:
                     self._clearml_task = self._clearml.Task.init(
@@ -1483,7 +1488,7 @@ class ClearMLCallback(TrainerCallback):
     def on_train_end(self, args, state, control, model=None, tokenizer=None, metrics=None, logs=None, **kwargs):
         if self._clearml is None:
             return
-        if self._clearml_task and state.is_world_process_zero:
+        if self._clearml_task and state.is_world_process_zero and not self._initialized_externally:
             # Close ClearML Task at the end end of training
             self._clearml_task.close()
 

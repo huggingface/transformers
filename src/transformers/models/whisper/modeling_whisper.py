@@ -55,6 +55,18 @@ WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+def sinusoids(length: int, channels: int, max_timescale: float = 10000) -> torch.Tensor:
+    """Returns sinusoids for positional embedding"""
+    if channels % 2 != 0:
+        raise ValueError(
+            f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
+        )
+    log_timescale_increment = math.log(max_timescale) / (channels // 2 - 1)
+    inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
+    scaled_time = torch.arange(length).view(-1, 1) * inv_timescales.view(1, -1)
+    return torch.cat([scaled_time.sin(), scaled_time.cos()], dim=1)
+
+
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
@@ -668,6 +680,10 @@ class WhisperPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, WhisperEncoder):
+            with torch.no_grad():
+                embed_positions = module.embed_positions.weight
+                embed_positions.copy_(sinusoids(*embed_positions.shape))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (WhisperDecoder, WhisperEncoder)):
@@ -835,6 +851,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
 
         self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
+        self.embed_positions.requires_grad_(False)
 
         self.layers = nn.ModuleList([WhisperEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -1635,8 +1652,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if return_timestamps is not None:
             if not hasattr(generation_config, "no_timestamps_token_id"):
                 raise ValueError(
-                    "You are trying to return timestamps, but the generation config is not properly set."
-                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`."
+                    "You are trying to return timestamps, but the generation config is not properly set. "
+                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`. "
                     "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
                 )
 
@@ -1647,7 +1664,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if language is not None:
             if not hasattr(generation_config, "lang_to_id"):
                 raise ValueError(
-                    "The generation config is outdated and is thus not compatible with the `language` argument"
+                    "The generation config is outdated and is thus not compatible with the `language` argument "
                     "to `generate`. Either set the language using the `forced_decoder_ids` in the model config, "
                     "or update the generation config as per the instructions https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
                 )
@@ -1656,7 +1673,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if task is not None:
             if not hasattr(generation_config, "task_to_id"):
                 raise ValueError(
-                    "The generation config is outdated and is thus not compatible with the `task` argument"
+                    "The generation config is outdated and is thus not compatible with the `task` argument "
                     "to `generate`. Either set the task using the `forced_decoder_ids` in the model config, "
                     "or update the generation config as per the instructions https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
                 )
@@ -1719,13 +1736,22 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             decoder_start_token_id, *text_prompt_ids = prompt_ids
             # Slicing the text prompt ids in a manner consistent with the OpenAI implementation
             # to accomodate context space for the prefix (see https://github.com/openai/whisper/blob/c09a7ae299c4c34c5839a76380ae407e7d785914/whisper/decoding.py#L599)
-            text_prompt_ids = text_prompt_ids[-self.config.max_length // 2 - 1 :]
+            text_prompt_ids = text_prompt_ids[-self.config.max_target_positions // 2 - 1 :]
             # Set the decoder_start_token_id to <|startofprev|>
             kwargs.update({"decoder_start_token_id": decoder_start_token_id})
 
             # If the user passes `max_new_tokens`, increase its number to account for the prompt
             if kwargs.get("max_new_tokens", None) is not None:
                 kwargs["max_new_tokens"] += len(text_prompt_ids)
+                if kwargs["max_new_tokens"] >= self.config.max_target_positions:
+                    raise ValueError(
+                        f"The length of the sliced `prompt_ids` is {len(text_prompt_ids)}, and the `max_new_tokens` "
+                        f"{kwargs['max_new_tokens'] - len(text_prompt_ids)}. Thus, the combined length of the sliced "
+                        f"`prompt_ids` and `max_new_tokens` is: {kwargs['max_new_tokens']}. This exceeds the "
+                        f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
+                        "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
+                        f"so that their combined length is less that {self.config.max_target_positions}."
+                    )
 
             # Reformat the forced_decoder_ids to incorporate the prompt
             non_prompt_forced_decoder_ids = (
@@ -1754,6 +1780,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
 
+            if kwargs.get("num_frames") is not None:
+                generation_config.num_frames = kwargs.pop("num_frames")
+
         outputs = super().generate(
             inputs,
             generation_config,
@@ -1765,7 +1794,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         )
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-            outputs["token_timestamps"] = self._extract_token_timestamps(outputs, generation_config.alignment_heads)
+            num_frames = getattr(generation_config, "num_frames", None)
+            outputs["token_timestamps"] = self._extract_token_timestamps(
+                outputs, generation_config.alignment_heads, num_frames=num_frames
+            )
 
         return outputs
 
@@ -1778,9 +1810,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         attention_mask=None,
         **kwargs,
     ):
-        # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "encoder_outputs": encoder_outputs,
@@ -1794,13 +1834,16 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past
 
-    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02):
+    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
-        map each output token to a position in the input audio.
+        map each output token to a position in the input audio. If `num_frames` is specified, the encoder-decoder
+        cross-attentions will be cropped before applying DTW.
 
         Returns:
             tensor containing the timestamps in seconds for each predicted token
@@ -1815,6 +1858,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # of shape (batch size, num selected, output length, input length).
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
+        if num_frames is not None:
+            weights = weights[..., : num_frames // 2]
 
         # Normalize and smoothen the weights.
         std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)

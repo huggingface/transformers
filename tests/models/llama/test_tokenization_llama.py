@@ -32,6 +32,7 @@ from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
+    require_jinja,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -52,6 +53,8 @@ if is_torch_available():
 @require_tokenizers
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LlamaTokenizer
+    rust_tokenizer_class = LlamaTokenizerFast
+
     test_rust_tokenizer = False
     test_sentencepiece = True
     from_pretrained_kwargs = {}
@@ -63,6 +66,10 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = LlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
+
+    def get_tokenizers(self, **kwargs):
+        kwargs.update({"pad_token": "<PAD>"})
+        return super().get_tokenizers(**kwargs)
 
     def test_full_tokenizer(self):
         tokenizer = LlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
@@ -510,7 +517,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
         tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
-        tokenizer.add_tokens(["<REPR_END>"], special_tokens=True)
+        tokenizer.add_tokens(["<REPR_END>"], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
@@ -518,9 +525,10 @@ class LlamaIntegrationTest(unittest.TestCase):
         out2 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=True
         )
-        self.assertEqual(out2, " <REPR_END> inform")
+        # decoding strips the added prefix space.
+        self.assertEqual(out2, "<REPR_END> inform")
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
-        self.assertEqual(input_ids, [29871, 32000, 262, 689])  # 29871 is the spiece underline, '▁'
+        self.assertEqual(input_ids, [29871, 32000, 262, 689])  # 29871 is the spiece underline, '▁' added as it should
 
         out2 = tokenizer.decode(
             tokenizer.encode(" <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -574,6 +582,45 @@ class LlamaIntegrationTest(unittest.TestCase):
         # a dummy prefix space is not added by the sp_model as it was de-activated
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁▁", out_type=str))
 
+    def test_fast_post_processor(self):
+        tokenizer = LlamaTokenizerFast(
+            SAMPLE_VOCAB, eos_token=None, bos_token=None, add_bos_token=False, add_eos_token=False
+        )
+        tokenizer.encode(" Hey ")
+
+        with self.assertRaises(ValueError):
+            tokenizer = LlamaTokenizerFast(
+                SAMPLE_VOCAB, bos_token=None, eos_token="<s>", add_bos_token=True, add_eos_token=False
+            )
+        with self.assertRaises(ValueError):
+            tokenizer = LlamaTokenizerFast(SAMPLE_VOCAB, eos_token=None, add_bos_token=True, add_eos_token=True)
+
+    @require_jinja
+    def test_tokenization_for_chat(self):
+        tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
+
+        test_chats = [
+            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+                {"role": "assistant", "content": "Nice to meet you."},
+            ],
+            [{"role": "user", "content": "Hello!"}],
+        ]
+        # Matt: The third test case tests the default system message, but if this is ever changed in the
+        #       class/repo code then that test will fail, and the case will need to be updated.
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        # fmt: off
+        expected_tokens = [
+            [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962],
+            [1, 29961, 25580, 29962, 3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 10994, 29991, 518, 29914, 25580, 29962, 20103, 304, 5870, 366, 29889, 29871, 2],
+            [1, 29961, 25580, 29962, 15043, 29991, 518, 29914, 25580, 29962]
+        ]
+        # fmt: on
+        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
+            self.assertListEqual(tokenized_chat, expected_tokens)
+
 
 @require_sentencepiece
 @require_tokenizers
@@ -585,10 +632,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         tokenizer = LlamaTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<s>"]})
-        tokenizer._create_trie(tokenizer.all_special_tokens)
-        # TODO @ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
-        # So the extra ids are split....
+        tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=False)]})
         cls.tokenizer = tokenizer
         return cls
 

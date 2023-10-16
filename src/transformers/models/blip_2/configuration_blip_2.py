@@ -90,7 +90,7 @@ class Blip2VisionConfig(PretrainedConfig):
         image_size=224,
         patch_size=14,
         hidden_act="gelu",
-        layer_norm_eps=0.00001,
+        layer_norm_eps=1e-6,
         attention_dropout=0.0,
         initializer_range=1e-10,
         qkv_bias=True,

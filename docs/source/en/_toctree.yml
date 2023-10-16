@@ -88,6 +88,13 @@
     - local: generation_strategies
       title: Customize the generation strategy
     title: Generation
+  - isExpanded: false
+    sections:
+    - local: tasks/idefics
+      title: Image tasks with IDEFICS
+    - local: tasks/prompting
+      title: LLM prompting guide
+    title: Prompting
   title: Task Guides
 - sections:
   - local: fast_tokenizers
@@ -98,6 +105,8 @@
     title: Use model-specific APIs
   - local: custom_models
     title: Share a custom model
+  - local: chat_templating
+    title: Templates for chat models
   - local: sagemaker
     title: Run training on Amazon SageMaker
   - local: serialization
@@ -313,6 +322,8 @@
         title: ErnieM
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/falcon
+        title: Falcon
       - local: model_doc/flan-t5
         title: FLAN-T5
       - local: model_doc/flan-ul2
@@ -375,6 +386,8 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/mistral
+        title: Mistral
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert
@@ -405,6 +418,8 @@
         title: Pegasus
       - local: model_doc/pegasus_x
         title: PEGASUS-X
+      - local: model_doc/persimmon
+        title: Persimmon
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -495,7 +510,7 @@
       - local: model_doc/dinat
         title: DiNAT
       - local: model_doc/dinov2
-        title: DINO V2
+        title: DINOV2
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -562,6 +577,8 @@
         title: ViTDet
       - local: model_doc/vit_mae
         title: ViTMAE
+      - local: model_doc/vitmatte
+        title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
       - local: model_doc/vivit
@@ -632,6 +649,8 @@
         title: BLIP-2
       - local: model_doc/bridgetower
         title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
@@ -670,10 +689,14 @@
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/nougat
+        title: Nougat
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
+      - local: model_doc/owlv2
+        title: OWLv2
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/pix2struct

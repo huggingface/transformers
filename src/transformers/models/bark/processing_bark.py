@@ -38,7 +38,7 @@ class BarkProcessor(ProcessorMixin):
     Args:
         tokenizer ([`PreTrainedTokenizer`]):
             An instance of [`PreTrainedTokenizer`].
-        speaker_embeddings (`Dict[Dict[str]]`, *optional*, defaults to `None`):
+        speaker_embeddings (`Dict[Dict[str]]`, *optional*):
             Optional nested speaker embeddings dictionary. The first level contains voice preset names (e.g
             `"en_speaker_4"`). The second level contains `"semantic_prompt"`, `"coarse_prompt"` and `"fine_prompt"`
             embeddings. The values correspond to the path of the corresponding `np.ndarray`. See

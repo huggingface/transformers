@@ -129,7 +129,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         pad_token_id = tokenizer.pad_token_id if pad_token_id is None else pad_token_id
 
         vocab = tokenizer.get_vocab()
-        vocab = sorted([(wordpiece, idx) for wordpiece, idx in vocab.items()], key=lambda x: x[1])
+        vocab = sorted(vocab.items(), key=lambda x: x[1])
         vocab_list = [entry[0] for entry in vocab]
         return cls(
             vocab_list=vocab_list,

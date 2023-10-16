@@ -1958,3 +1958,7 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Doesn't use SentencePiece")
     def test_sentencepiece_tokenize_and_decode(self):
         pass
+
+    @unittest.skip("Chat is not supported")
+    def test_chat_template(self):
+        pass
