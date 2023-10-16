@@ -606,7 +606,7 @@ class FalconFlashAttention2(FalconAttention):
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 
-        attn_dropout = self.attention_dropout if self.training else 0.0
+        attn_dropout = self.config.attention_dropout if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
