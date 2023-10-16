@@ -253,9 +253,9 @@ class ConversationalPipeline(Pipeline):
 
         Args:
             conversations (a [`Conversation`] or a list of [`Conversation`]):
-                Conversation to generate responses for. Inputs can also be passed as a list of dictionaries with
-                `role` and `content` keys - in this case, they will be converted to `Conversation` objects
-                automatically. Multiple conversations in either format may be passed as a list.
+                Conversation to generate responses for. Inputs can also be passed as a list of dictionaries with `role`
+                and `content` keys - in this case, they will be converted to `Conversation` objects automatically.
+                Multiple conversations in either format may be passed as a list.
             clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             generate_kwargs:
