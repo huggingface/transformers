@@ -72,11 +72,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] CharacterBertForPreTraining
     - forward
 
-## CharacterBertLMHeadModel
-
-[[autodoc]] CharacterBertLMHeadModel
-    - forward
-
 ## CharacterBertForMaskedLM
 
 [[autodoc]] CharacterBertForMaskedLM
