@@ -174,6 +174,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [M2M100](model_doc/m2m_100)                        |       ✅        |         ❌         |      ❌      |
 |                        [Marian](model_doc/marian)                        |       ✅        |         ✅         |      ✅      |
 |                      [MarkupLM](model_doc/markuplm)                      |       ✅        |         ❌         |      ❌      |
+|                     [Mask R-CNN](model_doc/maskrcnn)                     |       ✅        |         ❌         |      ❌      |
 |                   [Mask2Former](model_doc/mask2former)                   |       ✅        |         ❌         |      ❌      |
 |                    [MaskFormer](model_doc/maskformer)                    |       ✅        |         ❌         |      ❌      |
 |                        [MatCha](model_doc/matcha)                        |       ✅        |         ❌         |      ❌      |

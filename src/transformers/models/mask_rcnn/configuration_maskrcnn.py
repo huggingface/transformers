@@ -45,10 +45,12 @@ class MaskRCNNConfig(PretrainedConfig):
         backbone_config (`Dict`, *optional*):
             The configuration passed to the backbone, if unset, the configuration corresponding to
             `facebook/convnext-tiny-224` will be used.
-        fpn_out_channels (`int`, optional, defaults to 256):
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        fpn_out_channels (`int`, optional, defaults to 256, *optional*, defaults to 256):
             Number of output channels (feature dimension) of the output feature maps of the Feature Pyramid Network
             (FPN).
-        fpn_num_outputs (`int`, optional, defaults to 5):
+        fpn_num_outputs (`int`, optional, defaults to 5, *optional*, defaults to 5):
             Number of output feature maps of the Feature Pyramid Network (FPN).
         anchor_generator_scales (`List[int]`, *optional*, defaults to `[8]`):
             Scales of the 2D anchor generator used by the Region Proposal Network (RPN).
@@ -59,22 +61,22 @@ class MaskRCNNConfig(PretrainedConfig):
         rpn_bbox_coder_target_means (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.0, 0.0]`):
             Denormalizing means to use when encoding the targets of the RPN as delta coordinates w.r.t. ground truth
             boxes.
-        rpn_bbox_coder_target_stds (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.0, 0.0]`):
+        rpn_bbox_coder_target_stds (`List[float]`, *optional*, defaults to `[1.0, 1.0, 1.0, 1.0]`):
             Denormalizing standard deviations to use when encoding the targets of the RPN as delta coordinates w.r.t.
             ground truth boxes.
         rpn_in_channels (`int`, *optional*, defaults to 256):
             Number of input channels of the Region Proposal Network (RPN).
         rpn_feat_channels (`int`, *optional*, defaults to 256):
             Number of output channels (feature dimension) of the Region Proposal Network (RPN).
-        rpn_loss_cls (`Dict`, *optional*):
+        rpn_loss_cls (`Dict`, *optional*, defaults to `{'type': 'CrossEntropyLoss', 'use_sigmoid': True, 'loss_weight': 1.0}`):
             Configuration of the classification loss of the Region Proposal Network (RPN).
-        rpn_loss_bbox (`Dict`, *optional*):
+        rpn_loss_bbox (`Dict`, *optional*, defaults to `{'type': 'L1Loss', 'loss_weight': 1.0}`):
             Configuration of the bounding box regression loss of the Region Proposal Network (RPN).
-        rpn_test_cfg (`Dict`, *optional*):
+        rpn_test_cfg (`Dict`, *optional*, defaults to `{'nms_pre': 1000, 'max_per_img': 1000, 'nms': {'type': 'nms', 'iou_threshold': 0.7}, 'min_bbox_size': 0}`):
             Configuration of the Region Proposal Network (RPN) at inference time.
-        rcnn_test_cfg (`Dict`, *optional*):
+        rcnn_test_cfg (`Dict`, *optional*, defaults to `{'score_thr': 0.05, 'nms': {'type': 'nms', 'iou_threshold': 0.5}, 'max_per_img': 100, 'mask_thr_binary': 0.5}`):
             Configuration of the Region of Interest (RoI) heads at inference time.
-        bbox_roi_extractor_roi_layer (`Dict`, *optional*):
+        bbox_roi_extractor_roi_layer (`Dict`, *optional*, defaults to `{'type': 'RoIAlign', 'output_size': 7, 'sampling_ratio': 0}`):
             Configuration of the RoI layer used by the bounding box head.
         bbox_roi_extractor_out_channels (`int`, *optional*, defaults to 256):
             Number of output channels (feature dimension) of the RoI layer used by the bounding box head.
@@ -105,14 +107,13 @@ class MaskRCNNConfig(PretrainedConfig):
             Number of input channels of the mask head.
         mask_head_conv_out_channels (`int`, *optional*, defaults to 256):
             Number of output channels (feature dimension) of the convolutional layers of the mask head.
-        mask_roi_extractor_roi_layer (`Dict`, *optional*, defaults to `{"type":
-            "RoIAlign", "output_size": 14, "sampling_ratio": 0}`): Configuration of the RoI layer used by the mask
-            head.
+        mask_roi_extractor_roi_layer (`dict`, *optional*, defaults to `{'type': 'RoIAlign', 'output_size': 14, 'sampling_ratio': 0}`):
+            Configuration of the RoI layer used by the mask head.
         mask_roi_extractor_out_channels (`int`, *optional*, defaults to 256):
             Number of output channels (feature dimension) of the RoI layer used by the mask head.
         mask_roi_extractor_featmap_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
             Feature map strides of the RoI layer used by the mask head.
-        rpn_train_cfg (`Dict`, *optional*, defaults to `{"allowed_border": -1, "pos_weight": -1, "debug": False}`):
+        rpn_train_cfg (`Dict`, *optional*, defaults to `{'allowed_border': -1, 'pos_weight': -1, 'debug': False}`):
             Configuration of the Region Proposal Network (RPN) at training time.
         rpn_assigner_pos_iou_thr (`float`, *optional*, defaults to 0.7):
             IoU threshold for positive anchors in the Region Proposal Network (RPN) at training time.
@@ -133,10 +134,9 @@ class MaskRCNNConfig(PretrainedConfig):
         rpn_sampler_add_gt_as_proposals (`bool`, *optional*, defaults to `False`):
             Whether to add ground truth boxes as proposals for the Region Proposal Network (RPN) sampler at training
             time.
-        rpn_proposal (`Dict`, *optional*, defaults to `{"nms_pre":
-            2000, "max_per_img": 1000, "nms": {"type": "nms", "iou_threshold": 0.7}, "min_bbox_size": 0}`):
+        rpn_proposal (`dict`, *optional*, defaults to `{'nms_pre': 2000, 'max_per_img': 1000, 'nms': {'type': 'nms', 'iou_threshold': 0.7}, 'min_bbox_size': 0}`):
             Configuration of the Region Proposal Network (RPN) proposals at training time.
-        rcnn_train_cfg (`Dict`, *optional*, defaults to `{"mask_size": 28, "pos_weight": -1, "debug": False}`):
+        rcnn_train_cfg (`Dict`, *optional*, defaults to `{'mask_size': 28, 'pos_weight': -1, 'debug': False}`):
             Configuration of the Region of Interest (RoI) heads at training time.
         rcnn_assigner_pos_iou_thr (`float`, *optional*, defaults to 0.5):
             IoU threshold for positive RoIs in the Region of Interest (RoI) heads at training time.
