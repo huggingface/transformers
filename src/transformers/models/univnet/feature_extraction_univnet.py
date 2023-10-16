@@ -43,8 +43,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value to pad with when applying the padding strategy defined by the `padding` argument to
-            [`UnivNetFeatureExtractor.__call__`]. Note that this is used to pad the raw input waveforms; if `pad_end`
-            is specified, we will pad the output spectrograms using `self.spectrogram_zero`.
+            [`UnivNetFeatureExtractor.__call__`]. Should correspond to audio silence. The `pad_end` argument to
+            `__call__` will also use this padding value.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly improve the
             performance for some models.
@@ -68,9 +68,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         fmin (`float`, *optional*, defaults to 0.0):
             Minimum mel frequency in Hz.
         fmax (`float`, *optional*):
-            Maximum mel frequency in Hz.
+            Maximum mel frequency in Hz. If not set, defaults to `sampling_rate / 2`.
         mel_floor (`float`, *optional*, defaults to 1e-09):
-            Minimum value of mel frequency banks.
+            Minimum value of mel frequency banks. Note that the way [`UnivNetFeatureExtractor`] uses `mel_floor` is
+            different than in [`transformers.audio_utils.spectrogram`].
         center (`bool`, *optional*, defaults to `False`):
             Whether to pad the waveform so that frame `t` is centered around time `t * hop_length`. If `False`, frame
             `t` will start at time `t * hop_length`.
@@ -189,10 +190,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 The input waveform. This must be a single real-valued, mono waveform.
 
         Returns:
-            `numpy.ndarray` containing a spectrogram of shape `(num_frames, num_mel_bins)`.
+            `numpy.ndarray`: Array containing a log-mel spectrogram of shape `(num_frames, num_mel_bins)`.
         """
         # Do custom padding based on the official MelGAN and Hifi-GAN implementations
-        # See https://github.com/maum-ai/univnet/blob/master/utils/stft.py#L84
+        # See https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/utils/stft.py#L84-L86
         waveform = np.pad(
             waveform,
             (int((self.n_fft - self.hop_length) / 2), int((self.n_fft - self.hop_length) / 2)),
@@ -321,8 +322,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
                   lengths).
 
-                `raw_speech` is then converted into log mel spectrograms, which may be further padded if `pad_end` is
-                specified.
+                If `pad_end = True`, that padding will occur before the `padding` strategy is applied.
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`, *optional*, defaults to `True`):
@@ -426,12 +426,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
             batched_speech["padding_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
-
-        # if pad_end:
-        #     batched_speech["input_features"] = [
-        #         self.pad_spectrogram_end(spectrogram, pad_length, spectrogram_zero)
-        #         for spectrogram in batched_speech["input_features"]
-        #     ]
 
         if return_noise:
             noise = [
