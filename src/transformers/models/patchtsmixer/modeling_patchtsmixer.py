@@ -2096,7 +2096,7 @@ class PatchTSMixerForClassificationOutput(ModelOutput):
     Output type of [`PatchTSMixerForClassificationOutput`].
 
     Args:
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, n_classes)`):
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
             Prediction output from the classfication head.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
@@ -2133,7 +2133,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             in_channels=config.input_size,
             num_features=config.num_features,
             head_dropout=config.head_dropout,
-            output_dim=config.n_classes,
+            output_dim=config.num_labels,
             output_range=config.output_range,
             head_agg=config.head_agg,
             mode=config.mode,
