@@ -20,7 +20,7 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-from transformers import GroundingDINOConfig, ResNetConfig, is_torch_available, is_vision_available
+from transformers import GroundingDINOConfig, SwinConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
@@ -126,13 +126,12 @@ class GroundingDINOModelTester:
         return config, pixel_values, pixel_mask, input_ids, labels
 
     def get_config(self):
-        resnet_config = ResNetConfig(
-            num_channels=3,
-            embeddings_size=10,
-            hidden_sizes=[10, 20, 30, 40],
-            depths=[1, 1, 2, 1],
-            hidden_act="relu",
-            num_labels=3,
+        swin_config = SwinConfig(
+            window_size=7,
+            embed_dim=96,
+            depths=[2, 2, 18, 2],
+            num_heads=[3, 6, 12, 24],
+            image_size=self.image_size,
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
@@ -152,7 +151,7 @@ class GroundingDINOModelTester:
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
             use_timm_backbone=False,
-            backbone_config=resnet_config,
+            backbone_config=swin_config,
             max_text_len=self.max_text_len,
         )
 
@@ -167,7 +166,6 @@ class GroundingDINOModelTester:
         model.eval()
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids)
-        result = model(pixel_values)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
 
@@ -177,7 +175,6 @@ class GroundingDINOModelTester:
         model.eval()
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids)
-        result = model(pixel_values)
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))

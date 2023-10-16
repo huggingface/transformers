@@ -284,7 +284,7 @@ class GroundingDINOModelOutput(ModelOutput):
             sequence_length, sequence_length)`. Attentions weights of the text encoder's fusion layer, after the
             attention softmax, used to compute the weighted average in the bi-attention heads.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+            Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are
             picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
             foreground and background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
@@ -387,7 +387,7 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
         init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
             Initial reference points sent through the Transformer decoder.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-            Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+            Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are
             picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
             foreground and background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
@@ -1521,6 +1521,9 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.reference_points.bias.data, 0.0)
         if hasattr(module, "level_embed"):
             nn.init.normal_(module.level_embed)
+        if isinstance(module, GroundingDINOMLPPredictionHead):
+            nn.init.constant_(module.layers[-1].weight.data, 0)
+            nn.init.constant_(module.layers[-1].bias.data, 0)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GroundingDINODecoder):
@@ -2123,8 +2126,14 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
             self.enc_output_norm = nn.LayerNorm(config.d_model)
-            self.encoder_output_bbox_embed = None
-            self.encoder_output_class_embed = None
+            if config.two_stage_bbox_embed_share and config.decoder_bbox_embed_share and self.decoder.bbox_embed is not None:
+                self.encoder_output_bbox_embed = self.decoder.bbox_embed
+            else:
+                self.encoder_output_bbox_embed = GroundingDINOMLPPredictionHead(
+                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                )
+
+            self.encoder_output_class_embed = GroundingDINOContrastiveEmbedding(config)
         else:
             self.reference_points = nn.Embedding(config.num_queries, 4)
 
@@ -2403,8 +2412,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             delta_bbox = self.encoder_output_bbox_embed(object_query_embedding)
             enc_outputs_coord_logits = delta_bbox + output_proposals
 
-            # only keep top scoring `config.two_stage_num_proposals` proposals
-            topk = self.config.two_stage_num_proposals
+            # only keep top scoring `config.num_queries` proposals
+            topk = self.config.num_queries
             topk_logits = enc_outputs_class.max(-1)[0]
             topk_proposals = torch.topk(topk_logits, topk, dim=1)[1]
             topk_coords_logits = torch.gather(
@@ -2492,9 +2501,6 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
 
-        nn.init.constant_(_bbox_embed.layers[-1].weight.data, 0)
-        nn.init.constant_(_bbox_embed.layers[-1].bias.data, 0)
-
         if config.decoder_bbox_embed_share:
             self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         else:
@@ -2503,18 +2509,6 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         # hack implementation for two-stage
         self.model.decoder.bbox_embed = self.bbox_embed
         self.model.decoder.class_embed = self.class_embed
-
-        if config.two_stage:
-            if config.two_stage_bbox_embed_share:
-                self.model.encoder_output_bbox_embed = _bbox_embed
-            else:
-                self.model.encoder_output_bbox_embed = copy.deepcopy(_bbox_embed)
-
-            # TODO don't believe this is necessary since class_embed has no parameters
-            if config.two_stage_class_embed_share:
-                self.model.encoder_output_class_embed = _class_embed
-            else:
-                self.model.encoder_output_class_embed = copy.deepcopy(_class_embed)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2583,6 +2577,9 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
 
         # First, sent images through Grounding DINO base model to obtain encoder + decoder outputs
         outputs = self.model(
