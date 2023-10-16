@@ -168,7 +168,6 @@ There are various quantization techniques, which we won't discuss in detail here
 -   1.  Quantize all weights to the target precision
 -   2.  Load the quantized weights, and pass the input sequence of vectors in bfloat16 precision
 -   3.  Dynamically dequantize weights to bfloat16 to perform the computation with their input vectors in bfloat16 precision
--   4.  Quantize the weights again to the target precision after computation with their inputs.
 
 In a nutshell, this means that *inputs-weight matrix* multiplications, with \\( X \\) being the *inputs*, \\( W \\) being a weight matrix and \\( Y \\) being the output:
 
@@ -176,7 +175,7 @@ $$ Y = X * W $$
 
 are changed to
 
-$$ Y = X * \text{dequantize}(W); \text{quantize}(W) $$
+$$ Y = X * \text{dequantize}(W) $$
 
 for every matrix multiplication. Dequantization and re-quantization is performed sequentially for all weight matrices as the inputs run through the network graph.
 
