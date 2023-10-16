@@ -149,18 +149,16 @@ class PegasusTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(vocab_file)
 
         _added_tokens_decoder = {
-            0: AddedToken(str(pad_token), lstrip=False, rstrip=False, normalized=False, special=True),
-            1: AddedToken(str(eos_token), lstrip=False, rstrip=False, normalized=False, special=True),
+            0: AddedToken(str(pad_token), special=True),
+            1: AddedToken(str(eos_token), special=True),
         }
 
         if self.mask_token_sent is not None:
-            _added_tokens_decoder[2] = AddedToken(mask_token_sent, normalized=False, special=True)
-            _added_tokens_decoder[3] = AddedToken(str(mask_token), normalized=False, special=True)
+            _added_tokens_decoder[2] = AddedToken(mask_token_sent, special=True)
+            _added_tokens_decoder[3] = AddedToken(str(mask_token), special=True)
 
         for i in range(2, self.offset):
-            _added_tokens_decoder[len(_added_tokens_decoder)] = AddedToken(
-                f"<unk_{i}>", normalized=False, special=True
-            )
+            _added_tokens_decoder[len(_added_tokens_decoder)] = AddedToken(f"<unk_{i}>", special=True)
 
         # Force update as we want to make sure vocab is enforced (same as fast)
         self._added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})

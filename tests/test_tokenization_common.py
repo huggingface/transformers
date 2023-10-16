@@ -4061,8 +4061,6 @@ class TokenizerTesterMixin:
                         self.assertTrue(len(encoded_split_special_token) > 1)
 
     def test_added_tokens_serialization(self):
-        self.maxDiff = None
-
         # Utility to test the added vocab
         def _test_added_vocab_and_eos(expected, tokenizer_class, expected_eos, temp_dir):
             tokenizer = tokenizer_class.from_pretrained(temp_dir)
@@ -4072,7 +4070,7 @@ class TokenizerTesterMixin:
             self.assertDictEqual(expected, tokenizer.added_tokens_decoder)
             return tokenizer
 
-        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special = True)
+        new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special=True)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 # Load a slow tokenizer from the hub, init with the new token for fast to also include it
@@ -4132,6 +4130,4 @@ class TokenizerTesterMixin:
                                 )
 
                             with self.subTest("Hub -> Fast -> Slow: saving Fast1 locally and loading"):
-                                _test_added_vocab_and_eos(
-                                    EXPECTED_ADDED_TOKENS_DECODER, self.tokenizer_class, new_eos, tmp_dir_4
-                                )
+                                _test_added_vocab_and_eos(EXPECTED_ADDED_TOKENS_DECODER,self.tokenizer_class,new_eos,tmp_dir_4)

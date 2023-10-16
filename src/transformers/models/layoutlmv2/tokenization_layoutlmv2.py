@@ -244,31 +244,11 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         additional_special_tokens: Optional[List[str]] = None,
         **kwargs,
     ):
-        sep_token = (
-            AddedToken(sep_token, lstrip=False, rstrip=False, normalized=False, special=True)
-            if isinstance(sep_token, str)
-            else sep_token
-        )
-        unk_token = (
-            AddedToken(unk_token, lstrip=False, rstrip=False, normalized=False, special=True)
-            if isinstance(unk_token, str)
-            else unk_token
-        )
-        pad_token = (
-            AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False, special=True)
-            if isinstance(pad_token, str)
-            else pad_token
-        )
-        cls_token = (
-            AddedToken(cls_token, lstrip=False, rstrip=False, normalized=False, special=True)
-            if isinstance(cls_token, str)
-            else cls_token
-        )
-        mask_token = (
-            AddedToken(mask_token, lstrip=False, rstrip=False, normalized=False, special=True)
-            if isinstance(mask_token, str)
-            else mask_token
-        )
+        sep_token = AddedToken(sep_token, special=True) if isinstance(sep_token, str) else sep_token
+        unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
+        cls_token = AddedToken(cls_token, special=True) if isinstance(cls_token, str) else cls_token
+        mask_token = AddedToken(mask_token, special=True) if isinstance(mask_token, str) else mask_token
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
