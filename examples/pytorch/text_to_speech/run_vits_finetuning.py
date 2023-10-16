@@ -21,40 +21,34 @@ Fine-tuning the library Vits for TTS.
 # recognition task. Pointers for this are left as comments.
 
 import logging
+import math
 import os
+import shutil
 import sys
 import warnings
-import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
-from tqdm.auto import tqdm
-import shutil
 
 import datasets
-import evaluate
-import torch
-from datasets import DatasetDict, load_dataset
 import numpy as np
+import torch
+from accelerate import Accelerator
+from accelerate.utils import ProjectConfiguration, is_wandb_available, set_seed
+from datasets import DatasetDict, load_dataset
+from tqdm.auto import tqdm
 
 import transformers
 from transformers import (
     AutoConfig,
-    AutoFeatureExtractor,
     AutoTokenizer,
     HfArgumentParser,
-    Trainer,
     TrainingArguments,
 )
+from transformers.feature_extraction_utils import BatchFeature
+from transformers.optimization import get_scheduler
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-from transformers.optimization import get_scheduler
-from transformers.feature_extraction_utils import BatchFeature
-
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from accelerate.state import AcceleratorState
-from accelerate.utils import ProjectConfiguration, set_seed, is_wandb_available
 
 
 if is_wandb_available():
@@ -62,11 +56,11 @@ if is_wandb_available():
 
 
 # TODO: change import after you add VitsModelForPreTraining to the library
-from transformers.models.vits.modeling_vits import VitsModelForPreTraining, VitsDiscriminator, slice_segments
-from transformers.models.vits.feature_extraction_vits import VitsFeatureExtractor
-
-
 from accelerate import DistributedDataParallelKwargs
+
+from transformers.models.vits.feature_extraction_vits import VitsFeatureExtractor
+from transformers.models.vits.modeling_vits import VitsDiscriminator, VitsModelForPreTraining, slice_segments
+
 
 ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=False)
 
@@ -81,67 +75,72 @@ require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/spe
 
 logger = logging.getLogger(__name__)
 
-def discriminator_loss(disc_real_outputs, disc_generated_outputs):
-  loss = 0
-  r_losses = []
-  g_losses = []
-  for dr, dg in zip(disc_real_outputs, disc_generated_outputs):
-    dr = dr.float()
-    dg = dg.float()
-    r_loss = torch.mean((1-dr)**2)
-    g_loss = torch.mean(dg**2)
-    loss += (r_loss + g_loss)
-    r_losses.append(r_loss.item())
-    g_losses.append(g_loss.item())
 
-  return loss, r_losses, g_losses
+def discriminator_loss(disc_real_outputs, disc_generated_outputs):
+    loss = 0
+    r_losses = []
+    g_losses = []
+    for dr, dg in zip(disc_real_outputs, disc_generated_outputs):
+        dr = dr.float()
+        dg = dg.float()
+        r_loss = torch.mean((1 - dr) ** 2)
+        g_loss = torch.mean(dg**2)
+        loss += r_loss + g_loss
+        r_losses.append(r_loss.item())
+        g_losses.append(g_loss.item())
+
+    return loss, r_losses, g_losses
+
 
 def feature_loss(fmap_r, fmap_g):
-  loss = 0
-  for dr, dg in zip(fmap_r, fmap_g):
-    for rl, gl in zip(dr, dg):
-      rl = rl.float().detach()
-      gl = gl.float()
-      loss += torch.mean(torch.abs(rl - gl))
+    loss = 0
+    for dr, dg in zip(fmap_r, fmap_g):
+        for rl, gl in zip(dr, dg):
+            rl = rl.float().detach()
+            gl = gl.float()
+            loss += torch.mean(torch.abs(rl - gl))
 
-  return loss * 2 
+    return loss * 2
+
 
 def generator_loss(disc_outputs):
-  loss = 0
-  gen_losses = []
-  for dg in disc_outputs:
-    dg = dg.float()
-    l = torch.mean((1-dg)**2)
-    gen_losses.append(l)
-    loss += l
+    loss = 0
+    gen_losses = []
+    for dg in disc_outputs:
+        dg = dg.float()
+        l = torch.mean((1 - dg) ** 2)
+        gen_losses.append(l)
+        loss += l
 
-  return loss, gen_losses
+    return loss, gen_losses
 
 
 def kl_loss(z_p, logs_q, m_p, logs_p, z_mask):
-  """
-  z_p, logs_q: [b, h, t_t]
-  m_p, logs_p: [b, h, t_t]
-  """
-  z_p = z_p.float()
-  logs_q = logs_q.float()
-  m_p = m_p.float()
-  logs_p = logs_p.float()
-  z_mask = z_mask.float()
+    """
+    z_p, logs_q: [b, h, t_t]
+    m_p, logs_p: [b, h, t_t]
+    """
+    z_p = z_p.float()
+    logs_q = logs_q.float()
+    m_p = m_p.float()
+    logs_p = logs_p.float()
+    z_mask = z_mask.float()
 
-  kl = logs_p - logs_q - 0.5
-  kl += 0.5 * ((z_p - m_p)**2) * torch.exp(-2. * logs_p)
-  kl = torch.sum(kl * z_mask)
-  l = kl / torch.sum(z_mask)
-  return l
+    kl = logs_p - logs_q - 0.5
+    kl += 0.5 * ((z_p - m_p) ** 2) * torch.exp(-2.0 * logs_p)
+    kl = torch.sum(kl * z_mask)
+    l = kl / torch.sum(z_mask)
+    return l
 
-#SMALL_CONST = 1e-15
+
+# SMALL_CONST = 1e-15
 # kl_loss = 0
-#unpert_probs = nn.functional.softmax(unpert_logits[:, -1, :], dim=-1)
-#unpert_probs = unpert_probs + SMALL_CONST * (unpert_probs <= SMALL_CONST).float().to(device).detach()
-#correction = SMALL_CONST * (probs <= SMALL_CONST).float().to(device).detach()
-#corrected_probs = probs + correction.detach()
-#kl_loss = kl_scale * ((corrected_probs * (corrected_probs / unpert_probs).log()).sum())
+# unpert_probs = nn.functional.softmax(unpert_logits[:, -1, :], dim=-1)
+# unpert_probs = unpert_probs + SMALL_CONST * (unpert_probs <= SMALL_CONST).float().to(device).detach()
+# correction = SMALL_CONST * (probs <= SMALL_CONST).float().to(device).detach()
+# corrected_probs = probs + correction.detach()
+# kl_loss = kl_scale * ((corrected_probs * (corrected_probs / unpert_probs).log()).sum())
+
 
 @dataclass
 class ModelArguments:
@@ -202,13 +201,16 @@ class ModelArguments:
         },
     )
 
+
 @dataclass
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
+
     project_name: str = field(
-        default="vits_finetuning", metadata={"help": "The project name associated to this run. Useful to track your experiment."}
+        default="vits_finetuning",
+        metadata={"help": "The project name associated to this run. Useful to track your experiment."},
     )
     dataset_name: str = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
@@ -251,8 +253,10 @@ class DataTrainingArguments:
     )
     speaker_id_column_name: str = field(
         default=None,
-        metadata={"help": """If set, corresponds to the name of the speaker id column containing the speaker ids. Note that it assumes that speakers are indexed from 0 to `num_speakers-1`. 
-                  `num_speakers` and `speaker_embedding_size` have to be set in the model config. Defaults to None, i.e it is not used by default."""},
+        metadata={
+            "help": """If set, corresponds to the name of the speaker id column containing the speaker ids. Note that it assumes that speakers are indexed from 0 to `num_speakers-1`.
+                  `num_speakers` and `speaker_embedding_size` have to be set in the model config. Defaults to None, i.e it is not used by default."""
+        },
     )
     max_duration_in_seconds: float = field(
         default=20.0,
@@ -303,6 +307,7 @@ class DataTrainingArguments:
         },
     )
 
+
 @dataclass
 class DataCollatorTTSWithPadding:
     """
@@ -321,7 +326,7 @@ class DataCollatorTTSWithPadding:
     tokenizer: Any
     feature_extractor: Any
     forward_attention_mask: bool
-    
+
     def pad_waveform(self, raw_speech):
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
         if is_batched_numpy and len(raw_speech.shape) > 2:
@@ -340,9 +345,14 @@ class DataCollatorTTSWithPadding:
         # always return batch
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
-        
+
         if self.feature_extractor.max_wav_value is not None:
-            raw_speech = [speech if self.feature_extractor.max_wav_value is not None else speech/self.feature_extractor.max_wav_value for speech in raw_speech]
+            raw_speech = [
+                speech
+                if self.feature_extractor.max_wav_value is not None
+                else speech / self.feature_extractor.max_wav_value
+                for speech in raw_speech
+            ]
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 
@@ -354,7 +364,7 @@ class DataCollatorTTSWithPadding:
             return_attention_mask=False,
             return_tensors="pt",
         )["input_features"]
-                
+
         return padded_inputs
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
@@ -364,33 +374,39 @@ class DataCollatorTTSWithPadding:
         input_ids = [{model_input_name: feature[model_input_name]} for feature in features]
 
         # pad input tokens
-        batch = self.tokenizer.pad(input_ids, return_tensors="pt", return_attention_mask = self.forward_attention_mask)
+        batch = self.tokenizer.pad(input_ids, return_tensors="pt", return_attention_mask=self.forward_attention_mask)
 
         # pad waveform
         waveforms = [np.array(feature["waveform"]) for feature in features]
         batch["waveform"] = self.pad_waveform(waveforms)
-        
-        
+
         # pad spectrogram
         label_features = [np.array(feature["labels"]) for feature in features]
-        labels_batch = self.feature_extractor.pad({"input_features": [i.T for i in label_features]}, return_tensors="pt", return_attention_mask=True)
-                
-        
+        labels_batch = self.feature_extractor.pad(
+            {"input_features": [i.T for i in label_features]}, return_tensors="pt", return_attention_mask=True
+        )
+
         # TODO: do we have to transpose
-        labels = labels_batch["input_features"].transpose(1,2)
+        labels = labels_batch["input_features"].transpose(1, 2)
         batch["labels"] = labels
         batch["labels_attention_mask"] = labels_batch["attention_mask"]
-        
+
         # pad mel spectrogram
-        mel_scaled_input_features = {"input_features": [np.array(feature["mel_scaled_input_features"]).squeeze().T for feature in features]}
-        mel_scaled_input_features = self.feature_extractor.pad(mel_scaled_input_features, return_tensors="pt", return_attention_mask=True)["input_features"].transpose(1,2)
-        
+        mel_scaled_input_features = {
+            "input_features": [np.array(feature["mel_scaled_input_features"]).squeeze().T for feature in features]
+        }
+        mel_scaled_input_features = self.feature_extractor.pad(
+            mel_scaled_input_features, return_tensors="pt", return_attention_mask=True
+        )["input_features"].transpose(1, 2)
+
         batch["mel_scaled_input_features"] = mel_scaled_input_features
-        batch["speaker_id"] = torch.tensor([feature["speaker_id"] for feature in features]) if "speaker_id" in features[0] else None
+        batch["speaker_id"] = (
+            torch.tensor([feature["speaker_id"] for feature in features]) if "speaker_id" in features[0] else None
+        )
 
         return batch
-    
-    
+
+
 def training_loop(
     model,
     discriminator,
@@ -404,7 +420,7 @@ def training_loop(
 ):
     # inspired from https://github.com/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image.py
     # and https://github.com/huggingface/community-events/blob/main/huggan/pytorch/cyclegan/train.py
-    
+
     # define train_dataloader and eval_dataloader if relevant
     train_dataloader = None
     if args.do_train:
@@ -415,7 +431,7 @@ def training_loop(
             batch_size=args.per_device_train_batch_size,
             num_workers=args.dataloader_num_workers,
         )
-    
+
     eval_dataloader = None
     if args.do_eval:
         eval_dataloader = torch.utils.data.DataLoader(
@@ -425,7 +441,7 @@ def training_loop(
             batch_size=args.per_device_eval_batch_size,
             num_workers=args.dataloader_num_workers,
         )
-    
+
     logging_dir = os.path.join(args.output_dir, args.logging_dir)
 
     accelerator_project_config = ProjectConfiguration(project_dir=args.output_dir, logging_dir=logging_dir)
@@ -433,23 +449,21 @@ def training_loop(
     model_segment_size = model.segment_size
     config_segment_size = model.config.segment_size
     sampling_rate = model.config.sampling_rate
-    
+
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
-        log_with= args.report_to,
+        log_with=args.report_to,
         project_config=accelerator_project_config,
-        kwargs_handlers=[ddp_kwargs] # TODO: remove
+        kwargs_handlers=[ddp_kwargs],  # TODO: remove
     )
 
-    
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_steps == -1:
         args.max_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
-        
-        
+
     # init gen_optimizer, gen_lr_scheduler, disc_optimizer, dics_lr_scheduler
     gen_optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -457,30 +471,46 @@ def training_loop(
         betas=[args.adam_beta1, args.adam_beta2],
         eps=args.adam_epsilon,
     )
-    
+
     disc_optimizer = torch.optim.AdamW(
         discriminator.parameters(),
         args.learning_rate,
         betas=[args.adam_beta1, args.adam_beta2],
         eps=args.adam_epsilon,
     )
-    
+
     gen_lr_scheduler = get_scheduler(
-                args.lr_scheduler_type,
-                optimizer=gen_optimizer,
-                num_warmup_steps=args.get_warmup_steps(args.max_steps * accelerator.num_processes),
-                num_training_steps=args.max_steps * accelerator.num_processes,
-            )
+        args.lr_scheduler_type,
+        optimizer=gen_optimizer,
+        num_warmup_steps=args.get_warmup_steps(args.max_steps * accelerator.num_processes),
+        num_training_steps=args.max_steps * accelerator.num_processes,
+    )
     disc_lr_scheduler = get_scheduler(
-                args.lr_scheduler_type,
-                optimizer=disc_optimizer,
-                num_warmup_steps=args.get_warmup_steps(args.max_steps * accelerator.num_processes),
-                num_training_steps=args.max_steps * accelerator.num_processes,
-            )
-    
+        args.lr_scheduler_type,
+        optimizer=disc_optimizer,
+        num_warmup_steps=args.get_warmup_steps(args.max_steps * accelerator.num_processes),
+        num_training_steps=args.max_steps * accelerator.num_processes,
+    )
+
     # Prepare everything with our `accelerator`.
-    model, discriminator, gen_optimizer, gen_lr_scheduler, disc_optimizer, disc_lr_scheduler, train_dataloader, eval_dataloader = accelerator.prepare(
-        model, discriminator, gen_optimizer, gen_lr_scheduler, disc_optimizer, disc_lr_scheduler, train_dataloader, eval_dataloader
+    (
+        model,
+        discriminator,
+        gen_optimizer,
+        gen_lr_scheduler,
+        disc_optimizer,
+        disc_lr_scheduler,
+        train_dataloader,
+        eval_dataloader,
+    ) = accelerator.prepare(
+        model,
+        discriminator,
+        gen_optimizer,
+        gen_lr_scheduler,
+        disc_optimizer,
+        disc_lr_scheduler,
+        train_dataloader,
+        eval_dataloader,
     )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
@@ -545,7 +575,7 @@ def training_loop(
         # Only show the progress bar once on each machine.
         disable=not accelerator.is_local_main_process,
     )
-    
+
     for epoch in range(first_epoch, args.num_train_epochs):
         train_summed_losses = 0.0
         train_loss_disc = 0.0
@@ -554,39 +584,49 @@ def training_loop(
         train_loss_kl = 0.0
         train_loss_fmaps = 0.0
         train_loss_gen = 0.0
-        
 
         for step, batch in enumerate(train_dataloader):
-            with accelerator.accumulate(model, discriminator):                
+            with accelerator.accumulate(model, discriminator):
                 model_outputs = model(
-                    input_ids = batch["input_ids"],
-                    attention_mask = batch["attention_mask"],
-                    labels = batch["labels"],
-                    labels_attention_mask = batch["labels_attention_mask"],
-                    speaker_id = batch["speaker_id"],
-                    return_dict = True,
+                    input_ids=batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    labels=batch["labels"],
+                    labels_attention_mask=batch["labels_attention_mask"],
+                    speaker_id=batch["speaker_id"],
+                    return_dict=True,
                 )
-                
-                waveform, log_duration, ids_slice, input_padding_mask, labels_padding_mask, latents, prior_latents, prior_means, prior_log_variances, posterior_means, posterior_log_variances = model_outputs.training_outputs
-                
+
+                (
+                    waveform,
+                    log_duration,
+                    ids_slice,
+                    input_padding_mask,
+                    labels_padding_mask,
+                    latents,
+                    prior_latents,
+                    prior_means,
+                    prior_log_variances,
+                    posterior_means,
+                    posterior_log_variances,
+                ) = model_outputs.training_outputs
+
                 mel_scaled_labels = batch["mel_scaled_input_features"]
                 mel_scaled_target = slice_segments(mel_scaled_labels, ids_slice, model_segment_size)
                 mel_scaled_generation = feature_extractor._torch_extract_fbank_features(waveform.squeeze(1))[1]
-                
-                target_waveform = batch["waveform"].transpose(1,2)
-                target_waveform = slice_segments(target_waveform, ids_slice*feature_extractor.hop_length, config_segment_size)
-                
-                
+
+                target_waveform = batch["waveform"].transpose(1, 2)
+                target_waveform = slice_segments(
+                    target_waveform, ids_slice * feature_extractor.hop_length, config_segment_size
+                )
+
                 # -----------------------
                 #  Train Discriminator
-                # ----------------------- 
-                
+                # -----------------------
+
                 discriminator_target, _ = discriminator(target_waveform)
                 discriminator_candidate, _ = discriminator(waveform.detach())
-                
-                
+
                 loss_disc, _, _ = discriminator_loss(discriminator_target, discriminator_candidate)
-                
 
                 # backpropagate
                 accelerator.backward(loss_disc)
@@ -595,25 +635,27 @@ def training_loop(
                 disc_optimizer.step()
                 disc_lr_scheduler.step()
                 disc_optimizer.zero_grad()
-                
-          
+
                 # -----------------------
                 #  Train Generator
-                # ----------------------- 
-                
+                # -----------------------
+
                 _, fmaps_target = discriminator(target_waveform)
                 discriminator_candidate, fmaps_candidate = discriminator(waveform)
-                
-                
+
                 loss_duration = torch.sum(log_duration.float())
                 loss_mel = torch.nn.functional.l1_loss(mel_scaled_target, mel_scaled_generation) * WEIGHT_MEL
-                loss_kl = kl_loss(prior_latents, posterior_log_variances, prior_means, prior_log_variances, labels_padding_mask) * WEIGHT_KL
+                loss_kl = (
+                    kl_loss(
+                        prior_latents, posterior_log_variances, prior_means, prior_log_variances, labels_padding_mask
+                    )
+                    * WEIGHT_KL
+                )
                 loss_fmaps = feature_loss(fmaps_target, fmaps_candidate)
                 loss_gen, losses_gen = generator_loss(discriminator_candidate)
-                
-                
+
                 total_generator_loss = loss_duration + loss_mel + loss_kl + loss_fmaps + loss_gen
-                  
+
                 # backpropagate
                 accelerator.backward(total_generator_loss)
                 if accelerator.sync_gradients:
@@ -621,8 +663,7 @@ def training_loop(
                 gen_optimizer.step()
                 gen_lr_scheduler.step()
                 gen_optimizer.zero_grad()
-                
-                
+
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_total_loss = accelerator.gather(total_generator_loss.repeat(per_device_train_batch_size)).mean()
                 train_summed_losses += avg_total_loss.item() / args.gradient_accumulation_steps
@@ -644,22 +685,24 @@ def training_loop(
 
                 avg_train_loss_disc = accelerator.gather(loss_disc.repeat(per_device_train_batch_size)).mean()
                 train_loss_disc += avg_train_loss_disc.item() / args.gradient_accumulation_steps
-                
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
-                
                 progress_bar.update(1)
                 global_step += 1
                 # TODO: enrich log
-                accelerator.log({"train_summed_losses": train_summed_losses,
-                                "train_loss_disc": train_loss_disc,
-                                "train_loss_duration": train_loss_duration,
-                                "train_loss_mel": train_loss_mel,
-                                "train_loss_kl": train_loss_kl,
-                                "train_loss_fmaps": train_loss_fmaps,
-                                "train_loss_gen": train_loss_gen,}
-                                , step=global_step)
+                accelerator.log(
+                    {
+                        "train_summed_losses": train_summed_losses,
+                        "train_loss_disc": train_loss_disc,
+                        "train_loss_duration": train_loss_duration,
+                        "train_loss_mel": train_loss_mel,
+                        "train_loss_kl": train_loss_kl,
+                        "train_loss_fmaps": train_loss_fmaps,
+                        "train_loss_gen": train_loss_gen,
+                    },
+                    step=global_step,
+                )
                 train_summed_losses = 0.0
                 train_loss_disc = 0.0
                 train_loss_duration = 0.0
@@ -695,13 +738,16 @@ def training_loop(
                         logger.info(f"Saved state to {save_path}")
 
             # TODO: enrich
-            logs = {"step_loss": total_generator_loss.detach().item(), "lr": disc_lr_scheduler.get_last_lr()[0],
-                    "step_loss_duration": loss_duration.detach().item(),
-                    "step_loss_mel": loss_mel.detach().item(),
-                    "step_loss_kl": loss_kl.detach().item(),
-                    "step_loss_fmaps": loss_fmaps.detach().item(),
-                    "step_loss_gen": loss_gen.detach().item(),
-                    "step_loss_disc": loss_disc.detach().item()}
+            logs = {
+                "step_loss": total_generator_loss.detach().item(),
+                "lr": disc_lr_scheduler.get_last_lr()[0],
+                "step_loss_duration": loss_duration.detach().item(),
+                "step_loss_mel": loss_mel.detach().item(),
+                "step_loss_kl": loss_kl.detach().item(),
+                "step_loss_fmaps": loss_fmaps.detach().item(),
+                "step_loss_gen": loss_gen.detach().item(),
+                "step_loss_disc": loss_disc.detach().item(),
+            }
             progress_bar.set_postfix(**logs)
 
             if global_step >= args.max_steps:
@@ -709,57 +755,60 @@ def training_loop(
 
             eval_steps = args.eval_steps if args.eval_steps else 1
             do_eval = args.do_eval and (global_step % eval_steps == 0)
-            
+
             if do_eval:
                 if accelerator.is_main_process:
-                    logger.info("Running validation... ")                    
+                    logger.info("Running validation... ")
                     model.eval()
                     audios = []
                     for step, batch in enumerate(eval_dataloader):
-                        
                         with torch.no_grad():
                             model_outputs = model(
-                                input_ids = batch["input_ids"],
-                                attention_mask = batch["attention_mask"],
-                                speaker_id = batch["speaker_id"],
-                                return_dict = False
+                                input_ids=batch["input_ids"],
+                                attention_mask=batch["attention_mask"],
+                                speaker_id=batch["speaker_id"],
+                                return_dict=False,
                             )
-                        
+
                         # TODO: metrics
                         # compute_metrics(...)
-                        
+
                         model_outputs = model_outputs[0].cpu()
-                        
+
                         audios.append(model_outputs)
-                        
+
                     for tracker in accelerator.trackers:
                         if tracker.name == "tensorboard":
                             cpt = 0
                             for audio_batch in audios:
                                 for audio in audio_batch:
-                                    tracker.writer.add_audio(f"validation_{cpt}", audio[None,:], epoch, sample_rate=sampling_rate)
+                                    tracker.writer.add_audio(
+                                        f"validation_{cpt}", audio[None, :], epoch, sample_rate=sampling_rate
+                                    )
                                     cpt += 1
                         elif tracker.name == "wandb":
                             cpt = 0
                             for audio_batch in audios:
-                                
-                                    tracker.log(
-                                        {
-                                            "validation": [
-                                                wandb.Audio(audio.numpy(), caption=f"Audio {cpt + i}, epoch {epoch}", sample_rate=sampling_rate)
-                                                for i, audio in enumerate(audio_batch)
-                                            ]
-                                        }
-                                    )
-                                    cpt += len(audios)
+                                tracker.log(
+                                    {
+                                        "validation": [
+                                            wandb.Audio(
+                                                audio.numpy(),
+                                                caption=f"Audio {cpt + i}, epoch {epoch}",
+                                                sample_rate=sampling_rate,
+                                            )
+                                            for i, audio in enumerate(audio_batch)
+                                        ]
+                                    }
+                                )
+                                cpt += len(audios)
                         else:
-                            logger.warn(f"audio logging not implemented for {tracker.name}")      
-                            
-                            
+                            logger.warn(f"audio logging not implemented for {tracker.name}")
+
                     logger.info("Validation finished... ")
                     model.train()
                 accelerator.wait_for_everyone()
-        
+
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
         model = accelerator.unwrap_model(model)
@@ -767,42 +816,40 @@ def training_loop(
 
         model.save_pretrained(args.output_dir)
         discriminator.save_pretrained(args.output_dir)
-                
+
         epoch = args.num_train_epochs if args.num_train_epochs else 1
         eval_steps = args.eval_steps if args.eval_steps else 1
 
         # Run a final round of inference.
         do_eval = args.do_eval and (num_update_steps_per_epoch * epoch) % eval_steps
-        
+
         if do_eval:
             logger.info("Running validation... ")
             if args.seed is None:
-                generator = None
+                pass
             else:
-                generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
-                                
+                torch.Generator(device=accelerator.device).manual_seed(args.seed)
+
             audios = []
             for step, batch in enumerate(eval_dataloader):
                 with torch.no_grad():
                     model_outputs = model(
-                        input_ids = batch["input_ids"],
-                        attention_mask = batch["attention_mask"],
-                        speaker_id = batch["speaker_id"],
-                        return_dict = False
+                        input_ids=batch["input_ids"],
+                        attention_mask=batch["attention_mask"],
+                        speaker_id=batch["speaker_id"],
+                        return_dict=False,
                     )
-                
+
                 # TODO: metrics
                 # compute_metrics(...)
-                
+
                 model_outputs = model_outputs[0].cpu().numpy()
-                
+
                 audios.append(model_outputs)
-          
 
     accelerator.end_training()
     return
-    
-    
+
 
 def main():
     # 1. Parse input arguments
@@ -908,7 +955,10 @@ def main():
             f"{', '.join(next(iter(raw_datasets.values())).column_names)}."
         )
 
-    if data_args.speaker_id_column_name is not None and data_args.speaker_id_column_name not in next(iter(raw_datasets.values())).column_names:
+    if (
+        data_args.speaker_id_column_name is not None
+        and data_args.speaker_id_column_name not in next(iter(raw_datasets.values())).column_names
+    ):
         raise ValueError(
             f"--speaker_id_column_name {data_args.speaker_id_column_name} not found in dataset '{data_args.speaker_id_column_name}'. "
             "Make sure to set `--speaker_id_column_name` to the correct text column - one of "
@@ -927,7 +977,9 @@ def main():
     )
 
     feature_extractor = VitsFeatureExtractor.from_pretrained(
-        model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.discriminator_model_name_or_path,
+        model_args.feature_extractor_name
+        if model_args.feature_extractor_name
+        else model_args.discriminator_model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
@@ -976,7 +1028,7 @@ def main():
     model_input_name = tokenizer.model_input_names[0]
     do_lower_case = data_args.do_lower_case
     speaker_id_column_name = data_args.speaker_id_column_name
-    
+
     # return attention_mask for Vits models
     forward_attention_mask = True
 
@@ -986,33 +1038,33 @@ def main():
     if data_args.max_eval_samples is not None:
         raw_datasets["eval"] = raw_datasets["eval"].select(range(data_args.max_eval_samples))
 
-    def prepare_dataset(batch):        
+    def prepare_dataset(batch):
         # process target audio
         sample = batch[audio_column_name]
         audio_inputs = feature_extractor(
             sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=forward_attention_mask
         )
-        
+
         batch["labels"] = audio_inputs.get("input_features")[0]
         if forward_attention_mask:
             batch["labels_attention_mask"] = audio_inputs.get("attention_mask")[0]
-        
+
         # process text inputs
         input_str = batch[text_column_name].lower() if do_lower_case else batch[text_column_name]
         string_inputs = tokenizer(input_str, return_attention_mask=forward_attention_mask)
-        
+
         batch[model_input_name] = string_inputs.get("input_ids")
         if forward_attention_mask:
             batch["attention_mask"] = string_inputs.get("attention_mask")
 
         batch["input_length"] = len(sample["array"])
         batch["waveform"] = batch[audio_column_name]["array"]
-        
+
         batch["mel_scaled_input_features"] = audio_inputs.get("mel_scaled_input_features")[0]
-        
+
         if speaker_id_column_name is not None:
             batch["speaker_id"] = batch[speaker_id_column_name]
-        
+
         return batch
 
     remove_columns = next(iter(raw_datasets.values())).column_names
@@ -1053,16 +1105,14 @@ def main():
     # metric = evaluate.load("wer")
 
     def compute_metrics(pred):
-        #pred_ids = pred.predictions
-        #pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
-        #pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+        # pred_ids = pred.predictions
+        # pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
+        # pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
         ## we do not want to group tokens when computing the metrics
-        #label_str = tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
-        #wer = metric.compute(predictions=pred_str, references=label_str)
-        
-        
+        # label_str = tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
+        # wer = metric.compute(predictions=pred_str, references=label_str)
 
-        return {"todo": 0.}
+        return {"todo": 0.0}
 
     # 9. Save configs
     # make sure all processes wait until data is saved
@@ -1080,8 +1130,7 @@ def main():
         feature_extractor=feature_extractor,
         forward_attention_mask=forward_attention_mask,
     )
-    
-    
+
     # TODO: take care when only eval
 
     # 11. Training
@@ -1097,8 +1146,8 @@ def main():
         project_name=data_args.project_name,
     )
 
-
     logger.info("***** Training / Inference Done *****")
+
 
 if __name__ == "__main__":
     main()

@@ -144,7 +144,8 @@ class VitsConfig(PretrainedConfig):
         segment_size (`int`, *optional*, defaults to 8192):
             Segment size of the spectrogam used to compute the recontruction loss during training.
         hop_length (`int`, defaults to 256):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients. Used during training.
+            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients. Used during
+            training.
     Example:
 
     ```python

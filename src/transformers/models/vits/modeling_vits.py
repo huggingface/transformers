@@ -566,9 +566,7 @@ class HifiGanDiscriminatorPeriodResidualBlock(nn.Module):
                     padding=(self.get_padding(kernel_size, 1), 0),
                 )
             )
-        self.convs.append(
-            nn.Conv2d(1024, 1024, (kernel_size, 1), 1, padding=(self.get_padding(kernel_size, 1), 0))
-        )
+        self.convs.append(nn.Conv2d(1024, 1024, (kernel_size, 1), 1, padding=(self.get_padding(kernel_size, 1), 0)))
         self.final_conv = nn.Conv2d(1024, 1, (3, 1), 1, padding=(1, 0))
 
     def get_padding(self, kernel_size, dilation=1):
@@ -958,10 +956,10 @@ class VitsStochasticDurationPredictor(nn.Module):
                 * padding_mask
             )
             latents_posterior = random_posterior
-            
+
             latents_posterior, log_determinant = self.post_flows[0](
-                    latents_posterior, padding_mask, global_conditioning=inputs + hidden_states
-                )
+                latents_posterior, padding_mask, global_conditioning=inputs + hidden_states
+            )
             log_determinant_posterior_sum = log_determinant
 
             for flow in self.post_flows[1:]:
@@ -987,7 +985,7 @@ class VitsStochasticDurationPredictor(nn.Module):
 
             latents = torch.cat([first_half, second_half], dim=1)
             latents, log_determinant = self.flows[0](latents, padding_mask, global_conditioning=inputs)
-            
+
             log_determinant_sum += log_determinant
             for flow in self.flows[1:]:
                 latents, log_determinant = flow(latents, padding_mask, global_conditioning=inputs)
@@ -1610,12 +1608,14 @@ class VitsModel(VitsPreTrainedModel):
                 speaker_id = torch.full(size=(1,), fill_value=speaker_id, device=self.device)
             elif isinstance(speaker_id, list) or isinstance(speaker_id, np.ndarray):
                 speaker_id = torch.tensor(speaker_id, device=self.device)
-                                
-            if not ((0 <= speaker_id).all() and (speaker_id<self.config.num_speakers).all()).item():
+
+            if not ((0 <= speaker_id).all() and (speaker_id < self.config.num_speakers).all()).item():
                 raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
             if not (len(speaker_id) == 1 or len(speaker_id == len(input_ids))):
-                raise ValueError(f"You passed {len(speaker_id)} `speaker_id` but you should either pass one speaker id or `batch_size` `speaker_id`.")
-            
+                raise ValueError(
+                    f"You passed {len(speaker_id)} `speaker_id` but you should either pass one speaker id or `batch_size` `speaker_id`."
+                )
+
             speaker_embeddings = self.embed_speaker(speaker_id).unsqueeze(-1)
         else:
             speaker_embeddings = None
@@ -1863,12 +1863,14 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
                 speaker_id = torch.full(size=(1,), fill_value=speaker_id, device=self.device)
             elif isinstance(speaker_id, list) or isinstance(speaker_id, np.ndarray):
                 speaker_id = torch.tensor(speaker_id, device=self.device)
-                                
-            if not ((0 <= speaker_id).all() and (speaker_id<self.config.num_speakers).all()).item():
+
+            if not ((0 <= speaker_id).all() and (speaker_id < self.config.num_speakers).all()).item():
                 raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
             if not (len(speaker_id) == 1 or len(speaker_id == len(input_ids))):
-                raise ValueError(f"You passed {len(speaker_id)} `speaker_id` but you should either pass one speaker id or `batch_size` `speaker_id`.")
-            
+                raise ValueError(
+                    f"You passed {len(speaker_id)} `speaker_id` but you should either pass one speaker id or `batch_size` `speaker_id`."
+                )
+
             speaker_embeddings = self.embed_speaker(speaker_id).unsqueeze(-1)
         else:
             speaker_embeddings = None
@@ -1890,7 +1892,6 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         else:
             labels_attention_mask = torch.ones((labels.shape[0], labels.shape[2])).float().to(self.device)
             labels_padding_mask = labels_attention_mask.unsqueeze(1)
-            
 
         text_encoder_output = self.text_encoder(
             input_ids=input_ids,
@@ -1929,7 +1930,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             # [batch_size, text_length, latent_length]
             neg_cent = neg_cent1 + neg_cent2 + neg_cent3 + neg_cent4
 
-            attn_mask = (torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1))
+            attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1)
 
             attn = monotonic_align_max_path(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
 
