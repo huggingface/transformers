@@ -49,8 +49,7 @@ class AttentionMask2DTo4D:
 
     def __call__(self, attention_mask_2d: torch.Tensor, input_shape, past_key_values_length, dtype):
         """
-        Multiplies the given tensor x by -10,000. 
-        If the cached tensor does not exist or has a different size, a new one is allocated.
+        Prepares and caches an extended 4D float mask of shape (batch_size, 1, tgt_seq_len, src_seq_len), and caches as well attention_mask_2d.
         """
         if self.cached_2d_tensor is None or (attention_mask_2d != self.cached_2d_tensor).any():
             self.cached_2d_tensor = attention_mask_2d
