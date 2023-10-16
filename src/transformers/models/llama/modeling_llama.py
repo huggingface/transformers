@@ -393,7 +393,7 @@ class LlamaAttention(nn.Module):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+        key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cos, sin)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -933,7 +933,7 @@ class LlamaModel(LlamaPreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        for idx, decoder_layer in enumerate(self.layers):
+        for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
