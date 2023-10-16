@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Google AI and The HuggingFace Team. All rights reserved.
+# Copyright 2023 Google AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch OWL-ViT model."""
+""" PyTorch OWLv2 model."""
 
 
 import warnings
@@ -35,7 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_owlvit import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
+from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
 
 
 if is_vision_available():
@@ -44,13 +44,12 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google/owlvit-base-patch32"
+_CHECKPOINT_FOR_DOC = "google/owlv2-base-patch16-ensemble"
 
-# See all OwlViT models at https://huggingface.co/models?filter=owlvit
-OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/owlvit-base-patch32",
-    "google/owlvit-base-patch16",
-    "google/owlvit-large-patch14",
+# See all Owlv2 models at https://huggingface.co/models?filter=owlv2
+OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "google/owlv2-base-patch16-ensemble",
+    # See all OWLv2 models at https://huggingface.co/models?filter=owlv2
 ]
 
 
@@ -69,20 +68,20 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlvit
+# Copied from transformers.models.clip.modeling_clip.contrastive_loss with clip->owlv2
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->owlvit
-def owlvit_loss(similarity: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->owlv2
+def owlv2_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
     image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
 
 
 @dataclass
-class OwlViTOutput(ModelOutput):
+class Owlv2Output(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -94,14 +93,14 @@ class OwlViTOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds (`torch.FloatTensor` of shape `(batch_size * num_max_text_queries, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`Owlv2TextModel`].
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
-            [`OwlViTVisionModel`].
+            [`Owlv2VisionModel`].
         text_model_output (Tuple[`BaseModelOutputWithPooling`]):
-            The output of the [`OwlViTTextModel`].
+            The output of the [`Owlv2TextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`OwlViTVisionModel`].
+            The output of the [`Owlv2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -188,9 +187,9 @@ def generalized_box_iou(boxes1, boxes2):
 
 
 @dataclass
-class OwlViTObjectDetectionOutput(ModelOutput):
+class Owlv2ObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`OwlViTForObjectDetection`].
+    Output type of [`Owlv2ForObjectDetection`].
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -201,28 +200,32 @@ class OwlViTObjectDetectionOutput(ModelOutput):
             A dictionary containing the individual losses. Useful for logging.
         logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
             Classification logits (including no-object) for all queries.
+        objectness_logits (`torch.FloatTensor` of shape `(batch_size, num_patches, 1)`):
+            The objectness logits of all image patches. OWL-ViT represents images as a set of image patches where the
+            total number of patches is (image_size / patch_size)**2.
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         text_embeds (`torch.FloatTensor` of shape `(batch_size, num_max_text_queries, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`OwlViTTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`Owlv2TextModel`].
         image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
-            image embeddings for each patch.
+            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
+            embeddings for each patch.
         class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
-            Class embeddings of all image patches. OWL-ViT represents images as a set of image patches where the total
+            Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
         text_model_output (Tuple[`BaseModelOutputWithPooling`]):
-            The output of the [`OwlViTTextModel`].
+            The output of the [`Owlv2TextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`OwlViTVisionModel`].
+            The output of the [`Owlv2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
     loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
+    objectness_logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
@@ -238,9 +241,10 @@ class OwlViTObjectDetectionOutput(ModelOutput):
 
 
 @dataclass
-class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTImageGuidedObjectDetectionOutput with OwlViT->Owlv2,OWL-ViT->OWLv2
+class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`OwlViTForObjectDetection.image_guided_detection`].
+    Output type of [`Owlv2ForObjectDetection.image_guided_detection`].
 
     Args:
         logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
@@ -248,26 +252,26 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
         target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual target image in the batch
-            (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
+            (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
         query_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual query image in the batch
-            (disregarding possible padding). You can use [`~OwlViTImageProcessor.post_process_object_detection`] to
+            (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
         image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
-            image embeddings for each patch.
+            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
+            embeddings for each patch.
         query_image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-            Pooled output of [`OwlViTVisionModel`]. OWL-ViT represents images as a set of image patches and computes
-            image embeddings for each patch.
+            Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes image
+            embeddings for each patch.
         class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
-            Class embeddings of all image patches. OWL-ViT represents images as a set of image patches where the total
+            Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
         text_model_output (Tuple[`BaseModelOutputWithPooling`]):
-            The output of the [`OwlViTTextModel`].
+            The output of the [`Owlv2TextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`OwlViTVisionModel`].
+            The output of the [`Owlv2VisionModel`].
     """
 
     logits: torch.FloatTensor = None
@@ -286,8 +290,9 @@ class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
         )
 
 
-class OwlViTVisionEmbeddings(nn.Module):
-    def __init__(self, config: OwlViTVisionConfig):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionEmbeddings with OwlViT->Owlv2
+class Owlv2VisionEmbeddings(nn.Module):
+    def __init__(self, config: Owlv2VisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -318,8 +323,9 @@ class OwlViTVisionEmbeddings(nn.Module):
         return embeddings
 
 
-class OwlViTTextEmbeddings(nn.Module):
-    def __init__(self, config: OwlViTTextConfig):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextEmbeddings with OwlViT->Owlv2
+class Owlv2TextEmbeddings(nn.Module):
+    def __init__(self, config: Owlv2TextConfig):
         super().__init__()
         self.token_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.position_embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -349,7 +355,8 @@ class OwlViTTextEmbeddings(nn.Module):
         return embeddings
 
 
-class OwlViTAttention(nn.Module):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTAttention with OwlViT->Owlv2
+class Owlv2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -456,8 +463,8 @@ class OwlViTAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->OwlViT
-class OwlViTMLP(nn.Module):
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Owlv2
+class Owlv2MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -472,14 +479,14 @@ class OwlViTMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
-class OwlViTEncoderLayer(nn.Module):
-    def __init__(self, config: OwlViTConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Owlv2
+class Owlv2EncoderLayer(nn.Module):
+    def __init__(self, config: Owlv2Config):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = OwlViTAttention(config)
+        self.self_attn = Owlv2Attention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = OwlViTMLP(config)
+        self.mlp = Owlv2MLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
@@ -523,29 +530,30 @@ class OwlViTEncoderLayer(nn.Module):
         return outputs
 
 
-class OwlViTPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTPreTrainedModel with OwlViT->Owlv2,owlvit->owlv2
+class Owlv2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = OwlViTConfig
-    base_model_prefix = "owlvit"
+    config_class = Owlv2Config
+    base_model_prefix = "owlv2"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OwlViTEncoderLayer"]
+    _no_split_modules = ["Owlv2EncoderLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        if isinstance(module, OwlViTTextEmbeddings):
+        if isinstance(module, Owlv2TextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, OwlViTVisionEmbeddings):
+        elif isinstance(module, Owlv2VisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, OwlViTAttention):
+        elif isinstance(module, Owlv2Attention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -553,7 +561,7 @@ class OwlViTPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, OwlViTMLP):
+        elif isinstance(module, Owlv2MLP):
             factor = self.config.initializer_factor
             in_proj_std = (
                 (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -561,7 +569,7 @@ class OwlViTPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, OwlViTModel):
+        elif isinstance(module, Owlv2Model):
             nn.init.normal_(
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
@@ -577,11 +585,11 @@ class OwlViTPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, OwlViTEncoder):
+        if isinstance(module, Owlv2Encoder):
             module.gradient_checkpointing = value
 
 
-OWLVIT_START_DOCSTRING = r"""
+OWLV2_START_DOCSTRING = r"""
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -592,12 +600,12 @@ OWLVIT_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`OwlViTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`Owvl2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
+OWLV2_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -618,7 +626,7 @@ OWLVIT_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-OWLVIT_VISION_INPUTS_DOCSTRING = r"""
+OWLV2_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
@@ -632,19 +640,19 @@ OWLVIT_VISION_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-OWLVIT_INPUTS_DOCSTRING = r"""
+OWLV2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             [What are attention masks?](../glossary#attention-mask)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -653,11 +661,13 @@ OWLVIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        return_base_image_embeds (`bool`, *optional*):
+            Whether or not to return the base image embeddings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
+OWLV2_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
@@ -677,7 +687,7 @@ OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-OWLVIT_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
+OWLV2_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
@@ -694,18 +704,19 @@ OWLVIT_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
 """
 
 
-class OwlViTEncoder(nn.Module):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTEncoder with OwlViT->Owlv2
+class Owlv2Encoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`OwlViTEncoderLayer`].
+    [`Owlv2EncoderLayer`].
 
     Args:
-        config: OwlViTConfig
+        config: Owlv2Config
     """
 
-    def __init__(self, config: OwlViTConfig):
+    def __init__(self, config: Owlv2Config):
         super().__init__()
-        self.layers = nn.ModuleList([OwlViTEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Owlv2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -807,17 +818,18 @@ def _make_causal_mask(
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-class OwlViTTextTransformer(nn.Module):
-    def __init__(self, config: OwlViTTextConfig):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
+class Owlv2TextTransformer(nn.Module):
+    def __init__(self, config: Owlv2TextConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-        self.embeddings = OwlViTTextEmbeddings(config)
-        self.encoder = OwlViTEncoder(config)
+        self.embeddings = Owlv2TextEmbeddings(config)
+        self.encoder = Owlv2Encoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
+    @add_start_docstrings_to_model_forward(OWLV2_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Owlv2TextConfig)
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -841,7 +853,7 @@ class OwlViTTextTransformer(nn.Module):
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
         # num_samples, seq_len = input_shape  where num_samples = batch_size * num_max_text_queries
-        # OWLVIT's text model uses causal mask, prepare it here.
+        # OWLV2's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
         causal_attention_mask = _make_causal_mask(input_shape, hidden_states.dtype, device=hidden_states.device)
         # expand attention_mask
@@ -879,12 +891,13 @@ class OwlViTTextTransformer(nn.Module):
         )
 
 
-class OwlViTTextModel(OwlViTPreTrainedModel):
-    config_class = OwlViTTextConfig
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextModel with google/owlvit-base-patch32->google/owlv2-base-patch16, OWLVIT->OWLV2,OwlViT->Owlv2
+class Owlv2TextModel(Owlv2PreTrainedModel):
+    config_class = Owlv2TextConfig
 
-    def __init__(self, config: OwlViTTextConfig):
+    def __init__(self, config: Owlv2TextConfig):
         super().__init__(config)
-        self.text_model = OwlViTTextTransformer(config)
+        self.text_model = Owlv2TextTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -894,8 +907,8 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
+    @add_start_docstrings_to_model_forward(OWLV2_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Owlv2TextConfig)
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -909,10 +922,10 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoProcessor, OwlViTTextModel
+        >>> from transformers import AutoProcessor, Owlv2TextModel
 
-        >>> model = OwlViTTextModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> model = Owlv2TextModel.from_pretrained("google/owlv2-base-patch16")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
@@ -931,18 +944,19 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         )
 
 
-class OwlViTVisionTransformer(nn.Module):
-    def __init__(self, config: OwlViTVisionConfig):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
+class Owlv2VisionTransformer(nn.Module):
+    def __init__(self, config: Owlv2VisionConfig):
         super().__init__()
         self.config = config
 
-        self.embeddings = OwlViTVisionEmbeddings(config)
+        self.embeddings = Owlv2VisionEmbeddings(config)
         self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.encoder = OwlViTEncoder(config)
+        self.encoder = Owlv2Encoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
+    @add_start_docstrings_to_model_forward(OWLV2_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Owlv2VisionConfig)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -989,21 +1003,22 @@ class OwlViTVisionTransformer(nn.Module):
         )
 
 
-class OwlViTVisionModel(OwlViTPreTrainedModel):
-    config_class = OwlViTVisionConfig
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionModel with OWLVIT->OWLV2,OwlViT->Owlv2,google/owlvit-base-patch32->google/owlv2-base-patch16
+class Owlv2VisionModel(Owlv2PreTrainedModel):
+    config_class = Owlv2VisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: OwlViTVisionConfig):
+    def __init__(self, config: Owlv2VisionConfig):
         super().__init__(config)
-        self.vision_model = OwlViTVisionTransformer(config)
+        self.vision_model = Owlv2VisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
+    @add_start_docstrings_to_model_forward(OWLV2_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Owlv2VisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1018,10 +1033,10 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, OwlViTVisionModel
+        >>> from transformers import AutoProcessor, Owlv2VisionModel
 
-        >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> model = Owlv2VisionModel.from_pretrained("google/owlv2-base-patch16")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -1039,22 +1054,23 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         )
 
 
-@add_start_docstrings(OWLVIT_START_DOCSTRING)
-class OwlViTModel(OwlViTPreTrainedModel):
-    config_class = OwlViTConfig
+@add_start_docstrings(OWLV2_START_DOCSTRING)
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTModel with google/owlvit-base-patch32->google/owlv2-base-patch16-ensemble, OWLVIT->OWLV2,OwlViT->Owlv2,owlvit->owlv2,OWL-ViT->OWLv2
+class Owlv2Model(Owlv2PreTrainedModel):
+    config_class = Owlv2Config
 
-    def __init__(self, config: OwlViTConfig):
+    def __init__(self, config: Owlv2Config):
         super().__init__(config)
 
-        if not isinstance(config.text_config, OwlViTTextConfig):
+        if not isinstance(config.text_config, Owlv2TextConfig):
             raise ValueError(
-                "config.text_config is expected to be of type OwlViTTextConfig but is of type"
+                "config.text_config is expected to be of type Owlv2TextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, OwlViTVisionConfig):
+        if not isinstance(config.vision_config, Owlv2VisionConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type OwlViTVisionConfig but is of type"
+                "config.vision_config is expected to be of type Owlv2VisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
@@ -1065,8 +1081,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = OwlViTTextTransformer(text_config)
-        self.vision_model = OwlViTVisionTransformer(vision_config)
+        self.text_model = Owlv2TextTransformer(text_config)
+        self.vision_model = Owlv2VisionTransformer(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -1075,7 +1091,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(OWLV2_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1087,20 +1103,20 @@ class OwlViTModel(OwlViTPreTrainedModel):
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`OwlViTTextModel`].
+            applying the projection layer to the pooled output of [`Owlv2TextModel`].
 
         Examples:
         ```python
-        >>> from transformers import AutoProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, Owlv2Model
 
-        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
         ... )
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
+        # Use OWLv2 model's config for some fields (if specified) instead of those of vision & text components.
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Get embeddings for all text queries in all batch samples
@@ -1110,7 +1126,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(OWLV2_VISION_INPUTS_DOCSTRING)
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1121,22 +1137,22 @@ class OwlViTModel(OwlViTPreTrainedModel):
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`OwlViTVisionModel`].
+            applying the projection layer to the pooled output of [`Owlv2VisionModel`].
 
         Examples:
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, Owlv2Model
 
-        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(images=image, return_tensors="pt")
         >>> image_features = model.get_image_features(**inputs)
         ```"""
-        # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
+        # Use OWLv2 model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1155,8 +1171,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         return image_features
 
-    @add_start_docstrings_to_model_forward(OWLVIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=OwlViTOutput, config_class=OwlViTConfig)
+    @add_start_docstrings_to_model_forward(OWLV2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Owlv2Output, config_class=Owlv2Config)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1167,7 +1183,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, OwlViTOutput]:
+    ) -> Union[Tuple, Owlv2Output]:
         r"""
         Returns:
 
@@ -1175,10 +1191,10 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, OwlViTModel
+        >>> from transformers import AutoProcessor, Owlv2Model
 
-        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
@@ -1186,7 +1202,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
+        # Use OWLv2 model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1226,7 +1242,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = owlvit_loss(logits_per_text)
+            loss = owlv2_loss(logits_per_text)
 
         if return_base_image_embeds:
             warnings.warn(
@@ -1243,7 +1259,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
-        return OwlViTOutput(
+        return Owlv2Output(
             loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,
@@ -1254,8 +1270,9 @@ class OwlViTModel(OwlViTPreTrainedModel):
         )
 
 
-class OwlViTBoxPredictionHead(nn.Module):
-    def __init__(self, config: OwlViTConfig, out_dim: int = 4):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTBoxPredictionHead with OwlViT->Owlv2
+class Owlv2BoxPredictionHead(nn.Module):
+    def __init__(self, config: Owlv2Config, out_dim: int = 4):
         super().__init__()
 
         width = config.vision_config.hidden_size
@@ -1273,8 +1290,9 @@ class OwlViTBoxPredictionHead(nn.Module):
         return output
 
 
-class OwlViTClassPredictionHead(nn.Module):
-    def __init__(self, config: OwlViTConfig):
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTClassPredictionHead with OwlViT->Owlv2
+class Owlv2ClassPredictionHead(nn.Module):
+    def __init__(self, config: Owlv2Config):
         super().__init__()
 
         out_dim = config.text_config.hidden_size
@@ -1322,19 +1340,21 @@ class OwlViTClassPredictionHead(nn.Module):
         return (pred_logits, image_class_embeds)
 
 
-class OwlViTForObjectDetection(OwlViTPreTrainedModel):
-    config_class = OwlViTConfig
+class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
+    config_class = Owlv2Config
 
-    def __init__(self, config: OwlViTConfig):
+    def __init__(self, config: Owlv2Config):
         super().__init__(config)
 
-        self.owlvit = OwlViTModel(config)
-        self.class_head = OwlViTClassPredictionHead(config)
-        self.box_head = OwlViTBoxPredictionHead(config)
+        self.owlv2 = Owlv2Model(config)
+        self.class_head = Owlv2ClassPredictionHead(config)
+        self.box_head = Owlv2BoxPredictionHead(config)
+        self.objectness_head = Owlv2BoxPredictionHead(config, out_dim=1)
 
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.normalize_grid_corner_coordinates
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
         # Computes normalized xy corner coordinates from feature_map.
         if not feature_map.ndim == 4:
@@ -1356,6 +1376,20 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return box_coordinates
 
+    def objectness_predictor(self, image_features: torch.FloatTensor) -> torch.FloatTensor:
+        """Predicts the probability that each image feature token is an object.
+        Args:
+            image_features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_dim)`)):
+                Features extracted from the image.
+        Returns:
+            Objectness scores.
+        """
+        image_features = image_features.detach()
+        objectness_logits = self.objectness_head(image_features)
+        objectness_logits = objectness_logits[..., 0]
+        return objectness_logits
+
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.compute_box_bias
     def compute_box_bias(self, feature_map: torch.FloatTensor) -> torch.FloatTensor:
         # The box center is biased to its position on the feature grid
         box_coordinates = self.normalize_grid_corner_coordinates(feature_map)
@@ -1372,6 +1406,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         box_bias = torch.cat([box_coord_bias, box_size_bias], dim=-1)
         return box_bias
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.box_predictor
     def box_predictor(
         self,
         image_feats: torch.FloatTensor,
@@ -1395,6 +1430,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_boxes = self.sigmoid(pred_boxes)
         return pred_boxes
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.class_predictor
     def class_predictor(
         self,
         image_feats: torch.FloatTensor,
@@ -1414,6 +1450,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return (pred_logits, image_class_embeds)
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_text_embedder with owlvit->owlv2
     def image_text_embedder(
         self,
         input_ids: torch.Tensor,
@@ -1423,7 +1460,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor]:
         # Encode text and image
-        outputs = self.owlvit(
+        outputs = self.owlv2(
             pixel_values=pixel_values,
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1434,7 +1471,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Get image embeddings
         last_hidden_state = outputs.vision_model_output[0]
-        image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
+        image_embeds = self.owlv2.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
         new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
@@ -1456,18 +1493,19 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return (text_embeds, image_embeds, outputs)
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.image_embedder with owlvit->owlv2, OwlViTModel->Owlv2Model
     def image_embedder(
         self,
         pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor]:
-        # Get OwlViTModel vision embeddings (same as CLIP)
-        vision_outputs = self.owlvit.vision_model(pixel_values=pixel_values, return_dict=True)
+        # Get Owlv2Model vision embeddings (same as CLIP)
+        vision_outputs = self.owlv2.vision_model(pixel_values=pixel_values, return_dict=True)
 
         # Apply post_layernorm to last_hidden_state, return non-projected output
         last_hidden_state = vision_outputs[0]
-        image_embeds = self.owlvit.vision_model.post_layernorm(last_hidden_state)
+        image_embeds = self.owlv2.vision_model.post_layernorm(last_hidden_state)
 
         # Resize class token
         new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
@@ -1488,6 +1526,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return (image_embeds, vision_outputs)
 
+    # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.embed_image_query
     def embed_image_query(
         self, query_image_features: torch.FloatTensor, query_feature_map: torch.FloatTensor
     ) -> torch.FloatTensor:
@@ -1529,8 +1568,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return query_embeds, box_indices, pred_boxes
 
-    @add_start_docstrings_to_model_forward(OWLVIT_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=OwlViTImageGuidedObjectDetectionOutput, config_class=OwlViTConfig)
+    @add_start_docstrings_to_model_forward(OWLV2_IMAGE_GUIDED_OBJECT_DETECTION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Owlv2ImageGuidedObjectDetectionOutput, config_class=Owlv2Config)
     def image_guided_detection(
         self,
         pixel_values: torch.FloatTensor,
@@ -1538,7 +1577,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> OwlViTImageGuidedObjectDetectionOutput:
+    ) -> Owlv2ImageGuidedObjectDetectionOutput:
         r"""
         Returns:
 
@@ -1547,10 +1586,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import torch
-        >>> from transformers import AutoProcessor, OwlViTForObjectDetection
+        >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
 
-        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch16")
-        >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> query_url = "http://images.cocodataset.org/val2017/000000001675.jpg"
@@ -1562,15 +1601,26 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> target_sizes = torch.Tensor([image.size[::-1]])
         >>> # Convert outputs (bounding boxes and class logits) to COCO API
         >>> results = processor.post_process_image_guided_detection(
-        ...     outputs=outputs, threshold=0.6, nms_threshold=0.3, target_sizes=target_sizes
+        ...     outputs=outputs, threshold=0.9, nms_threshold=0.3, target_sizes=target_sizes
         ... )
         >>> i = 0  # Retrieve predictions for the first image
         >>> boxes, scores = results[i]["boxes"], results[i]["scores"]
         >>> for box, score in zip(boxes, scores):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected similar object with confidence {round(score.item(), 3)} at location {box}")
-        Detected similar object with confidence 0.856 at location [10.94, 50.4, 315.8, 471.39]
-        Detected similar object with confidence 1.0 at location [334.84, 25.33, 636.16, 374.71]
+        Detected similar object with confidence 0.938 at location [327.31, 54.94, 547.39, 268.06]
+        Detected similar object with confidence 0.959 at location [5.78, 360.65, 619.12, 366.39]
+        Detected similar object with confidence 0.902 at location [2.85, 360.01, 627.63, 380.79]
+        Detected similar object with confidence 0.985 at location [176.97, -29.45, 672.69, 182.83]
+        Detected similar object with confidence 1.0 at location [6.53, 14.35, 624.87, 470.82]
+        Detected similar object with confidence 0.998 at location [579.98, 29.14, 615.49, 489.05]
+        Detected similar object with confidence 0.985 at location [206.15, 10.53, 247.74, 466.01]
+        Detected similar object with confidence 0.947 at location [18.62, 429.72, 646.5, 457.72]
+        Detected similar object with confidence 0.996 at location [523.88, 20.69, 586.84, 483.18]
+        Detected similar object with confidence 0.998 at location [3.39, 360.59, 617.29, 499.21]
+        Detected similar object with confidence 0.969 at location [4.47, 449.05, 614.5, 474.76]
+        Detected similar object with confidence 0.966 at location [31.44, 463.65, 654.66, 471.07]
+        Detected similar object with confidence 0.924 at location [30.93, 468.07, 635.35, 475.39]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1613,7 +1663,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             output = tuple(x for x in output if x is not None)
             return output
 
-        return OwlViTImageGuidedObjectDetectionOutput(
+        return Owlv2ImageGuidedObjectDetectionOutput(
             image_embeds=feature_map,
             query_image_embeds=query_feature_map,
             target_pred_boxes=target_pred_boxes,
@@ -1624,8 +1674,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
-    @add_start_docstrings_to_model_forward(OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=OwlViTObjectDetectionOutput, config_class=OwlViTConfig)
+    @add_start_docstrings_to_model_forward(OWLV2_OBJECT_DETECTION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Owlv2ObjectDetectionOutput, config_class=Owlv2Config)
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -1634,7 +1684,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> OwlViTObjectDetectionOutput:
+    ) -> Owlv2ObjectDetectionOutput:
         r"""
         Returns:
 
@@ -1643,10 +1693,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import requests
         >>> from PIL import Image
         >>> import torch
-        >>> from transformers import AutoProcessor, OwlViTForObjectDetection
+        >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
 
-        >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
-        >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1658,7 +1708,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> target_sizes = torch.Tensor([image.size[::-1]])
         >>> # Convert outputs (bounding boxes and class logits) to final bounding boxes and scores
         >>> results = processor.post_process_object_detection(
-        ...     outputs=outputs, threshold=0.1, target_sizes=target_sizes
+        ...     outputs=outputs, threshold=0.2, target_sizes=target_sizes
         ... )
 
         >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
@@ -1668,8 +1718,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> for box, score, label in zip(boxes, scores, labels):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
-        Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
-        Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
+        Detected a photo of a cat with confidence 0.614 at location [341.67, 17.54, 642.32, 278.51]
+        Detected a photo of a cat with confidence 0.665 at location [6.75, 38.97, 326.62, 354.85]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1704,12 +1754,16 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         # Predict object classes [batch_size, num_patches, num_queries+1]
         (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
 
+        # Predict objectness
+        objectness_logits = self.objectness_predictor(image_feats)
+
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
 
         if not return_dict:
             output = (
                 pred_logits,
+                objectness_logits,
                 pred_boxes,
                 query_embeds,
                 feature_map,
@@ -1720,11 +1774,12 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             output = tuple(x for x in output if x is not None)
             return output
 
-        return OwlViTObjectDetectionOutput(
+        return Owlv2ObjectDetectionOutput(
             image_embeds=feature_map,
             text_embeds=query_embeds,
             pred_boxes=pred_boxes,
             logits=pred_logits,
+            objectness_logits=objectness_logits,
             class_embeds=class_embeds,
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
