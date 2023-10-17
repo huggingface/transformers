@@ -85,7 +85,7 @@ class VitsFeatureExtractor(SequenceFeatureExtractor):
             num_frequency_bins=1 + n_fft // 2,
             num_mel_filters=feature_size,
             min_frequency=0.0,
-            max_frequency=22050 // 2,
+            max_frequency=sampling_rate // 2,
             sampling_rate=sampling_rate,
             norm="slaney",
             mel_scale="slaney",
