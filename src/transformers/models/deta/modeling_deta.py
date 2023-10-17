@@ -948,7 +948,7 @@ class DetaClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel with DeformableDetr->Deta
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel with DeformableDetr->Deta,DeformableDetrConvEncoder->DetaBackboneWithPositionalEncodings
 class DetaPreTrainedModel(PreTrainedModel):
     config_class = DetaConfig
     base_model_prefix = "model"
