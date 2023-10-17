@@ -4415,10 +4415,11 @@ class GenerationMixin:
 
         this_peer_finished = False  # used by synced_gpus only
 
-        position_ids = torch.arange(max_len, device=input_ids.device, dtype=torch.long)[None, :].broadcast_to(batch_size, max_len) if batch_size > 1 else None
+        # 2 * max_len to give us room to potentially left cut
+        position_ids = torch.arange(2 * max_len, device=input_ids.device, dtype=torch.long)[None, :].broadcast_to(batch_size, 2 * max_len) if batch_size > 1 else None
         attention_mask = torch.ones_like(position_ids) if position_ids is not None else  None
         n_matches = None
-        # from transformers import AutoProcessor; processor = AutoProcessor.from_pretrained("sanchit-gandhi/large-32-2-gpu-flat-lr")
+        eos_tokens_mask = None
 
         while True:
             if synced_gpus:
@@ -4431,6 +4432,31 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
+            # Rotate everything for bsz > 1
+            if n_matches is not None and position_ids is not None:
+                # compute by how much everything can be rotated
+                shift = unfinished_sequences * (n_matches.max() - n_matches) + (1 - unfinished_sequences) * (eos_tokens_mask.sum(-1) - 1)
+
+                for i in range(batch_size):
+                    if shift[i] > 0:
+                        input_ids[i][shift[i]:] = input_ids[i][:-shift[i]].clone()
+                        input_ids[i][:shift[i]] = self.config.pad_token_id
+
+                position_ids = position_ids.add(-shift[:, None]).clamp(min=0)
+                attention_mask[:, :-1] = position_ids[:, 1:] > 0
+
+                left_cut = (1 - attention_mask).sum(-1).min()
+
+                if left_cut > 0:
+                    position_ids = position_ids[:, left_cut:]
+                    attention_mask = attention_mask[:, left_cut:]
+                    input_ids = input_ids[:, left_cut:]
+
+                    model_kwargs["past_key_values"] = _crop_past_key_values(self, model_kwargs["past_key_values"], left_cut=left_cut)
+                    model_kwargs["assistant_past_key_values"] = _crop_past_key_values(
+                        assistant_model, model_kwargs["assistant_past_key_values"], left_cut=left_cut
+                    )  # the assistant does not have the token after the last match, hence the -1
+
             # Assistant: main logic start
             cur_len = input_ids.shape[-1]
 
@@ -4438,11 +4464,6 @@ class GenerationMixin:
             # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
             # need access to the assistant cache to secure strong speedups.
             candidate_input_ids = input_ids
-
-            if n_matches is not None and position_ids is not None:
-                diff = n_matches - n_matches.max()
-                position_ids = position_ids.add(diff[:, None]).clamp(min=0)
-                attention_mask[:, :min(cur_len + num_assistant_tokens, attention_mask.shape[1] - 1)] = position_ids[:, 1: (cur_len + num_assistant_tokens + 1)] > 0
 
             for assist_idx in range(int(num_assistant_tokens)):
                 # 1.1. use the assistant model to obtain the next candidate logits
@@ -4515,7 +4536,6 @@ class GenerationMixin:
             if self.config.is_encoder_decoder:
                 candidate_kwargs["decoder_position_ids"] = position_ids[:, :cur_len + candidate_length] if position_ids is not None else None
                 candidate_kwargs["decoder_attention_mask"] = attention_mask[:, :cur_len + candidate_length] if attention_mask is not None else None
-                # print("pos_ids", candidate_kwargs["decoder_position_ids"])
             else:
                 candidate_kwargs["position_ids"] = position_ids[:, :cur_len + candidate_length]
 
@@ -4571,24 +4591,14 @@ class GenerationMixin:
                 eos_tokens_mask = torch.logical_or(eos_tokens.cumsum(-1).bool(), finished_seq_mask)
                 valid_tokens = torch.where(eos_tokens_mask, eos_token_id_tensor, valid_tokens)
 
-                unfinished_sequences = (1 - eos_tokens_mask.any(-1).int())
+                # check which sentence has finished
+                unfinished_sequences = (1 - eos_tokens_mask.gather(1, n_matches[:, None]).squeeze(-1).int())
 
                 # stop when each sentence is finished
                 if unfinished_sequences.max() == 0:
                     this_peer_finished = True
 
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
-
-            for i, n in enumerate(n_matches):
-                diff = (n_matches.max() - n).cpu().item()
-                if diff > 0:
-                    input_ids[i][diff:] = input_ids[i][:-diff].clone()
-                    input_ids[i][:diff] = self.config.pad_token_id
-
-            # print(unfinished_sequences)
-            # print("n_match", n_matches)
-            # print("n_match_new", n_matches_new)
-            # print("input_ids:", processor.batch_decode(input_ids, skip_special_tokens=True))
 
             if streamer is not None:
                 streamer.put(valid_tokens.cpu())
@@ -4691,22 +4701,27 @@ class GenerationMixin:
             return input_ids
 
 
-def _crop_past_key_values(model, past_key_values, maximum_length, n_matches):
+def _crop_past_key_values(model, past_key_values, maximum_length=None, n_matches=None, left_cut=None):
     """Crops the past key values up to a certain maximum length."""
     new_past = []
     if model.config.is_encoder_decoder:
         for idx in range(len(past_key_values)):
-            k_cache = past_key_values[idx][0][:, :, :maximum_length, :]
-            v_cache = past_key_values[idx][1][:, :, :maximum_length, :]
+            if left_cut is None:
+                k_cache = past_key_values[idx][0][:, :, :maximum_length, :]
+                v_cache = past_key_values[idx][1][:, :, :maximum_length, :]
+            else:
+                k_cache = past_key_values[idx][0][:, :, left_cut:, :]
+                v_cache = past_key_values[idx][1][:, :, left_cut:, :]
 
-            for batch_idx in range(len(n_matches)):
-                num_roll_left = n_matches.max() - n_matches[batch_idx]
-                if num_roll_left > 0:
-                    # TODO(PVP) - check mem usage
-                    #k_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=k_cache.device), k_cache[batch_idx][:, :-num_roll_left].clone())
-                    #v_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=v_cache.device), v_cache[batch_idx][:, :-num_roll_left].clone())
-                    k_cache[batch_idx][:, num_roll_left:] = k_cache[batch_idx][:, :-num_roll_left].clone()
-                    v_cache[batch_idx][:, num_roll_left:] = v_cache[batch_idx][:, :-num_roll_left].clone()
+            if n_matches is not None:
+                for batch_idx in range(len(n_matches)):
+                    num_roll_left = n_matches.max() - n_matches[batch_idx]
+                    if num_roll_left > 0:
+                        # TODO(PVP) - check mem usage
+                        # k_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=k_cache.device), k_cache[batch_idx][:, :-num_roll_left].clone())
+                        # v_cache[batch_idx].index_copy_(1, torch.arange(num_roll_left, maximum_length, device=v_cache.device), v_cache[batch_idx][:, :-num_roll_left].clone())
+                        k_cache[batch_idx][:, num_roll_left:] = k_cache[batch_idx][:, :-num_roll_left].clone()
+                        v_cache[batch_idx][:, num_roll_left:] = v_cache[batch_idx][:, :-num_roll_left].clone()
 
             new_past.append(
                 (
