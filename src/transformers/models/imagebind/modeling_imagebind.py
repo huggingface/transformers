@@ -545,7 +545,8 @@ class ImageBindAudioEmbeddings(RGBDTPatchEmbedding):
 
 class ImageBindDepthEmbeddings(RGBDTPatchEmbedding):
     def __init__(self, config: ImageBindDepthConfig):
-        super().__init__(config, norm_layer=None)
+        layer_norm = nn.LayerNorm(config.hidden_size)
+        super().__init__(config, norm_layer=layer_norm)
     
     def forward(self, depth: torch.FloatTensor) -> torch.Tensor:
         super().forward(pixel_values=depth)
@@ -1426,7 +1427,6 @@ class ImageBindAudioTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = ImageBindAudioEmbeddings(config)
-        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = ImageBindEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
@@ -1459,7 +1459,6 @@ class ImageBindAudioTransformer(nn.Module):
             input_features = input_features.reshape(batch_size * num_clips, *input_features.shape[2:])
 
         hidden_states = self.embeddings(input_features)
-        hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
