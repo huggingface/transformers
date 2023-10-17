@@ -124,7 +124,7 @@ class AspectRatioPreservingScalingWithPad:
             image = to_numpy_array(image)
         scaled_image = self._scale_to_target_aspect_ratio(image)
         padded_image = self._pad_to_target_size(scaled_image)
-        normalized_padded_image = normalize(padded_image)
+        normalized_padded_image = normalize(padded_image, 0.5, 0.5)
         return normalized_padded_image
 
 
@@ -134,11 +134,11 @@ class FuyuImageProcessor(BaseImageProcessor):
     In particular, it should handle:
 
     - Processing Images:
-        Taking a batch of images as input. 
+        Taking a batch of images as input.
         If the images are variable-sized, it resizes them based on the desired patch dimensions. The image output is 
         always
-        img_h ........................................... 1080                                                                                                                                       
-        img_w ........................................... 1920  
+        img_h ........................................... 1080
+        img_w ........................................... 1920
         Then, it patches up these images using the patchify_image function.
 
     - Creating Image Input IDs:

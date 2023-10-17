@@ -179,7 +179,7 @@ class FuyuProcessor():  # ProcessorMixin):
                 for image in images:
                     image = to_numpy_array(image)
                     if not is_scaled_image(image):
-                        image / 255.0
+                        image = image / 255.0
                     channel_dimension = infer_channel_dimension_format(image, 3)
                     if channel_dimension == ChannelDimension.FIRST:
                         width_index = 2
@@ -291,8 +291,11 @@ class FuyuProcessor():  # ProcessorMixin):
                 new_seq_len=max_seq_len_batch,
                 offset=0,
             )
-            return {"model_image_input": model_image_input, "image_padded_unpacked_tokens_tensor": image_padded_unpacked_tokens_tensor, "image_patch_input_indices": image_patch_input_indices}
+            return {"model_image_input": model_image_input,
+                    "image_padded_unpacked_tokens_tensor": image_padded_unpacked_tokens_tensor,
+                    "image_patch_input_indices": image_patch_input_indices}
 
+        '''
         if text is not None:
             encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
 
@@ -306,6 +309,7 @@ class FuyuProcessor():  # ProcessorMixin):
             return encoding
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+        '''
 
     def batch_decode(self, *args, **kwargs):
         """
