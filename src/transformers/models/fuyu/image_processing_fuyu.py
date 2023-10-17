@@ -11,6 +11,7 @@ from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
     pad,
+    normalize,
     rescale,
     resize,
     to_channel_dimension_format,
@@ -115,7 +116,7 @@ class AspectRatioPreservingScalingWithPad:
         padding_right = self.target_width - image_width
 
         padded_image = pad(image, ((padding_top, padding_bottom),
-                           (padding_left, padding_right)), mode=self.padding_mode)
+                           (padding_left, padding_right)), mode=self.padding_mode, constant_values=self.padding_value)
         return padded_image
 
     def apply_transformation(self, image: Union[np.ndarray, PIL.Image.Image]) -> np.ndarray:
@@ -123,7 +124,8 @@ class AspectRatioPreservingScalingWithPad:
             image = to_numpy_array(image)
         scaled_image = self._scale_to_target_aspect_ratio(image)
         padded_image = self._pad_to_target_size(scaled_image)
-        return padded_image
+        normalized_padded_image = normalize(padded_image)
+        return normalized_padded_image
 
 
 class FuyuImageProcessor(BaseImageProcessor):
@@ -152,7 +154,7 @@ class FuyuImageProcessor(BaseImageProcessor):
     def __init__(self, aspectratio_preserving_padding=AspectRatioPreservingScalingWithPad, **kwargs):
         super().__init__(**kwargs)
         self.aspectratio_preserving_padding = aspectratio_preserving_padding(
-            target_height=1080, target_width=1920, padding_value=255)
+            target_height=1080, target_width=1920, padding_value=1.0)
 
     def get_num_patches(self, img_h: int, img_w: int, patch_dim_h: int, patch_dim_w: int) -> int:
         """Calculate number of patches required to encode an image."""

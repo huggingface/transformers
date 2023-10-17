@@ -12,6 +12,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
+    normalize,
     pad,
     rescale,
     resize,
@@ -177,6 +178,8 @@ class FuyuProcessor():  # ProcessorMixin):
                 image_unpadded_widths = []
                 for image in images:
                     image = to_numpy_array(image)
+                    if not is_scaled_image(image):
+                        image / 255.0
                     channel_dimension = infer_channel_dimension_format(image, 3)
                     if channel_dimension == ChannelDimension.FIRST:
                         width_index = 2
