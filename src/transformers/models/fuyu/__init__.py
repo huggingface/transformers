@@ -17,12 +17,23 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_vision_available
 )
 
 
 _import_structure = {
     "configuration_fuyu": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
 }
+
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_fuyu"] = ["FuyuImageProcessor"]
+    _import_structure["processing_fuyu"] = ["FuyuProcessor"]
 
 
 try:
@@ -41,6 +52,15 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_fuyu import FuyuImageProcessor
+        from .processing_fuyu import FuyuProcessor
 
     try:
         if not is_torch_available():

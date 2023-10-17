@@ -1,5 +1,5 @@
 import math
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, List
 
 import numpy as np
 
@@ -10,16 +10,16 @@ from ...image_transforms import (
     resize,
 )
 from ...image_utils import to_numpy_array
+from ...utils import TensorType, is_vision_available, is_torch_available, logging
 
-import numpy as np
 
+if is_vision_available():
+    import PIL
 
-import torch
+if is_torch_available():
+    import torch
 
-from typing import List
-import math
-
-import PIL.Image
+logger = logging.get_logger(__name__)
 
 
 class AspectRatioPreservingScalingWithPad:
@@ -94,6 +94,8 @@ class FuyuImageProcessor(BaseImageProcessor):
     """
     # TODO make patchify logic consistent with FuyuViTModel
 
+    model_input_names = ["pixel_values"]
+
     def __init__(self, aspectratio_preserving_padding=AspectRatioPreservingScalingWithPad, **kwargs):
         super().__init__(**kwargs)
         self.aspectratio_preserving_padding = aspectratio_preserving_padding(
@@ -137,8 +139,6 @@ class FuyuImageProcessor(BaseImageProcessor):
         )
 
         return patches_final
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
 
     def process_images_for_model_input(
         self,

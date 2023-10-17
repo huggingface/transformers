@@ -52,8 +52,6 @@ import math
 from torchvision.transforms import ConvertImageDtype, Normalize, Compose
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
-
-
 def max_across_indices(values: Iterable[Any]) -> List[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
@@ -61,8 +59,6 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 # Copied from transformers.models.detr.image_processing_detr.get_max_height_width
-
-
 def get_max_height_width(
     images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> List[int]:
@@ -81,8 +77,6 @@ def get_max_height_width(
     return (max_height, max_width)
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
-
-
 def make_pixel_mask(
     image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> np.ndarray:
@@ -101,7 +95,7 @@ def make_pixel_mask(
     return mask
 
 
-class FuyuProcessor():  # ProcessorMixin):
+class FuyuProcessor(ProcessorMixin):
     r"""
     Constructs a Fuyu processor which wraps a Fuyu image processor and a Llama tokenizer into a single processor.
 
@@ -114,9 +108,9 @@ class FuyuProcessor():  # ProcessorMixin):
         tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
     """
-    # attributes = ["image_processor", "tokenizer"]
-    # image_processor_class = "FuyuImageProcessor"
-    # tokenizer_class = "LlamaTokenizerFast"
+    attributes = ["image_processor", "tokenizer"]
+    mage_processor_class = "FuyuImageProcessor"
+    tokenizer_class = "LlamaTokenizerFast"
     # FIXME How are these requirements propagated? currently getting AttributeError: module transformers has no attribute FuyuImageProcessor
 
     def __init__(self, image_processor, tokenizer):
