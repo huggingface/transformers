@@ -21,7 +21,7 @@ import unittest
 
 from transformers import DetaConfig, ResNetConfig, is_torch_available, is_torchvision_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_accelerate, require_torchvision, require_vision, slow, torch_device
+from transformers.testing_utils import require_torchvision, require_vision, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester

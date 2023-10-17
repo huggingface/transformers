@@ -23,7 +23,6 @@ from typing import Dict, List, Tuple
 from transformers import DeformableDetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
-    require_accelerate,
     require_timm,
     require_torch,
     require_torch_gpu,

@@ -21,7 +21,6 @@ import unittest
 
 from transformers import DetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
-    require_accelerate,
     require_timm,
     require_torch,
     require_vision,

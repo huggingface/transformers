@@ -23,7 +23,6 @@ from huggingface_hub import hf_hub_download
 
 from transformers import ResNetConfig, TableTransformerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
-    require_accelerate,
     require_timm,
     require_torch,
     require_vision,
