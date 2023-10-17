@@ -602,116 +602,6 @@ FUYU_INPUTS_DOCSTRING = r"""
 """
 
 
-"""
-# TODO the image_patch indices are derived from the logic
-            image_patch_input_indices = full_unpacked_stream_to_tensor(
-                all_bi_tokens_to_place=all_bi_tokens_to_place,
-                full_unpacked_stream=unpacked_image_patch_indices_per_batch,
-                fill_value=-1,
-                batch_size=batch_size,
-                new_seq_len=max_seq_len_batch,
-                offset=0,
-            )
-
-
-# Which is 
-
-def full_unpacked_stream_to_tensor(
-    all_bi_tokens_to_place: List[int],
-    full_unpacked_stream: List[torch.Tensor],
-    fill_value: int,
-    batch_size: int,
-    new_seq_len: int,
-    offset: int,
-) -> torch.Tensor:
-    #Takes an unpacked stream of tokens (i.e. a list of tensors, one for each item in the batch) and does
-    #the required padding to create a single tensor for the batch of shape batch_size x new_seq_len.
-
-    assert len(all_bi_tokens_to_place) == batch_size
-    assert len(full_unpacked_stream) == batch_size
-
-    # Create padded tensors for the full batch.
-    new_padded_tensor = torch.full(
-        [batch_size, new_seq_len],
-        fill_value=fill_value,
-        dtype=full_unpacked_stream[0].dtype,
-        device=full_unpacked_stream[0].device,
-    )
-
-    # Place each batch entry into the batch tensor.
-    for bi in range(batch_size):
-        tokens_to_place = all_bi_tokens_to_place[bi]
-        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset : tokens_to_place + offset]
-
-    return new_padded_tensor
-"""
-
-"""
-
-# Full code here
-
-if model_image_input is not None:
-            # Construct inputs for tokens.
-            image_padded_unpacked_tokens = construct_full_unpacked_stream(
-                num_real_text_tokens=context_length_tensor,
-                input_stream=context_tokens_tensor,
-                image_tokens=model_image_input.image_input_ids,
-                batch_size=batch_size,
-                num_sub_sequences=num_sub_sequences,
-            )
-            # Construct inputs for image patch indices.
-            unpacked_image_patch_indices_per_batch = construct_full_unpacked_stream(
-                num_real_text_tokens=context_length_tensor,
-                input_stream=torch.full_like(context_tokens_tensor, -1),
-                image_tokens=model_image_input.image_patch_indices_per_batch,
-                batch_size=batch_size,
-                num_sub_sequences=num_sub_sequences,
-            )
-            max_prompt_length = max(x.shape[-1] for x in image_padded_unpacked_tokens)
-            max_seq_len_batch = min(max_prompt_length + max_tokens_to_generate, max_position_embeddings)
-            if max_prompt_length > max_position_embeddings:
-                raise ValueError(
-                    f"Max prompt length of {max_prompt_length} exceeds context length of {max_position_embeddings}"
-                )
-            elif (
-                max_prompt_length + max_tokens_to_generate > max_position_embeddings
-                and torch.distributed.get_rank() == 0
-            ):
-                print(
-                    f"Max prompt length of {max_prompt_length} + max tokens to generate {max_tokens_to_generate}",
-                    f"exceeds context length of {max_position_embeddings}. Will generate as many tokens as possible.",
-                )
-
-            all_bi_tokens_to_place = []
-            for bi in range(batch_size):
-                tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[bi].shape[0]))
-                all_bi_tokens_to_place.append(tokens_to_place)
-
-            # Now pack tokens: combine subsequences, truncate if necessary.
-            image_padded_unpacked_tokens_tensor = full_unpacked_stream_to_tensor(
-                all_bi_tokens_to_place=all_bi_tokens_to_place,
-                full_unpacked_stream=image_padded_unpacked_tokens,
-                fill_value=tokenizer.eos_token_id,
-                batch_size=batch_size,
-                new_seq_len=max_seq_len_batch,
-                offset=0,
-            )
-
-            # Use same packing logic for the image patch indices.
-            image_patch_input_indices = full_unpacked_stream_to_tensor(
-                all_bi_tokens_to_place=all_bi_tokens_to_place,
-                full_unpacked_stream=unpacked_image_patch_indices_per_batch,
-                fill_value=-1,
-                batch_size=batch_size,
-                new_seq_len=max_seq_len_batch,
-                offset=0,
-            )
-            image_input = FuyuImageInput(
-                images=model_image_input.images, image_patch_input_indices=image_patch_input_indices
-            )
-"""
-
-
 @dataclass
 class FuyuBaseModelOutputWithPast(BaseModelOutputWithPast):
     """
@@ -1079,6 +969,47 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+
+        #TODO add the processing step. Processing has first to be done 
+
+        from transformers import FuyuConfig, FuyuModel, FuyuForCausalLM, AutoTokenizer
+        from transformers.models.fuyu.processing_fuyu import FuyuProcessor
+        from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
+        from transformers.image_utils import to_numpy_array
+        from PIL import Image
+        import torch
+
+        from transformers.models.fuyu.fuyu_processing_utils import tokenize_prompts_with_images, construct_full_unpacked_stream, tokenize_prompts_with_images, full_unpacked_stream_to_tensor
+
+        pretrained_path = 'huggingface/pre_release_model'
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_path)
+        image_processor = FuyuImageProcessor()
+
+
+        processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        text_prompt = "Generate a coco-style caption.\\n"
+
+        image_path = "/fsx/pablo/adept-collab/adept-mm/mm-inference-for-hf/bus.png"
+        image_pil = Image.open(image_path)
+
+        outputs = processor(text=text_prompt, images=[image_pil])
+
+        # TODO Now, we have outputs. We can use them to compute image and text embeddings and mix them. 
+        # The embeddings are identical to those of Adept. 
+
+        # Running
+        word_embeds = model.embed_tokens(outputs['image_padded_unpacked_tokens_tensor'][0][None, :])
+        cont_embeds = model.vision_embed_tokens(model_image_input['image_patches'][0][0]).unsqueeze(0)
+        patch_indices = outputs['image_patch_input_indices']
+        # word_embeds and cont_embeds are the text and image embeddings, same as adept.
+        # 
+        combined_embeddings = model.gather_continuous_embeddings(word_embeddings=word_embeds, continuous_embeddings=cont_embeds,
+                                   image_patch_input_indices=patch_indices)
+
+        # This has, then, to be pushed to the main transformers tower in the model.forward() method. # TODO THIS IS THE MAIN TODO.
+        # Then, we can use the .generate() and match their outputs. 
+
+
         '
         ```"""
 
