@@ -197,7 +197,7 @@ class Beit3ModelTester:
         return self.get_config(), {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
-            "text_padding_mask": text_padding_mask,
+            "attention_mask": text_padding_mask,
         }
 
     def create_and_check_model(self, config, input_dict):
@@ -255,7 +255,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict_to_return["pixel_values"] = torch.cat(
                 (inputs_dict_dup["pixel_values"].unsqueeze(1), inputs_dict_dup["pixel_values"].unsqueeze(1)), dim=1
             )
-            inputs_dict_to_return["text_padding_mask"] = inputs_dict_dup["text_padding_mask"]
+            inputs_dict_to_return["attention_mask"] = inputs_dict_dup["text_padding_mask"]
             inputs_dict_to_return["input_ids"] = inputs_dict_dup["input_ids"]
             return inputs_dict_to_return
         elif model_class.__name__ == "Beit3ForImageClassification":
@@ -270,6 +270,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             return inputs_dict_to_return
         elif model_class.__name__ == "Beit3ForImageTextRetrieval":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_text_retrieval()[1]
+            del inputs_dict_dup["text_padding_mask"]
         elif model_class.__name__ == "Beit3ForQuestionAnswering":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_visual_question_answering()[1]
             inputs_dict_to_return["labels"] = torch.ones(
@@ -281,6 +282,8 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             del inputs_dict_dup["text_padding_mask"]
         elif model_class.__name__ == "Beit3ForCaptioning":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_captioning()[1]
+            inputs_dict_to_return["attention_mask"] = inputs_dict_dup["text_padding_mask"]
+            del inputs_dict_dup["text_padding_mask"]
         elif model_class.__name__ == "Beit3Model":
             inputs_dict_to_return = self.model_tester.prepare_config_and_inputs_for_basemodel()[1]
             inputs_dict_to_return.update(inputs_dict_dup)
