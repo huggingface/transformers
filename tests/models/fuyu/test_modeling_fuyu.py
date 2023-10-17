@@ -36,7 +36,7 @@ class FuyuIntegrationTest(unittest.TestCase):
         """
         Test to ensure that the standard processing on a gold example matches adept's code.
         """
-        assert torch.equal(self.model_inputs["image_patch_input_indices"], torch.Tensor([[
+        torch.testing.assert_allclose(self.model_inputs["image_patch_input_indices"], torch.Tensor([[
             0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,
             14,  15,  16,  17,  18,  19,  20,  21,  -1,  22,  23,  24,  25,  26,
             27,  28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,  39,  40,
@@ -61,9 +61,9 @@ class FuyuIntegrationTest(unittest.TestCase):
             282, 283, 284, 285,  -1, 286, 287, 288, 289, 290, 291, 292, 293, 294,
             295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307,  -1,
             -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-            -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1]]))
+            -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1]]), atol=0, rtol=0)
 
-        assert torch.equal(self.model_inputs['image_padded_unpacked_tokens_tensor'], torch.Tensor([[
+        torch.testing.assert_allclose(self.model_inputs['image_padded_unpacked_tokens_tensor'], torch.Tensor([[
             71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
             71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
             71011,  71011,  71011,  71011,  71019,  71011,  71011,  71011,  71011,
@@ -102,17 +102,20 @@ class FuyuIntegrationTest(unittest.TestCase):
             71011,  71011,  71011,  71011,  71011,  71011,  71019,      1, 128340,
             71374,  71389, 120412,  71377,  71835,  71374,  73615,  71375,  71399,
             71435,  71122,  71013,  71013,  71013,  71013,  71013,  71013,  71013,
-            71013,  71013,  71013]]))
+            71013,  71013,  71013]]), atol=0, rtol=0)
 
     def test_model_embeddings_match_adept(self):
+        """
+        This test is very slow and needs about 30GB of RAM to be run on the Fuyu-8b model.
+        """
         word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens_tensor'][0][None, :])
         expected_word_embedding_start = torch.Tensor([2.8908e-06, -1.4961e-05, -2.9564e-05, -1.4901e-05, -2.5153e-05,
                                                       -1.9312e-05, -2.5511e-05,  1.9431e-05, -7.5698e-06, -3.5286e-05])
         expected_word_embedding_end = torch.Tensor([8.8811e-06, -3.7909e-05, -4.8637e-05,  2.1100e-05, -1.4544e-05,
                                                     -3.0756e-05,  4.3511e-06, -1.5080e-05,  2.5153e-05])
-        assert torch.allclose(word_embeddings[0][0][0:10], expected_word_embedding_start, atol=1e-7)
-        assert torch.allclose(word_embeddings[0][0][-9:], expected_word_embedding_end, atol=1e-7)
-        assert word_embeddings.shape == torch.Size([1, 335, 4096])
+        torch.testing.assert_allclose(word_embeddings[0][0][0:10], expected_word_embedding_start, atol=1e-7)
+        torch.testing.assert_allclose(word_embeddings[0][0][-9:], expected_word_embedding_end, atol=1e-7)
+        torch.testing.assert_allclose(word_embeddings.shape, torch.Size([1, 335, 4096]), atol=0, rtol=0)
 
         continuous_embeddings = self.model.vision_embed_tokens(self.model_inputs['image_patches'][0][0]).unsqueeze(0)
 
@@ -120,7 +123,7 @@ class FuyuIntegrationTest(unittest.TestCase):
                                                             -0.9062,  0.4473,  0.2412, -0.2461, -0.0430])
         expected_continuous_embedding_end = torch.Tensor([-0.2754, -0.1836,  0.2422, -0.3711,  0.0564,
                                                           -0.1099,  0.0378,  0.1367, -0.2100])
-        assert torch.allclose(continuous_embeddings[0][0][0:10], expected_continuous_embedding_start, atol=1e-4)
-        assert torch.allclose(continuous_embeddings[0][0][-9:], expected_continuous_embedding_end, atol=1e-4)
+        torch.testing.assert_allclose(continuous_embeddings[0][0][0:10], expected_continuous_embedding_start, atol=1e-4)
+        torch.testing.assert_allclose(continuous_embeddings[0][0][-9:], expected_continuous_embedding_end, atol=1e-4)
 
-        assert continuous_embeddings[0].shape == torch.Size([308, 4096])
+        torch.testing.assert_allclose(continuous_embeddings[0].shape, torch.Size([308, 4096]), atol=0, rtol=0)

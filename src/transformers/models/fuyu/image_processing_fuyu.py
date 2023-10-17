@@ -121,6 +121,8 @@ class FuyuImageProcessor(BaseImageProcessor):
             patch_dim_h: Height of each patch.
             patch_dim_w: Width of each patch.
         """
+        # TODO refer to https://github.com/ArthurZucker/transformers/blob/0f0a3fe5ca5697ee58faeb5b53f049af720b5e98/src/transformers/models/vit_mae/modeling_vit_mae.py#L871
+        # torch implementation is faster but does not handle non-squares
 
         batch_size, channels, height, width = image.shape
         unfolded_along_height = image.unfold(2, patch_dim_h, patch_dim_h)
