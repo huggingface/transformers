@@ -18,9 +18,9 @@
 from collections import OrderedDict
 
 from ...utils import logging
-from .auto_factory import _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
+from .auto_factory import (_BaseAutoModelClass, _LazyAutoMapping,
+                           auto_class_update)
 from .configuration_auto import CONFIG_MAPPING_NAMES
-
 
 logger = logging.get_logger(__name__)
 
@@ -45,6 +45,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("gptj", "FlaxGPTJModel"),
         ("longt5", "FlaxLongT5Model"),
         ("marian", "FlaxMarianModel"),
+        ("mistral", "FlaxMistralModel"),
         ("mbart", "FlaxMBartModel"),
         ("mt5", "FlaxMT5Model"),
         ("opt", "FlaxOPTModel"),
@@ -146,6 +147,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
         ("gptj", "FlaxGPTJForCausalLM"),
+        ("mistral", "FlaxMistralForCausalLM"),
         ("opt", "FlaxOPTForCausalLM"),
         ("roberta", "FlaxRobertaForCausalLM"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForCausalLM"),
@@ -164,6 +166,7 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("distilbert", "FlaxDistilBertForSequenceClassification"),
         ("electra", "FlaxElectraForSequenceClassification"),
         ("mbart", "FlaxMBartForSequenceClassification"),
+        ("mistral", "FlaxMistralForSequenceClassification"),
         ("roberta", "FlaxRobertaForSequenceClassification"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForSequenceClassification"),
         ("roformer", "FlaxRoFormerForSequenceClassification"),
