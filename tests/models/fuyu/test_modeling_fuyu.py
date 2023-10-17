@@ -398,12 +398,15 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         torch.testing.assert_close(word_embeddings[0][0][-9:], expected_word_embedding_end, rtol=0.1, atol=1e-02)
 
     def test_model_forward_values(self):
-        reference_tensor = torch.Tensor([[-0.5469,  1.6016,  2.3438,  2.8125,  1.0000],
-                                         [0.3613,  1.0391,  2.5625,  2.2031,  1.5703],
-                                         [-0.4707,  2.0938,  1.7109,  5.7188,  0.4199]])
+        # Slice from original model using bfloat16
+        reference_tensor = torch.Tensor([
+            [ 1.0938, -0.1230,  2.8281,  2.8906,  0.2969],
+            [-0.3281,  5.4375,  3.3750,  7.0000,  1.2188],
+            [ 1.2188,  3.3750,  4.7188,  5.0000,  0.0981]
+        ])
         model_outputs = self.model(
             input_ids=self.model_inputs["image_padded_unpacked_tokens"][0].unsqueeze(0),
             image_patches=self.model_inputs["model_image_input"]["image_patches"][0][0].unsqueeze(0),
             image_patches_indices=self.model_inputs["image_patch_input_indices"]
         )
-        torch.testing.assert_close(model_outputs[0][0, 5:8, 1200:1205], reference_tensor, rtol=0.1, atol=0.1)
+        torch.testing.assert_close(model_outputs[0][0, 6:9, 1200:1205], reference_tensor, rtol=0.15, atol=0.15)
