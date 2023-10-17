@@ -45,7 +45,10 @@ self-supervised loss that focuses on modeling inter-sentence coherence, and show
 with multi-sentence inputs. As a result, our best model establishes new state-of-the-art results on the GLUE, RACE, and
 SQuAD benchmarks while having fewer parameters compared to BERT-large.*
 
-Tips:
+This model was contributed by [lysandre](https://huggingface.co/lysandre). This model jax version was contributed by
+[kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/google-research/ALBERT).
+
+## Usage tips
 
 - ALBERT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather
   than the left.
@@ -56,11 +59,7 @@ Tips:
 - Layers are split in groups that share parameters (to save memory).
 Next sentence prediction is replaced by a sentence ordering prediction: in the inputs, we have two sentences A and B (that are consecutive) and we either feed A followed by B or B followed by A. The model must predict if they have been swapped or not.
 
-
-This model was contributed by [lysandre](https://huggingface.co/lysandre). This model jax version was contributed by
-[kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/google-research/ALBERT).
-
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -89,6 +88,9 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
 [[autodoc]] models.albert.modeling_tf_albert.TFAlbertForPreTrainingOutput
+
+<frameworkcontent>
+<pt>
 
 ## AlbertModel
 
@@ -123,6 +125,10 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 
 [[autodoc]] AlbertForQuestionAnswering
     - forward
+
+</pt>
+
+<tf>
 
 ## TFAlbertModel
 
@@ -159,6 +165,9 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 [[autodoc]] TFAlbertForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
 ## FlaxAlbertModel
 
 [[autodoc]] FlaxAlbertModel
@@ -193,3 +202,8 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 
 [[autodoc]] FlaxAlbertForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>
+
+
