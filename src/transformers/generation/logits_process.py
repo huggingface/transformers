@@ -282,8 +282,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     Args:
         penalty (`float`):
-            The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated tokens.
-            Between 0.0 and 1.0 rewards previously generated tokens. See [this 
+            The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
+            tokens. Between 0.0 and 1.0 rewards previously generated tokens. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
 
     Examples:
