@@ -73,8 +73,8 @@ class ChineseCLIPImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`): <fill_docstring>
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
