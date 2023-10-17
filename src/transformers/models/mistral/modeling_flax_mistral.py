@@ -103,32 +103,7 @@ class FlaxMistralMLP(nn.Module):
         self.act_fn = ACT2FN[self.config.hidden_act]
 
     def __call__(self, x):
-        if self.config.pretraining_tp > 1:
-            gate_proj_slices = jnp.split(
-                self.gate_proj.variables["params"]["kernel"].transpose(1, 0), self.config.pretraining_tp
-            )
-            up_proj_slices = jnp.split(
-                self.up_proj.variables["params"]["kernel"].transpose(1, 0), self.config.pretraining_tp
-            )
-            down_proj_slices = jnp.split(
-                self.down_proj.variables["params"]["kernel"].transpose(1, 0), self.config.pretraining_tp, axis=1
-            )
-
-            gate_proj = jnp.concatenate(
-                [x @ gate_proj_slices[i].transpose(1, 0) for i in range(self.config.pretraining_tp)], axis=-1
-            )
-            up_proj = jnp.concatenate(
-                [x @ up_proj_slices[i].transpose(1, 0) for i in range(self.config.pretraining_tp)], axis=-1
-            )
-
-            intermediate_states = jnp.split(self.act_fn(gate_proj) * up_proj, self.config.pretraining_tp, axis=2)
-            down_proj = [
-                intermediate_states[i] @ down_proj_slices[i].transpose(1, 0) for i in range(self.config.pretraining_tp)
-            ]
-            down_proj = sum(down_proj)
-        else:
-            down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
 
@@ -178,14 +153,14 @@ class FlaxMistralAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Dense(self.num_heads * self.head_dim, use_bias=self.config.attention_bias, dtype=self.dtype)
+        self.q_proj = nn.Dense(self.num_heads * self.head_dim, use_bias=False, dtype=self.dtype)
         self.k_proj = nn.Dense(
-            self.num_key_value_heads * self.head_dim, use_bias=self.config.attention_bias, dtype=self.dtype
+            self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype
         )
         self.v_proj = nn.Dense(
-            self.num_key_value_heads * self.head_dim, use_bias=self.config.attention_bias, dtype=self.dtype
+            self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype
         )
-        self.o_proj = nn.Dense(self.hidden_size, use_bias=self.config.attention_bias, dtype=self.dtype)
+        self.o_proj = nn.Dense(self.hidden_size, use_bias=False, dtype=self.dtype)
         self.rotary_emb = FlaxMistralRotaryEmbedding(
             self.head_dim, self.max_position_embeddings, base=self.rope_theta, dtype=self.dtype
         )
@@ -202,33 +177,11 @@ class FlaxMistralAttention(nn.Module):
         padding_mask: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         bsz, q_len, _ = hidden_states.shape
-        if self.config.pretraining_tp > 1:
-            # query_slicing = (self.num_heads * self.head_dim) // self.config.pretraining_tp
-            # key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
-            query_slices = jnp.split(
-                self.q_proj.variables["params"]["kernel"].transpose(1, 0), self.config.pretraining_tp
-            )
-            key_slices = jnp.split(
-                self.k_proj.variables["params"]["kernel"].transpose(1, 0), self.config.pretraining_tp
-            )
-            value_slices = jnp.split(
-                self.v_proj.variables["params"]["kernel"].transpose(1, 0), self.config.pretraining_tp
-            )
-
-            query_states = [hidden_states @ query_slices[i].transpose(1, 0) for i in range(self.config.pretraining_tp)]
-            query_states = jnp.concatenate(query_states, axis=-1)
-
-            key_states = [hidden_states @ key_slices[i].transpose(1, 0) for i in range(self.config.pretraining_tp)]
-            key_states = jnp.concatenate(key_states, axis=-1)
-
-            value_states = [hidden_states @ value_slices[i].transpose(1, 0) for i in range(self.config.pretraining_tp)]
-            value_states = jnp.concatenate(value_states, axis=-1)
-
-        else:
-            query_states = self.q_proj(hidden_states)
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
-
+        
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+        
         query_shape = (bsz, q_len, self.num_heads, self.head_dim)
         kv_shape = (bsz, q_len, self.num_key_value_heads, self.head_dim)
         query_states = jax.lax.reshape(query_states, query_shape).transpose(0, 2, 1, 3)
@@ -277,13 +230,7 @@ class FlaxMistralAttention(nn.Module):
 
         attn_output = attn_output.transpose(0, 2, 1, 3)
         attn_output = jax.lax.reshape(attn_output, (bsz, q_len, self.hidden_size))
-
-        if self.config.pretraining_tp > 1:
-            attn_output = jnp.split(attn_output, self.config.pretraining_tp, axis=2)
-            o_proj_slices = jnp.split(self.o_proj.variables["params"]["kernel"], self.config.pretraining_tp)
-            attn_output = sum([attn_output[i] @ o_proj_slices[i] for i in range(self.config.pretraining_tp)])
-        else:
-            attn_output = self.o_proj(attn_output)
+        attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
@@ -733,15 +680,13 @@ class FlaxMistralForCausalLMModule(nn.Module):
         )
 
         hidden_states = outputs[0]
-        if self.config.pretraining_tp > 1:
-            lm_head_slices = jnp.split(
-                self.lm_head.variables["params"]["kernel"].transpose(1, 0), self.config.pretraining_tp
-            )
-            logits = [hidden_states @ lm_head_slices[i].transpose(1, 0) for i in range(self.config.pretraining_tp)]
-            logits = jnp.concatenate(logits, axis=-1)
-        else:
-            logits = self.lm_head(hidden_states)
 
+        logits = self.lm_head(hidden_states)
+        
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return output
+        
         return FlaxCausalLMOutputWithCrossAttentions(
             logits=logits,
             past_key_values=outputs.past_key_values if return_dict else outputs[1],
