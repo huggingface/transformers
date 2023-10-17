@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Mistral AI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -134,6 +134,86 @@ def flax_repeat_kv(hidden_states: jnp.ndarray, n_rep: int) -> jnp.ndarray:
     hidden_states = jnp.repeat(hidden_states[:, :, None, :, :], n_rep, axis=2)
     new_size = (batch, num_key_value_heads * n_rep, slen, head_dim)
     return jax.lax.reshape(hidden_states, new_size)
+
+def _flax_make_sliding_window_causal_mask(
+    input_ids_shape: torch.Size,
+    dtype: jnp.dtype,
+    past_key_values_length: int = 0,
+    sliding_window: int = 4096,
+):
+    """
+    Make causal mask used for sliding window attention
+    """
+    bsz, tgt_len = input_ids_shape
+
+    tensor = jnp.full(
+        (tgt_len, tgt_len),
+        fill_value=1,
+    )
+    mask = jnp.tril(tensor, k=0)
+    # make the mask banded to account for sliding window
+    mask = jnp.triu(mask, k=-sliding_window)
+    mask = jnp.log(mask)
+    if past_key_values_length > 0:
+        mask = jnp.concatenate([jnp.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
+    return jnp.repeat(mask[None, None], bsz, axis=0)
+
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
+def _flax_make_causal_mask(input_ids_shape: Tuple[int], dtype: jnp.dtype, past_key_values_length: int = 0):
+    """
+    Make causal mask used for bi-directional self-attention.
+    """
+    bsz, tgt_len = input_ids_shape
+    mask = jnp.full((tgt_len, tgt_len), jnp.finfo(dtype).min)
+    causal_mask = jnp.triu(jnp.ones((tgt_len, tgt_len)), k=1)
+    mask = mask * causal_mask
+    mask = mask[None, None, :, :]
+    mask = jnp.repeat(mask, bsz, axis=0)
+
+    if past_key_values_length > 0:  # TODO: Update when past_key_values_length is not 0
+        mask = jnp.concatenate([jnp.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
+        mask = jnp.repeat(mask, tgt_len + past_key_values_length, axis=1)
+    return mask
+
+
+def _flax_expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int] = None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = mask.shape
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = mask[:, None, None, :]
+    expanded_mask = jnp.repeat(expanded_mask, tgt_len, axis=2)
+
+    inverted_mask = 1.0 - expanded_mask
+    inverted_mask = inverted_mask * jnp.full(inverted_mask.shape, jnp.finfo(dtype).min)
+
+    return inverted_mask
+
+
+
+def _prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window
+    ):
+    # create causal mask
+    # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+    combined_attention_mask = None
+    if input_shape[-1] > 1:
+        combined_attention_mask = _flax_make_sliding_window_causal_mask(
+            input_shape,
+            inputs_embeds.dtype,
+            past_key_values_length=past_key_values_length,
+            sliding_window=sliding_window,
+        )
+
+    if attention_mask is not None:
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        expanded_attn_mask = _flax_expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+        combined_attention_mask = (
+            expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+        )
+
+    return combined_attention_mask
 
 
 class FlaxMistralAttention(nn.Module):
@@ -426,38 +506,6 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _flax_make_causal_mask(input_ids_shape: Tuple[int], dtype: jnp.dtype, past_key_values_length: int = 0):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = jnp.full((tgt_len, tgt_len), jnp.finfo(dtype).min)
-    causal_mask = jnp.triu(jnp.ones((tgt_len, tgt_len)), k=1)
-    mask = mask * causal_mask
-    mask = mask[None, None, :, :]
-    mask = jnp.repeat(mask, bsz, axis=0)
-
-    if past_key_values_length > 0:  # TODO: Update when past_key_values_length is not 0
-        mask = jnp.concatenate([jnp.zeros((tgt_len, past_key_values_length), dtype=dtype), mask], axis=-1)
-        mask = jnp.repeat(mask, tgt_len + past_key_values_length, axis=1)
-    return mask
-
-
-def _flax_expand_mask(mask: jnp.ndarray, dtype: jnp.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.shape
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :]
-    expanded_mask = jnp.repeat(expanded_mask, tgt_len, axis=2)
-
-    inverted_mask = 1.0 - expanded_mask
-    inverted_mask = inverted_mask * jnp.full(inverted_mask.shape, jnp.finfo(dtype).min)
-
-    return inverted_mask
 
 
 class FlaxMistralModule(nn.Module):
@@ -479,26 +527,6 @@ class FlaxMistralModule(nn.Module):
             FlaxMistralDecoderLayer(self.config, dtype=self.dtype) for _ in range(self.config.num_hidden_layers)
         ]
         self.norm = FlaxMistralRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps, dtype=self.dtype)
-
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _flax_make_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                past_key_values_length=past_key_values_length,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _flax_expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
 
     def __call__(
         self,
@@ -558,8 +586,8 @@ class FlaxMistralModule(nn.Module):
         #     else:
         #         padding_mask = None
 
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+        attention_mask = _prepare_decoder_attention_mask(
+            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, sliding_window=self.config.sliding_window,
         )
 
         hidden_states = inputs_embeds
@@ -646,9 +674,9 @@ class FlaxMistralForCausalLMModule(nn.Module):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, MistralForCausalLM
+        >>> from transformers import AutoTokenizer, FlaxMistralForCausalLM
 
-        >>> model = MistralForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = FlaxMistralForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
