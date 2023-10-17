@@ -542,28 +542,6 @@ BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
 npt = None
 
 
-def _scale_coords(
-    self, input_coords: Union[npt.NDArray, torch.Tensor], scale: float
-) -> Union[npt.NDArray, torch.Tensor]:
-    if isinstance(input_coords, torch.Tensor):
-        return torch.round(input_coords * scale).to(torch.int32)
-    elif isinstance(input_coords, np.ndarray):
-        return np.round(input_coords * scale).astype(np.int32)
-    else:
-        raise ValueError(f"Unknown coordinate type: {input_coords}.")
-
-
-def _clamp_coords(
-    self, input_coords: Union[npt.NDArray, torch.Tensor], min_value: int, max_value: int
-) -> Union[npt.NDArray, torch.Tensor]:
-    if isinstance(input_coords, torch.Tensor):
-        return torch.clamp(input_coords, min_value, max_value - 1)
-    elif isinstance(input_coords, np.ndarray):
-        return np.clip(input_coords, min_value, max_value - 1)
-    else:
-        raise ValueError(f"Unknown coordinate type: {input_coords}.")
-
-
 def original_to_transformed_h_coords(
     self, original_coords: Union[npt.NDArray, torch.Tensor]
 ) -> Union[npt.NDArray, torch.Tensor]:
