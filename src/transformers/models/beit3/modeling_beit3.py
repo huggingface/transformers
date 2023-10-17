@@ -276,7 +276,7 @@ class Beit3MultiwayFeedForwardNetwork(nn.Module):
         return torch.cat([text_out, image_out], dim=self.dim)
 
 
-class Beit3AttentiionLinear(nn.Module):
+class Beit3AttentionLinear(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.text = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
@@ -399,10 +399,10 @@ class Beit3MultiheadAttention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         self.scaling = self.head_dim**-0.5
 
-        self.key_proj = Beit3AttentiionLinear(config)
-        self.value_proj = Beit3AttentiionLinear(config)
-        self.query_proj = Beit3AttentiionLinear(config)
-        self.out_proj = Beit3AttentiionLinear(config)
+        self.key_proj = Beit3AttentionLinear(config)
+        self.value_proj = Beit3AttentionLinear(config)
+        self.query_proj = Beit3AttentionLinear(config)
+        self.out_proj = Beit3AttentionLinear(config)
         self.inner_attn_ln = Beit3LayerNorm(config) if config.sub_layernorm else None
         self.dropout_module = nn.Dropout(config.attention_dropout)
 
