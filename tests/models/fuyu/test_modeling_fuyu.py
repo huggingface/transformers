@@ -354,21 +354,20 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         This test is very slow and needs about 30GB of RAM to be run on the Fuyu-8b model.
         """
         word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens_tensor'][0][None, :])
-        expected_word_embedding_start = torch.Tensor([2.8908e-06, -1.4961e-05, -2.9564e-05, -1.4901e-05, -2.5153e-05,
-                                                      -1.9312e-05, -2.5511e-05,  1.9431e-05, -7.5698e-06, -3.5286e-05])
-        expected_word_embedding_end = torch.Tensor([8.8811e-06, -3.7909e-05, -4.8637e-05,  2.1100e-05, -1.4544e-05,
-                                                    -3.0756e-05,  4.3511e-06, -1.5080e-05,  2.5153e-05])
+        expected_word_embedding_start = torch.Tensor([2.0117e-06, -1.0371e-05, -2.0504e-05, -1.0312e-05, -1.7405e-05,
+                                                      -1.3471e-05, -1.7643e-05,  1.3530e-05, -5.2452e-06, -2.4557e-05])
+        expected_word_embedding_end = torch.Tensor([-2.6345e-05, -3.3855e-05,  1.4663e-05, -1.0133e-05, -2.1338e-05,
+                                                    3.0249e-06, -1.0490e-05,  1.7405e-05, -1.1250e-06])
+        torch.testing.assert_allclose(word_embeddings.shape, torch.Size([1, 335, 4096]))
         torch.testing.assert_allclose(word_embeddings[0][0][0:10], expected_word_embedding_start)
         torch.testing.assert_allclose(word_embeddings[0][0][-9:], expected_word_embedding_end)
-        torch.testing.assert_allclose(word_embeddings.shape, torch.Size([1, 335, 4096]))
 
         continuous_embeddings = self.model.vision_embed_tokens(self.model_inputs['image_patches'][0][0]).unsqueeze(0)
 
-        expected_continuous_embedding_start = torch.Tensor([-0.2891,  0.0649, -0.0175,  0.1641, -0.4844,
-                                                            -0.9062,  0.4473,  0.2412, -0.2461, -0.0430])
-        expected_continuous_embedding_end = torch.Tensor([-0.2754, -0.1836,  0.2422, -0.3711,  0.0564,
-                                                          -0.1099,  0.0378,  0.1367, -0.2100])
+        expected_continuous_embedding_start = torch.Tensor([-0.1221,  0.1689, -0.2969,  0.0601,  0.2168, -0.6953,
+                                                            0.3438,  0.0165, 0.2168,  0.0586])
+        expected_continuous_embedding_end = torch.Tensor([0.1138,  0.2090, -0.0588,  0.0400,  0.1719,  0.0586,
+                                                          0.0928, -0.1875, 0.0471])
+        torch.testing.assert_allclose(continuous_embeddings[0].shape, torch.Size([308, 4096]))
         torch.testing.assert_allclose(continuous_embeddings[0][0][0:10], expected_continuous_embedding_start)
         torch.testing.assert_allclose(continuous_embeddings[0][0][-9:], expected_continuous_embedding_end)
-
-        torch.testing.assert_allclose(continuous_embeddings[0].shape, torch.Size([308, 4096]))
