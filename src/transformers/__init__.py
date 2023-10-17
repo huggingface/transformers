@@ -462,6 +462,13 @@ _import_structure = {
     "models.oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig", "OneFormerProcessor"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
+    "models.owlv2": [
+        "OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Owlv2Config",
+        "Owlv2Processor",
+        "Owlv2TextConfig",
+        "Owlv2VisionConfig",
+    ],
     "models.owlvit": [
         "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OwlViTConfig",
@@ -986,6 +993,7 @@ else:
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
     _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
+    _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
@@ -2428,6 +2436,16 @@ else:
             "OPTForSequenceClassification",
             "OPTModel",
             "OPTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.owlv2"].extend(
+        [
+            "OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Owlv2ForObjectDetection",
+            "Owlv2Model",
+            "Owlv2PreTrainedModel",
+            "Owlv2TextModel",
+            "Owlv2VisionModel",
         ]
     )
     _import_structure["models.owlvit"].extend(
@@ -4603,6 +4621,13 @@ if TYPE_CHECKING:
     from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig, OneFormerProcessor
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
+    from .models.owlv2 import (
+        OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Owlv2Config,
+        Owlv2Processor,
+        Owlv2TextConfig,
+        Owlv2VisionConfig,
+    )
     from .models.owlvit import (
         OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OwlViTConfig,
@@ -5073,6 +5098,7 @@ if TYPE_CHECKING:
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
+        from .models.owlv2 import Owlv2ImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
@@ -6268,6 +6294,14 @@ if TYPE_CHECKING:
             OPTForSequenceClassification,
             OPTModel,
             OPTPreTrainedModel,
+        )
+        from .models.owlv2 import (
+            OWLV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Owlv2ForObjectDetection,
+            Owlv2Model,
+            Owlv2PreTrainedModel,
+            Owlv2TextModel,
+            Owlv2VisionModel,
         )
         from .models.owlvit import (
             OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
