@@ -6,6 +6,8 @@ from PIL import Image
 import torch
 
 import unittest
+from ...test_modeling_common import ModelTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 from transformers.testing_utils import (
     require_torch_gpu,
@@ -15,7 +17,11 @@ from transformers.testing_utils import (
 
 @require_torch_gpu
 @slow
-class FuyuIntegrationTest(unittest.TestCase):
+class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    """
+    Currently, all these tests depend on a value of max_tokens_to_generate of 10.
+    """
+
     def setUp(self):
         pretrained_model_name = 'huggingface/pre_release_model'
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
@@ -61,7 +67,7 @@ class FuyuIntegrationTest(unittest.TestCase):
             282, 283, 284, 285,  -1, 286, 287, 288, 289, 290, 291, 292, 293, 294,
             295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307,  -1,
             -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-            -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1]]), atol=0, rtol=0)
+            -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1]]), atol=0)
 
         torch.testing.assert_allclose(self.model_inputs['image_padded_unpacked_tokens_tensor'], torch.Tensor([[
             71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
@@ -102,11 +108,11 @@ class FuyuIntegrationTest(unittest.TestCase):
             71011,  71011,  71011,  71011,  71011,  71011,  71019,      1, 128340,
             71374,  71389, 120412,  71377,  71835,  71374,  73615,  71375,  71399,
             71435,  71122,  71013,  71013,  71013,  71013,  71013,  71013,  71013,
-            71013,  71013,  71013]]), atol=0, rtol=0)
+            71013,  71013,  71013]]), atol=0)
 
     def test_model_embeddings_match_adept(self):
         """
-        This test is very slow and needs about 30GB of RAM to be run on the Fuyu-8b model.
+        This test is very slow and needs about 30GB of RAM to be run on the Fuyu-8b model. 
         """
         word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens_tensor'][0][None, :])
         expected_word_embedding_start = torch.Tensor([2.8908e-06, -1.4961e-05, -2.9564e-05, -1.4901e-05, -2.5153e-05,
@@ -115,7 +121,7 @@ class FuyuIntegrationTest(unittest.TestCase):
                                                     -3.0756e-05,  4.3511e-06, -1.5080e-05,  2.5153e-05])
         torch.testing.assert_allclose(word_embeddings[0][0][0:10], expected_word_embedding_start, atol=1e-7)
         torch.testing.assert_allclose(word_embeddings[0][0][-9:], expected_word_embedding_end, atol=1e-7)
-        torch.testing.assert_allclose(word_embeddings.shape, torch.Size([1, 335, 4096]), atol=0, rtol=0)
+        torch.testing.assert_allclose(word_embeddings.shape, torch.Size([1, 335, 4096]), atol=0)
 
         continuous_embeddings = self.model.vision_embed_tokens(self.model_inputs['image_patches'][0][0]).unsqueeze(0)
 
@@ -126,4 +132,4 @@ class FuyuIntegrationTest(unittest.TestCase):
         torch.testing.assert_allclose(continuous_embeddings[0][0][0:10], expected_continuous_embedding_start, atol=1e-4)
         torch.testing.assert_allclose(continuous_embeddings[0][0][-9:], expected_continuous_embedding_end, atol=1e-4)
 
-        torch.testing.assert_allclose(continuous_embeddings[0].shape, torch.Size([308, 4096]), atol=0, rtol=0)
+        torch.testing.assert_allclose(continuous_embeddings[0].shape, torch.Size([308, 4096]), atol=0)
