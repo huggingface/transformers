@@ -276,22 +276,6 @@ def process_images_for_model_input(
     }
 
 
-class TextSegmentForTokenConversion:
-    """
-    This named tuple saves a prompt as follows:
-    - text: The text of the prompt segment
-    - is_location: Whether the prompt segment is a bounding box or not
-
-    Eg: this is a prompt <point>1, 2, 3, 4</point> will be saved as: [
-        TextSegmentForTokenConversion(text="this is a prompt ", is_location=False),
-        TextSegmentForTokenConversion(text="<point>1, 2, 3, 4</point>", is_location=True),
-    ]
-    """
-
-    text: str
-    is_location: bool
-
-
 def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenizer) -> List[int]:
     """
     This function transforms the prompt in the following fashion:
@@ -311,16 +295,16 @@ def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenize
     prompt = _replace_string_repr_with_token_tags(prompt)
     # Tokenize the prompt
     # Convert prompt into a list split
-    prompt_text_list: List[TextSegmentForTokenConversion] = _segment_prompt_into_text_token_conversions(prompt)
+    prompt_text_list = _segment_prompt_into_text_token_conversions(prompt)
     transformed_prompt_tokens: List[int] = []
     for elem in prompt_text_list:
-        if elem.is_location:
+        if elem[1]:
             # This is a location, we need to tokenize it
-            within_tag_tokenized = _transform_within_tags(elem.text, transformed_image, tokenizer)
+            within_tag_tokenized = _transform_within_tags(elem[0], transformed_image, tokenizer)
             # Surround the text with the open and close tags
             transformed_prompt_tokens.extend(within_tag_tokenized)
         else:
-            transformed_prompt_tokens.extend(tokenizer(elem.text, add_special_tokens=False).input_ids)
+            transformed_prompt_tokens.extend(tokenizer(elem[0], add_special_tokens=False).input_ids)
     return transformed_prompt_tokens
 
 
@@ -351,12 +335,7 @@ def _segment_prompt_into_text_token_conversions(prompt: str) -> List:
             TOKEN_POINT_CLOSE_STRING,
         ]:
             continue
-        prompt_text_list.append(
-            TextSegmentForTokenConversion(
-                text=elem,
-                is_location=i > 1 and prompt_split[i - 1] in [TOKEN_BBOX_OPEN_STRING, TOKEN_POINT_OPEN_STRING],
-            )
-        )
+        prompt_text_list.append((elem,i > 1 and prompt_split[i - 1] in [TOKEN_BBOX_OPEN_STRING, TOKEN_POINT_OPEN_STRING]))
     return prompt_text_list
 
 
@@ -542,9 +521,7 @@ BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
 npt = None
 
 
-def original_to_transformed_h_coords(
-    self, original_coords: Union[npt.NDArray, torch.Tensor]
-) -> Union[npt.NDArray, torch.Tensor]:
+def original_to_transformed_h_coords(self, original_coords):
     # apply crop
     cropped_coords = (
         self._clamp_coords(original_coords, min_value=self.crop_top, max_value=self.crop_bottom) - self.crop_top
@@ -555,9 +532,7 @@ def original_to_transformed_h_coords(
     return scaled_coords + self.padding_top
 
 
-def original_to_transformed_w_coords(
-    self, original_coords: Union[npt.NDArray, torch.Tensor]
-) -> Union[npt.NDArray, torch.Tensor]:
+def original_to_transformed_w_coords(self, original_coords):
     # apply crop
     cropped_coords = (
         self._clamp_coords(original_coords, min_value=self.crop_left, max_value=self.crop_right) - self.crop_left
@@ -823,27 +798,10 @@ class FuyuProcessor(ProcessorMixin):
                 offset=0,
             )
             return {
-                "model_image_input": model_image_input,
-                "image_padded_unpacked_tokens": image_padded_unpacked_tokens,
-                "image_padded_unpacked_tokens_tensor": image_padded_unpacked_tokens_tensor,
-                "image_patch_input_indices": image_patch_input_indices,
+                "input_ids": image_padded_unpacked_tokens[0].unsqueeze(0),
+                "image_patches": model_image_input["image_patches"][0][0].unsqueeze(0),
+                "image_patches_indices": image_patch_input_indices,
             }
-
-        """
-        if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
-
-        if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
-
-        if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values return encoding
-        elif text is not None:
-            return encoding
-        else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
-        """
-
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -858,6 +816,3 @@ class FuyuProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    @property
-    def model_input_names(self):
-        return ["input_ids", "attention_mask", "pixel_values"]
