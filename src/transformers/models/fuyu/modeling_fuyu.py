@@ -1040,7 +1040,10 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                 "image_patches": image_patches if image_patches is not None else image_patches
             }
         )
+        if past_key_values is None:
+            model_inputs.update(kwargs)
         return model_inputs
+
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
