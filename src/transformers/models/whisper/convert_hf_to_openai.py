@@ -26,8 +26,8 @@ python convert_hf_to_openai.py \
 
 >> # Converts the model from Hugging Face to OpenAI format:
 >> convert_tfms_to_openai_whisper(
-...   "openai/whisper-tiny", "whisper-tiny-openai.pt"
-... )
+..   "openai/whisper-tiny", "whisper-tiny-openai.pt"
+.. )
 HF model path: openai/whisper-tiny
 OpenAI model path: whisper-tiny-openai.pt
 >> # Select an audio file:
@@ -92,8 +92,7 @@ REVERSE_WHISPER_MAPPING = {
 def reverse_rename_keys(s_dict: dict) -> dict:
     """Renames the keys back from Hugging Face to OpenAI Whisper format.
 
-    By using this function on an HF model's state_dict, we should get the
-    names in the format expected by Whisper.
+    By using this function on an HF model's state_dict, we should get the names in the format expected by Whisper.
 
     Args:
         s_dict (`dict`): A dictionary with keys in Hugging Face format.
@@ -117,16 +116,15 @@ def reverse_rename_keys(s_dict: dict) -> dict:
 def make_emb_from_linear(linear: nn.Linear) -> nn.Embedding:
     """Converts a linear layer's weights into an embedding layer.
 
-    The linear layer's `in_features` dimension corresponds to the vocabulary
-    size and its `out_features` dimension corresponds to the embedding size.
+    The linear layer's `in_features` dimension corresponds to the vocabulary size and its `out_features` dimension
+    corresponds to the embedding size.
 
     Args:
         linear (`nn.Linear`): The linear layer to be converted.
 
     Returns:
         `nn.Embedding`:
-            An embedding layer with weights set to those of the input linear
-            layer.
+            An embedding layer with weights set to those of the input linear layer.
 
     """
     vocab_size, emb_size = linear.weight.data.shape
@@ -137,8 +135,8 @@ def make_emb_from_linear(linear: nn.Linear) -> nn.Embedding:
 def extract_dims_from_hf(config: WhisperConfig) -> dict:
     """Extracts necessary dimensions from Hugging Face's WhisperConfig.
 
-    Extracts necessary dimensions and related configuration data from the
-    Hugging Face model and then restructure it for the OpenAI Whisper format.
+    Extracts necessary dimensions and related configuration data from the Hugging Face model and then restructure it
+    for the OpenAI Whisper format.
 
     Args:
         config (`WhisperConfig`): Configuration of the Hugging Face's model.
@@ -164,15 +162,14 @@ def extract_dims_from_hf(config: WhisperConfig) -> dict:
 def convert_tfms_to_openai_whisper(hf_model_path: str, whisper_dump_path: str):
     """Converts a Whisper model from the Hugging Face to the OpenAI format.
 
-    Takes in the path to a Hugging Face Whisper model, extracts its state_dict,
-    renames keys as needed, and then saves the model OpenAI's format.
+    Takes in the path to a Hugging Face Whisper model, extracts its state_dict, renames keys as needed, and then saves
+    the model OpenAI's format.
 
     Args:
         hf_model_path (`str`):
             Path to the pretrained Whisper model in Hugging Face format.
         whisper_dump_path (`str`):
-            Destination path where the converted model in Whisper/OpenAI
-            format will be saved.
+            Destination path where the converted model in Whisper/OpenAI format will be saved.
 
     Returns:
         `None`
