@@ -18,18 +18,19 @@
     "preprocessing_num_workers": 1,
 
     "do_train": true,
-    "num_train_epochs": 50,
+    "num_train_epochs": 10,
     "gradient_accumulation_steps": 1,
     "per_device_train_batch_size": 2,
     "learning_rate": 2e-5,
     "adam_beta1": 0.8,
     "adam_beta2": 0.99,
-    "lr_scheduler_type": "cosine_with_restarts",
-    "warmup_ratio": 0.05,
+    "warmup_ratio": 0.1,
+    "group_by_length": true,
 
     "do_eval": true, 
-    "eval_steps": 50,
-    "per_device_eval_batch_size": 4
+    "eval_steps": 20,
+    "per_device_eval_batch_size": 4,
 
 
+    "seed": 17
 }
