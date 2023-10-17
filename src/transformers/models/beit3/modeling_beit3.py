@@ -414,13 +414,9 @@ class Beit3MultiheadAttention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         key_padding_mask: torch.Tensor = None,
         attention_mask: torch.Tensor = None,
-        relative_pos: torch.Tensor = None,
         multiway_split_position=-1,
         output_attentions: bool = None,
     ):
-        print("Shape of queries:", query.shape)
-        print("Shape of keys:", key.shape)
-
         batch_size, target_length, embed_dim = query.size()
 
         key_batch_size, src_len, _ = key.size()
@@ -461,20 +457,13 @@ class Beit3MultiheadAttention(nn.Module):
             attention_mask = attention_mask.unsqueeze(0)
             attn_weights += attention_mask
 
-        print("Shape of key_padding_mask: ", key_padding_mask.shape)
-
         if key_padding_mask is not None:
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len)
-            print("Shape of attn_weights: ", attn_weights.shape)
             attn_weights = attn_weights.masked_fill(
                 key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
                 float("-inf"),
             )
             attn_weights = attn_weights.view(batch_size * self.num_heads, target_length, src_len)
-
-        if relative_pos is not None:
-            relative_pos = relative_pos.view(attn_weights.size())
-            attn_weights = attn_weights + relative_pos
 
         attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).type_as(attn_weights)
         attn_probs = self.dropout_module(attn_weights)
@@ -488,7 +477,9 @@ class Beit3MultiheadAttention(nn.Module):
         attn = self.out_proj(attn, split_position=multiway_split_position)
         attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len).transpose(1, 0)
 
-        return attn, attn_weights
+        outputs = (attn, attn_probs) if output_attentions else (attn,)
+
+        return outputs
 
 
 class Beit3PreTrainedModel(PreTrainedModel):
@@ -583,7 +574,6 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         hidden_states,
         encoder_padding_mask,
         attention_mask=None,
-        relative_pos=None,
         multiway_split_position=None,
         past_key_value=None,
         output_attentions=None,
@@ -600,7 +590,6 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
             value=hidden_states,
             key_padding_mask=encoder_padding_mask,
             attention_mask=attention_mask,
-            relative_pos=relative_pos,
             past_key_value=past_key_value,
             multiway_split_position=split_position,
             output_attentions=output_attentions,
@@ -614,7 +603,7 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         hidden_states = self.ffn(hidden_states, split_position=split_position)
 
         hidden_states = self.residual_connection(hidden_states, residual)
-        if self.final_layer_norm is not None:
+        if not self.normalize_before:
             hidden_states = self.final_layer_norm(hidden_states, split_position=split_position)
         return hidden_states
 
@@ -631,7 +620,6 @@ class Beit3Encoder(nn.Module):
         self.num_layers = len(self.layers)
 
         self.fc_norm = Beit3LayerNorm(config) if config.normalize_before and config.encoder_normalize_before else None
-        self.relative_position = None
 
         self.gradient_checkpointing = False
 
@@ -666,16 +654,8 @@ class Beit3Encoder(nn.Module):
         if encoder_padding_mask is None:
             encoder_padding_mask = torch.zeros(hidden_state.shape[:2], device=hidden_state.device).bool()
 
-        print("Shape of encoder_padding_mask: ", encoder_padding_mask.shape)
-
         hidden_state = self.add_position_embeddings(hidden_state, text_end_positions, multiway_split_position)
         hidden_state = hidden_state * (1 - encoder_padding_mask.unsqueeze(-1).type_as(hidden_state))
-
-        relative_pos_bias = None
-        if self.relative_position is not None:
-            relative_pos_bias = self.relative_position(
-                batch_size=hidden_state.size(0), qlen=hidden_state.size(1), klen=hidden_state.size(1)
-            )
 
         # past_key_value is not None during inference if we use the bidirectional encoder as a generator as in s2s-ft (https://arxiv.org/abs/2110.13640)
         for idx, layer in enumerate(self.layers):
@@ -686,7 +666,6 @@ class Beit3Encoder(nn.Module):
                 hidden_state,
                 encoder_padding_mask=encoder_padding_mask if past_key_value is None else None,
                 attention_mask=attention_mask,
-                relative_pos=relative_pos_bias,
                 multiway_split_position=multiway_split_position,
                 past_key_value=past_key_value[idx] if past_key_value is not None else None,
                 output_attentions=output_attentions,
@@ -791,10 +770,6 @@ class Beit3Model(Beit3PreTrainedModel):
             else:
                 encoder_padding_mask = None
 
-        print("Shape of embeddings:", embeddings.shape)
-        if encoder_padding_mask is not None:
-            print("Shape of encoder padding mask:", encoder_padding_mask.shape)
-
         outputs = self.encoder(
             hidden_state=embeddings,
             encoder_padding_mask=encoder_padding_mask,
@@ -806,10 +781,6 @@ class Beit3Model(Beit3PreTrainedModel):
             output_attentions=output_attentions,
             return_dict=return_dict,
         )
-        if not return_dict:
-            outputs.append(multiway_split_position)
-        else:
-            outputs["multiway_split_position"] = multiway_split_position
 
         return outputs
 
@@ -835,6 +806,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         pixel_values,
         text_padding_mask,
         output_hidden_states=None,
+        output_attentions=None,
         return_dict=None,
         labels=None,
     ):
@@ -854,8 +826,8 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
-        >>> input = beit3_processor(text=["This is photo of vision_cls_rep cat"], images=image)
+        >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2")
+        >>> input = processor(text=["This is photo of vision_cls_rep cat"], images=image)
 
         >>> pixel_values = torch.cat(
         ...     (torch.tensor(input["pixel_values"]).unsqueeze(1), torch.tensor(input["pixel_values"]).unsqueeze(1)),
@@ -871,8 +843,9 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         >>> list(output.logits.shape)
         [1, 2]
         ```"""
-        batch_size = input_ids.size()[0]
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        batch_size = input_ids.size()[0]
         image1_values, image2_values = pixel_values.split(1, dim=1)
         image1_values = image1_values.squeeze(1)
         image2_values = image2_values.squeeze(1)
@@ -884,6 +857,9 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
             input_ids=language_input,
             pixel_values=vision_input,
             text_padding_mask=text_padding_mask,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
         )
         last_hidden_state = outputs.last_hidden_state
 
@@ -1014,7 +990,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
 
 
 @add_start_docstrings(
-    """Beit3ForCaptioning has a Linear head on top of Beit3Model for Image captioning . Beit3 is a multimodal
+    """Beit3ForCaptioning has a linear head on top of Beit3Model for image captioning. BEiT-3 is a multimodal
     foundation model, The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway Transformers
     architecture which uses a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
@@ -1039,6 +1015,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         text_len=None,
         past_key_value=None,
         output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ):
@@ -1061,8 +1038,8 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
 
         >>> model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
 
-        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
-        >>> input = beit3_processor(text=["This is photo of a dog"], images=image)
+        >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
+        >>> input = processor(text=["This is photo of a dog"], images=image)
 
         >>> language_masked_pos = torch.zeros((input["input_ids"].shape[0], input["input_ids"].shape[1]))
         >>> language_masked_pos[0, 6] = 1
@@ -1074,7 +1051,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         ...     text_padding_mask=torch.zeros(language_masked_pos.shape),
         ...     language_masked_pos=language_masked_pos,
         ... )
-        >>> beit3_processor.tokenizer.decode([np.argmax(output.logits.cpu().detach().numpy())])
+        >>> processor.tokenizer.decode([np.argmax(output.logits.cpu().detach().numpy())])
         'dog'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1117,6 +1094,8 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
             attention_mask=uni_mask,
             past_key_value=past_key_value,
             text_end_positions=text_end_positions,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
         if pixel_values is not None:
             text_feats = outputs.last_hidden_state[:, image_len:]
@@ -1171,8 +1150,8 @@ class Beit3Pooler(nn.Module):
 
 
 @add_start_docstrings(
-    """Beit3ForQuestionAnswering has a Linear head on top of Beit3Model for visual question answering . Beit3 is a
-    multimodal foundation model.The key idea in BEiT-3 is to model images as another language. Beit3 uses multiway
+    """BEiT-3 model with a linear head on top for visual question answering. BEiT-3 is a
+    multimodal foundation model. The key idea in BEiT-3 is to model images as another language. Beit3 uses a multiway
     Transformers architecture which uses a shared self-attention module.""",
     BEIT3_START_DOCSTRING,
 )
@@ -1199,6 +1178,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         pixel_values,
         attention_mask,
         output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[Any], SequenceClassifierOutput]:
@@ -1208,7 +1188,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Beit3ForQuestionAnswering, Beit3Processor
+        >>> from transformers import Beit3Processor, Beit3ForQuestionAnswering
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -1216,10 +1196,10 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
+        >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
         >>> model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
 
-        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_vqa")
-        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+        >>> input = processor(text=["This is photo of a cat"], images=image)
 
         >>> output = model(
         ...     input_ids=torch.tensor(input["input_ids"]),
@@ -1235,6 +1215,9 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
             input_ids=input_ids,
             pixel_values=pixel_values,
             text_padding_mask=attention_mask,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
         )
 
         last_hidden_state = outputs.last_hidden_state
@@ -1249,9 +1232,7 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
             reshaped_logits = log_softmax(reshaped_logits)
             loss = loss_fct(reshaped_logits, labels.contiguous())
         if not return_dict:
-            output = (
-                (reshaped_logits,) + (outputs.hidden_states,) if output_hidden_states else (reshaped_logits,)
-            )
+            output = (reshaped_logits,) + (outputs.hidden_states,) if output_hidden_states else (reshaped_logits,)
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -1295,6 +1276,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         pixel_values: torch.FloatTensor,
         text_padding_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[Any], Beit3ImageTextMatchingModelOutput]:
         r"""
@@ -1303,7 +1285,7 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import Beit3ForImageTextRetrieval, Beit3Processor
+        >>> from transformers import Beit3Processor, Beit3ForImageTextRetrieval
         >>> from PIL import Image
         >>> import requests
         >>> import torch
@@ -1311,12 +1293,12 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
+        >>> processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
         >>> model = Beit3ForImageTextRetrieval.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
 
-        >>> beit3_processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval")
-        >>> input = beit3_processor(text=["This is photo of a cat"], images=image)
+        >>> input = processor(text=["This is photo of a cat"], images=image)
 
-        >>> another_input_ids = beit3_processor(text=["This is photo of a dog"], images=image)["input_ids"]
+        >>> another_input_ids = processor(text=["This is photo of a dog"], images=image)["input_ids"]
         >>> output = model(
         ...     input_ids=torch.tensor([input["input_ids"][0], another_input_ids[0]]),
         ...     pixel_values=torch.tensor([input["pixel_values"][0], input["pixel_values"][0]]),
@@ -1330,6 +1312,9 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
             input_ids=None,
             pixel_values=pixel_values,
             text_padding_mask=None,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
         )
 
         vision_out = outputs.last_hidden_state
@@ -1340,6 +1325,9 @@ class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
             input_ids=input_ids,
             pixel_values=None,
             text_padding_mask=text_padding_mask,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
         )
         text_out = outputs.last_hidden_state
         text_cls = self.language_classifier(text_out[:, 0, :])
