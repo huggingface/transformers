@@ -356,7 +356,6 @@ OBJECTS_TO_IGNORE = [
     "LongformerConfig",
     "LongformerModel",
     "LongformerTokenizerFast",
-    "LukeConfig",
     "LukeModel",
     "LukeTokenizer",
     "LxmertTokenizerFast",
