@@ -1,7 +1,7 @@
 import math
 import re
 from enum import IntEnum, auto
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -86,26 +86,6 @@ class TokenType(IntEnum):
 
     GENERATED_CAPTION = auto()
 
-
-CENTER_LOCATION_TOKEN_TYPES = [
-    TokenType.BBOX_CENTER_TO_TOKEN_QUERY,
-    TokenType.TOKEN_TO_BBOX_CENTER_ANSWER,
-    TokenType.BBOX_TO_POINTLABEL_QUERY,
-    TokenType.LOCATION,
-]
-BBOX_LOCATION_TOKEN_TYPES = [TokenType.BBOX_TO_TOKENS_QUERY, TokenType.TOKENS_TO_BBOX_ANSWER]
-ANSWER_TOKEN_TYPES = [
-    TokenType.CAPTION_LABEL,
-    TokenType.BBOX_CENTER_TO_TOKEN_ANSWER,
-    TokenType.TOKEN_TO_BBOX_CENTER_ANSWER,
-    TokenType.FT_ACTION,
-    TokenType.BBOX_TO_POINTLABEL_ANSWER,
-    TokenType.BBOX_TO_CLASS_LABEL_ANSWER,
-    TokenType.BBOX_TO_TOKENS_ANSWER,
-    TokenType.TOKENS_TO_BBOX_ANSWER,
-    TokenType.VQA_ANSWER,
-    TokenType.CLASSIFY_IMAGE_ANSWER,
-]
 
 TEXT_REPR_BBOX_OPEN = "<box>"
 TEXT_REPR_BBOX_CLOSE = "</box>"
@@ -432,9 +412,6 @@ def _tokenize_prompts_with_image_and_batch(
     - set the sequence length to be the max of length of prompts plus the number of tokens we would like to generate
     - pad all the sequences to this length so we can convert them into a 3D tensor.
     """
-    # args = get_args()
-    # Tokenize all the prompts.
-    # tokenizer = get_tokenizer()
 
     # If not tool use, tranform the coordinates while tokenizing
     if transformed_images is not None:
@@ -494,57 +471,6 @@ def _tokenize_prompts_with_image_and_batch(
     return prompts_tokens_tensor, prompts_length_tensor
 
 
-def tokenize_prompts_with_images(
-    tokenizer,
-    prompts: Optional[List[List[str]]],
-    transformed_images: Optional[List[List[Dict]]],
-    max_tokens_to_generate: int,
-    max_position_embeddings: int,
-    add_BOS: bool,
-    add_beginning_of_answer_token: bool,
-    rank: int = 0,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Tokenize prompts and make them avaiable on all ranks."""
-    assert add_BOS is not None
-
-    # On all ranks set to None so we can pass them to functions
-    sizes_list = None
-    prompts_tokens_cuda_long_tensor = None
-    prompts_length_cuda_long_tensor = None
-
-    assert prompts is not None
-    assert max_tokens_to_generate is not None
-    # Tensor of tokens padded and their unpadded length.
-    prompts_tokens_cuda_long_tensor, prompts_length_cuda_long_tensor = _tokenize_prompts_with_image_and_batch(
-        tokenizer,
-        prompts,
-        transformed_images,
-        max_tokens_to_generate,
-        max_position_embeddings,
-        add_BOS,
-        add_beginning_of_answer_token,
-    )
-    # We need the sizes of these tensors for the broadcast
-    sizes_list = [
-        prompts_tokens_cuda_long_tensor.size(0),  # Batch size
-        prompts_tokens_cuda_long_tensor.size(1),  # Num subsequences
-        prompts_tokens_cuda_long_tensor.size(2),  # Sequence length
-    ]
-    # First, broadcast the sizes.
-    sizes_tensor = broadcast_int_list(3, int_list=sizes_list, rank=rank)
-
-    # Now that we have the sizes, we can broadcast the tokens
-    # and length tensors.
-    sizes_tensor.tolist()
-    """prompts_tokens_cuda_long_tensor = broadcast_tensor(
-        sizes, torch.int64, tensor=prompts_tokens_cuda_long_tensor, rank=rank
-    ) prompts_length_cuda_long_tensor = broadcast_tensor(
-        sizes[:2], torch.int64, tensor=prompts_length_cuda_long_tensor, rank=rank
-    )"""
-
-    return prompts_tokens_cuda_long_tensor, prompts_length_cuda_long_tensor
-
-
 def _is_cuda(tensor):
     """Check if a tensor is not none and is cuda."""
     assert tensor is not None
@@ -561,11 +487,8 @@ def broadcast_tensor(size, dtype, tensor=None, rank=0, device=0):
     """Given size and type of a tensor on all ranks and the tensor value
     Args:
     only on a specific rank, broadcast from that rank to all other ranks.
-        size: size of the tensor
-        dtype: type of the tensor
-        tensor: tensor to be broadcasted
-        rank: primary rank for broadcasting
-        device: device of the tensor. If not set to None, then we use cuda.current_device().
+        size: size of the tensor dtype: type of the tensor tensor: tensor to be broadcasted rank: primary rank for
+        broadcasting device: device of the tensor. If not set to None, then we use cuda.current_device().
             Default is 0, since we use cuda.current_device() to get the device.
     """
     if device is not None:
@@ -741,14 +664,13 @@ class FuyuProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    mage_processor_class = "FuyuImageProcessor"
-    tokenizer_class = "LlamaTokenizerFast"
-    # FIXME How are these requirements propagated? currently getting AttributeError: module transformers has no attribute FuyuImageProcessor
+    image_processor_class = "FuyuImageProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
-        # super().__init__(image_processor=image_processor, tokenizer=tokenizer)
+        super().__init__(image_processor=image_processor, tokenizer=tokenizer)
         self.image_processor = image_processor
-        self.tokenizer = tokenizer  # AutoTokenizer.from_pretrained(pretrained_path)
+        self.tokenizer = tokenizer
         self.max_tokens_to_generate = 10
         self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
         self.image_processor = FuyuImageProcessor()
