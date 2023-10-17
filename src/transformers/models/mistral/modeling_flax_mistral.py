@@ -29,11 +29,14 @@ from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 
-from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
-                                      FlaxCausalLMOutputWithCrossAttentions,
-                                      FlaxSequenceClassifierOutput)
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutputWithPast,
+    FlaxCausalLMOutputWithCrossAttentions,
+    FlaxSequenceClassifierOutput,
+)
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, logging
 from .configuration_mistral import MistralConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -504,6 +507,8 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         )
 
         return outputs
+    
+
 
 
 
@@ -522,7 +527,7 @@ class FlaxMistralModule(nn.Module):
     def setup(self):
         self.padding_idx = self.config.pad_token_id
         self.vocab_size = self.config.vocab_size
-        self.embed_tokens = nn.Embed(self.config.vocab_size, self.config.hidden_size)
+        self.embed_tokens = nn.Embed(self.config.vocab_size, self.config.hidden_size, dtype=self.dtype)
         self.layers = [
             FlaxMistralDecoderLayer(self.config, dtype=self.dtype) for _ in range(self.config.num_hidden_layers)
         ]
