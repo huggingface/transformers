@@ -859,9 +859,9 @@ class ImageBindPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
             if module.k_bias is not None:
-                nn.init.normal_(module.k_bias.weight, std=in_proj_std)
+                nn.init.normal_(module.k_bias, std=in_proj_std)
             if module.v_bias is not None:
-                nn.init.normal_(module.v_bias.weight, std=in_proj_std)
+                nn.init.normal_(module.v_bias, std=in_proj_std)
         elif isinstance(module, ImageBindMLP):
             factor = self.config.initializer_factor
             in_proj_std = (
