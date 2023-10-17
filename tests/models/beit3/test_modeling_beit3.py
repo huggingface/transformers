@@ -109,7 +109,7 @@ class Beit3ModelTester:
             hidden_size=self.hidden_size,
             num_attention_heads=self.attention_heads,
             intermediate_size=self.intermediate_size,
-            layers=self.num_hidden_layers,
+            num_hidden_layers=self.num_hidden_layers,
             normalize_before=self.normalize_before,
             activation_fn=self.activation_fn,
             dropout=self.dropout,
@@ -241,7 +241,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_inputs_embeds = False
     test_head_masking = False
-
+    has_attentions = False
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict_dup = inputs_dict.copy()
         inputs_dict_to_return = None
