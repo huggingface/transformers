@@ -123,7 +123,7 @@ class FuyuProcessor():  # ProcessorMixin):
         # super().__init__(image_processor=image_processor, tokenizer=tokenizer)
         self.image_processor = image_processor
         self.tokenizer = tokenizer  # AutoTokenizer.from_pretrained(pretrained_path)
-        self.max_tokens_to_generate = 4096
+        self.max_tokens_to_generate = 10
         self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
         self.image_processor = FuyuImageProcessor()
 
@@ -220,6 +220,7 @@ class FuyuProcessor():  # ProcessorMixin):
             assert len(prompts) == len(images)
             self.batch_size = len(batch_images)
 
+            # FIXME max_tokens_to_generate is embedded into this processor's call.
             prompt_tokens, prompts_length = tokenize_prompts_with_images(tokenizer=self.tokenizer,
                                                                          prompts=prompts,
                                                                          transformed_images=[
@@ -229,10 +230,15 @@ class FuyuProcessor():  # ProcessorMixin):
                                                                          add_BOS=True,
                                                                          add_beginning_of_answer_token=True,
                                                                          rank=0)
+            # same so far
 
+            # FIXME the remainder of current image processing logic assumes batch_size = subsequence_size = 1.
             image_input = tensor_img
 
             # This is 1 if there is an image per subsequence, else 0. [batch, subsequence, presence]
+            # the remainder of current image processing logic assumes batch_size = subsequence_size = 1.
+            # Here it is OK as the model cannot handle > 1 subsequences
+            # FIXME the image could be absent however and image presence should be inferred from user batch input
             image_present = torch.ones(self.batch_size, 1, 1)
 
             image_placeholder_id = self.tokenizer('|SPEAKER|', add_special_tokens=False)['input_ids'][1]
@@ -265,10 +271,8 @@ class FuyuProcessor():  # ProcessorMixin):
                 batch_size=self.batch_size,
                 num_sub_sequences=self.subsequence_length,
             )
-
             max_prompt_length = max(x.shape[-1] for x in image_padded_unpacked_tokens)
             max_seq_len_batch = min(max_prompt_length + self.max_tokens_to_generate, self.max_position_embeddings)
-
             all_bi_tokens_to_place = []
             for bi in range(self.batch_size):
                 tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[bi].shape[0]))
