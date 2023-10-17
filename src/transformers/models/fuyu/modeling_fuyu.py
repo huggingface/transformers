@@ -21,10 +21,6 @@
 import math
 import collections
 from typing import List, Optional, Tuple, Union
-import einops
-from PIL import Image
-import numpy as np
-
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -34,21 +30,8 @@ from dataclasses import dataclass
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ..auto.configuration_auto import AutoConfig
-from ..auto.modeling_auto import AutoModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-)
+
 from .configuration_fuyu import FuyuConfig
 
 

@@ -194,7 +194,6 @@ class FuyuImageProcessor(BaseImageProcessor):
                         patch_dim_h=image_patch_dim_h,
                         patch_dim_w=image_patch_dim_w,
                     )
-                    print(num_patches)
                     ids = torch.full([num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device)
                     patches = self.patchify_image(
                         image=image.unsqueeze(0), patch_dim_h=image_patch_dim_h, patch_dim_w=image_patch_dim_w
