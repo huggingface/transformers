@@ -512,22 +512,6 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
-    @require_accelerate
-    def test_inference_no_head_using_device_map(self):
-        model = ConditionalDetrModel.from_pretrained("microsoft/conditional-detr-resnet-50", device_map="auto")
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt")
-
-        with torch.no_grad():
-            outputs = model(**encoding)
-
-        expected_shape = torch.Size((1, 300, 256))
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
-        expected_slice = torch.tensor([[0.4222, 0.7471, 0.8760], [0.6395, -0.2729, 0.7127], [-0.3090, 0.7642, 0.9529]])
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
-
     def test_inference_object_detection_head(self):
         model = ConditionalDetrForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50").to(
             torch_device

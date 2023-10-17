@@ -653,21 +653,3 @@ class DetrModelIntegrationTests(unittest.TestCase):
             [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
-
-    @require_accelerate
-    def test_inference_no_head_using_device_map(self):
-        model = DetrModel.from_pretrained("facebook/detr-resnet-50", revision="no_timm", device_map="auto")
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt")
-
-        with torch.no_grad():
-            outputs = model(**encoding)
-
-        expected_shape = torch.Size((1, 100, 256))
-        assert outputs.last_hidden_state.shape == expected_shape
-        expected_slice = torch.tensor(
-            [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
-        )
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

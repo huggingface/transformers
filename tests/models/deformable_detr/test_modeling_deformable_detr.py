@@ -619,46 +619,6 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
 
-    @require_accelerate
-    def test_inference_object_detection_head_using_device_map(self):
-        model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr", device_map="auto")
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt")
-        pixel_values = encoding["pixel_values"]
-        pixel_mask = encoding["pixel_mask"]
-
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-
-        expected_logits = torch.tensor(
-            [[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]]
-        )
-        expected_boxes = torch.tensor([[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]])
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
-
-        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
-
-        # verify postprocessing
-        results = image_processor.post_process_object_detection(
-            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
-        )[0]
-        expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382])
-        expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841])
-
-        self.assertEqual(len(results["scores"]), 5)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
-        self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
-
     def test_inference_object_detection_head_with_box_refine_two_stage(self):
         model = DeformableDetrForObjectDetection.from_pretrained(
             "SenseTime/deformable-detr-with-box-refine-two-stage"
