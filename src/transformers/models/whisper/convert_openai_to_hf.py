@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Converts a Whisper model in OpenAI format to Hugging Face format.
 
 Example:
