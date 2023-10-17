@@ -29,7 +29,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "checkpoing/todo": "https://huggingface.co/checkpoing/todo/resolve/main/config.json",
+    "rafaelpadilla/porting_rt_detr": "https://huggingface.co/rafaelpadilla/porting_rt_detr/raw/main/config.json",
 }
 
 
@@ -143,32 +143,63 @@ class RT_DETRConfig(PretrainedConfig):
     def __init__(
         self,
         # PResNet config:
-        depth, 
+        depth=50, 
         variant='d', 
         num_stages=4, 
         return_idx=[0, 1, 2, 3], 
-        act='relu',
+        act_presnet='relu',
         freeze_at=-1, 
         freeze_norm=True, 
         pretrained=True,
         is_encoder_decoder=True,
         block_nums = [3, 4, 6, 3], # TODO Rafael: OC depends on the depth
-    # 18: [2, 2, 2, 2],
-    # 34: [3, 4, 6, 3],
-    # 50: [3, 4, 6, 3],
-    # 101: [3, 4, 23, 3],
-    # 152: [3, 8, 36, 3],
+            # 18: [2, 2, 2, 2],
+            # 34: [3, 4, 6, 3],
+            # 50: [3, 4, 6, 3],
+            # 101: [3, 4, 23, 3],
+            # 152: [3, 8, 36, 3],
+        # HybridEncoder config:
+        in_channels=[512, 1024, 2048],
+        feat_strides=[8, 16, 32],
+        hidden_dim=256,
+        num_head=8,
+        dim_feedforward = 1024,
+        dropout=0.0,
+        enc_act='gelu',
+        use_encoder_idx=[2],
+        num_encoder_layers=1,
+        pe_temperature=10000,
+        expansion=1.0,
+        depth_mult=1.0,
+        act_encoder='silu',
+        eval_size=None,
         **kwargs,
     ):
+        # backbone
         self.depth = depth
         self.variant = variant
         self.num_stages = num_stages
         self.return_idx = return_idx
-        self.act, = act,
+        self.act_presnet, = act_presnet,
         self.freeze_at = freeze_at
         self.freeze_norm = freeze_norm
         self.pretrained = pretrained
         self.is_encoder_decoder = is_encoder_decoder
         self.block_nums = block_nums
+        # encoder
+        self.in_channels = in_channels
+        self.feat_strides = feat_strides
+        self.hidden_dim = hidden_dim
+        self.num_head = num_head
+        self.dim_feedforward = dim_feedforward
+        self.dropout = dropout
+        self.enc_act = enc_act
+        self.use_encoder_idx = use_encoder_idx
+        self.num_encoder_layers = num_encoder_layers
+        self.pe_temperature = pe_temperature
+        self.expansion = expansion
+        self.depth_mult = depth_mult
+        self.act_encoder = act_encoder
+        self.eval_size = eval_size
         
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

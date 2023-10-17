@@ -12,375 +12,187 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert RT_DETR checkpoints with native (Transformers) backbone."""
-
+"""Convert RT Detr checkpoints from the original repository: https://github.com/lyuwenyu/RT-DETR/issues/42"""
 
 import argparse
-import json
-from pathlib import Path
 
 import requests
 import torch
-from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import RT_DETRConfig, RT_DETRForObjectDetection, RT_DETRForSegmentation, DetrImageProcessor, ResNetConfig
-from transformers.utils import logging
+from transformers import RT_DETRConfig, RtDetrImageProcessor
+
+# TODO: Rafael Convert all these weighs (?)
+# rtdetr_r18vd_5x_coco_objects365_from_paddle.pth
+# rtdetr_r18vd_1x_objects365_from_paddle.pth
+
+# rtdetr_r50vd_6x_coco_from_paddle.pth -> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth
+# rtdetr_r50vd_2x_coco_objects365_from_paddle.pth
+# rtdetr_r50vd_1x_objects365_from_paddle.pth
+
+# rtdetr_r101vd_6x_coco_from_paddle.pth
+# rtdetr_r101vd_2x_coco_objects365_from_paddle.pth
+# rtdetr_r101vd_1x_objects365_from_paddle.pth
+
+# Weights downloaded from: https://github.com/lyuwenyu/RT-DETR/issues/42
+#########################
 
 
-logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
+def rename_key(name):
+    if "cls_token" in name:
+        name = name.replace("cls_token", "vit.embeddings.cls_token")
+    if "mask_token" in name:
+        name = name.replace("mask_token", "decoder.mask_token")
+    if "decoder_pos_embed" in name:
+        name = name.replace("decoder_pos_embed", "decoder.decoder_pos_embed")
+    if "pos_embed" in name and "decoder" not in name:
+        name = name.replace("pos_embed", "vit.embeddings.position_embeddings")
+    if "patch_embed.proj" in name:
+        name = name.replace("patch_embed.proj", "vit.embeddings.patch_embeddings.projection")
+    if "patch_embed.norm" in name:
+        name = name.replace("patch_embed.norm", "vit.embeddings.norm")
+    if "decoder_blocks" in name:
+        name = name.replace("decoder_blocks", "decoder.decoder_layers")
+    if "blocks" in name:
+        name = name.replace("blocks", "vit.encoder.layer")
+    if "attn.proj" in name:
+        name = name.replace("attn.proj", "attention.output.dense")
+    if "attn" in name:
+        name = name.replace("attn", "attention.self")
+    if "norm1" in name:
+        name = name.replace("norm1", "layernorm_before")
+    if "norm2" in name:
+        name = name.replace("norm2", "layernorm_after")
+    if "mlp.fc1" in name:
+        name = name.replace("mlp.fc1", "intermediate.dense")
+    if "mlp.fc2" in name:
+        name = name.replace("mlp.fc2", "output.dense")
+    if "decoder_embed" in name:
+        name = name.replace("decoder_embed", "decoder.decoder_embed")
+    if "decoder_norm" in name:
+        name = name.replace("decoder_norm", "decoder.decoder_norm")
+    if "decoder_pred" in name:
+        name = name.replace("decoder_pred", "decoder.decoder_pred")
+    if "norm.weight" in name and "decoder" not in name:
+        name = name.replace("norm.weight", "vit.layernorm.weight")
+    if "norm.bias" in name and "decoder" not in name:
+        name = name.replace("norm.bias", "vit.layernorm.bias")
+
+    return name
 
 
-def get_rt_detr_config(model_name):
-    # initialize config
-    if "resnet-50" in model_name:
-        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50")
-    elif "resnet-101" in model_name:
-        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101")
-    else:
-        raise ValueError("Model name should include either resnet50 or resnet101")
+def convert_state_dict(orig_state_dict, config):
+    for key in orig_state_dict.copy().keys():
+        val = orig_state_dict.pop(key)
 
-    config = RT_DETRConfig(use_timm_backbone=False, backbone_config=backbone_config)
-
-    # set label attributes
-    is_panoptic = "panoptic" in model_name
-    if is_panoptic:
-        config.num_labels = 250
-    else:
-        config.num_labels = 91
-        repo_id = "huggingface/label-files"
-        filename = "coco-detection-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
-
-    return config, is_panoptic
-
-
-def create_rename_keys(config):
-    # here we list all keys to be renamed (original name on the left, our name on the right)
-    rename_keys = []
-
-    # stem
-    # fmt: off
-    rename_keys.append(("backbone.0.body.conv1.weight", "backbone.conv_encoder.model.embedder.embedder.convolution.weight"))
-    rename_keys.append(("backbone.0.body.bn1.weight", "backbone.conv_encoder.model.embedder.embedder.normalization.weight"))
-    rename_keys.append(("backbone.0.body.bn1.bias", "backbone.conv_encoder.model.embedder.embedder.normalization.bias"))
-    rename_keys.append(("backbone.0.body.bn1.running_mean", "backbone.conv_encoder.model.embedder.embedder.normalization.running_mean"))
-    rename_keys.append(("backbone.0.body.bn1.running_var", "backbone.conv_encoder.model.embedder.embedder.normalization.running_var"))
-    # stages
-    for stage_idx in range(len(config.backbone_config.depths)):
-        for layer_idx in range(config.backbone_config.depths[stage_idx]):
-            # shortcut
-            if layer_idx == 0:
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.0.weight",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.convolution.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.weight",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.bias",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.bias",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.running_mean",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_mean",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.downsample.1.running_var",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.shortcut.normalization.running_var",
-                    )
-                )
-            # 3 convs
-            for i in range(3):
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.conv{i+1}.weight",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.convolution.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.weight",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.bias",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.bias",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_mean",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_mean",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.0.body.layer{stage_idx + 1}.{layer_idx}.bn{i+1}.running_var",
-                        f"backbone.conv_encoder.model.encoder.stages.{stage_idx}.layers.{layer_idx}.layer.{i}.normalization.running_var",
-                    )
-                )
-    # fmt: on
-
-    for i in range(config.encoder_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append(
-            (
-                f"transformer.encoder.layers.{i}.self_attn.out_proj.weight",
-                f"encoder.layers.{i}.self_attn.out_proj.weight",
-            )
-        )
-        rename_keys.append(
-            (f"transformer.encoder.layers.{i}.self_attn.out_proj.bias", f"encoder.layers.{i}.self_attn.out_proj.bias")
-        )
-        rename_keys.append((f"transformer.encoder.layers.{i}.linear1.weight", f"encoder.layers.{i}.fc1.weight"))
-        rename_keys.append((f"transformer.encoder.layers.{i}.linear1.bias", f"encoder.layers.{i}.fc1.bias"))
-        rename_keys.append((f"transformer.encoder.layers.{i}.linear2.weight", f"encoder.layers.{i}.fc2.weight"))
-        rename_keys.append((f"transformer.encoder.layers.{i}.linear2.bias", f"encoder.layers.{i}.fc2.bias"))
-        rename_keys.append(
-            (f"transformer.encoder.layers.{i}.norm1.weight", f"encoder.layers.{i}.self_attn_layer_norm.weight")
-        )
-        rename_keys.append(
-            (f"transformer.encoder.layers.{i}.norm1.bias", f"encoder.layers.{i}.self_attn_layer_norm.bias")
-        )
-        rename_keys.append(
-            (f"transformer.encoder.layers.{i}.norm2.weight", f"encoder.layers.{i}.final_layer_norm.weight")
-        )
-        rename_keys.append((f"transformer.encoder.layers.{i}.norm2.bias", f"encoder.layers.{i}.final_layer_norm.bias"))
-        # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
-        rename_keys.append(
-            (
-                f"transformer.decoder.layers.{i}.self_attn.out_proj.weight",
-                f"decoder.layers.{i}.self_attn.out_proj.weight",
-            )
-        )
-        rename_keys.append(
-            (f"transformer.decoder.layers.{i}.self_attn.out_proj.bias", f"decoder.layers.{i}.self_attn.out_proj.bias")
-        )
-        rename_keys.append(
-            (
-                f"transformer.decoder.layers.{i}.multihead_attn.out_proj.weight",
-                f"decoder.layers.{i}.encoder_attn.out_proj.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"transformer.decoder.layers.{i}.multihead_attn.out_proj.bias",
-                f"decoder.layers.{i}.encoder_attn.out_proj.bias",
-            )
-        )
-        rename_keys.append((f"transformer.decoder.layers.{i}.linear1.weight", f"decoder.layers.{i}.fc1.weight"))
-        rename_keys.append((f"transformer.decoder.layers.{i}.linear1.bias", f"decoder.layers.{i}.fc1.bias"))
-        rename_keys.append((f"transformer.decoder.layers.{i}.linear2.weight", f"decoder.layers.{i}.fc2.weight"))
-        rename_keys.append((f"transformer.decoder.layers.{i}.linear2.bias", f"decoder.layers.{i}.fc2.bias"))
-        rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm1.weight", f"decoder.layers.{i}.self_attn_layer_norm.weight")
-        )
-        rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm1.bias", f"decoder.layers.{i}.self_attn_layer_norm.bias")
-        )
-        rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm2.weight", f"decoder.layers.{i}.encoder_attn_layer_norm.weight")
-        )
-        rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm2.bias", f"decoder.layers.{i}.encoder_attn_layer_norm.bias")
-        )
-        rename_keys.append(
-            (f"transformer.decoder.layers.{i}.norm3.weight", f"decoder.layers.{i}.final_layer_norm.weight")
-        )
-        rename_keys.append((f"transformer.decoder.layers.{i}.norm3.bias", f"decoder.layers.{i}.final_layer_norm.bias"))
-
-    # convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
-    rename_keys.extend(
-        [
-            ("input_proj.weight", "input_projection.weight"),
-            ("input_proj.bias", "input_projection.bias"),
-            ("query_embed.weight", "query_position_embeddings.weight"),
-            ("transformer.decoder.norm.weight", "decoder.layernorm.weight"),
-            ("transformer.decoder.norm.bias", "decoder.layernorm.bias"),
-            ("class_embed.weight", "class_labels_classifier.weight"),
-            ("class_embed.bias", "class_labels_classifier.bias"),
-            ("bbox_embed.layers.0.weight", "bbox_predictor.layers.0.weight"),
-            ("bbox_embed.layers.0.bias", "bbox_predictor.layers.0.bias"),
-            ("bbox_embed.layers.1.weight", "bbox_predictor.layers.1.weight"),
-            ("bbox_embed.layers.1.bias", "bbox_predictor.layers.1.bias"),
-            ("bbox_embed.layers.2.weight", "bbox_predictor.layers.2.weight"),
-            ("bbox_embed.layers.2.bias", "bbox_predictor.layers.2.bias"),
-        ]
-    )
-
-    return rename_keys
-
-
-def rename_key(state_dict, old, new):
-    val = state_dict.pop(old)
-    state_dict[new] = val
-
-
-def read_in_q_k_v(state_dict, is_panoptic=False):
-    prefix = ""
-    if is_panoptic:
-        prefix = "rt_detr."
-
-    # first: transformer encoder
-    for i in range(6):
-        # read in weights + bias of input projection layer (in PyTorch's MultiHeadAttention, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"{prefix}transformer.encoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"{prefix}transformer.encoder.layers.{i}.self_attn.in_proj_bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"encoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-        state_dict[f"encoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
-        state_dict[f"encoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-        state_dict[f"encoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-        state_dict[f"encoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-        state_dict[f"encoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
-    # next: transformer decoder (which is a bit more complex because it also includes cross-attention)
-    for i in range(6):
-        # read in weights + bias of input projection layer of self-attention
-        in_proj_weight = state_dict.pop(f"{prefix}transformer.decoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"{prefix}transformer.decoder.layers.{i}.self_attn.in_proj_bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-        state_dict[f"decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
-        state_dict[f"decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-        state_dict[f"decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-        state_dict[f"decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-        state_dict[f"decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
-        # read in weights + bias of input projection layer of cross-attention
-        in_proj_weight_cross_attn = state_dict.pop(
-            f"{prefix}transformer.decoder.layers.{i}.multihead_attn.in_proj_weight"
-        )
-        in_proj_bias_cross_attn = state_dict.pop(f"{prefix}transformer.decoder.layers.{i}.multihead_attn.in_proj_bias")
-        # next, add query, keys and values (in that order) of cross-attention to the state dict
-        state_dict[f"decoder.layers.{i}.encoder_attn.q_proj.weight"] = in_proj_weight_cross_attn[:256, :]
-        state_dict[f"decoder.layers.{i}.encoder_attn.q_proj.bias"] = in_proj_bias_cross_attn[:256]
-        state_dict[f"decoder.layers.{i}.encoder_attn.k_proj.weight"] = in_proj_weight_cross_attn[256:512, :]
-        state_dict[f"decoder.layers.{i}.encoder_attn.k_proj.bias"] = in_proj_bias_cross_attn[256:512]
-        state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.weight"] = in_proj_weight_cross_attn[-256:, :]
-        state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
-
-
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-
-    return im
-
-
-@torch.no_grad()
-def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
-    """
-    Copy/paste/tweak model's weights to our RT_DETR structure.
-    """
-
-    # load default config
-    config, is_panoptic = get_rt_detr_config(model_name)
-
-    # load original model from torch hub
-    model_name_to_original_name = {
-        "rt_detr-resnet-50": "rt_detr_resnet50",
-        "rt_detr-resnet-101": "rt_detr_resnet101",
-    }
-    logger.info(f"Converting model {model_name}...")
-    rt_detr = torch.hub.load("facebookresearch/rt_detr", model_name_to_original_name[model_name], pretrained=True).eval()
-    state_dict = rt_detr.state_dict()
-    # rename keys
-    for src, dest in create_rename_keys(config):
-        if is_panoptic:
-            src = "rt_detr." + src
-        rename_key(state_dict, src, dest)
-    # query, key and value matrices need special treatment
-    read_in_q_k_v(state_dict, is_panoptic=is_panoptic)
-    # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    prefix = "rt_detr.model." if is_panoptic else "model."
-    for key in state_dict.copy().keys():
-        if is_panoptic:
-            if (
-                key.startswith("rt_detr")
-                and not key.startswith("class_labels_classifier")
-                and not key.startswith("bbox_predictor")
-            ):
-                val = state_dict.pop(key)
-                state_dict["rt_detr.model" + key[4:]] = val
-            elif "class_labels_classifier" in key or "bbox_predictor" in key:
-                val = state_dict.pop(key)
-                state_dict["rt_detr." + key] = val
-            elif key.startswith("bbox_attention") or key.startswith("mask_head"):
-                continue
+        if "qkv" in key:
+            key_split = key.split(".")
+            layer_num = int(key_split[1])
+            if "decoder_blocks" in key:
+                dim = config.decoder_hidden_size
+                prefix = "decoder.decoder_layers."
+                if "weight" in key:
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                elif "bias" in key:
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
             else:
-                val = state_dict.pop(key)
-                state_dict[prefix + key] = val
-        else:
-            if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
-                val = state_dict.pop(key)
-                state_dict[prefix + key] = val
+                dim = config.hidden_size
+                prefix = "vit.encoder.layer."
+                if "weight" in key:
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                elif "bias" in key:
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
+                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
 
-    # finally, create HuggingFace model and load state dict
-    model = RT_DETRForSegmentation(config) if is_panoptic else RT_DETRForObjectDetection(config)
-    model.load_state_dict(state_dict)
+        else:
+            orig_state_dict[rename_key(key)] = val
+
+    return orig_state_dict
+
+
+def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub):
+    config = RT_DETRConfig()
+    # if "large" in checkpoint_url:
+    #     config.hidden_size = 1024
+    #     config.intermediate_size = 4096
+    #     config.num_hidden_layers = 24
+    #     config.num_attention_heads = 16
+    # elif "huge" in checkpoint_url:
+    #     config.patch_size = 14
+    #     config.hidden_size = 1280
+    #     config.intermediate_size = 5120
+    #     config.num_hidden_layers = 32
+    #     config.num_attention_heads = 16
+
+    model = RTViTMAEForPreTraining(config)
+
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
+
+    image_processor = ViTMAEImageProcessor(size=config.image_size)
+
+    new_state_dict = convert_state_dict(state_dict, config)
+
+    model.load_state_dict(new_state_dict)
     model.eval()
 
-    # verify our conversion on an image
-    format = "coco_panoptic" if is_panoptic else "coco_detection"
-    processor = DetrImageProcessor(format=format)
+    url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
 
-    encoding = processor(images=prepare_img(), return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
+    image = Image.open(requests.get(url, stream=True).raw)
+    image_processor = ViTMAEImageProcessor(size=config.image_size)
+    inputs = image_processor(images=image, return_tensors="pt")
 
-    original_outputs = rt_detr(pixel_values)
-    outputs = model(pixel_values)
+    # forward pass
+    torch.manual_seed(2)
+    outputs = model(**inputs)
+    logits = outputs.logits
 
-    assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-3)
-    assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-3)
-    if is_panoptic:
-        assert torch.allclose(outputs.pred_masks, original_outputs["pred_masks"], atol=1e-4)
-    print("Looks ok!")
+    if "large" in checkpoint_url:
+        expected_slice = torch.tensor(
+            [[-0.7309, -0.7128, -1.0169], [-1.0161, -0.9058, -1.1878], [-1.0478, -0.9411, -1.1911]]
+        )
+    elif "huge" in checkpoint_url:
+        expected_slice = torch.tensor(
+            [[-1.1599, -0.9199, -1.2221], [-1.1952, -0.9269, -1.2307], [-1.2143, -0.9337, -1.2262]]
+        )
+    else:
+        expected_slice = torch.tensor(
+            [[-0.9192, -0.8481, -1.1259], [-1.1349, -1.0034, -1.2599], [-1.1757, -1.0429, -1.2726]]
+        )
 
-    if pytorch_dump_folder_path is not None:
-        # Save model and image processor
-        logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
-        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        model.save_pretrained(pytorch_dump_folder_path)
-        processor.save_pretrained(pytorch_dump_folder_path)
+    # verify logits
+    assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
 
-    if push_to_hub:
-        # Upload model and image processor to the hub
-        logger.info("Uploading PyTorch model and image processor to the hub...")
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+    print(f"Saving model to {pytorch_dump_folder_path}")
+    model.save_pretrained(pytorch_dump_folder_path)
+
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-
+    # Required parameters
     parser.add_argument(
-        "--model_name",
-        default="rt_detr-resnet-50",
+        "--checkpoint_url",
+        default="https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth",
         type=str,
-        choices=["rt_detr-resnet-50", "rt_detr-resnet-101"],
-        help="Name of the RT_DETR model you'd like to convert.",
+        help="URL of the checkpoint you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether to push the model to the hub or not.")
+
     args = parser.parse_args()
-    convert_rt_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    
+    # TODO: Rafael remove it from here
+    args.checkpoint_url = "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth"
+    convert_rt_detr_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
+    
