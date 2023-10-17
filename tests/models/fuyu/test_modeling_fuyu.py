@@ -1,17 +1,13 @@
-from transformers import AutoTokenizer, FuyuConfig, FuyuModel, FuyuForCausalLM, is_torch_available, is_vision_available
-from transformers.models.fuyu.processing_fuyu import FuyuProcessor
-from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
-
 import unittest
+
+from transformers import AutoTokenizer, FuyuConfig, FuyuForCausalLM, FuyuModel, is_torch_available, is_vision_available
+from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
+from transformers.models.fuyu.processing_fuyu import FuyuProcessor
+from transformers.testing_utils import require_torch_gpu, slow, torch_device
+
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
-from transformers.testing_utils import (
-    require_torch_gpu,
-    slow,
-    torch_device
-)
 
 if is_vision_available():
     from PIL import Image
@@ -262,7 +258,7 @@ class FuyuProcessingTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     """
 
     def setUp(self):
-        pretrained_model_name = 'huggingface/pre_release_model'
+        pretrained_model_name = "huggingface/pre_release_model"
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
         image_processor = FuyuImageProcessor()
 
@@ -278,73 +274,14 @@ class FuyuProcessingTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         """
         Test to ensure that the standard processing on a gold example matches adept's code.
         """
-        torch.testing.assert_close(self.model_inputs["image_patch_input_indices"], torch.Tensor([[
-            0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,
-            14,  15,  16,  17,  18,  19,  20,  21,  -1,  22,  23,  24,  25,  26,
-            27,  28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,  39,  40,
-            41,  42,  43,  -1,  44,  45,  46,  47,  48,  49,  50,  51,  52,  53,
-            54,  55,  56,  57,  58,  59,  60,  61,  62,  63,  64,  65,  -1,  66,
-            67,  68,  69,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,
-            81,  82,  83,  84,  85,  86,  87,  -1,  88,  89,  90,  91,  92,  93,
-            94,  95,  96,  97,  98,  99, 100, 101, 102, 103, 104, 105, 106, 107,
-            108, 109,  -1, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
-            121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131,  -1, 132, 133,
-            134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147,
-            148, 149, 150, 151, 152, 153,  -1, 154, 155, 156, 157, 158, 159, 160,
-            161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174,
-            175,  -1, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187,
-            188, 189, 190, 191, 192, 193, 194, 195, 196, 197,  -1, 198, 199, 200,
-            201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214,
-            215, 216, 217, 218, 219,  -1, 220, 221, 222, 223, 224, 225, 226, 227,
-            228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241,
-            -1, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254,
-            255, 256, 257, 258, 259, 260, 261, 262, 263,  -1, 264, 265, 266, 267,
-            268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 281,
-            282, 283, 284, 285,  -1, 286, 287, 288, 289, 290, 291, 292, 293, 294,
-            295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307,  -1,
-            -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,
-            -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1]]))
-
-        torch.testing.assert_close(self.model_inputs['image_padded_unpacked_tokens_tensor'], torch.Tensor([[
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71019,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71019,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71019,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71019,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71019,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71019,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71019,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71019,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71019,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71019,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71019,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71019,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71019,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,  71011,
-            71011,  71011,  71011,  71011,  71011,  71011,  71019,      1, 128340,
-            71374,  71389, 120412,  71377,  71835,  71374,  73615,  71375,  71399,
-            71435,  71122,  71013,  71013,  71013,  71013,  71013,  71013,  71013,
-            71013,  71013,  71013]]))
+        # fmt: off
+        EXPECTED_IMAGE_PATCH_INPUTS = torch.Tensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, -1, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, -1, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, -1, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, -1, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, -1, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, -1, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, -1, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, -1, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, -1, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, -1, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, -1, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263, -1, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282, 283, 284, 285, -1, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,]])
+        EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS = torch.Tensor([[71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 1, 128340, 71374, 71389, 120412, 71377, 71835, 71374, 73615, 71375, 71399, 71435, 71122, 71013, 71013, 71013, 71013, 71013, 71013, 71013, 71013, 71013, 71013,]])
+        # fmt: on
+        torch.testing.assert_close(self.model_inputs["image_patch_input_indices"], EXPECTED_IMAGE_PATCH_INPUTS)
+        torch.testing.assert_close(
+            self.model_inputs["image_padded_unpacked_tokens_tensor"], EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS
+        )
 
 
 @require_torch_gpu
@@ -355,7 +292,7 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     """
 
     def setUp(self):
-        pretrained_model_name = 'huggingface/pre_release_model'
+        pretrained_model_name = "huggingface/pre_release_model"
         tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
         image_processor = FuyuImageProcessor()
 
@@ -376,37 +313,44 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         """
 
         continuous_embeddings = self.model.vision_embed_tokens(
-            self.model_inputs['model_image_input']['image_patches'][0][0]).unsqueeze(0)
-        expected_continuous_embedding_start = torch.Tensor([-0.1221,  0.1689, -0.2969,  0.0601,  0.2168, -0.6953,
-                                                            0.3438,  0.0165, 0.2168,  0.0586])
-        expected_continuous_embedding_end = torch.Tensor([0.1138,  0.2090, -0.0588,  0.0400,  0.1719,  0.0586,
-                                                          0.0928, -0.1875, 0.0471])
+            self.model_inputs["model_image_input"]["image_patches"][0][0]
+        ).unsqueeze(0)
+        EXPECTED_CONTINUOUS_EMBEDDING_START = torch.Tensor(
+            [-0.1221, 0.1689, -0.2969, 0.0601, 0.2168, -0.6953, 0.3438, 0.0165, 0.2168, 0.0586]
+        )
+        EXPECTED_CONTINUOUS_EMBEDDING_END = torch.Tensor(
+            [0.1138, 0.2090, -0.0588, 0.0400, 0.1719, 0.0586, 0.0928, -0.1875, 0.0471]
+        )
         torch.testing.assert_close(continuous_embeddings[0].shape, torch.Size([308, 4096]))
-        torch.testing.assert_close(continuous_embeddings[0][0][0:10],
-                                   expected_continuous_embedding_start, rtol=0.1, atol=1e-02)
-        torch.testing.assert_close(continuous_embeddings[0][0][-9:],
-                                   expected_continuous_embedding_end, rtol=0.1, atol=1e-02)
+        torch.testing.assert_close(
+            continuous_embeddings[0][0][0:10], EXPECTED_CONTINUOUS_EMBEDDING_START, rtol=0.1, atol=1e-02
+        )
+        torch.testing.assert_close(
+            continuous_embeddings[0][0][-9:], EXPECTED_CONTINUOUS_EMBEDDING_END, rtol=0.1, atol=1e-02
+        )
 
         # word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens_tensor'][0][None, :])
-        word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens'][0][None, :])
-        expected_word_embedding_start = torch.Tensor([2.0117e-06, -1.0371e-05, -2.0504e-05, -1.0312e-05, -1.7405e-05,
-                                                      -1.3471e-05, -1.7643e-05,  1.3530e-05, -5.2452e-06, -2.4557e-05])
-        expected_word_embedding_end = torch.Tensor([-2.6345e-05, -3.3855e-05,  1.4663e-05, -1.0133e-05, -2.1338e-05,
-                                                    3.0249e-06, -1.0490e-05,  1.7405e-05, -1.1250e-06])
+        word_embeddings = self.model.embed_tokens(self.model_inputs["image_padded_unpacked_tokens"][0][None, :])
+
+        # fmt: off
+        EXPECTED_WORD_EMBEDDING_START = torch.Tensor([2.0117e-06,-1.0371e-05,-2.0504e-05,-1.0312e-05,-1.7405e-05,-1.3471e-05,-1.7643e-05,1.3530e-05,-5.2452e-06,-2.4557e-05])
+        EXPECTED_WORD_EMBEDDING_END = torch.Tensor([-2.6345e-05, -3.3855e-05, 1.4663e-05, -1.0133e-05, -2.1338e-05, 3.0249e-06, -1.0490e-05, 1.7405e-05, -1.1250e-06])
+        # fmt: on
+
         torch.testing.assert_close(word_embeddings.shape, torch.Size([1, 335, 4096]))
-        torch.testing.assert_close(word_embeddings[0][0][0:10], expected_word_embedding_start, rtol=0.1, atol=1e-02)
-        torch.testing.assert_close(word_embeddings[0][0][-9:], expected_word_embedding_end, rtol=0.1, atol=1e-02)
+        torch.testing.assert_close(word_embeddings[0][0][0:10], EXPECTED_WORD_EMBEDDING_START, rtol=0.1, atol=1e-02)
+        torch.testing.assert_close(word_embeddings[0][0][-9:], EXPECTED_WORD_EMBEDDING_END, rtol=0.1, atol=1e-02)
 
     def test_model_forward_values(self):
-        # Slice from original model using bfloat16
-        reference_tensor = torch.Tensor([
-            [ 1.0938, -0.1230,  2.8281,  2.8906,  0.2969],
-            [-0.3281,  5.4375,  3.3750,  7.0000,  1.2188],
-            [ 1.2188,  3.3750,  4.7188,  5.0000,  0.0981]
-        ])
+        # fmt: off
+        EXPECTED_HIDDEN_STATES_SLICE = torch.Tensor([[-0.5469, 1.6016, 2.3438, 2.8125, 1.0000],[0.3613, 1.0391, 2.5625, 2.2031, 1.5703],[-0.4707, 2.0938, 1.7109, 5.7188, 0.4199],])
+        # fmt: on
+
         model_outputs = self.model(
             input_ids=self.model_inputs["image_padded_unpacked_tokens"][0].unsqueeze(0),
             image_patches=self.model_inputs["model_image_input"]["image_patches"][0][0].unsqueeze(0),
-            image_patches_indices=self.model_inputs["image_patch_input_indices"]
+            image_patches_indices=self.model_inputs["image_patch_input_indices"],
         )
-        torch.testing.assert_close(model_outputs[0][0, 6:9, 1200:1205], reference_tensor, rtol=0.15, atol=0.15)
+        torch.testing.assert_close(
+            model_outputs[0][0, 5:8, 1200:1205], EXPECTED_HIDDEN_STATES_SLICE, rtol=0.1, atol=0.1
+        )

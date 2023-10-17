@@ -1,32 +1,31 @@
 import math
-from typing import List, Optional, Tuple, Union
+from typing import List, Union
 
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor
 from ...image_transforms import (
-    pad,
     normalize,
+    pad,
     resize,
 )
 from ...image_utils import to_numpy_array
+from ...utils import is_torch_available, is_vision_available, logging
 
-import numpy as np
 
+if is_vision_available():
+    import PIL
 
-import torch
+if is_torch_available():
+    import torch
 
-from typing import List
-import math
-
-import PIL.Image
+logger = logging.get_logger(__name__)
 
 
 class AspectRatioPreservingScalingWithPad:
     """
-    A transformer to scale images while preserving their aspect ratio and then padding them 
-    to a desired target size. Meant to closely emulate the image augmentation method used 
-    in the Fuyu-8b model by Adept during inference.
+    A transformer to scale images while preserving their aspect ratio and then padding them to a desired target size.
+    Meant to closely emulate the image augmentation method used in the Fuyu-8b model by Adept during inference.
     """
 
     def __init__(self, target_width: int, target_height: int, padding_value: float, padding_mode: str = "constant"):
@@ -58,8 +57,12 @@ class AspectRatioPreservingScalingWithPad:
         padding_bottom = self.target_height - image_height
         padding_right = self.target_width - image_width
 
-        padded_image = pad(image, ((padding_top, padding_bottom),
-                           (padding_left, padding_right)), mode=self.padding_mode, constant_values=self.padding_value)
+        padded_image = pad(
+            image,
+            ((padding_top, padding_bottom), (padding_left, padding_right)),
+            mode=self.padding_mode,
+            constant_values=self.padding_value,
+        )
         return padded_image
 
     def apply_transformation(self, image: Union[np.ndarray, PIL.Image.Image]) -> np.ndarray:
@@ -73,31 +76,32 @@ class AspectRatioPreservingScalingWithPad:
 
 class FuyuImageProcessor(BaseImageProcessor):
     """
-    This class should handle the image processing part before the main FuyuModel.
-    In particular, it should handle:
+    This class should handle the image processing part before the main FuyuModel. In particular, it should handle:
 
     - Processing Images:
-        Taking a batch of images as input.
-        If the images are variable-sized, it resizes them based on the desired patch dimensions. The image output is 
-        always
-        img_h ........................................... 1080
-        img_w ........................................... 1920
-        Then, it patches up these images using the patchify_image function.
+        Taking a batch of images as input. If the images are variable-sized, it resizes them based on the desired patch
+        dimensions. The image output is always img_h ........................................... 1080 img_w
+        ........................................... 1920 Then, it patches up these images using the patchify_image
+        function.
 
     - Creating Image Input IDs:
-        For each patch, a placeholder ID is given to identify where these patches belong in a token sequence.
-        For variable-sized images, each line of patches is terminated with a newline ID.
+        For each patch, a placeholder ID is given to identify where these patches belong in a token sequence. For
+        variable-sized images, each line of patches is terminated with a newline ID.
 
     - Image Patch Indices:
         For each image patch, the code maintains an index where these patches should be inserted in a token stream.
 
     """
+
     # TODO make patchify logic consistent with FuyuViTModel
+
+    model_input_names = ["pixel_values"]
 
     def __init__(self, aspectratio_preserving_padding=AspectRatioPreservingScalingWithPad, **kwargs):
         super().__init__(**kwargs)
         self.aspectratio_preserving_padding = aspectratio_preserving_padding(
-            target_height=1080, target_width=1920, padding_value=1.0)
+            target_height=1080, target_width=1920, padding_value=1.0
+        )
 
     def get_num_patches(self, img_h: int, img_w: int, patch_dim_h: int, patch_dim_w: int) -> int:
         """Calculate number of patches required to encode an image."""
@@ -128,17 +132,13 @@ class FuyuImageProcessor(BaseImageProcessor):
         unfolded_along_height = image.unfold(2, patch_dim_h, patch_dim_h)
         patches = unfolded_along_height.unfold(3, patch_dim_w, patch_dim_w)
 
-        patches_reshaped = patches.contiguous().view(
-            batch_size, channels, -1, patch_dim_h, patch_dim_w
-        )
+        patches_reshaped = patches.contiguous().view(batch_size, channels, -1, patch_dim_h, patch_dim_w)
 
         patches_final = patches_reshaped.permute(0, 2, 3, 4, 1).reshape(
             batch_size, -1, channels * patch_dim_h * patch_dim_w
         )
 
         return patches_final
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
 
     def process_images_for_model_input(
         self,
@@ -247,8 +247,10 @@ class FuyuImageProcessor(BaseImageProcessor):
                 image_patch_indices_per_subsequence[bi].append(indices_in_stream_per_subsequence)
                 index_offset += num_patches
 
-        return {'images': images,
-                'image_input_ids': image_input_ids,
-                'image_patches': image_patches,
-                'image_patch_indices_per_batch': image_patch_indices_per_batch,
-                'image_patch_indices_per_subsequence': image_patch_indices_per_subsequence}
+        return {
+            "images": images,
+            "image_input_ids": image_input_ids,
+            "image_patches": image_patches,
+            "image_patch_indices_per_batch": image_patch_indices_per_batch,
+            "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
+        }

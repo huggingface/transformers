@@ -18,20 +18,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Fuyu model."""
-import math
 import collections
+import math
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from dataclasses import dataclass
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-
 from .configuration_fuyu import FuyuConfig
 
 
@@ -218,6 +218,7 @@ class FuyuViTPatchEmbeddings(nn.Module):
                 )
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
+
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXMLP with GPTNeoX->Fuyu
 
@@ -652,8 +653,9 @@ class FuyuModel(FuyuPreTrainedModel):
 
         # vision tokens
 
-        self.vision_embed_tokens = nn.Linear(config.patch_size * config.patch_size *
-                                             config.num_channels, config.hidden_size)
+        self.vision_embed_tokens = nn.Linear(
+            config.patch_size * config.patch_size * config.num_channels, config.hidden_size
+        )
 
         # text tokens # TODO can we just use AutoModel there?
 
@@ -674,17 +676,19 @@ class FuyuModel(FuyuPreTrainedModel):
         self.embed_tokens = value
 
     def gather_continuous_embeddings(
-            self,
-            word_embeddings: torch.Tensor,
-            continuous_embeddings: List[torch.Tensor],
-            image_patch_input_indices: torch.Tensor) -> torch.Tensor:
+        self,
+        word_embeddings: torch.Tensor,
+        continuous_embeddings: List[torch.Tensor],
+        image_patch_input_indices: torch.Tensor,
+    ) -> torch.Tensor:
         """This function places the continuous_embeddings into the word_embeddings at the locations
-        indicated by image_patch_input_indices.
-        Different batch elements can have different numbers of continuous embeddings.
+        indicated by image_patch_input_indices. Different batch elements can have different numbers of continuous
+        embeddings.
 
         Args:
             word_embeddings: Tensor of word embeddings. Shape: [b, s, h]
-            continuous_embeddings: Tensor of continuous embeddings. The length of the list is the batch size. Each entry is
+            continuous_embeddings:
+                Tensor of continuous embeddings. The length of the list is the batch size. Each entry is
             shape [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
             indices in image_patch_input_indices for that batch element.
             image_patch_input_indices: Tensor of indices of the image patches in the input_ids tensor. Shape: [b, s]
@@ -786,8 +790,10 @@ class FuyuModel(FuyuPreTrainedModel):
             if image_patches is not None and past_key_values is None:
                 patch_embeddings = self.vision_embed_tokens(image_patches)
                 inputs_embeds = self.gather_continuous_embeddings(
-                    word_embeddings=inputs_embeds, continuous_embeddings=patch_embeddings,
-                    image_patch_input_indices=image_patches_indices)
+                    word_embeddings=inputs_embeds,
+                    continuous_embeddings=patch_embeddings,
+                    image_patch_input_indices=image_patches_indices,
+                )
 
         # embed positions
         if attention_mask is None:
@@ -925,8 +931,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        # TODO finish documentation
         Args:
+        # TODO finish documentation
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -1037,7 +1043,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                "image_patches": image_patches if image_patches is not None else image_patches
+                "image_patches_indices": image_patches_indices if past_key_values is None else None,
+                "image_patches": image_patches if past_key_values is None else None
             }
         )
         return model_inputs
@@ -1056,8 +1063,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
     """
     The Fuyu transformer with a sequence classification head on top (linear layer).
 
-    [`FuyuForSequenceClassification`] uses the last token in order to do the classification, as other causal
-    models (e.g. GPT-2) do.
+    [`FuyuForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
