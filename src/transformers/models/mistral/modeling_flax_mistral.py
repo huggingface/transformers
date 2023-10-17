@@ -696,7 +696,7 @@ class FlaxMistralModule(nn.Module):
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
-            attentions=all_self_attns,
+            attentions=outputs[-1] if output_attentions else None,
         )
 
 
