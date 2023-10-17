@@ -412,7 +412,7 @@ If you wish to normalize images as a part of the augmentation transformation, us
 and `image_processor.image_std` values.
 </Tip>
 
-3. Then use 🤗 Datasets [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform) to apply the transforms on the fly:
+3. Then use 🤗 Datasets [`set_transform`](https://huggingface.co/docs/datasets/v2.14.5/en/package_reference/main_classes#datasets.Dataset.set_transform) to apply the transforms on the fly:
 
 ```py
 >>> dataset.set_transform(transforms)
