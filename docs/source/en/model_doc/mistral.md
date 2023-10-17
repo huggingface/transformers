@@ -76,7 +76,7 @@ python src/transformers/models/mistral/convert_mistral_weights_to_hf.py \
 You can then load the converted model from the `output/path`:
 
 ```python
-from transformers import MistralForCausalLM, LlamaTokenzier
+from transformers import MistralForCausalLM, LlamaTokenizer
 
 tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 model = MistralForCausalLM.from_pretrained("/output/path")
