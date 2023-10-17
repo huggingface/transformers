@@ -516,8 +516,8 @@ class RGBDTPatchEmbedding(nn.Module):
         self.norm_layer = norm_layer
 
         if is_temporal:
-            self.time_patch_size = self.patch_size.shape[0]
-            self.spatial_patch_size = self.patch_size.shape[1]
+            self.time_patch_size = self.patch_size[0]
+            self.spatial_patch_size = self.patch_size[1]
             self.num_patches = (config.num_frames // self.time_patch_size) * (self.image_size // self.spatial_patch_size) ** 2
         else:
             self.time_patch_size = None
@@ -815,6 +815,7 @@ class ImageBindPostProcessor(nn.Module):
         dim: int = -1,
         max_logit_scale: float = 100,
     ):
+        super().__init__()
         self.dim = dim
         self.scale_logits = config.logit_scale_init_value is not None
 
