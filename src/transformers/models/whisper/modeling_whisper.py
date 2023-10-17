@@ -1817,6 +1817,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         encoder_outputs=None,
         attention_mask=None,
         decoder_position_ids=None,
+        decoder_attention_mask=None,
         **kwargs,
     ):
         if past_key_values is not None:
@@ -1839,7 +1840,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,
-            "decoder_attention_mask": None,
+            "decoder_attention_mask": decoder_attention_mask,
             "decoder_position_ids": decoder_position_ids,
         }
 

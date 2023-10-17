@@ -4416,8 +4416,9 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
 
         position_ids = torch.arange(max_len, device=input_ids.device, dtype=torch.long)[None, :].broadcast_to(batch_size, max_len) if batch_size > 1 else None
+        attention_mask = torch.ones_like(position_ids) if position_ids is not None else  None
         n_matches = None
-        from transformers import AutoProcessor; processor = AutoProcessor.from_pretrained("sanchit-gandhi/large-32-2-gpu-flat-lr")
+        # from transformers import AutoProcessor; processor = AutoProcessor.from_pretrained("sanchit-gandhi/large-32-2-gpu-flat-lr")
 
         while True:
             if synced_gpus:
@@ -4441,6 +4442,7 @@ class GenerationMixin:
             if n_matches is not None and position_ids is not None:
                 diff = n_matches - n_matches.max()
                 position_ids = position_ids.add(diff[:, None]).clamp(min=0)
+                attention_mask[:, :min(cur_len + num_assistant_tokens, attention_mask.shape[1] - 1)] = position_ids[:, 1: (cur_len + num_assistant_tokens + 1)] > 0
 
             for assist_idx in range(int(num_assistant_tokens)):
                 # 1.1. use the assistant model to obtain the next candidate logits
@@ -4449,13 +4451,16 @@ class GenerationMixin:
                     # `new_token_len` can be 1 or 2 (next token in assistant + last token picked by the larger model)
                     new_token_len = candidate_input_ids.shape[1] - prev_seq_len
                     assist_inputs = candidate_input_ids[:, -new_token_len:]
+
                     assist_position_ids = position_ids[:, cur_len - new_token_len + assist_idx:cur_len + assist_idx] if position_ids is not None else None
+                    assist_attention_mask = attention_mask[:, :cur_len + assist_idx] if attention_mask is not None else None
 
                     # TODO (joao): make it compatible with models that use unconventional fwd pass logic, like blip2
                     if assistant_model.config.is_encoder_decoder:
                         assistant_model_outputs = assistant_model(
                             decoder_input_ids=assist_inputs,
                             decoder_position_ids=assist_position_ids,
+                            decoder_attention_mask=assist_attention_mask,
                             past_key_values=model_kwargs["assistant_past_key_values"],
                             encoder_outputs=model_kwargs["assistant_encoder_outputs"],
                         )
@@ -4482,7 +4487,8 @@ class GenerationMixin:
                 new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
                 candidate_input_ids = torch.cat((candidate_input_ids, new_token[:, None]), dim=-1)
 
-                # out = processor.batch_decode(candidate_input_ids)
+                if stopping_criteria(candidate_input_ids, assistant_model_outputs.logits[:, -1, :]):
+                    break
 
                 # 1.3. stop assistant generation on EOS
                 if eos_token_id_tensor is not None:
@@ -4494,8 +4500,6 @@ class GenerationMixin:
                         break
                 else:
                     last_assistant_token_is_eos = torch.zeros((1, 1), device=candidate_input_ids.device, dtype=torch.int8)
-
-            # print("Out", out)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
 
@@ -4509,7 +4513,9 @@ class GenerationMixin:
             candidate_kwargs = self._extend_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
 
             if self.config.is_encoder_decoder:
-                candidate_kwargs["decoder_position_ids"] = position_ids[:, :cur_len + candidate_length]
+                candidate_kwargs["decoder_position_ids"] = position_ids[:, :cur_len + candidate_length] if position_ids is not None else None
+                candidate_kwargs["decoder_attention_mask"] = attention_mask[:, :cur_len + candidate_length] if attention_mask is not None else None
+                # print("pos_ids", candidate_kwargs["decoder_position_ids"])
             else:
                 candidate_kwargs["position_ids"] = position_ids[:, :cur_len + candidate_length]
 
@@ -4552,6 +4558,8 @@ class GenerationMixin:
             n_matches -= last_assistant_token_is_eos.int() * (n_matches == candidate_length).int()
             # make sure than already finished sequences always match until longest "still active" sequence
             n_matches = torch.clamp(n_matches, max=max_len - cur_len - 1)
+            # make sure that finished sentences cannot slow down valid tokens
+            n_matches = unfinished_sequences * n_matches + (1 - unfinished_sequences) * (unfinished_sequences * n_matches).max()
 
             # 5.2. Get the valid continuation, after the matching tokens
             valid_tokens = selected_tokens[:, : n_matches.max() + 1]
@@ -4569,8 +4577,6 @@ class GenerationMixin:
                 if unfinished_sequences.max() == 0:
                     this_peer_finished = True
 
-            n_matches = unfinished_sequences * n_matches + (1 - unfinished_sequences) * (unfinished_sequences * n_matches).max()
-
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
 
             for i, n in enumerate(n_matches):
@@ -4579,8 +4585,10 @@ class GenerationMixin:
                     input_ids[i][diff:] = input_ids[i][:-diff].clone()
                     input_ids[i][:diff] = self.config.pad_token_id
 
-            print("input_ids:", processor.batch_decode(input_ids))
-            # import ipdb; ipdb.set_trace()
+            # print(unfinished_sequences)
+            # print("n_match", n_matches)
+            # print("n_match_new", n_matches_new)
+            # print("input_ids:", processor.batch_decode(input_ids, skip_special_tokens=True))
 
             if streamer is not None:
                 streamer.put(valid_tokens.cpu())
@@ -4598,9 +4606,9 @@ class GenerationMixin:
             # cost of forecasting incorrect assistant tokens.
             if assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic":
                 if n_matches.min() == int(num_assistant_tokens):
-                    num_assistant_tokens += 2.0
+                    num_assistant_tokens += 2
                 else:
-                    num_assistant_tokens = max(1.0, num_assistant_tokens - 1.0)
+                    num_assistant_tokens = max(1, num_assistant_tokens - 1)
 
             # Assistant: main logic end
             if synced_gpus and this_peer_finished:
