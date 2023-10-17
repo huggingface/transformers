@@ -232,34 +232,15 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         # word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens_tensor'][0][None, :])
         word_embeddings = self.model.embed_tokens(self.model_inputs["image_padded_unpacked_tokens"][0][None, :])
-        expected_word_embedding_start = torch.Tensor(
-            [
-2.0117e-06,
--1.0371e-05,
--2.0504e-05,
--1.0312e-05,
--1.7405e-05,
--1.3471e-05,
--1.7643e-05,
-1.3530e-05,
--5.2452e-06,
--2.4557e-05,     ]
-        )
-        expected_word_embedding_end = torch.Tensor(
-            [
--2.6345e-05,
--3.3855e-05,
-1.4663e-05,
--1.0133e-05,
--2.1338e-05,
-3.0249e-06,
--1.0490e-05,
-1.7405e-05,
--1.1250e-06,     ]
-        )
+
+        # fmt: off
+        EXPECTED_WORD_EMBEDDING_START = torch.Tensor([2.0117e-06,-1.0371e-05,-2.0504e-05,-1.0312e-05,-1.7405e-05,-1.3471e-05,-1.7643e-05,1.3530e-05,-5.2452e-06,-2.4557e-05])
+        EXPECTED_WORD_EMBEDDING_END = torch.Tensor([-2.6345e-05, -3.3855e-05, 1.4663e-05, -1.0133e-05, -2.1338e-05, 3.0249e-06, -1.0490e-05, 1.7405e-05, -1.1250e-06])
+        # fmt: on
+
         torch.testing.assert_close(word_embeddings.shape, torch.Size([1, 335, 4096]))
-        torch.testing.assert_close(word_embeddings[0][0][0:10], expected_word_embedding_start, rtol=0.1, atol=1e-02)
-        torch.testing.assert_close(word_embeddings[0][0][-9:], expected_word_embedding_end, rtol=0.1, atol=1e-02)
+        torch.testing.assert_close(word_embeddings[0][0][0:10], EXPECTED_WORD_EMBEDDING_START, rtol=0.1, atol=1e-02)
+        torch.testing.assert_close(word_embeddings[0][0][-9:], EXPECTED_WORD_EMBEDDING_END, rtol=0.1, atol=1e-02)
 
     def test_model_forward_values(self):
         reference_tensor = torch.Tensor(
