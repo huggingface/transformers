@@ -732,7 +732,6 @@ class FuyuModel(FuyuPreTrainedModel):
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
-
         return combined_attention_mask
 
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
@@ -784,12 +783,11 @@ class FuyuModel(FuyuPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-            if image_patches is not None and past_key_values is not None:
+            if image_patches is not None and past_key_values is None:
                 patch_embeddings = self.vision_embed_tokens(image_patches)
                 inputs_embeds = self.gather_continuous_embeddings(
                     word_embeddings=inputs_embeds, continuous_embeddings=patch_embeddings,
                     image_patch_input_indices=image_patches_indices)
-            # processed_images = self.image_processor.process_images_for_model_input(images, )
 
         # embed positions
         if attention_mask is None:
@@ -909,36 +907,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
-    ):
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
-
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-            }
-        )
-        return model_inputs
-
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -969,58 +937,22 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import FuyuProcessor, FuyuForCausalLM
-
-        >>> model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
-        >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
-
-        >>> prompt = "Hi, my name is Max"
-        >>> input_ids = processor(text=prompt, return_tensors="pt").input_ids
-
-        >>> file_path = "image_test.jpeg"
-        >>> image = Image.open(file_path)
-        >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-
-        #TODO add the processing step. Processing has first to be done 
-
-        from transformers import FuyuConfig, FuyuModel, FuyuForCausalLM, AutoTokenizer
-        from transformers.models.fuyu.processing_fuyu import FuyuProcessor
-        from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
-        from transformers.image_utils import to_numpy_array
-        from PIL import Image
-        import torch
-
-        pretrained_path = 'huggingface/pre_release_model'
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_path)
-        image_processor = FuyuImageProcessor()
-
-
-        processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        text_prompt = "Generate a coco-style caption.\\n"
-
-        image_path = "/fsx/pablo/adept-collab/adept-mm/mm-inference-for-hf/bus.png"
-        image_pil = Image.open(image_path)
-
-        outputs = processor(text=text_prompt, images=[image_pil])
-
-        # TODO Now, we have outputs. We can use them to compute image and text embeddings and mix them. 
-        # The embeddings are identical to those of Adept. 
-
-        # Running
-        word_embeds = model.embed_tokens(outputs['image_padded_unpacked_tokens_tensor'][0][None, :])
-        cont_embeds = model.vision_embed_tokens(model_image_input['image_patches'][0][0]).unsqueeze(0)
-        patch_indices = outputs['image_patch_input_indices']
-        # word_embeds and cont_embeds are the text and image embeddings, same as adept.
-        # 
-        combined_embeddings = model.gather_continuous_embeddings(word_embeddings=word_embeds, continuous_embeddings=cont_embeds,
-                                   image_patch_input_indices=patch_indices)
-
-        # This has, then, to be pushed to the main transformers tower in the model.forward() method. # TODO THIS IS THE MAIN TODO.
-        # Then, we can use the .generate() and match their outputs. 
+        >>> from transformers import FuyuConfig, FuyuForCausalLM, AutoTokenizer
+        >>> from transformers.models.fuyu.processing_fuyu import FuyuProcessor
+        >>> from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
+        >>> from PIL import Image
+        >>> import torch
+        >>> pretrained_path = 'adept/fuyu-8b'
+        >>> tokenizer = AutoTokenizer.from_pretrained(pretrained_path)
+        >>> image_processor = FuyuImageProcessor()
+        >>> processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        >>> text_prompt = "Generate a coco-style caption.\\n"
+        >>> image_path = "bus.png"
+        >>> image_pil = Image.open(image_path)
+        >>> model_inputs = processor(text=text_prompt, images=[image_pil])
+        >>> model_config = FuyuConfig()
+        >>> model = FuyuForCausalLM.from_pretrained(pretrained_path)
+        >>> generation_output = model.generate(**model_inputs, max_new_tokens=10)
 
 
         '
@@ -1077,7 +1009,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, image_patches=None, image_patches_indices=None, **kwargs
     ):
         if past_key_values:
             input_ids = input_ids[:, -1:]
@@ -1096,14 +1028,16 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        if image_patches_indices is not None:
+            model_inputs["image_patches_indices"] = image_patches_indices
+
         model_inputs.update(
             {
-                "position_ids": position_ids,
-                "attention_mask": attention_mask,
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
+                "image_patches": image_patches if image_patches is not None else image_patches
             }
         )
         return model_inputs
