@@ -57,8 +57,6 @@ RUN_SLOW=1 pytest examples/
 
 
 
-
-
 ### Choosing which tests to run
 
 This document goes into many details of how tests can be run. If after reading everything, you need even more details
@@ -184,6 +182,7 @@ pytest -k "test and ada" tests/test_optimization.py
 ### Run `accelerate` tests
 
 Sometimes you need to run `accelerate` tests on your models. For that you can just add `-m accelerate_tests` to your command, if let's say you want to run these tests on `OPT` run:
+
 ```bash
 RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
 ```
@@ -514,6 +513,7 @@ n_gpu = get_gpu_count()  # works with torch and tf
 ### Testing with a specific PyTorch backend or device
 
 To run the test suite on a specific torch device add `TRANSFORMERS_TEST_DEVICE="$device"` where `$device` is the target backend. For example, to test on CPU only:
+
 ```bash
 TRANSFORMERS_TEST_DEVICE="cpu" pytest tests/utils/test_logging.py
 ```
@@ -521,6 +521,7 @@ TRANSFORMERS_TEST_DEVICE="cpu" pytest tests/utils/test_logging.py
 This variable is useful for testing custom or less common PyTorch backends such as `mps`. It can also be used to achieve the same effect as `CUDA_VISIBLE_DEVICES` by targeting specific GPUs or testing in CPU-only mode.
 
 Certain devices will require an additional import after importing `torch` for the first time. This can be specified using the environment variable `TRANSFORMERS_TEST_BACKEND`:
+
 ```bash
 TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/utils/test_logging.py
 ```
@@ -879,7 +880,8 @@ or the `xfail` way:
 def test_feature_x():
 ```
 
-- Here is how to skip a test based on some internal check inside the test:
+
+Here's how to skip a test based on internal checks within the test:
 
 ```python
 def test_feature_x():

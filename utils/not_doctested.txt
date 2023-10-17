@@ -530,7 +530,6 @@ src/transformers/models/electra/convert_electra_original_tf_checkpoint_to_pytorc
 src/transformers/models/electra/modeling_flax_electra.py
 src/transformers/models/encodec/configuration_encodec.py
 src/transformers/models/encodec/convert_encodec_checkpoint_to_pytorch.py
-src/transformers/models/encoder_decoder/configuration_encoder_decoder.py
 src/transformers/models/encoder_decoder/modeling_encoder_decoder.py
 src/transformers/models/encoder_decoder/modeling_flax_encoder_decoder.py
 src/transformers/models/encoder_decoder/modeling_tf_encoder_decoder.py
@@ -627,7 +626,6 @@ src/transformers/models/lilt/configuration_lilt.py
 src/transformers/models/llama/configuration_llama.py
 src/transformers/models/llama/convert_llama_weights_to_hf.py
 src/transformers/models/llama/modeling_llama.py
-src/transformers/models/llama/tokenization_llama_fast.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
 src/transformers/models/longt5/configuration_longt5.py
@@ -756,7 +754,6 @@ src/transformers/models/roberta/modeling_flax_roberta.py
 src/transformers/models/roberta_prelayernorm/convert_roberta_prelayernorm_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/roberta_prelayernorm/modeling_flax_roberta_prelayernorm.py
 src/transformers/models/roc_bert/configuration_roc_bert.py
-src/transformers/models/roformer/configuration_roformer.py
 src/transformers/models/roformer/convert_roformer_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/roformer/modeling_flax_roformer.py
 src/transformers/models/roformer/modeling_roformer.py

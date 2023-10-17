@@ -32,6 +32,7 @@ Make sure to follow the installation guide on the repository mentioned above to 
 We natively support Flash Attention 2 for the following models:
 
 - Llama
+- Mistral
 - Falcon
 
 You can request to add Flash Attention 2 support for more models by opening an issue on GitHub, and even open a Pull Request to integrate the changes. The supported models can be used for inference and training, including training with padding tokens - *which is currently not supported for `BetterTransformer` API below.*

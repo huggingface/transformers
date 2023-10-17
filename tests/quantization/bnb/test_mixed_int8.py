@@ -186,6 +186,14 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         _ = config.to_json_string()
 
+    def test_original_dtype(self):
+        r"""
+        A simple test to check if the model succesfully stores the original dtype
+        """
+        self.assertTrue(hasattr(self.model_8bit.config, "_pre_quantization_dtype"))
+        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
+        self.assertTrue(self.model_8bit.config._pre_quantization_dtype == torch.float16)
+
     def test_memory_footprint(self):
         r"""
         A simple test to check if the model conversion has been done correctly by checking on the
@@ -262,13 +270,6 @@ class MixedInt8Test(BaseMixedInt8Test):
         )
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
-
-    def test_warns_save_pretrained(self):
-        r"""
-        Test whether trying to save a model after converting it in 8-bit will throw a warning.
-        """
-        with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
-            self.model_8bit.save_pretrained(tmpdirname)
 
     def test_raise_if_config_and_load_in_8bit(self):
         r"""

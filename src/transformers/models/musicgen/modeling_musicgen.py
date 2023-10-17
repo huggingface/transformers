@@ -1428,7 +1428,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
@@ -1453,7 +1453,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder,"
+    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder, "
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
@@ -1995,9 +1995,17 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             if decoder_attention_mask is not None:
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
-        # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -2467,7 +2475,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 

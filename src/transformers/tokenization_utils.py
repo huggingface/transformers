@@ -368,6 +368,25 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._decode_use_source_tokenizer = False
 
     @property
+    def is_fast(self) -> bool:
+        return False
+
+    @property
+    def vocab_size(self) -> int:
+        """
+        `int`: Size of the base vocabulary (without the added tokens).
+        """
+        raise NotImplementedError
+
+    @property
+    def added_tokens_encoder(self) -> Dict[str, int]:
+        """
+        Returns the sorted mapping from string to index. The added tokens encoder is cached for performance
+        optimisation in `self._added_tokens_encoder` for the slow tokenizers.
+        """
+        return {k.content: v for v, k in sorted(self._added_tokens_decoder.items(), key=lambda item: item[0])}
+
+    @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
         """
         Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
@@ -388,17 +407,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
             self._added_tokens_encoder[str(token)] = index
-
-    @property
-    def is_fast(self) -> bool:
-        return False
-
-    @property
-    def vocab_size(self) -> int:
-        """
-        `int`: Size of the base vocabulary (without the added tokens).
-        """
-        raise NotImplementedError
 
     def get_added_vocab(self) -> Dict[str, int]:
         """
@@ -979,11 +987,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
-        if spaces_between_special_tokens:
-            logger.warning_once(
-                "spaces_between_special_tokens is deprecated and will be removed in transformers v5. It was adding spaces between `added_tokens`, not special tokens, "
-                "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
-            )
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
         legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
             token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
