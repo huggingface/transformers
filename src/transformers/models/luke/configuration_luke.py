@@ -70,15 +70,18 @@ class LukeConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_entity_aware_attention (`bool`, defaults to `True`, *optional*, defaults to `True`):
+        use_entity_aware_attention (`bool`, *optional*, defaults to `True`):
             Whether or not the model should use the entity-aware self-attention mechanism proposed in [LUKE: Deep
             Contextualized Entity Representations with Entity-aware Self-attention (Yamada et
             al.)](https://arxiv.org/abs/2010.01057).
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        pad_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        bos_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        eos_token_id (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        pad_token_id (`int`, *optional*, defaults to 1):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            End of stream token id.
 
     Examples:
 
