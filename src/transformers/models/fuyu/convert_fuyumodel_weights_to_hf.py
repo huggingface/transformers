@@ -65,7 +65,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "vit_encoder.linear_encoder": "model.vision_embed_tokens"
 }
 
-KEYS_TO_REMOVE = {"rotary_emb.inv_freq", "image_patch_projection"}
+KEYS_TO_REMOVE = {"rotary_emb.inv_freq", "image_patch_projection", "image_patch_projection.weight", "image_patch_projection.bias"}
 
 
 def rename_state_dict(state_dict):
@@ -89,7 +89,7 @@ def convert_fuyu_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_pat
     state_dict = rename_state_dict(state_dict)
 
     transformers_config = FuyuConfig()
-    model = FuyuForCausalLM(transformers_config, eos_token_id=71013, bos_token_id=71013).to(torch.bfloat16)
+    model = FuyuForCausalLM(transformers_config).to(torch.bfloat16)
     model.load_state_dict(state_dict)
     model.save_pretrained(pytorch_dump_folder_path, safe_serialization=safe_serialization)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
