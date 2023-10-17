@@ -821,7 +821,7 @@ class GenerationMixin:
         warpers = LogitsProcessorList()
 
         # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
-        # better score (i.e. keep len(generation_config.eos_token_id) + 1)
+        # better score (i.e. keep len(list(generation_config.eos_token_id)) + 1)
         if generation_config.num_beams > 1:
             if isinstance(generation_config.eos_token_id, list):
                 min_tokens_to_keep = len(generation_config.eos_token_id) + 1
