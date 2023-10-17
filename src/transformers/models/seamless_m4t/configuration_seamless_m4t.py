@@ -150,7 +150,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         max_source_positions (`int`, *optional*, defaults to 4096):
             if `"relative"` position embeddings are used, defines the maximum source input positions. Only applied to
             the speech encoder.
-        conv_depthwise_kernel_size (`int`, defaults to 31, *optional*, defaults to 31):
+        conv_depthwise_kernel_size (`int`, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks. Only applied to the speech encoder.
 
         > Text-To-Unit (t2u) model specific parameters
