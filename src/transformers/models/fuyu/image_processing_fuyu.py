@@ -1,82 +1,25 @@
 import math
-import warnings
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...image_processing_utils import BaseImageProcessor
 from ...image_transforms import (
-    PaddingMode,
-    get_resize_output_image_size,
     pad,
     normalize,
-    rescale,
     resize,
-    to_channel_dimension_format,
 )
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_batched,
-    is_scaled_image,
-    to_numpy_array,
-    valid_images,
-)
-from ...utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    TensorType,
-    is_torch_available,
-    is_torch_tensor,
-    logging,
-)
+from ...image_utils import to_numpy_array
 
 import numpy as np
 
 
 import torch
-import einops
 
 from typing import List
 import math
 
-from torchvision.transforms import ConvertImageDtype, Normalize, Compose
 import PIL.Image
-
-
-class PaddedSampleTransform:
-    def __init__(
-        self,
-        *,
-        params_dtype: torch.dtype,
-        image_size: Tuple[int, int],
-        normalize_img_mean_std: Optional[List[float]] = None,
-    ):
-        height, width = image_size
-        super().__init__(image_height=height, image_width=width, image_dtype=params_dtype)
-        preprocess_transformations = [ConvertImageDtype(torch.float)]
-
-        evaluation_transformations = []
-
-        common_transformations = [
-            AspectRatioPreservingScalingWithPad(width=width, height=height, fill=1.0, padding_mode="constant"),
-        ]
-        if normalize_img_mean_std:
-            # split it into two lists of 3 floats each.
-            assert len(normalize_img_mean_std) == 6, "Couldn't parse normalize_img_mean_std argument"
-            img_mean, img_std = normalize_img_mean_std[:3], normalize_img_mean_std[3:]
-            common_transformations.append(Normalize(img_mean, img_std))
-
-        common_transformations.append(ConvertImageDtype(self.image_dtype))
-        self.evaluation_transformations = (
-            preprocess_transformations + evaluation_transformations + common_transformations
-        )
-        return Compose(evaluation_transformations)
 
 
 class AspectRatioPreservingScalingWithPad:
@@ -158,8 +101,10 @@ class FuyuImageProcessor(BaseImageProcessor):
 
     def get_num_patches(self, img_h: int, img_w: int, patch_dim_h: int, patch_dim_w: int) -> int:
         """Calculate number of patches required to encode an image."""
-        assert img_h % patch_dim_h == 0, f"{img_h=} must be divisible by {patch_dim_h=}"
-        assert img_w % patch_dim_w == 0, f"{img_w=} must be divisible by {patch_dim_w=}"
+        if img_h % patch_dim_h != 0:
+            raise ValueError(f"{img_h=} must be divisible by {patch_dim_h=}")
+        if img_w % patch_dim_w != 0:
+            raise ValueError(f"{img_w=} must be divisible by {patch_dim_w=}")
 
         num_patches_per_dim_h = img_h // patch_dim_h
         num_patches_per_dim_w = img_w // patch_dim_w
@@ -168,23 +113,28 @@ class FuyuImageProcessor(BaseImageProcessor):
         return num_patches
 
     def patchify_image(self, image: torch.Tensor, patch_dim_h: int, patch_dim_w: int) -> torch.Tensor:
-        """Convert an image into a tensor of patches.
+        """
+        Convert an image into a tensor of patches.
 
         Args:
             image: Image to convert. Shape: [batch, channels, height, width]
             patch_dim_h: Height of each patch.
             patch_dim_w: Width of each patch.
         """
-        rearranged_input = einops.rearrange(
-            image,
-            "b c (h p1) (w p2) -> b (h w) (p1 p2 c)",
-            p1=patch_dim_h,
-            p2=patch_dim_w,
+
+        batch_size, channels, height, width = image.shape
+        unfolded_along_height = image.unfold(2, patch_dim_h, patch_dim_h)
+        patches = unfolded_along_height.unfold(3, patch_dim_w, patch_dim_w)
+
+        patches_reshaped = patches.contiguous().view(
+            batch_size, channels, -1, patch_dim_h, patch_dim_w
         )
-        assert rearranged_input.shape[1] == self.get_num_patches(
-            img_h=image.shape[2], img_w=image.shape[3], patch_dim_h=patch_dim_h, patch_dim_w=patch_dim_w
+
+        patches_final = patches_reshaped.permute(0, 2, 3, 4, 1).reshape(
+            batch_size, -1, channels * patch_dim_h * patch_dim_w
         )
-        return rearranged_input
+
+        return patches_final
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
 
