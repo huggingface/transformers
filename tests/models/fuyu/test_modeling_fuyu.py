@@ -256,7 +256,7 @@ class FuyuModelTester:
 
 @require_torch_gpu
 @slow
-class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class FuyuProcessingTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Currently, all these tests depend on a value of max_tokens_to_generate of 10.
     """
@@ -273,9 +273,6 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         image_pil = Image.open(image_path)
 
         self.model_inputs = processor(text=text_prompt, images=[image_pil])
-
-        self.model_config = FuyuConfig()
-        self.model = FuyuModel(self.model_config).from_pretrained(pretrained_model_name)
 
     def test_fuyu_processing(self):
         """
@@ -348,6 +345,30 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             71374,  71389, 120412,  71377,  71835,  71374,  73615,  71375,  71399,
             71435,  71122,  71013,  71013,  71013,  71013,  71013,  71013,  71013,
             71013,  71013,  71013]]))
+
+
+@require_torch_gpu
+@slow
+class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    """
+    Currently, all these tests depend on a value of max_tokens_to_generate of 10.
+    """
+
+    def setUp(self):
+        pretrained_model_name = 'huggingface/pre_release_model'
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
+        image_processor = FuyuImageProcessor()
+
+        processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        text_prompt = "Generate a coco-style caption.\\n"
+
+        image_path = "/fsx/pablo/adept-collab/adept-mm/mm-inference-for-hf/bus.png"
+        image_pil = Image.open(image_path)
+
+        self.model_inputs = processor(text=text_prompt, images=[image_pil])
+
+        self.model_config = FuyuConfig()
+        self.model = FuyuModel(self.model_config).from_pretrained(pretrained_model_name)
 
     def test_model_embeddings_match_adept(self):
         """
