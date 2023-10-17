@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch RT_DETR model."""
 
-
+import copy
 import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
@@ -913,38 +913,6 @@ class RT_DETRClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrPreTrainedModel with Detr->RT_DETR
-class RT_DETRPreTrainedModel(PreTrainedModel):
-    config_class = RT_DETRConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        xavier_std = self.config.init_xavier_std
-
-        if isinstance(module, RT_DETRMHAttentionMap):
-            nn.init.zeros_(module.k_linear.bias)
-            nn.init.zeros_(module.q_linear.bias)
-            nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
-            nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
-        elif isinstance(module, RT_DETRLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, RT_DETRDecoder):
-            module.gradient_checkpointing = value
 
 
 RT_DETR_START_DOCSTRING = r"""
@@ -1001,337 +969,1107 @@ RT_DETR_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrEncoder with DETR->RT_DETR,Detr->RT_DETR
-class RT_DETREncoder(RT_DETRPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`RT_DETREncoderLayer`].
+# # Copied from transformers.models.detr.modeling_detr.DetrEncoder with DETR->RT_DETR,Detr->RT_DETR
+# class RT_DETREncoder(RT_DETRPreTrainedModel):
+#     """
+#     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+#     [`RT_DETREncoderLayer`].
 
-    The encoder updates the flattened feature map through multiple self-attention layers.
+#     The encoder updates the flattened feature map through multiple self-attention layers.
 
-    Small tweak for RT_DETR:
+#     Small tweak for RT_DETR:
 
-    - object_queries are added to the forward pass.
+#     - object_queries are added to the forward pass.
 
-    Args:
-        config: RT_DETRConfig
-    """
+#     Args:
+#         config: RT_DETRConfig
+#     """
 
-    def __init__(self, config: RT_DETRConfig):
-        super().__init__(config)
+#     def __init__(self, config: RT_DETRConfig):
+#         super().__init__(config)
 
-        self.dropout = config.dropout
-        self.layerdrop = config.encoder_layerdrop
+#         self.dropout = config.dropout
+#         self.layerdrop = config.encoder_layerdrop
 
-        self.layers = nn.ModuleList([RT_DETREncoderLayer(config) for _ in range(config.encoder_layers)])
+#         self.layers = nn.ModuleList([RT_DETREncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        # in the original RT_DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
+#         # in the original RT_DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
-        # Initialize weights and apply final processing
-        self.post_init()
+#         # Initialize weights and apply final processing
+#         self.post_init()
 
-    def forward(
-        self,
-        inputs_embeds=None,
-        attention_mask=None,
-        object_queries=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
-    ):
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+#     def forward(
+#         self,
+#         inputs_embeds=None,
+#         attention_mask=None,
+#         object_queries=None,
+#         output_attentions=None,
+#         output_hidden_states=None,
+#         return_dict=None,
+#         **kwargs,
+#     ):
+#         r"""
+#         Args:
+#             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+#                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
 
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
+#             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+#                 Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
 
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
+#                 - 1 for pixel features that are real (i.e. **not masked**),
+#                 - 0 for pixel features that are padding (i.e. **masked**).
 
-                [What are attention masks?](../glossary#attention-mask)
+#                 [What are attention masks?](../glossary#attention-mask)
 
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Object queries that are added to the queries in each self-attention layer.
+#             object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+#                 Object queries that are added to the queries in each self-attention layer.
 
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        position_embeddings = kwargs.pop("position_embeddings", None)
+#             output_attentions (`bool`, *optional*):
+#                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+#                 returned tensors for more detail.
+#             output_hidden_states (`bool`, *optional*):
+#                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+#                 for more detail.
+#             return_dict (`bool`, *optional*):
+#                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+#         """
+#         position_embeddings = kwargs.pop("position_embeddings", None)
 
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+#         if kwargs:
+#             raise ValueError(f"Unexpected arguments {kwargs.keys()}")
 
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
+#         if position_embeddings is not None and object_queries is not None:
+#             raise ValueError(
+#                 "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
+#             )
 
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
+#         if position_embeddings is not None:
+#             logger.warning_once(
+#                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
+#             )
+#             object_queries = position_embeddings
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+#         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+#         output_hidden_states = (
+#             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+#         )
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = inputs_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+#         hidden_states = inputs_embeds
+#         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+#         # expand attention_mask
+#         if attention_mask is not None:
+#             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+#             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        for i, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
+#         encoder_states = () if output_hidden_states else None
+#         all_attentions = () if output_attentions else None
+#         for i, encoder_layer in enumerate(self.layers):
+#             if output_hidden_states:
+#                 encoder_states = encoder_states + (hidden_states,)
+#             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+#             to_drop = False
+#             if self.training:
+#                 dropout_probability = torch.rand([])
+#                 if dropout_probability < self.layerdrop:  # skip the layer
+#                     to_drop = True
 
-            if to_drop:
-                layer_outputs = (None, None)
+#             if to_drop:
+#                 layer_outputs = (None, None)
+#             else:
+#                 # we add object_queries as extra input to the encoder_layer
+#                 layer_outputs = encoder_layer(
+#                     hidden_states,
+#                     attention_mask,
+#                     object_queries=object_queries,
+#                     output_attentions=output_attentions,
+#                 )
+
+#                 hidden_states = layer_outputs[0]
+
+#             if output_attentions:
+#                 all_attentions = all_attentions + (layer_outputs[1],)
+
+#         if output_hidden_states:
+#             encoder_states = encoder_states + (hidden_states,)
+
+#         if not return_dict:
+#             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+#         return BaseModelOutput(
+#             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+#         )
+
+
+# # Copied from transformers.models.detr.modeling_detr.DetrDecoder with DETR->RT_DETR,Detr->RT_DETR
+# class RT_DETRDecoder(RT_DETRPreTrainedModel):
+#     """
+#     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`RT_DETRDecoderLayer`].
+
+#     The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
+
+#     Some small tweaks for RT_DETR:
+
+#     - object_queries and query_position_embeddings are added to the forward pass.
+#     - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
+
+#     Args:
+#         config: RT_DETRConfig
+#     """
+
+#     def __init__(self, config: RT_DETRConfig):
+#         super().__init__(config)
+#         self.dropout = config.dropout
+#         self.layerdrop = config.decoder_layerdrop
+
+#         self.layers = nn.ModuleList([RT_DETRDecoderLayer(config) for _ in range(config.decoder_layers)])
+#         # in RT_DETR, the decoder uses layernorm after the last decoder layer output
+#         self.layernorm = nn.LayerNorm(config.d_model)
+
+#         self.gradient_checkpointing = False
+#         # Initialize weights and apply final processing
+#         self.post_init()
+
+#     def forward(
+#         self,
+#         inputs_embeds=None,
+#         attention_mask=None,
+#         encoder_hidden_states=None,
+#         encoder_attention_mask=None,
+#         object_queries=None,
+#         query_position_embeddings=None,
+#         output_attentions=None,
+#         output_hidden_states=None,
+#         return_dict=None,
+#         **kwargs,
+#     ):
+#         r"""
+#         Args:
+#             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+#                 The query embeddings that are passed into the decoder.
+
+#             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+#                 Mask to avoid performing attention on certain queries. Mask values selected in `[0, 1]`:
+
+#                 - 1 for queries that are **not masked**,
+#                 - 0 for queries that are **masked**.
+
+#                 [What are attention masks?](../glossary#attention-mask)
+#             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+#                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+#                 of the decoder.
+#             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
+#                 Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+#                 in `[0, 1]`:
+
+#                 - 1 for pixels that are real (i.e. **not masked**),
+#                 - 0 for pixels that are padding (i.e. **masked**).
+
+#             object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+#                 Object queries that are added to the queries and keys in each cross-attention layer.
+#             query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+#                 , *optional*): Position embeddings that are added to the values and keys in each self-attention layer.
+
+#             output_attentions (`bool`, *optional*):
+#                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+#                 returned tensors for more detail.
+#             output_hidden_states (`bool`, *optional*):
+#                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+#                 for more detail.
+#             return_dict (`bool`, *optional*):
+#                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+#         """
+#         position_embeddings = kwargs.pop("position_embeddings", None)
+
+#         if kwargs:
+#             raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+
+#         if position_embeddings is not None and object_queries is not None:
+#             raise ValueError(
+#                 "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
+#             )
+
+#         if position_embeddings is not None:
+#             logger.warning_once(
+#                 "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
+#             )
+#             object_queries = position_embeddings
+
+#         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+#         output_hidden_states = (
+#             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+#         )
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+#         if inputs_embeds is not None:
+#             hidden_states = inputs_embeds
+#             input_shape = inputs_embeds.size()[:-1]
+
+#         combined_attention_mask = None
+
+#         if attention_mask is not None and combined_attention_mask is not None:
+#             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+#             combined_attention_mask = combined_attention_mask + _expand_mask(
+#                 attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
+#             )
+
+#         # expand encoder attention mask
+#         if encoder_hidden_states is not None and encoder_attention_mask is not None:
+#             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
+#             encoder_attention_mask = _expand_mask(
+#                 encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
+#             )
+
+#         # optional intermediate hidden states
+#         intermediate = () if self.config.auxiliary_loss else None
+
+#         # decoder layers
+#         all_hidden_states = () if output_hidden_states else None
+#         all_self_attns = () if output_attentions else None
+#         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+
+#         for idx, decoder_layer in enumerate(self.layers):
+#             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+#             if output_hidden_states:
+#                 all_hidden_states += (hidden_states,)
+#             if self.training:
+#                 dropout_probability = torch.rand([])
+#                 if dropout_probability < self.layerdrop:
+#                     continue
+
+#             if self.gradient_checkpointing and self.training:
+
+#                 def create_custom_forward(module):
+#                     def custom_forward(*inputs):
+#                         return module(*inputs, output_attentions)
+
+#                     return custom_forward
+
+#                 layer_outputs = torch.utils.checkpoint.checkpoint(
+#                     create_custom_forward(decoder_layer),
+#                     hidden_states,
+#                     combined_attention_mask,
+#                     encoder_hidden_states,
+#                     encoder_attention_mask,
+#                     None,
+#                 )
+#             else:
+#                 layer_outputs = decoder_layer(
+#                     hidden_states,
+#                     attention_mask=combined_attention_mask,
+#                     object_queries=object_queries,
+#                     query_position_embeddings=query_position_embeddings,
+#                     encoder_hidden_states=encoder_hidden_states,
+#                     encoder_attention_mask=encoder_attention_mask,
+#                     output_attentions=output_attentions,
+#                 )
+
+#             hidden_states = layer_outputs[0]
+
+#             if self.config.auxiliary_loss:
+#                 hidden_states = self.layernorm(hidden_states)
+#                 intermediate += (hidden_states,)
+
+#             if output_attentions:
+#                 all_self_attns += (layer_outputs[1],)
+
+#                 if encoder_hidden_states is not None:
+#                     all_cross_attentions += (layer_outputs[2],)
+
+#         # finally, apply layernorm
+#         hidden_states = self.layernorm(hidden_states)
+
+#         # add hidden states from the last decoder layer
+#         if output_hidden_states:
+#             all_hidden_states += (hidden_states,)
+
+#         # stack intermediate decoder activations
+#         if self.config.auxiliary_loss:
+#             intermediate = torch.stack(intermediate)
+
+#         if not return_dict:
+#             return tuple(
+#                 v
+#                 for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions, intermediate]
+#                 if v is not None
+#             )
+#         return RT_DETRDecoderOutput(
+#             last_hidden_state=hidden_states,
+#             hidden_states=all_hidden_states,
+#             attentions=all_self_attns,
+#             cross_attentions=all_cross_attentions,
+#             intermediate_hidden_states=intermediate,
+#         )
+
+
+
+# @add_start_docstrings(
+#     """
+#     RT_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top, for tasks
+#     such as COCO detection.
+#     """,
+#     RT_DETR_START_DOCSTRING,
+# )
+# # Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection with DETR->RT_DETR,Detr->RT_DETR,detr->rt_detr,facebook/detr-resnet-50->checkpoing/todo
+# class RT_DETRForObjectDetection(RT_DETRPreTrainedModel):
+#     def __init__(self, config: RT_DETRConfig):
+#         super().__init__(config)
+
+#         # RT_DETR encoder-decoder model
+#         self.model = RT_DETRModel(config)
+
+#         # Object detection heads
+#         self.class_labels_classifier = nn.Linear(
+#             config.d_model, config.num_labels + 1
+#         )  # We add one for the "no object" class
+#         self.bbox_predictor = RT_DETRMLPPredictionHead(
+#             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+#         )
+
+#         # Initialize weights and apply final processing
+#         self.post_init()
+
+#     # taken from https://github.com/facebookresearch/rt_detr/blob/master/models/rt_detr.py
+#     @torch.jit.unused
+#     def _set_aux_loss(self, outputs_class, outputs_coord):
+#         # this is a workaround to make torchscript happy, as torchscript
+#         # doesn't support dictionary with non-homogeneous values, such
+#         # as a dict having both a Tensor and a list.
+#         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+
+#     @add_start_docstrings_to_model_forward(RT_DETR_INPUTS_DOCSTRING)
+#     @replace_return_docstrings(output_type=RT_DETRObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+#     def forward(
+#         self,
+#         pixel_values: torch.FloatTensor,
+#         pixel_mask: Optional[torch.LongTensor] = None,
+#         decoder_attention_mask: Optional[torch.FloatTensor] = None,
+#         encoder_outputs: Optional[torch.FloatTensor] = None,
+#         inputs_embeds: Optional[torch.FloatTensor] = None,
+#         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+#         labels: Optional[List[dict]] = None,
+#         output_attentions: Optional[bool] = None,
+#         output_hidden_states: Optional[bool] = None,
+#         return_dict: Optional[bool] = None,
+#     ) -> Union[Tuple[torch.FloatTensor], RT_DETRObjectDetectionOutput]:
+#         r"""
+#         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+#             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+#             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+#             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+#             in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+
+#         Returns:
+
+#         Examples:
+
+#         ```python
+#         >>> from transformers import AutoImageProcessor, RT_DETRForObjectDetection
+#         >>> import torch
+#         >>> from PIL import Image
+#         >>> import requests
+
+#         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+#         >>> image = Image.open(requests.get(url, stream=True).raw)
+
+#         >>> image_processor = AutoImageProcessor.from_pretrained("checkpoing/todo")
+#         >>> model = RT_DETRForObjectDetection.from_pretrained("checkpoing/todo")
+
+#         >>> inputs = image_processor(images=image, return_tensors="pt")
+#         >>> outputs = model(**inputs)
+
+#         >>> # convert outputs (bounding boxes and class logits) to COCO API
+#         >>> target_sizes = torch.tensor([image.size[::-1]])
+#         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+#         ...     0
+#         ... ]
+
+#         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+#         ...     box = [round(i, 2) for i in box.tolist()]
+#         ...     print(
+#         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+#         ...         f"{round(score.item(), 3)} at location {box}"
+#         ...     )
+#         Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
+#         Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]
+#         Detected couch with confidence 0.995 at location [-0.02, 1.15, 639.73, 473.76]
+#         Detected cat with confidence 0.999 at location [13.24, 52.05, 314.02, 470.93]
+#         Detected cat with confidence 0.999 at location [345.4, 23.85, 640.37, 368.72]
+#         ```"""
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+#         # First, sent images through RT_DETR base model to obtain encoder + decoder outputs
+#         outputs = self.model(
+#             pixel_values,
+#             pixel_mask=pixel_mask,
+#             decoder_attention_mask=decoder_attention_mask,
+#             encoder_outputs=encoder_outputs,
+#             inputs_embeds=inputs_embeds,
+#             decoder_inputs_embeds=decoder_inputs_embeds,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=return_dict,
+#         )
+
+#         sequence_output = outputs[0]
+
+#         # class logits + predicted bounding boxes
+#         logits = self.class_labels_classifier(sequence_output)
+#         pred_boxes = self.bbox_predictor(sequence_output).sigmoid()
+
+#         loss, loss_dict, auxiliary_outputs = None, None, None
+#         if labels is not None:
+#             # First: create the matcher
+#             matcher = RT_DETRHungarianMatcher(
+#                 class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
+#             )
+#             # Second: create the criterion
+#             losses = ["labels", "boxes", "cardinality"]
+#             criterion = RT_DETRLoss(
+#                 matcher=matcher,
+#                 num_classes=self.config.num_labels,
+#                 eos_coef=self.config.eos_coefficient,
+#                 losses=losses,
+#             )
+#             criterion.to(self.device)
+#             # Third: compute the losses, based on outputs and labels
+#             outputs_loss = {}
+#             outputs_loss["logits"] = logits
+#             outputs_loss["pred_boxes"] = pred_boxes
+#             if self.config.auxiliary_loss:
+#                 intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
+#                 outputs_class = self.class_labels_classifier(intermediate)
+#                 outputs_coord = self.bbox_predictor(intermediate).sigmoid()
+#                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
+#                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+
+#             loss_dict = criterion(outputs_loss, labels)
+#             # Fourth: compute total loss, as a weighted sum of the various losses
+#             weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
+#             weight_dict["loss_giou"] = self.config.giou_loss_coefficient
+#             if self.config.auxiliary_loss:
+#                 aux_weight_dict = {}
+#                 for i in range(self.config.decoder_layers - 1):
+#                     aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
+#                 weight_dict.update(aux_weight_dict)
+#             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+
+#         if not return_dict:
+#             if auxiliary_outputs is not None:
+#                 output = (logits, pred_boxes) + auxiliary_outputs + outputs
+#             else:
+#                 output = (logits, pred_boxes) + outputs
+#             return ((loss, loss_dict) + output) if loss is not None else output
+
+#         return RT_DETRObjectDetectionOutput(
+#             loss=loss,
+#             loss_dict=loss_dict,
+#             logits=logits,
+#             pred_boxes=pred_boxes,
+#             auxiliary_outputs=auxiliary_outputs,
+#             last_hidden_state=outputs.last_hidden_state,
+#             decoder_hidden_states=outputs.decoder_hidden_states,
+#             decoder_attentions=outputs.decoder_attentions,
+#             cross_attentions=outputs.cross_attentions,
+#             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+#             encoder_hidden_states=outputs.encoder_hidden_states,
+#             encoder_attentions=outputs.encoder_attentions,
+#         )
+
+
+#### TODO: Rafael
+from collections import OrderedDict
+import torch.nn.functional as F 
+
+
+def get_activation(act: str, inplace: bool=True):
+    act = act.lower()
+    if act == "silu":
+        act_func = nn.SiLU()
+    elif act == "relu":
+        act_func = nn.ReLU()
+    elif act == "leaky_relu":
+        act_func = nn.LeakyReLU()
+    elif act == "silu":
+        act_func = nn.SiLU()
+    elif act == "gelu":
+        act_func = nn.GELU()
+    elif act is None:
+        act_func = nn.Identity()
+    elif isinstance(act, nn.Module):
+        act_func = act
+    else:
+        raise RuntimeError(f"Not valid activation {act}")  
+    if hasattr(act_func, "inplace"):
+        act_func.inplace = inplace
+    return act_func 
+
+
+class ConvNormLayer(nn.Module):
+    def __init__(self, channels_in, channels_out, kernel_size, stride, padding=None, bias=False, act=None):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            channels_in, 
+            channels_out, 
+            kernel_size, 
+            stride, 
+            padding=(kernel_size-1)//2 if padding is None else padding, 
+            bias=bias)
+        self.norm = nn.BatchNorm2d(channels_out)
+        self.act = nn.Identity() if act is None else get_activation(act) 
+
+    def forward(self, x):
+        return self.act(self.norm(self.conv(x)))
+
+
+class BottleNeck(nn.Module):
+    expansion = 4
+
+    def __init__(self, channels_in, channels_out, stride, shortcut, act='relu', variant='b'):
+        super().__init__()
+
+        if variant == 'a':
+            stride1, stride2 = stride, 1
+        else:
+            stride1, stride2 = 1, stride
+
+        width = channels_out 
+
+        self.branch2a = ConvNormLayer(channels_in, width, 1, stride1, act=act)
+        self.branch2b = ConvNormLayer(width, width, 3, stride2, act=act)
+        self.branch2c = ConvNormLayer(width, channels_out * self.expansion, 1, 1)
+
+        self.shortcut = shortcut
+        if not shortcut:
+            if variant == 'd' and stride == 2:
+                self.short = nn.Sequential(OrderedDict([
+                    ('pool', nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
+                    ('conv', ConvNormLayer(channels_in, channels_out * self.expansion, 1, 1))
+                ]))
             else:
-                # we add object_queries as extra input to the encoder_layer
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    object_queries=object_queries,
-                    output_attentions=output_attentions,
-                )
+                self.short = ConvNormLayer(channels_in, channels_out * self.expansion, 1, stride)
 
-                hidden_states = layer_outputs[0]
+        self.act = nn.Identity() if act is None else get_activation(act) 
 
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+    def forward(self, x):
+        out = self.branch2a(x)
+        out = self.branch2b(out)
+        out = self.branch2c(out)
 
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+        if self.shortcut:
+            short = x
+        else:
+            short = self.short(x)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        out = out + short
+        out = self.act(out)
+
+        return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrDecoder with DETR->RT_DETR,Detr->RT_DETR
-class RT_DETRDecoder(RT_DETRPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`RT_DETRDecoderLayer`].
+class BasicBlock(nn.Module):
+    expansion = 1
 
-    The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
+    def __init__(self, channels_in, channels_out, stride, shortcut, act='relu', variant='b'):
+        super().__init__()
 
-    Some small tweaks for RT_DETR:
+        self.shortcut = shortcut
 
-    - object_queries and query_position_embeddings are added to the forward pass.
-    - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
-
-    Args:
-        config: RT_DETRConfig
-    """
-
-    def __init__(self, config: RT_DETRConfig):
-        super().__init__(config)
-        self.dropout = config.dropout
-        self.layerdrop = config.decoder_layerdrop
-
-        self.layers = nn.ModuleList([RT_DETRDecoderLayer(config) for _ in range(config.decoder_layers)])
-        # in RT_DETR, the decoder uses layernorm after the last decoder layer output
-        self.layernorm = nn.LayerNorm(config.d_model)
-
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(
-        self,
-        inputs_embeds=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        object_queries=None,
-        query_position_embeddings=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
-    ):
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on certain queries. Mask values selected in `[0, 1]`:
-
-                - 1 for queries that are **not masked**,
-                - 0 for queries that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Object queries that are added to the queries and keys in each cross-attention layer.
-            query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                , *optional*): Position embeddings that are added to the values and keys in each self-attention layer.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        position_embeddings = kwargs.pop("position_embeddings", None)
-
-        if kwargs:
-            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
-
-        if position_embeddings is not None and object_queries is not None:
-            raise ValueError(
-                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
-            )
-
-        if position_embeddings is not None:
-            logger.warning_once(
-                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
-            )
-            object_queries = position_embeddings
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if inputs_embeds is not None:
-            hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
-
-        combined_attention_mask = None
-
-        if attention_mask is not None and combined_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            combined_attention_mask = combined_attention_mask + _expand_mask(
-                attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
-            )
-
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _expand_mask(
-                encoder_attention_mask, inputs_embeds.dtype, target_len=input_shape[-1]
-            )
-
-        # optional intermediate hidden states
-        intermediate = () if self.config.auxiliary_loss else None
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-
-        for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:
-                    continue
-
-            if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
-                    hidden_states,
-                    combined_attention_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    None,
-                )
+        if not shortcut:
+            if variant == 'd' and stride == 2:
+                self.short = nn.Sequential(OrderedDict([
+                    ('pool', nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
+                    ('conv', ConvNormLayer(channels_in, channels_out, 1, 1))
+                ]))
             else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=combined_attention_mask,
-                    object_queries=object_queries,
-                    query_position_embeddings=query_position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions,
-                )
+                self.short = ConvNormLayer(channels_in, channels_out, 1, stride)
 
-            hidden_states = layer_outputs[0]
+        self.branch2a = ConvNormLayer(channels_in, channels_out, 3, stride, act=act)
+        self.branch2b = ConvNormLayer(channels_out, channels_out, 3, 1, act=None)
+        self.act = nn.Identity() if act is None else get_activation(act) 
 
-            if self.config.auxiliary_loss:
-                hidden_states = self.layernorm(hidden_states)
-                intermediate += (hidden_states,)
 
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+    def forward(self, x):
+        out = self.branch2a(x)
+        out = self.branch2b(out)
+        if self.shortcut:
+            short = x
+        else:
+            short = self.short(x)
+        
+        out = out + short
+        out = self.act(out)
 
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
+        return out
 
-        # finally, apply layernorm
-        hidden_states = self.layernorm(hidden_states)
 
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
+class Blocks(nn.Module):
+    def __init__(self, block, channels_in, channels_out, count, stage_num, act='relu', variant='b'):
+        super().__init__()
 
-        # stack intermediate decoder activations
-        if self.config.auxiliary_loss:
-            intermediate = torch.stack(intermediate)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions, intermediate]
-                if v is not None
+        self.blocks = nn.ModuleList()
+        for i in range(count):
+            self.blocks.append(
+                block(
+                    channels_in, 
+                    channels_out,
+                    stride=2 if i == 0 and stage_num != 2 else 1, 
+                    shortcut=False if i == 0 else True,
+                    variant=variant,
+                    act=act)
             )
-        return RT_DETRDecoderOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
-            intermediate_hidden_states=intermediate,
+
+            if i == 0:
+                channels_in = channels_out * block.expansion
+
+    def forward(self, x):
+        out = x
+        for block in self.blocks:
+            out = block(out)
+        return out
+
+
+class FrozenBatchNorm2d(nn.Module):
+    """copy and modified from https://github.com/facebookresearch/detr/blob/master/models/backbone.py
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt,
+    without which any other models than torchvision.models.resnet[18,34,50,101]
+    produce nans.
+    """
+    def __init__(self, num_features, eps=1e-5):
+        super(FrozenBatchNorm2d, self).__init__()
+        n = num_features
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+        self.eps = eps
+        self.num_features = n 
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        num_batches_tracked_key = prefix + 'num_batches_tracked'
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super(FrozenBatchNorm2d, self)._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs)
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it fuser-friendly
+        w = self.weight.reshape(1, -1, 1, 1)
+        b = self.bias.reshape(1, -1, 1, 1)
+        rv = self.running_var.reshape(1, -1, 1, 1)
+        rm = self.running_mean.reshape(1, -1, 1, 1)
+        scale = w * (rv + self.eps).rsqrt()
+        bias = b - rm * scale
+        return x * scale + bias
+
+    def extra_repr(self):
+        return (
+            "{num_features}, eps={eps}".format(**self.__dict__)
         )
+
+
+class PResNet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        block_nums = config.block_nums
+        variant = config.variant
+        act_presnet = config.act_presnet
+        depth = config.depth
+        num_stages = config.num_stages
+        return_idx = config.return_idx
+        freeze_at = config.freeze_at
+        freeze_norm = config.freeze_norm
+        pretrained = config.pretrained
+        
+        channels_in = 64
+        if variant in ["c", "d"]:
+            conv_def = [
+                [3, channels_in // 2, 3, 2, "conv1_1"],
+                [channels_in // 2, channels_in // 2, 3, 1, "conv1_2"],
+                [channels_in // 2, channels_in, 3, 1, "conv1_3"],
+            ]
+        else:
+            conv_def = [[3, channels_in, 7, 2, "conv1_1"]]
+
+        self.conv1 = nn.Sequential(OrderedDict([
+            (_name, ConvNormLayer(c_in, c_out, k, s, act=act_presnet)) for c_in, c_out, k, s, _name in conv_def
+        ]))
+
+        channels_out_list = [64, 128, 256, 512]
+        block = BottleNeck if depth >= 50 else BasicBlock
+
+        _out_channels = [block.expansion * v for v in channels_out_list]
+        _out_strides = [4, 8, 16, 32]
+
+        self.res_layers = nn.ModuleList()
+        for i in range(num_stages):
+            stage_num = i + 2
+            self.res_layers.append(
+                Blocks(block, channels_in, channels_out_list[i], block_nums[i], stage_num, act=act_presnet, variant=variant)
+            )
+            channels_in = _out_channels[i]
+
+        self.return_idx = return_idx
+        self.out_channels = [_out_channels[_i] for _i in return_idx]
+        self.out_strides = [_out_strides[_i] for _i in return_idx]
+
+        if freeze_at >= 0:
+            self._freeze_parameters(self.conv1)
+            for i in range(min(freeze_at, num_stages)):
+                self._freeze_parameters(self.res_layers[i])
+
+        if freeze_norm:
+            self._freeze_norm(self)
+
+        # TODO Rafael: How/Where to load weights? 
+        # if pretrained:
+        #     state = torch.hub.load_state_dict_from_url(donwload_url[depth])
+        #     self.load_state_dict(state)
+        #     print(f"Load PResNet{depth} state_dict")
+            
+    def _freeze_parameters(self, m: nn.Module):
+        for p in m.parameters():
+            p.requires_grad = False
+
+    def _freeze_norm(self, m: nn.Module):
+        if isinstance(m, nn.BatchNorm2d):
+            m = FrozenBatchNorm2d(m.num_features)
+        else:
+            for name, child in m.named_children():
+                _child = self._freeze_norm(child)
+                if _child is not child:
+                    setattr(m, name, _child)
+        return m
+
+    def forward(self, x):
+        conv1 = self.conv1(x)
+        x = F.max_pool2d(conv1, kernel_size=3, stride=2, padding=1)
+        outs = []
+        for idx, stage in enumerate(self.res_layers):
+            x = stage(x)
+            if idx in self.return_idx:
+                outs.append(x)
+        return outs
+
+
+class TransformerEncoderLayer(nn.Module):
+    def __init__(self,
+                 d_model,
+                 num_head,
+                 dim_feedforward=2048,
+                 dropout=0.1,
+                 activation="relu",
+                 normalize_before=False):
+        super().__init__()
+        self.normalize_before = normalize_before
+
+        self.self_attn = nn.MultiheadAttention(d_model, num_head, dropout, batch_first=True)
+
+        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        self.dropout = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(dim_feedforward, d_model)
+
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        self.activation = get_activation(activation) 
+
+    @staticmethod
+    def with_pos_embed(tensor, pos_embed):
+        return tensor if pos_embed is None else tensor + pos_embed
+
+    def forward(self, src, src_mask=None, pos_embed=None) -> torch.Tensor:
+        residual = src
+        if self.normalize_before:
+            src = self.norm1(src)
+        q = k = self.with_pos_embed(src, pos_embed)
+        src, _ = self.self_attn(q, k, value=src, attn_mask=src_mask)
+
+        src = residual + self.dropout1(src)
+        if not self.normalize_before:
+            src = self.norm1(src)
+
+        residual = src
+        if self.normalize_before:
+            src = self.norm2(src)
+        src = self.linear2(self.dropout(self.activation(self.linear1(src))))
+        src = residual + self.dropout2(src)
+        if not self.normalize_before:
+            src = self.norm2(src)
+        return src
+
+
+class TransformerEncoder(nn.Module):
+    def __init__(self, encoder_layer, num_layers, norm=None):
+        super(TransformerEncoder, self).__init__()
+        self.layers = nn.ModuleList([copy.deepcopy(encoder_layer) for _ in range(num_layers)])
+        self.num_layers = num_layers
+        self.norm = norm
+
+    def forward(self, src, src_mask=None, pos_embed=None) -> torch.Tensor:
+        output = src
+        for layer in self.layers:
+            output = layer(output, src_mask=src_mask, pos_embed=pos_embed)
+
+        if self.norm is not None:
+            output = self.norm(output)
+
+        return output
+
+
+class RepVggBlock(nn.Module):
+    def __init__(self, channels_in, channels_out, act='relu'):
+        super().__init__()
+        self.channels_in = channels_in
+        self.channels_out = channels_out
+        self.conv1 = ConvNormLayer(channels_in, channels_out, 3, 1, padding=1, act=None)
+        self.conv2 = ConvNormLayer(channels_in, channels_out, 1, 1, padding=0, act=None)
+        self.act = nn.Identity() if act is None else get_activation(act) 
+
+    def forward(self, x):
+        if hasattr(self, 'conv'):
+            y = self.conv(x)
+        else:
+            y = self.conv1(x) + self.conv2(x)
+
+        return self.act(y)
+
+    def convert_to_deploy(self):
+        if not hasattr(self, 'conv'):
+            self.conv = nn.Conv2d(self.channels_in, self.channels_out, 3, 1, padding=1)
+
+        kernel, bias = self.get_equivalent_kernel_bias()
+        self.conv.weight.data = kernel
+        self.conv.bias.data = bias 
+
+    def get_equivalent_kernel_bias(self):
+        kernel3x3, bias3x3 = self._fuse_bn_tensor(self.conv1)
+        kernel1x1, bias1x1 = self._fuse_bn_tensor(self.conv2)
+        
+        return kernel3x3 + self._pad_1x1_to_3x3_tensor(kernel1x1), bias3x3 + bias1x1
+
+    def _pad_1x1_to_3x3_tensor(self, kernel1x1):
+        if kernel1x1 is None:
+            return 0
+        else:
+            return F.pad(kernel1x1, [1, 1, 1, 1])
+
+    def _fuse_bn_tensor(self, branch: ConvNormLayer):
+        if branch is None:
+            return 0, 0
+        kernel = branch.conv.weight
+        running_mean = branch.norm.running_mean
+        running_var = branch.norm.running_var
+        gamma = branch.norm.weight
+        beta = branch.norm.bias
+        eps = branch.norm.eps
+        std = (running_var + eps).sqrt()
+        t = (gamma / std).reshape(-1, 1, 1, 1)
+        return kernel * t, beta - running_mean * gamma / std
+
+
+class CSPRepLayer(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 num_blocks=3,
+                 expansion=1.0,
+                 bias=None,
+                 act="silu"):
+        super(CSPRepLayer, self).__init__()
+        hidden_channels = int(out_channels * expansion)
+        self.conv1 = ConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, act=act)
+        self.conv2 = ConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, act=act)
+        self.bottlenecks = nn.Sequential(*[
+            RepVggBlock(hidden_channels, hidden_channels, act=act) for _ in range(num_blocks)
+        ])
+        if hidden_channels != out_channels:
+            self.conv3 = ConvNormLayer(hidden_channels, out_channels, 1, 1, bias=bias, act=act)
+        else:
+            self.conv3 = nn.Identity()
+
+    def forward(self, x):
+        x_1 = self.conv1(x)
+        x_1 = self.bottlenecks(x_1)
+        x_2 = self.conv2(x)
+        return self.conv3(x_1 + x_2)
+
+
+class HybridEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        
+        self.in_channels = config.in_channels
+        self.feat_strides = config.feat_strides
+        self.hidden_dim = config.hidden_dim
+        num_head = config.num_head
+        dim_feedforward = config.dim_feedforward
+        dropout = config.dropout
+        enc_act = config.enc_act
+        self.use_encoder_idx = config.use_encoder_idx
+        self.num_encoder_layers = config.num_encoder_layers
+        self.pe_temperature = config.pe_temperature
+        expansion = config.expansion
+        depth_mult = config.depth_mult
+        act_encoder = config.act_encoder
+        self.eval_size = config.eval_size
+
+        self.out_channels = [self.hidden_dim for _ in range(len(self.in_channels))]
+        self.out_strides = self.feat_strides
+        
+        # channel projection
+        self.input_proj = nn.ModuleList()
+        for in_channel in self.in_channels:
+            self.input_proj.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channel, self.hidden_dim, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(self.hidden_dim)
+                )
+            )
+
+        # encoder transformer
+        encoder_layer = TransformerEncoderLayer(
+            self.hidden_dim, 
+            num_head=num_head,
+            dim_feedforward=dim_feedforward, 
+            dropout=dropout,
+            activation=enc_act)
+
+        self.encoder = nn.ModuleList([
+            TransformerEncoder(copy.deepcopy(encoder_layer), self.num_encoder_layers) for _ in range(len(self.use_encoder_idx))
+        ])
+
+        # top-down fpn
+        self.lateral_convs = nn.ModuleList()
+        self.fpn_blocks = nn.ModuleList()
+        for _ in range(len(self.in_channels) - 1, 0, -1):
+            self.lateral_convs.append(ConvNormLayer(self.hidden_dim, self.hidden_dim, 1, 1, act=act_encoder))
+            self.fpn_blocks.append(
+                CSPRepLayer(self.hidden_dim * 2, self.hidden_dim, round(3 * depth_mult), act=act_encoder, expansion=expansion)
+            )
+
+        # bottom-up pan
+        self.downsample_convs = nn.ModuleList()
+        self.pan_blocks = nn.ModuleList()
+        for _ in range(len(self.in_channels) - 1):
+            self.downsample_convs.append(
+                ConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, act=act_encoder)
+            )
+            self.pan_blocks.append(
+                CSPRepLayer(self.hidden_dim * 2, self.hidden_dim, round(3 * depth_mult), act=act_encoder, expansion=expansion)
+            )
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        if self.eval_size:
+            for idx in self.use_encoder_idx:
+                stride = self.feat_strides[idx]
+                pos_embed = self.build_2d_sincos_position_embedding(
+                    self.eval_size[1] // stride, self.eval_size[0] // stride,
+                    self.hidden_dim, self.pe_temperature)
+                setattr(self, f'pos_embed{idx}', pos_embed)
+
+    @staticmethod
+    def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.):
+        grid_w = torch.arange(int(w), dtype=torch.float32)
+        grid_h = torch.arange(int(h), dtype=torch.float32)
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing='ij')
+        if embed_dim % 4 != 0:
+            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
+        pos_dim = embed_dim // 4
+        omega = torch.arange(pos_dim, dtype=torch.float32) / pos_dim
+        omega = 1. / (temperature ** omega)
+
+        out_w = grid_w.flatten()[..., None] @ omega[None]
+        out_h = grid_h.flatten()[..., None] @ omega[None]
+
+        return torch.concat([out_w.sin(), out_w.cos(), out_h.sin(), out_h.cos()], dim=1)[None, :, :]
+
+    def forward(self, feats):
+        assert len(feats) == len(self.in_channels)
+        proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
+        
+        # encoder
+        if self.num_encoder_layers > 0:
+            for i, enc_ind in enumerate(self.use_encoder_idx):
+                h, w = proj_feats[enc_ind].shape[2:]
+                # flatten [B, C, H, W] to [B, HxW, C]
+                src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
+                if self.training or self.eval_size is None:
+                    pos_embed = self.build_2d_sincos_position_embedding(
+                        w, h, self.hidden_dim, self.pe_temperature).to(src_flatten.device)
+                else:
+                    pos_embed = getattr(self, f'pos_embed{enc_ind}', None).to(src_flatten.device)
+
+                memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
+                proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, h, w).contiguous()
+
+        # broadcasting and fusion
+        inner_outs = [proj_feats[-1]]
+        for idx in range(len(self.in_channels) - 1, 0, -1):
+            feat_heigh = inner_outs[0]
+            feat_low = proj_feats[idx - 1]
+            feat_heigh = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_heigh)
+            inner_outs[0] = feat_heigh
+            upsample_feat = F.interpolate(feat_heigh, scale_factor=2., mode='nearest')
+            inner_out = self.fpn_blocks[len(self.in_channels)-1-idx](torch.concat([upsample_feat, feat_low], dim=1))
+            inner_outs.insert(0, inner_out)
+
+        outs = [inner_outs[0]]
+        for idx in range(len(self.in_channels) - 1):
+            feat_low = outs[-1]
+            feat_height = inner_outs[idx + 1]
+            downsample_feat = self.downsample_convs[idx](feat_low)
+            out = self.pan_blocks[idx](torch.concat([downsample_feat, feat_height], dim=1))
+            outs.append(out)
+
+        return outs
+
+
+class RT_DETRPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = RT_DETRConfig
+    base_model_prefix = "rt_detr"
+    main_input_name = "pixel_values"
+
+    def _init_weights(self, module):
+        std = self.config.init_std
+        xavier_std = self.config.init_xavier_std
+
+        if isinstance(module, RT_DETRMHAttentionMap):
+            nn.init.zeros_(module.k_linear.bias)
+            nn.init.zeros_(module.q_linear.bias)
+            nn.init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
+            nn.init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
+        elif isinstance(module, RT_DETRLearnedPositionEmbedding):
+            nn.init.uniform_(module.row_embeddings.weight)
+            nn.init.uniform_(module.column_embeddings.weight)
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, RT_DETRDecoder):
+            module.gradient_checkpointing = value
 
 
 @add_start_docstrings(
@@ -1346,18 +2084,9 @@ class RT_DETRModel(RT_DETRPreTrainedModel):
     def __init__(self, config: RT_DETRConfig):
         super().__init__(config)
 
-        # Create backbone + positional encoding
-        backbone = RT_DETRConvEncoder(config)
-        object_queries = build_position_encoding(config)
-        self.backbone = RT_DETRConvModel(backbone, object_queries)
-
-        # Create projection layer
-        self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
-
-        self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
-
-        self.encoder = RT_DETREncoder(config)
-        self.decoder = RT_DETRDecoder(config)
+        self.backbone = PResNet(config)
+        self.encoder = HybridEncoder(config)
+        # self.decoder = RTDETRTransformer(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1501,1272 +2230,3 @@ class RT_DETRModel(RT_DETRPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
         )
-
-
-@add_start_docstrings(
-    """
-    RT_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top, for tasks
-    such as COCO detection.
-    """,
-    RT_DETR_START_DOCSTRING,
-)
-# Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection with DETR->RT_DETR,Detr->RT_DETR,detr->rt_detr,facebook/detr-resnet-50->checkpoing/todo
-class RT_DETRForObjectDetection(RT_DETRPreTrainedModel):
-    def __init__(self, config: RT_DETRConfig):
-        super().__init__(config)
-
-        # RT_DETR encoder-decoder model
-        self.model = RT_DETRModel(config)
-
-        # Object detection heads
-        self.class_labels_classifier = nn.Linear(
-            config.d_model, config.num_labels + 1
-        )  # We add one for the "no object" class
-        self.bbox_predictor = RT_DETRMLPPredictionHead(
-            input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    # taken from https://github.com/facebookresearch/rt_detr/blob/master/models/rt_detr.py
-    @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_coord):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
-
-    @add_start_docstrings_to_model_forward(RT_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RT_DETRObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[List[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], RT_DETRObjectDetectionOutput]:
-        r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, RT_DETRForObjectDetection
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("checkpoing/todo")
-        >>> model = RT_DETRForObjectDetection.from_pretrained("checkpoing/todo")
-
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
-        >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
-        ...     0
-        ... ]
-
-        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-        ...     box = [round(i, 2) for i in box.tolist()]
-        ...     print(
-        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
-        ...         f"{round(score.item(), 3)} at location {box}"
-        ...     )
-        Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
-        Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]
-        Detected couch with confidence 0.995 at location [-0.02, 1.15, 639.73, 473.76]
-        Detected cat with confidence 0.999 at location [13.24, 52.05, 314.02, 470.93]
-        Detected cat with confidence 0.999 at location [345.4, 23.85, 640.37, 368.72]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # First, sent images through RT_DETR base model to obtain encoder + decoder outputs
-        outputs = self.model(
-            pixel_values,
-            pixel_mask=pixel_mask,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        # class logits + predicted bounding boxes
-        logits = self.class_labels_classifier(sequence_output)
-        pred_boxes = self.bbox_predictor(sequence_output).sigmoid()
-
-        loss, loss_dict, auxiliary_outputs = None, None, None
-        if labels is not None:
-            # First: create the matcher
-            matcher = RT_DETRHungarianMatcher(
-                class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
-            )
-            # Second: create the criterion
-            losses = ["labels", "boxes", "cardinality"]
-            criterion = RT_DETRLoss(
-                matcher=matcher,
-                num_classes=self.config.num_labels,
-                eos_coef=self.config.eos_coefficient,
-                losses=losses,
-            )
-            criterion.to(self.device)
-            # Third: compute the losses, based on outputs and labels
-            outputs_loss = {}
-            outputs_loss["logits"] = logits
-            outputs_loss["pred_boxes"] = pred_boxes
-            if self.config.auxiliary_loss:
-                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
-                outputs_class = self.class_labels_classifier(intermediate)
-                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
-                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
-                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
-
-            loss_dict = criterion(outputs_loss, labels)
-            # Fourth: compute total loss, as a weighted sum of the various losses
-            weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
-            weight_dict["loss_giou"] = self.config.giou_loss_coefficient
-            if self.config.auxiliary_loss:
-                aux_weight_dict = {}
-                for i in range(self.config.decoder_layers - 1):
-                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
-                weight_dict.update(aux_weight_dict)
-            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
-
-        if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes) + auxiliary_outputs + outputs
-            else:
-                output = (logits, pred_boxes) + outputs
-            return ((loss, loss_dict) + output) if loss is not None else output
-
-        return RT_DETRObjectDetectionOutput(
-            loss=loss,
-            loss_dict=loss_dict,
-            logits=logits,
-            pred_boxes=pred_boxes,
-            auxiliary_outputs=auxiliary_outputs,
-            last_hidden_state=outputs.last_hidden_state,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    RT_DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top, for tasks
-    such as COCO panoptic.
-
-    """,
-    RT_DETR_START_DOCSTRING,
-)
-# Copied from transformers.models.detr.modeling_detr.DetrForSegmentation with DETR->RT_DETR,Detr->RT_DETR,detr->rt_detr,facebook/detr-resnet-50->checkpoing/todo
-class RT_DETRForSegmentation(RT_DETRPreTrainedModel):
-    def __init__(self, config: RT_DETRConfig):
-        super().__init__(config)
-
-        # object detection model
-        self.rt_detr = RT_DETRForObjectDetection(config)
-
-        # segmentation head
-        hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
-        intermediate_channel_sizes = self.rt_detr.model.backbone.conv_encoder.intermediate_channel_sizes
-
-        self.mask_head = RT_DETRMaskHeadSmallConv(
-            hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size
-        )
-
-        self.bbox_attention = RT_DETRMHAttentionMap(
-            hidden_size, hidden_size, number_of_heads, dropout=0.0, std=config.init_xavier_std
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(RT_DETR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RT_DETRSegmentationOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[List[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], RT_DETRSegmentationOutput]:
-        r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss, DICE/F-1 loss and Focal loss. List of dicts, each
-            dictionary containing at least the following 3 keys: 'class_labels', 'boxes' and 'masks' (the class labels,
-            bounding boxes and segmentation masks of an image in the batch respectively). The class labels themselves
-            should be a `torch.LongTensor` of len `(number of bounding boxes in the image,)`, the boxes a
-            `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)` and the masks a
-            `torch.FloatTensor` of shape `(number of bounding boxes in the image, height, width)`.
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> import io
-        >>> import requests
-        >>> from PIL import Image
-        >>> import torch
-        >>> import numpy
-
-        >>> from transformers import AutoImageProcessor, RT_DETRForSegmentation
-        >>> from transformers.image_transforms import rgb_to_id
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("checkpoing/todo-panoptic")
-        >>> model = RT_DETRForSegmentation.from_pretrained("checkpoing/todo-panoptic")
-
-        >>> # prepare image for the model
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-
-        >>> # forward pass
-        >>> outputs = model(**inputs)
-
-        >>> # Use the `post_process_panoptic_segmentation` method of the `image_processor` to retrieve post-processed panoptic segmentation maps
-        >>> # Segmentation results are returned as a list of dictionaries
-        >>> result = image_processor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
-
-        >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
-        >>> panoptic_seg = result[0]["segmentation"]
-        >>> # Get prediction score and segment_id to class_id mapping of each segment
-        >>> panoptic_segments_info = result[0]["segments_info"]
-        ```"""
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        batch_size, num_channels, height, width = pixel_values.shape
-        device = pixel_values.device
-
-        if pixel_mask is None:
-            pixel_mask = torch.ones((batch_size, height, width), device=device)
-
-        # First, get list of feature maps and position embeddings
-        features, object_queries_list = self.rt_detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
-
-        # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        feature_map, mask = features[-1]
-        batch_size, num_channels, height, width = feature_map.shape
-        projected_feature_map = self.rt_detr.model.input_projection(feature_map)
-
-        # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
-        # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
-        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
-
-        flattened_mask = mask.flatten(1)
-
-        # Fourth, sent flattened_features + flattened_mask + position embeddings through encoder
-        # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size)
-        # flattened_mask is a Tensor of shape (batch_size, heigth*width)
-        if encoder_outputs is None:
-            encoder_outputs = self.rt_detr.model.encoder(
-                inputs_embeds=flattened_features,
-                attention_mask=flattened_mask,
-                object_queries=object_queries,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
-        query_position_embeddings = self.rt_detr.model.query_position_embeddings.weight.unsqueeze(0).repeat(
-            batch_size, 1, 1
-        )
-        queries = torch.zeros_like(query_position_embeddings)
-
-        # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
-        decoder_outputs = self.rt_detr.model.decoder(
-            inputs_embeds=queries,
-            attention_mask=None,
-            object_queries=object_queries,
-            query_position_embeddings=query_position_embeddings,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=flattened_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = decoder_outputs[0]
-
-        # Sixth, compute logits, pred_boxes and pred_masks
-        logits = self.rt_detr.class_labels_classifier(sequence_output)
-        pred_boxes = self.rt_detr.bbox_predictor(sequence_output).sigmoid()
-
-        memory = encoder_outputs[0].permute(0, 2, 1).view(batch_size, self.config.d_model, height, width)
-        mask = flattened_mask.view(batch_size, height, width)
-
-        # FIXME h_boxes takes the last one computed, keep this in mind
-        # important: we need to reverse the mask, since in the original implementation the mask works reversed
-        # bbox_mask is of shape (batch_size, num_queries, number_of_attention_heads in bbox_attention, height/32, width/32)
-        bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
-
-        seg_masks = self.mask_head(projected_feature_map, bbox_mask, [features[2][0], features[1][0], features[0][0]])
-
-        pred_masks = seg_masks.view(batch_size, self.rt_detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
-
-        loss, loss_dict, auxiliary_outputs = None, None, None
-        if labels is not None:
-            # First: create the matcher
-            matcher = RT_DETRHungarianMatcher(
-                class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
-            )
-            # Second: create the criterion
-            losses = ["labels", "boxes", "cardinality", "masks"]
-            criterion = RT_DETRLoss(
-                matcher=matcher,
-                num_classes=self.config.num_labels,
-                eos_coef=self.config.eos_coefficient,
-                losses=losses,
-            )
-            criterion.to(self.device)
-            # Third: compute the losses, based on outputs and labels
-            outputs_loss = {}
-            outputs_loss["logits"] = logits
-            outputs_loss["pred_boxes"] = pred_boxes
-            outputs_loss["pred_masks"] = pred_masks
-            if self.config.auxiliary_loss:
-                intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[-1]
-                outputs_class = self.class_labels_classifier(intermediate)
-                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
-                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
-                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
-
-            loss_dict = criterion(outputs_loss, labels)
-            # Fourth: compute total loss, as a weighted sum of the various losses
-            weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
-            weight_dict["loss_giou"] = self.config.giou_loss_coefficient
-            weight_dict["loss_mask"] = self.config.mask_loss_coefficient
-            weight_dict["loss_dice"] = self.config.dice_loss_coefficient
-            if self.config.auxiliary_loss:
-                aux_weight_dict = {}
-                for i in range(self.config.decoder_layers - 1):
-                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
-                weight_dict.update(aux_weight_dict)
-            loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
-
-        if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes, pred_masks) + auxiliary_outputs + decoder_outputs + encoder_outputs
-            else:
-                output = (logits, pred_boxes, pred_masks) + decoder_outputs + encoder_outputs
-            return ((loss, loss_dict) + output) if loss is not None else output
-
-        return RT_DETRSegmentationOutput(
-            loss=loss,
-            loss_dict=loss_dict,
-            logits=logits,
-            pred_boxes=pred_boxes,
-            pred_masks=pred_masks,
-            auxiliary_outputs=auxiliary_outputs,
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
-
-
-def _expand(tensor, length: int):
-    return tensor.unsqueeze(1).repeat(1, int(length), 1, 1, 1).flatten(0, 1)
-
-
-# taken from https://github.com/facebookresearch/rt_detr/blob/master/models/segmentation.py
-# Copied from transformers.models.detr.modeling_detr.DetrMaskHeadSmallConv with Detr->RT_DETR
-class RT_DETRMaskHeadSmallConv(nn.Module):
-    """
-    Simple convolutional head, using group norm. Upsampling is done using a FPN approach
-    """
-
-    def __init__(self, dim, fpn_dims, context_dim):
-        super().__init__()
-
-        if dim % 8 != 0:
-            raise ValueError(
-                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in"
-                " GroupNorm is set to 8"
-            )
-
-        inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
-
-        self.lay1 = nn.Conv2d(dim, dim, 3, padding=1)
-        self.gn1 = nn.GroupNorm(8, dim)
-        self.lay2 = nn.Conv2d(dim, inter_dims[1], 3, padding=1)
-        self.gn2 = nn.GroupNorm(min(8, inter_dims[1]), inter_dims[1])
-        self.lay3 = nn.Conv2d(inter_dims[1], inter_dims[2], 3, padding=1)
-        self.gn3 = nn.GroupNorm(min(8, inter_dims[2]), inter_dims[2])
-        self.lay4 = nn.Conv2d(inter_dims[2], inter_dims[3], 3, padding=1)
-        self.gn4 = nn.GroupNorm(min(8, inter_dims[3]), inter_dims[3])
-        self.lay5 = nn.Conv2d(inter_dims[3], inter_dims[4], 3, padding=1)
-        self.gn5 = nn.GroupNorm(min(8, inter_dims[4]), inter_dims[4])
-        self.out_lay = nn.Conv2d(inter_dims[4], 1, 3, padding=1)
-
-        self.dim = dim
-
-        self.adapter1 = nn.Conv2d(fpn_dims[0], inter_dims[1], 1)
-        self.adapter2 = nn.Conv2d(fpn_dims[1], inter_dims[2], 1)
-        self.adapter3 = nn.Conv2d(fpn_dims[2], inter_dims[3], 1)
-
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_uniform_(m.weight, a=1)
-                nn.init.constant_(m.bias, 0)
-
-    def forward(self, x: Tensor, bbox_mask: Tensor, fpns: List[Tensor]):
-        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, heigth/32, width/32) with
-        # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32).
-        # We expand the projected feature map to match the number of heads.
-        x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
-
-        x = self.lay1(x)
-        x = self.gn1(x)
-        x = nn.functional.relu(x)
-        x = self.lay2(x)
-        x = self.gn2(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter1(fpns[0])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay3(x)
-        x = self.gn3(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter2(fpns[1])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay4(x)
-        x = self.gn4(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter3(fpns[2])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay5(x)
-        x = self.gn5(x)
-        x = nn.functional.relu(x)
-
-        x = self.out_lay(x)
-        return x
-
-
-# Copied from transformers.models.detr.modeling_detr.DetrMHAttentionMap with Detr->RT_DETR
-class RT_DETRMHAttentionMap(nn.Module):
-    """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
-
-    def __init__(self, query_dim, hidden_dim, num_heads, dropout=0.0, bias=True, std=None):
-        super().__init__()
-        self.num_heads = num_heads
-        self.hidden_dim = hidden_dim
-        self.dropout = nn.Dropout(dropout)
-
-        self.q_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
-        self.k_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
-
-        self.normalize_fact = float(hidden_dim / self.num_heads) ** -0.5
-
-    def forward(self, q, k, mask: Optional[Tensor] = None):
-        q = self.q_linear(q)
-        k = nn.functional.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
-        queries_per_head = q.view(q.shape[0], q.shape[1], self.num_heads, self.hidden_dim // self.num_heads)
-        keys_per_head = k.view(k.shape[0], self.num_heads, self.hidden_dim // self.num_heads, k.shape[-2], k.shape[-1])
-        weights = torch.einsum("bqnc,bnchw->bqnhw", queries_per_head * self.normalize_fact, keys_per_head)
-
-        if mask is not None:
-            weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), torch.finfo(weights.dtype).min)
-        weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
-        weights = self.dropout(weights)
-        return weights
-
-
-def dice_loss(inputs, targets, num_boxes):
-    """
-    Compute the DICE loss, similar to generalized IOU for masks
-
-    Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs (0 for the negative class and 1 for the positive
-                 class).
-    """
-    inputs = inputs.sigmoid()
-    inputs = inputs.flatten(1)
-    numerator = 2 * (inputs * targets).sum(1)
-    denominator = inputs.sum(-1) + targets.sum(-1)
-    loss = 1 - (numerator + 1) / (denominator + 1)
-    return loss.sum() / num_boxes
-
-
-def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
-    """
-    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
-
-    Args:
-        inputs (`torch.FloatTensor` of arbitrary shape):
-            The predictions for each example.
-        targets (`torch.FloatTensor` with the same shape as `inputs`)
-            A tensor storing the binary classification label for each element in the `inputs` (0 for the negative class
-            and 1 for the positive class).
-        alpha (`float`, *optional*, defaults to `0.25`):
-            Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
-        gamma (`int`, *optional*, defaults to `2`):
-            Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
-
-    Returns:
-        Loss tensor
-    """
-    prob = inputs.sigmoid()
-    ce_loss = nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-    # add modulating factor
-    p_t = prob * targets + (1 - prob) * (1 - targets)
-    loss = ce_loss * ((1 - p_t) ** gamma)
-
-    if alpha >= 0:
-        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
-        loss = alpha_t * loss
-
-    return loss.mean(1).sum() / num_boxes
-
-
-# taken from https://github.com/facebookresearch/rt_detr/blob/master/models/rt_detr.py
-# Copied from transformers.models.detr.modeling_detr.DetrLoss with Detr->RT_DETR,detr->rt_detr
-class RT_DETRLoss(nn.Module):
-    """
-    This class computes the losses for RT_DETRForObjectDetection/RT_DETRForSegmentation. The process happens in two steps: 1)
-    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
-    of matched ground-truth / prediction (supervise class and box).
-
-    A note on the `num_classes` argument (copied from original repo in rt_detr.py): "the naming of the `num_classes`
-    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
-    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
-    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
-    (`max_obj_id` + 1). For more details on this, check the following discussion
-    https://github.com/facebookresearch/rt_detr/issues/108#issuecomment-650269223"
-
-
-    Args:
-        matcher (`RT_DETRHungarianMatcher`):
-            Module able to compute a matching between targets and proposals.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
-        eos_coef (`float`):
-            Relative classification weight applied to the no-object category.
-        losses (`List[str]`):
-            List of all the losses to be applied. See `get_loss` for a list of all available losses.
-    """
-
-    def __init__(self, matcher, num_classes, eos_coef, losses):
-        super().__init__()
-        self.matcher = matcher
-        self.num_classes = num_classes
-        self.eos_coef = eos_coef
-        self.losses = losses
-        empty_weight = torch.ones(self.num_classes + 1)
-        empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
-
-    # removed logging parameter, which was part of the original implementation
-    def loss_labels(self, outputs, targets, indices, num_boxes):
-        """
-        Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
-        [nb_target_boxes]
-        """
-        if "logits" not in outputs:
-            raise KeyError("No logits were found in the outputs")
-        source_logits = outputs["logits"]
-
-        idx = self._get_source_permutation_idx(indices)
-        target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(
-            source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
-        )
-        target_classes[idx] = target_classes_o
-
-        loss_ce = nn.functional.cross_entropy(source_logits.transpose(1, 2), target_classes, self.empty_weight)
-        losses = {"loss_ce": loss_ce}
-
-        return losses
-
-    @torch.no_grad()
-    def loss_cardinality(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
-
-        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
-        """
-        logits = outputs["logits"]
-        device = logits.device
-        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
-        card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
-        losses = {"cardinality_error": card_err}
-        return losses
-
-    def loss_boxes(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
-
-        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
-        are expected in format (center_x, center_y, w, h), normalized by the image size.
-        """
-        if "pred_boxes" not in outputs:
-            raise KeyError("No predicted boxes found in outputs")
-        idx = self._get_source_permutation_idx(indices)
-        source_boxes = outputs["pred_boxes"][idx]
-        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
-
-        loss_bbox = nn.functional.l1_loss(source_boxes, target_boxes, reduction="none")
-
-        losses = {}
-        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
-
-        loss_giou = 1 - torch.diag(
-            generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
-        )
-        losses["loss_giou"] = loss_giou.sum() / num_boxes
-        return losses
-
-    def loss_masks(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the losses related to the masks: the focal loss and the dice loss.
-
-        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
-        """
-        if "pred_masks" not in outputs:
-            raise KeyError("No predicted masks found in outputs")
-
-        source_idx = self._get_source_permutation_idx(indices)
-        target_idx = self._get_target_permutation_idx(indices)
-        source_masks = outputs["pred_masks"]
-        source_masks = source_masks[source_idx]
-        masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
-        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(source_masks)
-        target_masks = target_masks[target_idx]
-
-        # upsample predictions to the target size
-        source_masks = nn.functional.interpolate(
-            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
-        )
-        source_masks = source_masks[:, 0].flatten(1)
-
-        target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(source_masks.shape)
-        losses = {
-            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
-        }
-        return losses
-
-    def _get_source_permutation_idx(self, indices):
-        # permute predictions following indices
-        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
-        source_idx = torch.cat([source for (source, _) in indices])
-        return batch_idx, source_idx
-
-    def _get_target_permutation_idx(self, indices):
-        # permute targets following indices
-        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
-        target_idx = torch.cat([target for (_, target) in indices])
-        return batch_idx, target_idx
-
-    def get_loss(self, loss, outputs, targets, indices, num_boxes):
-        loss_map = {
-            "labels": self.loss_labels,
-            "cardinality": self.loss_cardinality,
-            "boxes": self.loss_boxes,
-            "masks": self.loss_masks,
-        }
-        if loss not in loss_map:
-            raise ValueError(f"Loss {loss} not supported")
-        return loss_map[loss](outputs, targets, indices, num_boxes)
-
-    def forward(self, outputs, targets):
-        """
-        This performs the loss computation.
-
-        Args:
-             outputs (`dict`, *optional*):
-                Dictionary of tensors, see the output specification of the model for the format.
-             targets (`List[dict]`, *optional*):
-                List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
-                losses applied, see each loss' doc.
-        """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs"}
-
-        # Retrieve the matching between the outputs of the last layer and the targets
-        indices = self.matcher(outputs_without_aux, targets)
-
-        # Compute the average number of target boxes across all nodes, for normalization purposes
-        num_boxes = sum(len(t["class_labels"]) for t in targets)
-        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        # (Niels): comment out function below, distributed training to be added
-        # if is_dist_avail_and_initialized():
-        #     torch.distributed.all_reduce(num_boxes)
-        # (Niels) in original implementation, num_boxes is divided by get_world_size()
-        num_boxes = torch.clamp(num_boxes, min=1).item()
-
-        # Compute all the requested losses
-        losses = {}
-        for loss in self.losses:
-            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
-
-        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
-        if "auxiliary_outputs" in outputs:
-            for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
-                indices = self.matcher(auxiliary_outputs, targets)
-                for loss in self.losses:
-                    if loss == "masks":
-                        # Intermediate masks losses are too costly to compute, we ignore them.
-                        continue
-                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
-                    l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
-                    losses.update(l_dict)
-
-        return losses
-
-
-# taken from https://github.com/facebookresearch/rt_detr/blob/master/models/rt_detr.py
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with Detr->RT_DETR,detr->rt_detr
-class RT_DETRMLPPredictionHead(nn.Module):
-    """
-    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
-    height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/rt_detr/blob/master/models/rt_detr.py
-
-    """
-
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
-        super().__init__()
-        self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
-
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
-
-
-# taken from https://github.com/facebookresearch/rt_detr/blob/master/models/matcher.py
-# Copied from transformers.models.detr.modeling_detr.DetrHungarianMatcher with Detr->RT_DETR
-class RT_DETRHungarianMatcher(nn.Module):
-    """
-    This class computes an assignment between the targets and the predictions of the network.
-
-    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
-    predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
-    un-matched (and thus treated as non-objects).
-
-    Args:
-        class_cost:
-            The relative weight of the classification error in the matching cost.
-        bbox_cost:
-            The relative weight of the L1 error of the bounding box coordinates in the matching cost.
-        giou_cost:
-            The relative weight of the giou loss of the bounding box in the matching cost.
-    """
-
-    def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
-        super().__init__()
-        requires_backends(self, ["scipy"])
-
-        self.class_cost = class_cost
-        self.bbox_cost = bbox_cost
-        self.giou_cost = giou_cost
-        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
-            raise ValueError("All costs of the Matcher can't be 0")
-
-    @torch.no_grad()
-    def forward(self, outputs, targets):
-        """
-        Args:
-            outputs (`dict`):
-                A dictionary that contains at least these entries:
-                * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
-            targets (`List[dict]`):
-                A list of targets (len(targets) = batch_size), where each target is a dict containing:
-                * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
-                  ground-truth
-                 objects in the target) containing the class labels
-                * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
-
-        Returns:
-            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
-            - index_i is the indices of the selected predictions (in order)
-            - index_j is the indices of the corresponding selected targets (in order)
-            For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
-        """
-        batch_size, num_queries = outputs["logits"].shape[:2]
-
-        # We flatten to compute the cost matrices in a batch
-        out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
-        out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
-
-        # Also concat the target labels and boxes
-        target_ids = torch.cat([v["class_labels"] for v in targets])
-        target_bbox = torch.cat([v["boxes"] for v in targets])
-
-        # Compute the classification cost. Contrary to the loss, we don't use the NLL,
-        # but approximate it in 1 - proba[target class].
-        # The 1 is a constant that doesn't change the matching, it can be ommitted.
-        class_cost = -out_prob[:, target_ids]
-
-        # Compute the L1 cost between boxes
-        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
-
-        # Compute the giou cost between boxes
-        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
-
-        # Final cost matrix
-        cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
-        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
-
-        sizes = [len(v["boxes"]) for v in targets]
-        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
-
-
-# below: bounding box utilities taken from https://github.com/facebookresearch/rt_detr/blob/master/util/box_ops.py
-
-
-def _upcast(t: Tensor) -> Tensor:
-    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
-    if t.is_floating_point():
-        return t if t.dtype in (torch.float32, torch.float64) else t.float()
-    else:
-        return t if t.dtype in (torch.int32, torch.int64) else t.int()
-
-
-def box_area(boxes: Tensor) -> Tensor:
-    """
-    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
-
-    Args:
-        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
-            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
-            < x2` and `0 <= y1 < y2`.
-
-    Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
-    """
-    boxes = _upcast(boxes)
-    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-
-
-# modified from torchvision to also return the union
-def box_iou(boxes1, boxes2):
-    area1 = box_area(boxes1)
-    area2 = box_area(boxes2)
-
-    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
-
-    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
-    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
-
-    union = area1[:, None] + area2 - inter
-
-    iou = inter / union
-    return iou, union
-
-
-def generalized_box_iou(boxes1, boxes2):
-    """
-    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
-
-    Returns:
-        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
-    """
-    # degenerate boxes gives inf / nan results
-    # so do an early check
-    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
-        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
-    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
-        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
-    iou, union = box_iou(boxes1, boxes2)
-
-    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
-    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
-
-    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
-    area = width_height[:, :, 0] * width_height[:, :, 1]
-
-    return iou - (area - union) / area
-
-
-# below: taken from https://github.com/facebookresearch/rt_detr/blob/master/util/misc.py#L306
-def _max_by_axis(the_list):
-    # type: (List[List[int]]) -> List[int]
-    maxes = the_list[0]
-    for sublist in the_list[1:]:
-        for index, item in enumerate(sublist):
-            maxes[index] = max(maxes[index], item)
-    return maxes
-
-
-class NestedTensor(object):
-    def __init__(self, tensors, mask: Optional[Tensor]):
-        self.tensors = tensors
-        self.mask = mask
-
-    def to(self, device):
-        cast_tensor = self.tensors.to(device)
-        mask = self.mask
-        if mask is not None:
-            cast_mask = mask.to(device)
-        else:
-            cast_mask = None
-        return NestedTensor(cast_tensor, cast_mask)
-
-    def decompose(self):
-        return self.tensors, self.mask
-
-    def __repr__(self):
-        return str(self.tensors)
-
-
-def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
-    if tensor_list[0].ndim == 3:
-        max_size = _max_by_axis([list(img.shape) for img in tensor_list])
-        batch_shape = [len(tensor_list)] + max_size
-        batch_size, num_channels, height, width = batch_shape
-        dtype = tensor_list[0].dtype
-        device = tensor_list[0].device
-        tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
-        for img, pad_img, m in zip(tensor_list, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], : img.shape[2]] = False
-    else:
-        raise ValueError("Only 3-dimensional tensors are supported")
-    return NestedTensor(tensor, mask)
-
-
-#### TODO: Rafael
-from collections import OrderedDict
-import torch.nn.functional as F 
-
-
-def get_activation(act: str, inplace: bool=True):
-    act = act.lower()
-    if act == "silu":
-        act_func = nn.SiLU()
-    elif act == "relu":
-        act_func = nn.ReLU()
-    elif act == "leaky_relu":
-        act_func = nn.LeakyReLU()
-    elif act == "silu":
-        act_func = nn.SiLU()
-    elif act == "gelu":
-        act_func = nn.GELU()
-    elif act is None:
-        act_func = nn.Identity()
-    elif isinstance(act, nn.Module):
-        act_func = act
-    else:
-        raise RuntimeError(f"Not valid activation {act}")  
-    if hasattr(act_func, "inplace"):
-        act_func.inplace = inplace
-    return act_func 
-
-class ConvNormLayer(nn.Module):
-    def __init__(self, ch_in, ch_out, kernel_size, stride, padding=None, bias=False, act=None):
-        super().__init__()
-        self.conv = nn.Conv2d(
-            ch_in, 
-            ch_out, 
-            kernel_size, 
-            stride, 
-            padding=(kernel_size-1)//2 if padding is None else padding, 
-            bias=bias)
-        self.norm = nn.BatchNorm2d(ch_out)
-        self.act = nn.Identity() if act is None else get_activation(act) 
-
-    def forward(self, x):
-        return self.act(self.norm(self.conv(x)))
-
-class BottleNeck(nn.Module):
-    expansion = 4
-
-    def __init__(self, ch_in, ch_out, stride, shortcut, act='relu', variant='b'):
-        super().__init__()
-
-        if variant == 'a':
-            stride1, stride2 = stride, 1
-        else:
-            stride1, stride2 = 1, stride
-
-        width = ch_out 
-
-        self.branch2a = ConvNormLayer(ch_in, width, 1, stride1, act=act)
-        self.branch2b = ConvNormLayer(width, width, 3, stride2, act=act)
-        self.branch2c = ConvNormLayer(width, ch_out * self.expansion, 1, 1)
-
-        self.shortcut = shortcut
-        if not shortcut:
-            if variant == 'd' and stride == 2:
-                self.short = nn.Sequential(OrderedDict([
-                    ('pool', nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
-                    ('conv', ConvNormLayer(ch_in, ch_out * self.expansion, 1, 1))
-                ]))
-            else:
-                self.short = ConvNormLayer(ch_in, ch_out * self.expansion, 1, stride)
-
-        self.act = nn.Identity() if act is None else get_activation(act) 
-
-    def forward(self, x):
-        out = self.branch2a(x)
-        out = self.branch2b(out)
-        out = self.branch2c(out)
-
-        if self.shortcut:
-            short = x
-        else:
-            short = self.short(x)
-
-        out = out + short
-        out = self.act(out)
-
-        return out
-
-class BasicBlock(nn.Module):
-    expansion = 1
-
-    def __init__(self, ch_in, ch_out, stride, shortcut, act='relu', variant='b'):
-        super().__init__()
-
-        self.shortcut = shortcut
-
-        if not shortcut:
-            if variant == 'd' and stride == 2:
-                self.short = nn.Sequential(OrderedDict([
-                    ('pool', nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
-                    ('conv', ConvNormLayer(ch_in, ch_out, 1, 1))
-                ]))
-            else:
-                self.short = ConvNormLayer(ch_in, ch_out, 1, stride)
-
-        self.branch2a = ConvNormLayer(ch_in, ch_out, 3, stride, act=act)
-        self.branch2b = ConvNormLayer(ch_out, ch_out, 3, 1, act=None)
-        self.act = nn.Identity() if act is None else get_activation(act) 
-
-
-    def forward(self, x):
-        out = self.branch2a(x)
-        out = self.branch2b(out)
-        if self.shortcut:
-            short = x
-        else:
-            short = self.short(x)
-        
-        out = out + short
-        out = self.act(out)
-
-        return out
-
-class Blocks(nn.Module):
-    def __init__(self, block, ch_in, ch_out, count, stage_num, act='relu', variant='b'):
-        super().__init__()
-
-        self.blocks = nn.ModuleList()
-        for i in range(count):
-            self.blocks.append(
-                block(
-                    ch_in, 
-                    ch_out,
-                    stride=2 if i == 0 and stage_num != 2 else 1, 
-                    shortcut=False if i == 0 else True,
-                    variant=variant,
-                    act=act)
-            )
-
-            if i == 0:
-                ch_in = ch_out * block.expansion
-
-    def forward(self, x):
-        out = x
-        for block in self.blocks:
-            out = block(out)
-        return out
-
-class FrozenBatchNorm2d(nn.Module):
-    """copy and modified from https://github.com/facebookresearch/detr/blob/master/models/backbone.py
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt,
-    without which any other models than torchvision.models.resnet[18,34,50,101]
-    produce nans.
-    """
-    def __init__(self, num_features, eps=1e-5):
-        super(FrozenBatchNorm2d, self).__init__()
-        n = num_features
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-        self.eps = eps
-        self.num_features = n 
-
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        num_batches_tracked_key = prefix + 'num_batches_tracked'
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super(FrozenBatchNorm2d, self)._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict,
-            missing_keys, unexpected_keys, error_msgs)
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it fuser-friendly
-        w = self.weight.reshape(1, -1, 1, 1)
-        b = self.bias.reshape(1, -1, 1, 1)
-        rv = self.running_var.reshape(1, -1, 1, 1)
-        rm = self.running_mean.reshape(1, -1, 1, 1)
-        scale = w * (rv + self.eps).rsqrt()
-        bias = b - rm * scale
-        return x * scale + bias
-
-    def extra_repr(self):
-        return (
-            "{num_features}, eps={eps}".format(**self.__dict__)
-        )
-
-class PResNet(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        block_nums = config.block_nums
-        variant = config.variant
-        act = config.act
-        depth = config.depth
-        num_stages = config.num_stages
-        return_idx = config.return_idx
-        freeze_at = config.freeze_at
-        freeze_norm = config.freeze_norm
-        pretrained = config.pretrained
-        
-        ch_in = 64
-        if variant in ["c", "d"]:
-            conv_def = [
-                [3, ch_in // 2, 3, 2, "conv1_1"],
-                [ch_in // 2, ch_in // 2, 3, 1, "conv1_2"],
-                [ch_in // 2, ch_in, 3, 1, "conv1_3"],
-            ]
-        else:
-            conv_def = [[3, ch_in, 7, 2, "conv1_1"]]
-
-        self.conv1 = nn.Sequential(OrderedDict([
-            (_name, ConvNormLayer(c_in, c_out, k, s, act=act)) for c_in, c_out, k, s, _name in conv_def
-        ]))
-
-        ch_out_list = [64, 128, 256, 512]
-        block = BottleNeck if depth >= 50 else BasicBlock
-
-        _out_channels = [block.expansion * v for v in ch_out_list]
-        _out_strides = [4, 8, 16, 32]
-
-        self.res_layers = nn.ModuleList()
-        for i in range(num_stages):
-            stage_num = i + 2
-            self.res_layers.append(
-                Blocks(block, ch_in, ch_out_list[i], block_nums[i], stage_num, act=act, variant=variant)
-            )
-            ch_in = _out_channels[i]
-
-        self.return_idx = return_idx
-        self.out_channels = [_out_channels[_i] for _i in return_idx]
-        self.out_strides = [_out_strides[_i] for _i in return_idx]
-
-        if freeze_at >= 0:
-            self._freeze_parameters(self.conv1)
-            for i in range(min(freeze_at, num_stages)):
-                self._freeze_parameters(self.res_layers[i])
-
-        if freeze_norm:
-            self._freeze_norm(self)
-
-        # TODO Rafael: How/Where to load weights? 
-        # if pretrained:
-        #     state = torch.hub.load_state_dict_from_url(donwload_url[depth])
-        #     self.load_state_dict(state)
-        #     print(f"Load PResNet{depth} state_dict")
-            
-    def _freeze_parameters(self, m: nn.Module):
-        for p in m.parameters():
-            p.requires_grad = False
-
-    def _freeze_norm(self, m: nn.Module):
-        if isinstance(m, nn.BatchNorm2d):
-            m = FrozenBatchNorm2d(m.num_features)
-        else:
-            for name, child in m.named_children():
-                _child = self._freeze_norm(child)
-                if _child is not child:
-                    setattr(m, name, _child)
-        return m
-
-    def forward(self, x):
-        conv1 = self.conv1(x)
-        x = F.max_pool2d(conv1, kernel_size=3, stride=2, padding=1)
-        outs = []
-        for idx, stage in enumerate(self.res_layers):
-            x = stage(x)
-            if idx in self.return_idx:
-                outs.append(x)
-        return outs
-
