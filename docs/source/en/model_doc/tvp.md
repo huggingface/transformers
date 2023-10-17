@@ -16,8 +16,6 @@ specific language governing permissions and limitations under the License.
 
 The text-visual prompting (TVP) framework was proposed in the paper [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://arxiv.org/abs/2303.04995) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding.
 
-TVP framework is an effective and efficient framework to train time-efficient 2D TVG models, in which we leverage TVP (text-visual prompting) to improve the utility of sparse 2D visual features without resorting to costly 3D features. To the best of our knowledge, it is the first work to expand the application of prompt learning for resolving TVG problems.
-
 The abstract from the paper is the following:
 
 *In this paper, we study the problem of temporal video grounding (TVG), which aims to predict the starting/ending time points of moments described by a text sentence within a long untrimmed video. Benefiting
@@ -27,6 +25,8 @@ perturbation patterns (that we call ‘prompts’) into both visual inputs and t
 and language encoder in a 2D TVG model and improves the performance of cross-modal feature fusion using only low-complexity sparse 2D visual features. Further, we propose a Temporal-Distance
 IoU (TDIoU) loss for efficient learning of TVG. Experiments on two benchmark datasets, Charades-STA and ActivityNet Captions datasets, empirically show that the proposed TVP significantly boosts
 the performance of 2D TVG (e.g., 9.79% improvement on Charades-STA and 30.77% improvement on ActivityNet Captions) and achieves 5× inference acceleration over TVG using 3D visual features.*
+
+TVP framework is an effective and efficient framework to train time-efficient 2D TVG models, in which we leverage TVP (text-visual prompting) to improve the utility of sparse 2D visual features without resorting to costly 3D features. To the best of our knowledge, it is the first work to expand the application of prompt learning for resolving TVG problems.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/tvp_architecture.png"
 alt="drawing" width="600"/> 

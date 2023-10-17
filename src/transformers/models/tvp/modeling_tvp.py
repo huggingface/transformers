@@ -115,8 +115,8 @@ class TvpOutput(ModelOutput):
 
 class TvpLoss(nn.Module):
     """
-    This class computes the losses for TvpForVideoGrounding. The process happens in two steps: 1) we compute hungarian
-    assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of matched
+    This class computes the losses for `TvpForVideoGrounding`. The process happens in two steps: 1) we compute
+    hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of matched
     ground-truth / prediction (supervise class and box).
 
     Args:
@@ -131,20 +131,18 @@ class TvpLoss(nn.Module):
     def loss_IoU(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
         inter = torch.min(candidates_end_time, end_time) - torch.max(candidates_start_time, start_time)
         union = torch.max(candidates_end_time, end_time) - torch.min(candidates_start_time, start_time)
-        iou = inter.clamp(min=0) / union
-        iou_loss = 1 - iou
+        iou = 1 - inter.clamp(min=0) / union
 
-        return iou_loss
+        return iou
 
     def loss_distance(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
         mid_candidates = torch.div(torch.add(candidates_start_time, candidates_end_time), 2.0)
         mid_groundtruth = torch.div(torch.add(start_time, end_time), 2.0)
-        d_c = torch.div(
+        distance_diff = torch.div(
             torch.max(mid_candidates, mid_groundtruth) - torch.min(mid_candidates, mid_groundtruth), duration
-        )
-        d_c = d_c.clamp(min=0.2)
+        ).clamp(min=0.2)
 
-        return d_c
+        return distance_diff
 
     def loss_duration(self, start_time, end_time, candidates_start_time, candidates_end_time, duration):
         duration_candidates = torch.sub(candidates_end_time, candidates_start_time)
@@ -235,8 +233,29 @@ class TvpVisualInputEmbedding(nn.Module):
         self.row_position_embeddings = nn.Embedding(config.max_grid_row_position_embeddings, config.hidden_size)
         self.col_position_embeddings = nn.Embedding(config.max_grid_col_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(1, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def add_2d_positional_embeddings(self, grid):
+        """
+        Args:
+            grid: (batch_size, height, width, hidden_dim)
+        Returns:
+            grid + col_position_embeddings.view(*col_shape): (batch_size, *, height, width, hidden_dim)
+        """
+        batch_size, height, width, hidden_dim = grid.shape
+
+        # add row-wise position embeddings
+        row_position_ids = torch.arange(height, dtype=torch.long, device=grid.device)  # (height, )
+        row_position_embeddings = self.row_position_embeddings(row_position_ids)  # (height, hidden_dim)
+        row_shape = (1,) * (len(grid.shape) - 3) + (height, 1, hidden_dim)  # (1, height, 1, hidden_dim)
+        grid = grid + row_position_embeddings.view(*row_shape)  # broadcast automatically
+
+        # add column-wise position embeddings
+        col_position_ids = torch.arange(width, dtype=torch.long, device=grid.device)  # (width, )
+        col_position_embeddings = self.col_position_embeddings(col_position_ids)  # (width, hidden_dim)
+        col_shape = (batch_size, 1, width, hidden_dim)  # (1, 1, width, hidden_dim)
+        return grid + col_position_embeddings.view(*col_shape)  # broadcast automatically
 
     def forward(self, grid):
         """
@@ -263,31 +282,9 @@ class TvpVisualInputEmbedding(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = visual_tokens + token_type_embeddings
-        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
-
-    def add_2d_positional_embeddings(self, grid):
-        """
-        Args:
-            grid: (B, H, W, d)
-
-        Returns:
-            grid + col_position_embeddings.view(*col_shape): (B, *, H, W, d)
-        """
-        height, width, hsz = grid.shape[-3:]
-
-        # add row-wise position embeddings
-        row_position_ids = torch.arange(height, dtype=torch.long, device=grid.device)  # (H, )
-        row_position_embeddings = self.row_position_embeddings(row_position_ids)  # (H, d)
-        row_shape = (1,) * (len(grid.shape) - 3) + (height, 1, hsz)  # (1, H, 1, d)
-        grid = grid + row_position_embeddings.view(*row_shape)  # broadcast automatically
-
-        # add column-wise position embeddings
-        col_position_ids = torch.arange(width, dtype=torch.long, device=grid.device)  # (W, )
-        col_position_embeddings = self.col_position_embeddings(col_position_ids)  # (W, d)
-        col_shape = (1,) * (len(grid.shape) - 3) + (1, width, hsz)  # (1, 1, W, d)
-        return grid + col_position_embeddings.view(*col_shape)  # broadcast automatically
 
 
 class TvpTextInputEmbeddings(nn.Module):
@@ -298,7 +295,7 @@ class TvpTextInputEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
@@ -321,7 +318,7 @@ class TvpTextInputEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
@@ -345,36 +342,30 @@ class TvpSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+    # Copied from Llama
+    def _shape(self, tensor: torch.Tensor, sequence_length: int, batch_size: int):
+        return (
+            tensor.view(batch_size, sequence_length, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions: Optional[bool] = None,
     ):
+        batch_size, sequence_length = hidden_states.shape[:2]
         mixed_query_layer = self.query(hidden_states)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        if encoder_hidden_states is not None:
-            mixed_key_layer = self.key(encoder_hidden_states)
-            mixed_value_layer = self.value(encoder_hidden_states)
-            attention_mask = encoder_attention_mask
-        else:
-            mixed_key_layer = self.key(hidden_states)
-            mixed_value_layer = self.value(hidden_states)
+        mixed_key_layer = self.key(hidden_states)
+        mixed_value_layer = self.value(hidden_states)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
+        query_layer = self._shape(mixed_query_layer, sequence_length, batch_size)
+        key_layer = self._shape(mixed_key_layer, sequence_length, batch_size)
+        value_layer = self._shape(mixed_value_layer, sequence_length, batch_size)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -393,13 +384,12 @@ class TvpSelfAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        attn_output = torch.matmul(attention_probs, value_layer)
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(batch_size, sequence_length, self.all_head_size)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (attn_output, attention_probs) if output_attentions else (attn_output,)
         return outputs
 
 
@@ -408,28 +398,44 @@ class TvpSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.layer_norm(hidden_states + input_tensor)
         return hidden_states
 
 
-# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L392
 class TvpAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = TvpSelfAttention(config)
-        self.output = TvpSelfOutput(config)
+        # self.self = TvpSelfAttention(config)
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                "The hidden size (%d) is not a multiple of the number of attention "
+                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.attn_dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        mask = torch.ones(self.self.num_attention_heads, self.self.attention_head_size)
+        mask = torch.ones(self.num_attention_heads, self.attention_head_size)
         heads = set(heads) - self.pruned_heads  # Convert to set and remove already pruned heads
         for head in heads:
             # Compute how many pruned heads are before the head and move the index accordingly
@@ -439,34 +445,71 @@ class TvpAttention(nn.Module):
         index = torch.arange(len(mask))[mask].long()
 
         # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+        self.query = prune_linear_layer(self.query, index)
+        self.key = prune_linear_layer(self.key, index)
+        self.value = prune_linear_layer(self.value, index)
+        self.dense = prune_linear_layer(self.dense, index, dim=1)
 
         # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.num_attention_heads = self.num_attention_heads - len(heads)
+        self.all_head_size = self.attention_head_size * self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
+
+    # Copied from Llama
+    def _shape(self, tensor: torch.Tensor, sequence_length: int, batch_size: int):
+        return (
+            tensor.view(batch_size, sequence_length, self.num_attention_heads, self.attention_head_size)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions: Optional[bool] = None,
     ):
-        self_outputs = self.self(
-            hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask, output_attentions
-        )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        batch_size, sequence_length = hidden_states.shape[:2]
+        mixed_query_layer = self.query(hidden_states)
+
+        mixed_key_layer = self.key(hidden_states)
+        mixed_value_layer = self.value(hidden_states)
+
+        query_layer = self._shape(mixed_query_layer, sequence_length, batch_size)
+        key_layer = self._shape(mixed_key_layer, sequence_length, batch_size)
+        value_layer = self._shape(mixed_value_layer, sequence_length, batch_size)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.attn_dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        attn_output = torch.matmul(attention_probs, value_layer)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(batch_size, sequence_length, self.all_head_size)
+
+        outputs = (attn_output, attention_probs) if output_attentions else (attn_output,)
+        attention_output = self.dense(outputs[0])
+        attention_output = self.dropout(attention_output)
+        attention_output = self.layer_norm(attention_output + hidden_states)
+        outputs = (attention_output,) + outputs[1:]  # add attentions if we output them
         return outputs
 
 
-# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L441
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Tvp
 class TvpIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -482,18 +525,18 @@ class TvpIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L456
+# Copied from transformers.models.bert.modeling_bert.BertOutputLayer with Bert->Tvp
 class TvpOutputLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.layer_norm(hidden_states + input_tensor)
         return hidden_states
 
 
@@ -509,8 +552,6 @@ class TvpEncodeLayer(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions: Optional[bool] = None,
     ):
         self_attention_outputs = self.attention(
@@ -518,8 +559,6 @@ class TvpEncodeLayer(nn.Module):
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -534,13 +573,12 @@ class TvpEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([TvpEncodeLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
 
     def forward(
         self,
         hidden_states,
         attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -558,16 +596,25 @@ class TvpEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(
-                hidden_states,
-                attention_mask,
-                head_mask[i],
-                encoder_hidden_states,
-                encoder_attention_mask,
-                output_attentions,
-            )
-            hidden_states = layer_outputs[0]
+            if self.gradient_checkpointing and self.training:
 
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    attention_mask,
+                    head_mask[i],
+                    output_attentions,
+                )
+            else:
+                layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions)
+
+            hidden_states = layer_outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
@@ -613,6 +660,7 @@ class TvpPreTrainedModel(PreTrainedModel):
 
     config_class = TvpConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -631,6 +679,10 @@ class TvpPreTrainedModel(PreTrainedModel):
             nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, TvpEncoder):
+            module.gradient_checkpointing = value
 
 
 class TvpTransformer(TvpPreTrainedModel):
@@ -670,22 +722,26 @@ class TvpTransformer(TvpPreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         r"""
-        input_ids: (B, Lt) pixel_values: (B, #frame, H, W, C) attention_mask: (B, Lt) with 1 indicates valid, 0
-        indicates invalid position.
+        input_ids: (batch_size, sequence_length) pixel_values: (batch_size, frames, height, width, channels)
+        attention_mask: (batch_size, sequence_length) with 1 indicates valid, 0 indicates invalid position.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         input_shape = input_ids.size()
         device = input_ids.device
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        text_embedding_output = self.embeddings(input_ids=input_ids)  # (B, Lt, D)
-        visual_embedding_output = self.visual_embeddings(pixel_values)  # (B, Lv, d)
-        visual_attention_mask = attention_mask.new_ones(visual_embedding_output.shape[:2])  # (B, Lv)
+        text_embedding_output = self.embeddings(input_ids=input_ids)  # (batch_size, sequence_length, hidden_size)
+        visual_embedding_output = self.visual_embeddings(
+            pixel_values
+        )  # (batch_size, visual_sequence_length, hidden_size)
+        visual_attention_mask = attention_mask.new_ones(
+            visual_embedding_output.shape[:2]
+        )  # (batch_size, visual_sequence_length)
         pt_mask = torch.ones(attention_mask.shape[0], 10)
-        attention_mask = torch.cat([pt_mask.long(), attention_mask, visual_attention_mask], dim=-1)  # (B, lt+Lv, d)
-        txt_pt = self.text_prompt
-        txt_pt = txt_pt.expand(text_embedding_output.shape[0], -1, -1)
-        embedding_output = torch.cat([txt_pt, text_embedding_output, visual_embedding_output], dim=1)  # (B, Lt+Lv, d)
+        attention_mask = torch.cat([pt_mask.long(), attention_mask, visual_attention_mask], dim=-1)
+        text_prompt = self.text_prompt.expand(text_embedding_output.shape[0], -1, -1)
+        # (batch_size, sequence_length + visual_sequence_length, hidden_size)
+        embedding_output = torch.cat([text_prompt, text_embedding_output, visual_embedding_output], dim=1)
 
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape).to(device)
         encoder_outputs = self.encoder(
@@ -714,6 +770,7 @@ class TvpTransformer(TvpPreTrainedModel):
         )
 
 
+# Pad single images in the surroundings.
 class TvpPadPrompter(nn.Module):
     def __init__(self, image_size, prompt_size):
         super(TvpPadPrompter, self).__init__()
@@ -735,6 +792,7 @@ class TvpPadPrompter(nn.Module):
         return prompt
 
 
+# Pad single images only at the bottom.
 class TvpDownPadPrompter(nn.Module):
     def __init__(self, image_size, pad_size):
         super(TvpDownPadPrompter, self).__init__()
@@ -750,6 +808,7 @@ class TvpDownPadPrompter(nn.Module):
         return prompt
 
 
+# Pad frames extracted from videos only at the bottom.
 class TvpFrameDownPadPrompter(nn.Module):
     def __init__(self, image_size, pad_size, frame_num):
         super(TvpFrameDownPadPrompter, self).__init__()
@@ -766,6 +825,7 @@ class TvpFrameDownPadPrompter(nn.Module):
         return prompt
 
 
+# Pad frames extracted from videos in the surroundings.
 class TvpFramePadPrompter(nn.Module):
     def __init__(self, image_size, prompt_size, frame_num):
         super(TvpFramePadPrompter, self).__init__()
@@ -787,6 +847,14 @@ class TvpFramePadPrompter(nn.Module):
         return prompt
 
 
+prompter_map = {
+    "downpad": TvpDownPadPrompter,
+    "pad": TvpPadPrompter,
+    "framedownpad": TvpFrameDownPadPrompter,
+    "framepad": TvpFramePadPrompter,
+}
+
+
 @add_start_docstrings(
     "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on" " top.",
     TVP_START_DOCSTRING,
@@ -795,74 +863,16 @@ class TvpModel(TvpPreTrainedModel):
     def __init__(self, config):
         super(TvpModel, self).__init__(config)
         self.config = config
-        self.cnn = TvpVisionModel(config)
+        self.vision_model = TvpVisionModel(config)
         self.transformer = TvpTransformer(config)
-        if config.visual_prompter_type == "downpad":
-            self.visual_prompter = TvpDownPadPrompter(config.max_img_size, config.pad_size)
-        elif config.visual_prompter_type == "pad":
-            self.visual_prompter = TvpPadPrompter(config.max_img_size, config.pad_size)
-        elif config.visual_prompter_type == "framedownpad":
-            self.visual_prompter = TvpFrameDownPadPrompter(config.max_img_size, config.pad_size, config.num_frm)
-        elif config.visual_prompter_type == "framepad":
-            self.visual_prompter = TvpFramePadPrompter(config.max_img_size, config.pad_size, config.num_frm)
+        if config.visual_prompter_type not in prompter_map:
+            raise ValueError("`visual_prompter_type` must be in (downpad, pad, framedownpad, framepad)")
+        else:
+            self.visual_prompter = prompter_map[config.visual_prompter_type](
+                config.max_img_size, config.pad_size, config.num_frm
+            )
 
         self.post_init()
-
-    @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
-    def add_vision_prompt(self, pixel_values):
-        r"""
-        Returns:
-
-        Examples:
-        ```python
-        >>> import torch
-        >>> from transformers import AutoConfig, TvpModel
-
-        >>> config = AutoConfig.from_pretrained("Intel/tvp-base")
-        >>> model = TvpModel(config)
-
-        >>> x = torch.rand(1, 48, 3, 448, 448)
-        >>> y = model.add_vision_prompt(x)
-        ```"""
-        if self.config.visual_prompter_apply != "remove":
-            visual_prompt = self.visual_prompter(pixel_values).to(pixel_values.dtype)
-
-        if self.config.visual_prompter_apply == "add":
-            pixel_values = pixel_values + visual_prompt
-        elif self.config.visual_prompter_apply == "remove":
-            visual_prompter_mask = torch.ones(
-                [self.config.max_img_size, self.config.max_img_size], dtype=pixel_values.dtype
-            )
-            start_point = self.config.pad_size
-            end_point = self.config.max_img_size - self.config.pad_size
-
-            if self.config.visual_prompter_type == "downpad" or self.config.visual_prompter_type == "framedownpad":
-                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
-            elif self.config.visual_prompter_type == "pad":
-                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
-                visual_prompter_mask[:start_point, :] = 0.0
-                visual_prompter_mask[:, end_point : self.config.max_img_size] = 0.0
-                visual_prompter_mask[:, :start_point] = 0.0
-
-            pixel_values = pixel_values * visual_prompter_mask
-        elif self.config.visual_prompter_apply == "replace":
-            visual_prompter_mask = torch.ones(
-                [self.config.max_img_size, self.config.max_img_size], dtype=pixel_values.dtype
-            )
-            start_point = self.config.pad_size
-            end_point = self.config.max_img_size - self.config.pad_size
-
-            if self.config.visual_prompter_type == "downpad" or self.config.visual_prompter_type == "framedownpad":
-                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
-            elif self.config.visual_prompter_type == "pad":
-                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
-                visual_prompter_mask[:start_point, :] = 0.0
-                visual_prompter_mask[:, end_point : self.config.max_img_size] = 0.0
-                visual_prompter_mask[:, :start_point] = 0.0
-
-            pixel_values = pixel_values * visual_prompter_mask + visual_prompt
-
-        return pixel_values
 
     @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=TvpConfig)
@@ -893,8 +903,30 @@ class TvpModel(TvpPreTrainedModel):
         >>> text_inputs = tokenizer("This is an example inputs", return_tensors="pt")
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
-        pixel_values = self.add_vision_prompt(pixel_values)
-        pixel_values = self.cnn(pixel_values)
+        # Add visual prompt, it will
+        if self.config.visual_prompter_apply not in ("add", "replace", "remove"):
+            raise ValueError("`visual_prompter_apply` must be in (add, replace, remove)")
+
+        if self.config.visual_prompter_apply != "add":
+            visual_prompter_mask = torch.ones(
+                [self.config.max_img_size, self.config.max_img_size], dtype=pixel_values.dtype
+            )
+            start_point = self.config.pad_size
+            end_point = self.config.max_img_size - self.config.pad_size
+            if "downpad" in self.config.visual_prompter_type:
+                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
+            elif self.config.visual_prompter_type == "pad":
+                visual_prompter_mask[end_point : self.config.max_img_size, :] = 0.0
+                visual_prompter_mask[:start_point, :] = 0.0
+                visual_prompter_mask[:, end_point : self.config.max_img_size] = 0.0
+                visual_prompter_mask[:, :start_point] = 0.0
+
+            pixel_values *= visual_prompter_mask
+
+        if self.config.visual_prompter_apply != "remove":
+            pixel_values += self.visual_prompter(pixel_values).to(pixel_values.dtype)
+
+        pixel_values = self.vision_model(pixel_values)
         outputs = self.transformer(
             input_ids,
             pixel_values,
@@ -910,15 +942,14 @@ class TvpModel(TvpPreTrainedModel):
 class TvpVideoGroundingHead(nn.Module):
     def __init__(self, hidden_size):
         super().__init__()
-        self.layer = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size * 2),
-            nn.ReLU(True),
-            nn.Linear(hidden_size * 2, 2),
-            nn.Sigmoid(),
-        )
+        self.layer_0 = nn.Linear(hidden_size, hidden_size * 2)
+        self.layer_1 = nn.Linear(hidden_size * 2, 2)
+        self.activation_0 = nn.ReLU(True)
+        self.activation_1 = nn.Sigmoid()
 
     def forward(self, x):
-        x = self.layer(x)
+        x = self.activation_0(self.layer_0(x))
+        x = self.activation_1(self.layer_1(x))
         return x
 
 
