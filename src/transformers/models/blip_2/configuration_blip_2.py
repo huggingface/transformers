@@ -398,13 +398,13 @@ class Blip2ModelWithoutLMConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a Blip2Config from a Blip2VisionConfig, Blip2QFormerConfig and any PretrainedConfig
+    >>> # We can also initialize a Blip2ModelWithoutLMConfig from a Blip2VisionConfig, Blip2QFormerConfig and any PretrainedConfig
 
     >>> # Initializing BLIP-2 vision and BLIP-2 Q-Former model configurations
     >>> vision_config = Blip2VisionConfig()
     >>> qformer_config = Blip2QFormerConfig()
 
-    >>> config = Blip2ModelWithoutLMConfig.from_vision_qformer_text_configs(vision_config, qformer_config)
+    >>> config = Blip2ModelWithoutLMConfig.from_vision_qformer_configs(vision_config, qformer_config)
     ```"""
 
     model_type = "blip-2-without-lm"
@@ -440,18 +440,18 @@ class Blip2ModelWithoutLMConfig(PretrainedConfig):
         self.initializer_range = 0.02
 
     @classmethod
-    def from_vision_qformer_text_configs(
+    def from_vision_qformer_configs(
         cls,
         vision_config: Blip2VisionConfig,
         qformer_config: Blip2QFormerConfig,
         **kwargs,
     ):
         r"""
-        Instantiate a [`Blip2Config`] (or a derived class) from a BLIP-2 vision model, Q-Former and language model
+        Instantiate a [`Blip2ModelWithoutLMConfig`] (or a derived class) from a BLIP-2 vision and Q-Former model
         configurations.
 
         Returns:
-            [`Blip2Config`]: An instance of a configuration object
+            [`Blip2ModelWithoutLMConfig`]: An instance of a configuration object
         """
 
         return cls(

@@ -855,7 +855,7 @@ class Blip2TextModelWithProjectionTester:
         return config, input_ids, attention_mask
 
     def get_config(self):
-        return Blip2ModelWithoutLMConfig.from_vision_qformer_text_configs(
+        return Blip2ModelWithoutLMConfig.from_vision_qformer_configs(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1003,7 +1003,7 @@ class Blip2VisionModelWithProjectionTester:
         return config, pixel_values
 
     def get_config(self):
-        return Blip2ModelWithoutLMConfig.from_vision_qformer_text_configs(
+        return Blip2ModelWithoutLMConfig.from_vision_qformer_configs(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
@@ -1152,7 +1152,7 @@ class Blip2TextRetrievalModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return Blip2ModelWithoutLMConfig.from_vision_qformer_text_configs(
+        return Blip2ModelWithoutLMConfig.from_vision_qformer_configs(
             vision_config=self.vision_model_tester.get_config(),
             qformer_config=self.qformer_model_tester.get_config(),
         )
