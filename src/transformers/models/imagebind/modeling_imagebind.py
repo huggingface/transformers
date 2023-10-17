@@ -439,46 +439,6 @@ class ImageBindTextEmbeddings(nn.Module):
         return embeddings
 
 
-class Image2Video(nn.Module):
-    """
-    Maps 4-dim image tensors of shape (B, C, H, W) to 5-dim video tensors, possibly repeating the image along the
-    time dimension. For example, if time_dim == 2 (the default), images of shape (B, C, H, W) will be transformed to
-    video of shape (B, C, 1, H, W), and then the image will be repeated along the time dimension ntimes to get shape
-    (B, C, N, H, W).
-    """
-    def __init__(self, time_dim: int = 2, ntimes: int = 2, pad_type: str = "repeat"):
-        if ntimes <= 0:
-            raise ValueError(f"`ntimes` should be a positive integer but got {ntimes}")
-        if pad_type not in ["zero", "repeat"]:
-            raise ValueError(f"`pad_type` should be one of `[zero, repeat]` but got {pad_type}")
-        
-        self.time_dim = time_dim
-        self.ntimes = ntimes
-        self.pad_type = pad_type
-    
-    def forward(self, image: torch.FloatTensor) -> torch.FloatTensor:
-        if image.ndim not in [4, 5]:
-            raise ValueError(
-                f"The input `image` tensor should be 4- or 5-dimensional but has {image.ndim} dimensions."
-            )
-        
-        # Add time dimension at specified dim index
-        if image.ndim == 4:
-            image = image.unsqueeze(self.time_dim)
-        
-        # Repeat image across the time dimension ntimes.
-        if image.shape[self.time_dim] == 1:
-            if self.pad_type == "repeat":
-                new_shape = [1] * len(image.shape)
-                new_shape[self.time_dim] = self.ntimes
-                video = image.repeat(new_shape)
-            elif self.pad_type == "zero":
-                pad_arg = [0, 0] * len(image.shape)
-                pad_arg[2 * self.time_dim + 1] = self.ntimes - image.shape[self.time_dim]
-                video = nn.functional.pad(image, pad_arg)
-        return video
-
-
 class RGBDTPatchEmbedding(nn.Module):
     """
     Creates patch embeddings for spatiotemporal data (e.g. images, video, depth etc.). This handles patch embeddings
@@ -488,7 +448,6 @@ class RGBDTPatchEmbedding(nn.Module):
         self,
         config: Union[ImageBindAudioConfig, ImageBindDepthConfig, ImageBindThermalConfig, ImageBindVisionConfig],
         norm_layer: Optional[nn.Module] = None,
-        is_temporal: bool = False,
     ):
         super().__init__()
         self.config = config
@@ -496,14 +455,14 @@ class RGBDTPatchEmbedding(nn.Module):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
         self.stride = config.stride
+        self.num_frames = config.num_frames if hasattr(config, "num_frames") else None
+        self.is_temporal = self.num_frames is not None
 
         self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
 
-        if is_temporal:
-            self.image_to_video = Image2Video(time_dim=2, ntimes=config.num_frames, pad_type="repeat")
+        if self.is_temporal:
             patch_embedding_cls = nn.Conv3d
         else:
-            self.image_to_video = None
             patch_embedding_cls = nn.Conv2d
         
         self.patch_embedding = patch_embedding_cls(
@@ -513,9 +472,9 @@ class RGBDTPatchEmbedding(nn.Module):
             stride=self.stride,
             bias=False,
         )
-        self.norm_layer = norm_layer
+        self.norm_layer = norm_layer if norm_layer is not None else nn.Identity()
 
-        if is_temporal:
+        if self.is_temporal:
             self.time_patch_size = self.patch_size[0]
             self.spatial_patch_size = self.patch_size[1]
             self.num_patches = (config.num_frames // self.time_patch_size) * (self.image_size // self.spatial_patch_size) ** 2
@@ -527,15 +486,42 @@ class RGBDTPatchEmbedding(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
     
+    def image_to_video(self, image: torch.FloatTensor, time_dim: int = 2, ntimes: int = 2, pad_type: str = "repeat"):
+        """
+        Maps 4-dim image tensors of shape (B, C, H, W) to 5-dim video tensors, possibly repeating the image along the
+        time dimension. For example, if `time_dim == 1`, RGB images of shape (B, C, H, W) will be transformed to
+        video of shape (B, 1, C, H, W), and then the image will be repeated along the time dimension `ntimes` to get
+        shape (B, N, C, H, W).
+        """
+        if image.ndim not in [4, 5]:
+            raise ValueError(
+                f"The input `image` tensor should be 4- or 5-dimensional but has {image.ndim} dimensions."
+            )
+
+        # Add time dimension at specified dim index
+        if image.ndim == 4:
+            image = image.unsqueeze(time_dim)
+
+        # Repeat image across the time dimension ntimes.
+        if image.shape[time_dim] == 1:
+            if pad_type == "repeat":
+                new_shape = [1] * len(image.shape)
+                new_shape[time_dim] = ntimes
+                video = image.repeat(new_shape)
+            elif pad_type == "zero":
+                pad_arg = [0, 0] * len(image.shape)
+                pad_arg[2 * time_dim + 1] = self.ntimes - image.shape[time_dim]
+                video = nn.functional.pad(image, pad_arg)
+        return video
+
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
-        if self.image_to_video is not None:
-            pixel_values = self.image_to_video(pixel_values)
+        if self.is_temporal:
+            pixel_values = self.image_to_video(pixel_values, time_dim=1, ntimes=self.num_frames)
         
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-        if self.norm_layer is not None:
-            patch_embeds = self.norm_layer(patch_embeds)
+        patch_embeds = self.norm_layer(patch_embeds)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
@@ -545,7 +531,7 @@ class RGBDTPatchEmbedding(nn.Module):
 
 class ImageBindVisionEmbeddings(RGBDTPatchEmbedding):
     def __init__(self, config: ImageBindVisionConfig):
-        super().__init__(config, norm_layer=None, is_temporal=True)
+        super().__init__(config, norm_layer=None)
 
 
 class ImageBindAudioEmbeddings(RGBDTPatchEmbedding):
