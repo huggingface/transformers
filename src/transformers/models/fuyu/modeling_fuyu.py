@@ -1040,7 +1040,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                "image_patches": image_patches if image_patches is not None else image_patches
+                "image_patches_indices": image_patches_indices if past_key_values is None else None,
+                "image_patches": image_patches if past_key_values is None else None
             }
         )
         return model_inputs
