@@ -28,6 +28,9 @@ class FuyuModelTester:
         parent,
         batch_size=13,
         seq_length=7,
+        image_size=300,
+        patch_size=30,
+        num_channels=3,
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=False,
@@ -52,6 +55,9 @@ class FuyuModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
