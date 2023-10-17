@@ -1,5 +1,7 @@
 from typing import Union
 
+from transformers import InstructBlipProcessor
+
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -116,6 +118,9 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def preprocess(self, inputs, padding=False, truncation=False, timeout=None):
         image = load_image(inputs["image"], timeout=timeout)
+        if isinstance(self.image_processor, InstructBlipProcessor):
+            return self.image_processor(images=image, text=inputs["question"], return_tensors=self.framework)
+
         model_inputs = self.tokenizer(
             inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
         )
