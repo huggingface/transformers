@@ -296,6 +296,7 @@ class FuyuProcessor():  # ProcessorMixin):
                 offset=0,
             )
             return {"model_image_input": model_image_input,
+                    "image_padded_unpacked_tokens": image_padded_unpacked_tokens,
                     "image_padded_unpacked_tokens_tensor": image_padded_unpacked_tokens_tensor,
                     "image_patch_input_indices": image_patch_input_indices}
 
