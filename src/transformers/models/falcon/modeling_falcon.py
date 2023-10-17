@@ -866,7 +866,7 @@ FALCON_INPUTS_DOCSTRING = r"""
             their past given to this model should not be passed as `input_ids` as they have already been computed.
 
             Each element of `past_key_values` is a tuple (past_key, past_value):
-            - past_key: [batch_size * num_heads, head_dim, kv_length]
+            - past_key: [batch_size * num_heads, kv_length, head_dim]
             - past_value: [batch_size * num_heads, kv_length, head_dim]
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
