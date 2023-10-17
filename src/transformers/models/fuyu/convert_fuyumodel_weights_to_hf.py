@@ -13,13 +13,13 @@
 # limitations under the License.
 import argparse
 import os
-import warnings
 import sys
+import warnings
 
 import flatdict
 import torch
 
-from transformers import LlamaTokenizer, FuyuConfig, FuyuForCausalLM
+from transformers import FuyuConfig, FuyuForCausalLM, LlamaTokenizer
 
 
 try:
@@ -34,8 +34,7 @@ except ImportError as e:
     tokenizer_class = LlamaTokenizer
 
 """
-Sample usage:
-# TODO fix clone links from persimmon to fuyu
+Sample usage: # TODO fix clone links from persimmon to fuyu
 ```
 git clone https://github.com/adept-ai-labs/adept-inference
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_base_model_release.tar
@@ -62,7 +61,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "language_model.encoder": "model",
     "word_embeddings_for_head": "lm_head",
     "language_model.embedding.word_embeddings": "model.embed_tokens",
-    "vit_encoder.linear_encoder": "model.vision_embed_tokens"
+    "vit_encoder.linear_encoder": "model.vision_embed_tokens",
 }
 
 KEYS_TO_REMOVE = {"rotary_emb.inv_freq", "image_patch_projection"}
@@ -82,7 +81,6 @@ def rename_state_dict(state_dict):
 
 
 def convert_fuyu_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_model_path, safe_serialization=False):
-
     sys.path.insert(0, ada_lib_path)
     model_state_dict_base = torch.load(pt_model_path, map_location="cpu")
     state_dict = flatdict.FlatDict(model_state_dict_base["model"], ".")

@@ -20,7 +20,33 @@ if is_torch_available():
 # Copied from transformers.tests.llama.test_modelling_llama.LlamaModelTest with Llama->Fuyu
 class FuyuModelTester:
     def __init__(
-        self, parent, batch_size=13, seq_length=7, image_size=300, patch_size=30, num_channels=3, is_training=True, use_input_mask=True, use_token_type_ids=False, use_labels=True, vocab_size=99, hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37, hidden_act="gelu", hidden_dropout_prob=0.1, attention_probs_dropout_prob=0.1, max_position_embeddings=512, type_vocab_size=16, type_sequence_label_size=2, initializer_range=0.02, num_labels=3, num_choices=4, pad_token_id=0, scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        image_size=300,
+        patch_size=30,
+        num_channels=3,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=False,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        pad_token_id=0,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -74,7 +100,20 @@ class FuyuModelTester:
 
     def get_config(self):
         return FuyuConfig(
-            vocab_size=self.vocab_size,     hidden_size=self.hidden_size,     num_hidden_layers=self.num_hidden_layers,     num_attention_heads=self.num_attention_heads,     intermediate_size=self.intermediate_size,     hidden_act=self.hidden_act,     hidden_dropout_prob=self.hidden_dropout_prob,     attention_probs_dropout_prob=self.attention_probs_dropout_prob,     max_position_embeddings=self.max_position_embeddings,     type_vocab_size=self.type_vocab_size,     is_decoder=False,     initializer_range=self.initializer_range,     pad_token_id=self.pad_token_id, )
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            type_vocab_size=self.type_vocab_size,
+            is_decoder=False,
+            initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
+        )
 
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -87,21 +126,46 @@ class FuyuModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_as_decoder(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, encoder_hidden_states, encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.add_cross_attention = True
         model = FuyuModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids,     attention_mask=input_mask,     encoder_hidden_states=encoder_hidden_states,     encoder_attention_mask=encoder_attention_mask, )
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+        )
         result = model(
-            input_ids,     attention_mask=input_mask,     encoder_hidden_states=encoder_hidden_states, )
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_causal_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, encoder_hidden_states, encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         model = FuyuForCausalLM(config=config)
         model.to(torch_device)
@@ -110,7 +174,16 @@ class FuyuModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, encoder_hidden_states, encoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         config.is_decoder = True
         config.add_cross_attention = True
@@ -120,7 +193,12 @@ class FuyuModelTester:
 
         # first forward pass
         outputs = model(
-            input_ids,     attention_mask=input_mask,     encoder_hidden_states=encoder_hidden_states,     encoder_attention_mask=encoder_attention_mask,     use_cache=True, )
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            use_cache=True,
+        )
         past_key_values = outputs.past_key_values
 
         # create hypothetical multiple next token and extent to next_input_ids
@@ -132,9 +210,20 @@ class FuyuModelTester:
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
         output_from_no_past = model(
-            next_input_ids,     attention_mask=next_attention_mask,     encoder_hidden_states=encoder_hidden_states,     encoder_attention_mask=encoder_attention_mask,     output_hidden_states=True, )["hidden_states"][0]
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_hidden_states=True,
+        )["hidden_states"][0]
         output_from_past = model(
-            next_tokens,     attention_mask=next_attention_mask,     encoder_hidden_states=encoder_hidden_states,     encoder_attention_mask=encoder_attention_mask,     past_key_values=past_key_values,     output_hidden_states=True, )["hidden_states"][0]
+            next_tokens,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        )["hidden_states"][0]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -149,7 +238,14 @@ class FuyuModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
-            config,     input_ids,     token_type_ids,     input_mask,     sequence_labels,     token_labels,     choice_labels, ) = config_and_inputs
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
@@ -183,8 +279,11 @@ class FuyuProcessingTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS = torch.Tensor([[71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 1, 128340, 71374, 71389, 120412, 71377, 71835, 71374, 73615, 71375, 71399, 71435, 71122, 71013, 71013, 71013, 71013, 71013, 71013, 71013, 71013, 71013, 71013,]])
         # fmt: on
         torch.testing.assert_close(self.model_inputs["image_patch_input_indices"], EXPECTED_IMAGE_PATCH_INPUTS)
-        torch.testing.assert_close(self.model_inputs["image_padded_unpacked_tokens_tensor"], EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS)
- 
+        torch.testing.assert_close(
+            self.model_inputs["image_padded_unpacked_tokens_tensor"], EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS
+        )
+
+
 @require_torch_gpu
 @slow
 class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -216,18 +315,18 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         continuous_embeddings = self.model.vision_embed_tokens(
             self.model_inputs["model_image_input"]["image_patches"][0][0]
         ).unsqueeze(0)
-        expected_continuous_embedding_start = torch.Tensor(
+        EXPECTED_CONTINUOUS_EMBEDDING_START = torch.Tensor(
             [-0.1221, 0.1689, -0.2969, 0.0601, 0.2168, -0.6953, 0.3438, 0.0165, 0.2168, 0.0586]
         )
-        expected_continuous_embedding_end = torch.Tensor(
+        EXPECTED_CONTINUOUS_EMBEDDING_END = torch.Tensor(
             [0.1138, 0.2090, -0.0588, 0.0400, 0.1719, 0.0586, 0.0928, -0.1875, 0.0471]
         )
         torch.testing.assert_close(continuous_embeddings[0].shape, torch.Size([308, 4096]))
         torch.testing.assert_close(
-            continuous_embeddings[0][0][0:10], expected_continuous_embedding_start, rtol=0.1, atol=1e-02
+            continuous_embeddings[0][0][0:10], EXPECTED_CONTINUOUS_EMBEDDING_START, rtol=0.1, atol=1e-02
         )
         torch.testing.assert_close(
-            continuous_embeddings[0][0][-9:], expected_continuous_embedding_end, rtol=0.1, atol=1e-02
+            continuous_embeddings[0][0][-9:], EXPECTED_CONTINUOUS_EMBEDDING_END, rtol=0.1, atol=1e-02
         )
 
         # word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens_tensor'][0][None, :])
@@ -243,12 +342,15 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         torch.testing.assert_close(word_embeddings[0][0][-9:], EXPECTED_WORD_EMBEDDING_END, rtol=0.1, atol=1e-02)
 
     def test_model_forward_values(self):
-        reference_tensor = torch.Tensor(
-            [
-[-0.5469, 1.6016, 2.3438, 2.8125, 1.0000],
-[0.3613, 1.0391, 2.5625, 2.2031, 1.5703],
-[-0.4707, 2.0938, 1.7109, 5.7188, 0.4199],     ]
-        )
+        # fmt: off
+        EXPECTED_HIDDEN_STATES_SLICE = torch.Tensor([[-0.5469, 1.6016, 2.3438, 2.8125, 1.0000],[0.3613, 1.0391, 2.5625, 2.2031, 1.5703],[-0.4707, 2.0938, 1.7109, 5.7188, 0.4199],])
+        # fmt: on
+
         model_outputs = self.model(
-            input_ids=self.model_inputs["image_padded_unpacked_tokens"][0].unsqueeze(0),     image_patches=self.model_inputs["model_image_input"]["image_patches"][0][0].unsqueeze(0),     image_patches_indices=self.model_inputs["image_patch_input_indices"], )
-        torch.testing.assert_close(model_outputs[0][0, 5:8, 1200:1205], reference_tensor, rtol=0.1, atol=0.1)
+            input_ids=self.model_inputs["image_padded_unpacked_tokens"][0].unsqueeze(0),
+            image_patches=self.model_inputs["model_image_input"]["image_patches"][0][0].unsqueeze(0),
+            image_patches_indices=self.model_inputs["image_patch_input_indices"],
+        )
+        torch.testing.assert_close(
+            model_outputs[0][0, 5:8, 1200:1205], EXPECTED_HIDDEN_STATES_SLICE, rtol=0.1, atol=0.1
+        )

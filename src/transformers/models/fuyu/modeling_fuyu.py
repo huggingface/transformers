@@ -18,20 +18,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Fuyu model."""
-import math
 import collections
+import math
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from dataclasses import dataclass
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-
 from .configuration_fuyu import FuyuConfig
 
 
@@ -165,7 +165,7 @@ class FuyuDynamicNTKScalingRotaryEmbedding(FuyuRotaryEmbedding):
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2:]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -218,6 +218,7 @@ class FuyuViTPatchEmbeddings(nn.Module):
                 )
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
+
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXMLP with GPTNeoX->Fuyu
 
@@ -346,11 +347,11 @@ class FuyuAttention(nn.Module):
         # Partial rotary embedding
         query_rot, query_pass = (
             query_states[..., : self.rotary_emb.dim],
-            query_states[..., self.rotary_emb.dim:],
+            query_states[..., self.rotary_emb.dim :],
         )
         key_rot, key_pass = (
             key_states[..., : self.rotary_emb.dim],
-            key_states[..., self.rotary_emb.dim:],
+            key_states[..., self.rotary_emb.dim :],
         )
         # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
         query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
@@ -652,8 +653,9 @@ class FuyuModel(FuyuPreTrainedModel):
 
         # vision tokens
 
-        self.vision_embed_tokens = nn.Linear(config.patch_size * config.patch_size *
-                                             config.num_channels, config.hidden_size)
+        self.vision_embed_tokens = nn.Linear(
+            config.patch_size * config.patch_size * config.num_channels, config.hidden_size
+        )
 
         # text tokens # TODO can we just use AutoModel there?
 
@@ -674,17 +676,19 @@ class FuyuModel(FuyuPreTrainedModel):
         self.embed_tokens = value
 
     def gather_continuous_embeddings(
-            self,
-            word_embeddings: torch.Tensor,
-            continuous_embeddings: List[torch.Tensor],
-            image_patch_input_indices: torch.Tensor) -> torch.Tensor:
+        self,
+        word_embeddings: torch.Tensor,
+        continuous_embeddings: List[torch.Tensor],
+        image_patch_input_indices: torch.Tensor,
+    ) -> torch.Tensor:
         """This function places the continuous_embeddings into the word_embeddings at the locations
-        indicated by image_patch_input_indices.
-        Different batch elements can have different numbers of continuous embeddings.
+        indicated by image_patch_input_indices. Different batch elements can have different numbers of continuous
+        embeddings.
 
         Args:
             word_embeddings: Tensor of word embeddings. Shape: [b, s, h]
-            continuous_embeddings: Tensor of continuous embeddings. The length of the list is the batch size. Each entry is
+            continuous_embeddings:
+                Tensor of continuous embeddings. The length of the list is the batch size. Each entry is
             shape [num_image_embeddings, hidden], and num_image_embeddings needs to match the number of non-negative
             indices in image_patch_input_indices for that batch element.
             image_patch_input_indices: Tensor of indices of the image patches in the input_ids tensor. Shape: [b, s]
@@ -787,8 +791,10 @@ class FuyuModel(FuyuPreTrainedModel):
             if image_patches is not None:
                 patch_embeddings = self.vision_embed_tokens(image_patches)
                 inputs_embeds = self.gather_continuous_embeddings(
-                    word_embeddings=inputs_embeds, continuous_embeddings=patch_embeddings,
-                    image_patch_input_indices=image_patches_indices)
+                    word_embeddings=inputs_embeds,
+                    continuous_embeddings=patch_embeddings,
+                    image_patch_input_indices=image_patches_indices,
+                )
             # processed_images = self.image_processor.process_images_for_model_input(images, )
 
         # embed positions
@@ -925,8 +931,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        # TODO finish documentation
         Args:
+        # TODO finish documentation
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -952,47 +958,46 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-
-        #TODO add the processing step. Processing has first to be done 
-
+        #TODO add the processing step. Processing has first to be done
+        
         from transformers import FuyuConfig, FuyuModel, FuyuForCausalLM, AutoTokenizer
         from transformers.models.fuyu.processing_fuyu import FuyuProcessor
         from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
         from transformers.image_utils import to_numpy_array
         from PIL import Image
         import torch
-
+        
         from transformers.models.fuyu.fuyu_processing_utils import tokenize_prompts_with_images, construct_full_unpacked_stream, tokenize_prompts_with_images, full_unpacked_stream_to_tensor
-
+        
         pretrained_path = 'huggingface/pre_release_model'
         tokenizer = AutoTokenizer.from_pretrained(pretrained_path)
         image_processor = FuyuImageProcessor()
-
-
+        
+        
         processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
         text_prompt = "Generate a coco-style caption.\\n"
-
+        
         image_path = "/fsx/pablo/adept-collab/adept-mm/mm-inference-for-hf/bus.png"
         image_pil = Image.open(image_path)
-
+        
         outputs = processor(text=text_prompt, images=[image_pil])
-
-        # TODO Now, we have outputs. We can use them to compute image and text embeddings and mix them. 
-        # The embeddings are identical to those of Adept. 
-
+        
+        # TODO Now, we have outputs. We can use them to compute image and text embeddings and mix them.
+        # The embeddings are identical to those of Adept.
+        
         # Running
         word_embeds = model.embed_tokens(outputs['image_padded_unpacked_tokens_tensor'][0][None, :])
         cont_embeds = model.vision_embed_tokens(model_image_input['image_patches'][0][0]).unsqueeze(0)
         patch_indices = outputs['image_patch_input_indices']
         # word_embeds and cont_embeds are the text and image embeddings, same as adept.
-        # 
+        #
         combined_embeddings = model.gather_continuous_embeddings(word_embeddings=word_embeds, continuous_embeddings=cont_embeds,
                                    image_patch_input_indices=patch_indices)
-
+        
         # This has, then, to be pushed to the main transformers tower in the model.forward() method. # TODO THIS IS THE MAIN TODO.
-        # Then, we can use the .generate() and match their outputs. 
-
-
+        # Then, we can use the .generate() and match their outputs.
+        
+        
         '
         ```"""
 
@@ -1088,8 +1093,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
     """
     The Fuyu transformer with a sequence classification head on top (linear layer).
 
-    [`FuyuForSequenceClassification`] uses the last token in order to do the classification, as other causal
-    models (e.g. GPT-2) do.
+    [`FuyuForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
