@@ -784,7 +784,7 @@ class FuyuModel(FuyuPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-            if image_patches is not None:
+            if image_patches is not None and past_key_values is not None:
                 patch_embeddings = self.vision_embed_tokens(image_patches)
                 inputs_embeds = self.gather_continuous_embeddings(
                     word_embeddings=inputs_embeds, continuous_embeddings=patch_embeddings,
@@ -909,11 +909,43 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
     def get_decoder(self):
         return self.model
 
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+    ):
+        if past_key_values:
+            input_ids = input_ids[:, -1:]
+
+        position_ids = kwargs.get("position_ids", None)
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+            }
+        )
+        return model_inputs
+
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
+        image_patches: torch.Tensor = None,  # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
+        image_patches_indices: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -962,8 +994,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         from PIL import Image
         import torch
 
-        from transformers.models.fuyu.fuyu_processing_utils import tokenize_prompts_with_images, construct_full_unpacked_stream, tokenize_prompts_with_images, full_unpacked_stream_to_tensor
-
         pretrained_path = 'huggingface/pre_release_model'
         tokenizer = AutoTokenizer.from_pretrained(pretrained_path)
         image_processor = FuyuImageProcessor()
@@ -1005,6 +1035,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
+            image_patches=image_patches,
+            image_patches_indices=image_patches_indices,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1066,6 +1098,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
         model_inputs.update(
             {
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),

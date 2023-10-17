@@ -140,7 +140,7 @@ class FuyuProcessor():  # ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `List[PIL.Image.Image]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
@@ -173,6 +173,8 @@ class FuyuProcessor():  # ProcessorMixin):
                 else:
                     prompts = [text]
             batch_images = []
+            if isinstance(images, PIL.Image.Image):
+                images = [images]
             if isinstance(images, list):
                 image_unpadded_heights = []
                 image_unpadded_widths = []
@@ -295,26 +297,9 @@ class FuyuProcessor():  # ProcessorMixin):
                 new_seq_len=max_seq_len_batch,
                 offset=0,
             )
-            return {"model_image_input": model_image_input,
-                    "image_padded_unpacked_tokens": image_padded_unpacked_tokens,
-                    "image_padded_unpacked_tokens_tensor": image_padded_unpacked_tokens_tensor,
-                    "image_patch_input_indices": image_patch_input_indices}
-
-        '''
-        if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
-
-        if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
-
-        if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None:
-            return encoding
-        else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
-        '''
+            return {"input_ids": image_padded_unpacked_tokens[0].unsqueeze(0),
+                    "image_patches": model_image_input["image_patches"][0][0].unsqueeze(0),
+                    "image_patches_indices": image_patch_input_indices}
 
     def batch_decode(self, *args, **kwargs):
         """
