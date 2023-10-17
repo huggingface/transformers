@@ -521,7 +521,6 @@ MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Do not add new models here, this class will be deprecated in the future.
         # Model for Image Segmentation mapping
         ("detr", "DetrForSegmentation"),
-        ("rt_detr", "RT_DETRForSegmentation"),
     ]
 )
 
@@ -551,7 +550,6 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Universal Segmentation mapping
         ("detr", "DetrForSegmentation"),
-        ("rt_detr", "RT_DETRForSegmentation"),
         ("mask2former", "Mask2FormerForUniversalSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("oneformer", "OneFormerForUniversalSegmentation"),

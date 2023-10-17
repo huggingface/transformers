@@ -1656,7 +1656,6 @@ else:
         [
             "RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
             "RT_DETRForObjectDetection",
-            "RT_DETRForSegmentation",
             "RT_DETRModel",
             "RT_DETRPreTrainedModel",
         ]
@@ -5654,7 +5653,6 @@ if TYPE_CHECKING:
         from .models.rt_detr import (
             RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             RT_DETRForObjectDetection,
-            RT_DETRForSegmentation,
             RT_DETRModel,
             RT_DETRPreTrainedModel,
         )
