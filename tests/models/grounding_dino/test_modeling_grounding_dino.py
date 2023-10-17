@@ -176,13 +176,13 @@ class GroundingDINOModelTester:
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, config.max_text_len))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, input_ids=input_ids, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, config.max_text_len))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
@@ -280,7 +280,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions
+            attentions = outputs.encoder_attentions[-1]
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -291,7 +291,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions
+            attentions = outputs.encoder_attentions[-1]
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
@@ -304,7 +304,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             )
             out_len = len(outputs)
 
-            correct_outlen = 8
+            correct_outlen = 10
 
             # loss is at first position
             if "labels" in inputs_dict:
@@ -316,7 +316,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             self.assertEqual(out_len, correct_outlen)
 
             # decoder attentions
-            decoder_attentions = outputs.decoder_attentions
+            decoder_attentions = outputs.decoder_attentions[0]
             self.assertIsInstance(decoder_attentions, (list, tuple))
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
@@ -325,7 +325,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             )
 
             # cross attentions
-            cross_attentions = outputs.cross_attentions
+            cross_attentions = outputs.decoder_attentions[-1]
             self.assertIsInstance(cross_attentions, (list, tuple))
             self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
@@ -349,12 +349,12 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
             elif self.is_encoder_decoder:
-                added_hidden_states = 2
+                added_hidden_states = 3
             else:
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs.encoder_attentions
+            self_attentions = outputs.encoder_attentions[-1]
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
@@ -409,18 +409,22 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             model.to(torch_device)
             model.eval()
 
+            print("Done 1")
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
+            print("Done 2")
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
+            print("Done 3")
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
+            print("Done 4")
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
@@ -458,15 +462,15 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         # we take the second output since last_hidden_state is the second item
         output = outputs[1]
 
-        encoder_hidden_states = outputs.encoder_hidden_states[0]
-        encoder_attentions = outputs.encoder_attentions[0]
+        encoder_hidden_states = outputs.encoder_hidden_states_vision[0]
+        encoder_attentions = outputs.encoder_attentions[0][0]
         encoder_hidden_states.retain_grad()
         encoder_attentions.retain_grad()
 
-        decoder_attentions = outputs.decoder_attentions[0]
+        decoder_attentions = outputs.decoder_attentions[0][0]
         decoder_attentions.retain_grad()
 
-        cross_attentions = outputs.cross_attentions[0]
+        cross_attentions = outputs.decoder_attentions[-1][0]
         cross_attentions.retain_grad()
 
         output.flatten()[0].backward(retain_graph=True)
@@ -510,7 +514,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
-                    self.model_tester.num_labels,
+                    config.max_text_len,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
 

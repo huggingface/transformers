@@ -152,27 +152,17 @@ class GroundingDINODecoderOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        vision_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
-        text_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the encoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the text cross-attention heads.
+            the self-attention, cross-attention and multi-scale deformable attention heads.
     """
 
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    vision_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    text_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -181,8 +171,6 @@ class GroundingDINOEncoderOutput(ModelOutput):
     Base class for outputs of the GroundingDINOEncoder. This class extends BaseModelOutput, due to:
     - vision and text last hidden states
     - vision and text intermediate hidden states
-    - vision and text attentions
-    - vision and text cross attentions
 
     Args:
         last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -197,32 +185,17 @@ class GroundingDINOEncoderOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
             of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
             each layer plus the initial embedding outputs.
-        attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the vision encoder, after the attention softmax,
-            used to compute the weighted average in the multi-scale deformable attention heads.
-        attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the text encoder, after the attention softmax,
-            used to compute the weighted average in the self-attention heads.
-        cross_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the
-            attention softmax, used to compute the weighted average in the bi-attention heads.
-        cross_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the text encoder's fusion layer, after the
-            attention softmax, used to compute the weighted average in the bi-attention heads.
+        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the text-vision attention, vision-text attention, text-enhancer (self-attention) and multi-scale deformable attention heads.
     """
 
     last_hidden_state_vision: torch.FloatTensor = None
     last_hidden_state_text: torch.FloatTensor = None
     hidden_states_vision: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_text: Optional[Tuple[torch.FloatTensor]] = None
-    attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    attentions_text: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -243,18 +216,10 @@ class GroundingDINOModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
             plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, num_queries,
-            num_queries)`. Attentions weights of the decoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        decoder_cross_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        decoder_cross_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
+        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention, cross-attention and multi-scale deformable attention heads.
         encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -267,21 +232,10 @@ class GroundingDINOModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
             of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
             each layer plus the initial embedding outputs.
-        encoder_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the vision encoder, after the attention softmax,
-            used to compute the weighted average in the multi-scale deformable attention heads.
-        encoder_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the text encoder, after the attention softmax,
-            used to compute the weighted average in the self-attention heads.
-        encoder_cross_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the
-            attention softmax, used to compute the weighted average in the bi-attention heads.
-        encoder_cross_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the text encoder's fusion layer, after the
+        encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the text-vision attention, vision-text attention, text-enhancer (self-attention) and multi-scale deformable attention heads.
             attention softmax, used to compute the weighted average in the bi-attention heads.
         enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
             Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are
@@ -296,17 +250,12 @@ class GroundingDINOModelOutput(ModelOutput):
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state_text: Optional[torch.FloatTensor] = None
     encoder_hidden_states_vision: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states_text: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_cross_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_cross_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
@@ -340,18 +289,10 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, num_queries, hidden_size)`. Hidden-states of the decoder at the output of each layer
             plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, num_queries,
-            num_queries)`. Attentions weights of the decoder, after the attention softmax, used to compute the weighted
-            average in the self-attention heads.
-        decoder_cross_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        decoder_cross_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
+        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention, cross-attention and multi-scale deformable attention heads.
         encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -364,22 +305,10 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
             of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
             each layer plus the initial embedding outputs.
-        encoder_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the vision encoder, after the attention softmax,
-            used to compute the weighted average in the multi-scale deformable attention heads.
-        encoder_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the text encoder, after the attention softmax,
-            used to compute the weighted average in the self-attention heads.
-        encoder_cross_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the
-            attention softmax, used to compute the weighted average in the bi-attention heads.
-        encoder_cross_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads,
-            sequence_length, sequence_length)`. Attentions weights of the text encoder's fusion layer, after the
-            attention softmax, used to compute the weighted average in the bi-attention heads.
+        encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the text-vision attention, vision-text attention, text-enhancer (self-attention) and multi-scale deformable attention heads.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
             Stacked intermediate hidden states (output of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
@@ -404,17 +333,16 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     encoder_last_hidden_state_vision: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state_text: Optional[torch.FloatTensor] = None
     encoder_hidden_states_vision: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states_text: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_cross_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_cross_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    # encoder_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
+    # encoder_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
+    # encoder_cross_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
+    # encoder_cross_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
@@ -1704,6 +1632,7 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
 
         encoder_vision_states = () if output_hidden_states else None
         encoder_text_states = () if output_hidden_states else None
+        all_attns = () if output_attentions else None
         all_attn_fused_text = () if output_attentions else None
         all_attn_fused_vision = () if output_attentions else None
         all_attn_enhanced_text = () if output_attentions else None
@@ -1712,18 +1641,7 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
             if output_hidden_states:
                 encoder_vision_states += (vision_features,)
                 encoder_text_states += (text_features,)
-            # INPUTS FOR ENCODER LAYER
-            #   - vision_features: Tensor,
-            #   - vision_position_embedding: Tensor,
-            #   - spatial_shapes: Tensor,
-            #   - level_start_index: Tensor,
-            #   - key_padding_mask: Tensor,
-            #   - reference_points: Tensor,
-            #   - text_features: Optional[Tensor] = None,
-            #   - text_attention_mask: Optional[Tensor] = None,
-            #   - text_position_embedding: Optional[Tensor] = None,
-            #   - text_self_attention_masks: Optional[Tensor] = None,
-            #   - text_position_ids: Optional[Tensor] = None
+
             (vision_features, text_features), attentions = encoder_layer(
                 vision_features=vision_features,
                 vision_position_embedding=vision_position_embedding,
@@ -1748,14 +1666,14 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
             encoder_vision_states += (vision_features,)
             encoder_text_states += (text_features,)
 
+        if output_attentions:
+            all_attns = (all_attn_fused_vision, all_attn_fused_text, all_attn_enhanced_text, all_attn_deformable)
+
         if not return_dict:
             enc_outputs = [
                 vision_features,
                 text_features,
-                all_attn_fused_vision,
-                all_attn_fused_text,
-                all_attn_enhanced_text,
-                all_attn_deformable,
+                all_attns
             ]
             return tuple(v for v in enc_outputs if v is not None)
         return GroundingDINOEncoderOutput(
@@ -1763,10 +1681,7 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
             last_hidden_state_text=text_features,
             hidden_states_vision=encoder_vision_states,
             hidden_states_text=encoder_text_states,
-            cross_attentions_vision=all_attn_fused_vision,
-            cross_attentions_text=all_attn_fused_text,
-            attentions_vision=all_attn_deformable,
-            attentions_text=all_attn_enhanced_text,
+            attentions=all_attns,
         )
 
 
@@ -1899,6 +1814,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_attns = () if output_attentions else None
         all_cross_attns_vision = () if (output_attentions and vision_encoder_hidden_states is not None) else None
         all_cross_attns_text = () if (output_attentions and text_encoder_hidden_states is not None) else None
         intermediate = ()
@@ -1998,6 +1914,9 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
+        if output_attentions:
+            all_attns += (all_self_attns, all_cross_attns_text, all_cross_attns_vision)
+
         if not return_dict:
             return tuple(
                 v
@@ -2006,9 +1925,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                     intermediate,
                     intermediate_reference_points,
                     all_hidden_states,
-                    all_self_attns,
-                    all_cross_attns_vision,
-                    all_cross_attns_text,
+                    all_attns,
                 ]
                 if v is not None
             )
@@ -2017,9 +1934,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
             intermediate_hidden_states=intermediate,
             intermediate_reference_points=intermediate_reference_points,
             hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            vision_cross_attentions=all_cross_attns_vision,
-            text_cross_attentions=all_cross_attns_text,
+            attentions=all_attns,
         )
 
 
@@ -2388,10 +2303,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
                 last_hidden_state_text=encoder_outputs[1],
                 hidden_states_vision=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
                 hidden_states_text=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
-                attentions_vision=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
-                attentions_text=encoder_outputs[5] if len(encoder_outputs) > 5 else None,
-                cross_attentions_vision=encoder_outputs[6] if len(encoder_outputs) > 6 else None,
-                cross_attentions_text=encoder_outputs[7] if len(encoder_outputs) > 7 else None,
+                attentions=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
             )
 
         # Fifth, prepare decoder inputs
@@ -2463,16 +2375,11 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
-            decoder_cross_attentions_vision=decoder_outputs.vision_cross_attentions,
-            decoder_cross_attentions_text=decoder_outputs.text_cross_attentions,
             encoder_last_hidden_state_vision=encoder_outputs.last_hidden_state_vision,
             encoder_last_hidden_state_text=encoder_outputs.last_hidden_state_text,
             encoder_hidden_states_vision=encoder_outputs.hidden_states_vision,
             encoder_hidden_states_text=encoder_outputs.hidden_states_text,
-            encoder_attentions_vision=encoder_outputs.attentions_vision,
-            encoder_attentions_text=encoder_outputs.attentions_text,
-            encoder_cross_attentions_vision=encoder_outputs.cross_attentions_vision,
-            encoder_cross_attentions_text=encoder_outputs.cross_attentions_text,
+            encoder_attentions=encoder_outputs.attentions,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
         )
@@ -2487,7 +2394,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
 )
 class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _tied_weights_keys = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
+    _tied_weights_keys = [r"bbox_embed\.[1-9]\d*"]
 
     def __init__(self, config: GroundingDINOConfig):
         super().__init__(config)
@@ -2595,7 +2502,7 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         )
 
         hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
-        enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[9]
+        enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[7]
         init_reference = outputs.init_reference_points if return_dict else outputs[0]
         inter_references = outputs.intermediate_reference_points if return_dict else outputs[3]
 
@@ -2686,16 +2593,11 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
             last_hidden_state=outputs.last_hidden_state,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
-            decoder_cross_attentions_vision=outputs.decoder_cross_attentions_vision,
-            decoder_cross_attentions_text=outputs.decoder_cross_attentions_text,
             encoder_last_hidden_state_vision=outputs.encoder_last_hidden_state_vision,
             encoder_last_hidden_state_text=outputs.encoder_last_hidden_state_text,
             encoder_hidden_states_vision=outputs.encoder_hidden_states_vision,
             encoder_hidden_states_text=outputs.encoder_hidden_states_text,
-            encoder_attentions_vision=outputs.encoder_attentions_vision,
-            encoder_attentions_text=outputs.encoder_attentions_text,
-            encoder_cross_attentions_text=outputs.encoder_cross_attentions_text,
-            encoder_cross_attentions_vision=outputs.encoder_cross_attentions_vision,
+            encoder_attentions=outputs.encoder_attentions,
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_reference_points=outputs.intermediate_reference_points,
             init_reference_points=outputs.init_reference_points,
