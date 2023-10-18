@@ -55,7 +55,7 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
-"The expected outupt"
+"The expected output"
 ```
 
 Raw weights for `Mistral-7B-v0.1` and `Mistral-7B-Instruct-v0.1` can be downloaded from:
@@ -109,7 +109,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 >>> tokenizer.batch_decode(generated_ids)[0]
-"The expected outupt"
+"The expected output"
 ```
 
 ### Expected speedups

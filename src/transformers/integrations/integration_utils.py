@@ -1312,7 +1312,7 @@ class NeptuneCallback(TrainerCallback):
                 target_path = consistent_checkpoint_path
             except IOError as e:
                 logger.warning(
-                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'."
+                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'. "
                     "Could fail trying to upload.".format(e)
                 )
 

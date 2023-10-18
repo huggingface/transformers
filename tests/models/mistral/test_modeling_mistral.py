@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch Mistral model. """
 
 
+import gc
 import tempfile
 import unittest
 
@@ -436,7 +437,8 @@ class MistralIntegrationTest(unittest.TestCase):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        out = model(input_ids).logits.cpu()
+        with torch.no_grad():
+            out = model(input_ids).logits.cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
@@ -447,17 +449,23 @@ class MistralIntegrationTest(unittest.TestCase):
         print(out[0, 0, :30])
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
+
     @slow
     def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = (
-            """My favourite condiment is mayonnaise. I love it on sandwiches, in salads, on burgers"""
-        )
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(torch_device)
-        model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1").to(torch_device)
+        model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()

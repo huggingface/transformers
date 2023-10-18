@@ -1204,7 +1204,7 @@ class EsmFoldTriangularSelfAttentionBlock(nn.Module):
 
         if sequence_state_dim != self.config.sequence_state_dim:
             raise ValueError(
-                "`sequence_state` last dimension should be equal to `self.sequence_state_dim`. Got"
+                "`sequence_state` last dimension should be equal to `self.sequence_state_dim`. Got "
                 f"{sequence_state_dim} != {self.config.sequence_state_dim}."
             )
         if pairwise_state_dim != self.config.pairwise_state_dim:
