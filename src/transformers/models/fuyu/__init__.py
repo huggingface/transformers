@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_fuyu": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
+    "configuration_fuyu": ["FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
 }
 
 
