@@ -152,13 +152,91 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_newline_id: int,
         variable_sized: bool,
     ) -> dict:
+
+        images = []
+        image_input_ids = []
+        image_patches = []
+        for bi in range(image_input.shape[0]):
+            if image_present[bi]:
+                image = image_input[bi]
+                if variable_sized:
+                    new_h = min(
+                        image.shape[1], math.ceil(image_unpadded_h[bi] / image_patch_dim_h) * image_patch_dim_h
+                    )
+                    new_w = min(
+                        image.shape[2], math.ceil(image_unpadded_w[bi] / image_patch_dim_w) * image_patch_dim_w
+                    )
+                    image = image[:, :new_h, :new_w]
+
+                images.append(image)
+
+                num_patches = self.get_num_patches(
+                    img_h=image.shape[1],
+                    img_w=image.shape[2],
+                    patch_dim_h=image_patch_dim_h,
+                    patch_dim_w=image_patch_dim_w,
+                )
+                ids = torch.full([num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device)
+                patches = self.patchify_image(
+                    image=image.unsqueeze(0), patch_dim_h=image_patch_dim_h, patch_dim_w=image_patch_dim_w
+                ).squeeze(0)
+
+                if variable_sized:
+                    ids = ids.reshape(-1, new_w // image_patch_dim_w)
+                    ids = torch.cat(
+                        [
+                            ids,
+                            torch.full(
+                                [ids.shape[0], 1], image_newline_id, dtype=torch.int32, device=image_input.device
+                            ),
+                        ],
+                        dim=1,
+                    )
+                    ids = ids.reshape(-1)
+
+                image_input_ids.append(ids)
+                image_patches.append(patches)
+            else:
+                image_input_ids.append(torch.tensor([], dtype=torch.int32, device=image_input.device))
+
+        image_patch_indices = []
+        index_offset = 0
+        for ids in image_input_ids:
+            num_patches = torch.count_nonzero(ids == image_placeholder_id)
+            indices = torch.arange(num_patches, dtype=ids.dtype, device=ids.device)
+
+            indices_in_stream = torch.full_like(ids, -1)
+            indices_in_stream[torch.nonzero(ids == image_placeholder_id, as_tuple=True)[0]] = (indices + index_offset)
+            index_offset += num_patches
+
+            image_patch_indices.append(indices_in_stream)
+
+        return {
+            "images": images,
+            "image_input_ids": image_input_ids,
+            "image_patches": image_patches,
+            "image_patch_indices": image_patch_indices,
+        }
+
+    def old_process_images_for_model_input(
+        self,
+        image_input: torch.Tensor,
+        image_present: torch.Tensor,
+        image_unpadded_h: torch.Tensor,
+        image_unpadded_w: torch.Tensor,
+        image_patch_dim_h: int,
+        image_patch_dim_w: int,
+        image_placeholder_id: int,
+        image_newline_id: int,
+        variable_sized: bool,
+    ) -> dict:
         """Process images for model input. In particular, variable-sized images are handled here.
 
         Args:
-            image_input: [batch_size, num_sub_sequences, c, h, w] tensor of images padded to model input size.
-            image_present: [batch_size, num_sub_sequences] tensor of 1s and 0s indicating whether an image is present.
-            image_unpadded_h: [batch_size, num_sub_sequences] tensor of unpadded image heights.
-            image_unpadded_w: [batch_size, num_sub_sequences] tensor of unpadded image widths.
+            image_input: [batch_size, 1, c, h, w] tensor of images padded to model input size.
+            image_present: [batch_size, 1] tensor of 1s and 0s indicating whether an image is present.
+            image_unpadded_h: [batch_size, 1] tensor of unpadded image heights.
+            image_unpadded_w: [batch_size, 1] tensor of unpadded image widths.
             image_patch_dim_h: The height of the image patches.
             image_patch_dim_w: The width of the image patches.
             image_placeholder_id: The id of the image placeholder token.

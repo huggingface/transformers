@@ -629,6 +629,35 @@ class FuyuProcessor(ProcessorMixin):
         self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
         self.image_processor = FuyuImageProcessor()
 
+    def _process_images(self, images):
+        """Utility function to preprocess the images and extract necessary information about original formats."""
+        batch_images = []
+        image_unpadded_heights = []
+        image_unpadded_widths = []
+
+        for image in images:
+            image = to_numpy_array(image)
+            if not is_scaled_image(image):
+                image = image / 255.0
+            channel_dimension = infer_channel_dimension_format(image, 3)
+            if channel_dimension == ChannelDimension.FIRST:
+                width_index = 2
+                height_index = 1
+            elif channel_dimension == ChannelDimension.LAST:
+                width_index = 1
+                height_index = 0
+
+            image_unpadded_widths.append([image.shape[width_index]])
+            image_unpadded_heights.append([image.shape[height_index]])
+
+            # Reproduct adept padding sampler
+            padded_image = self.image_processor.aspectratio_preserving_padding.apply_transformation(image)
+
+            tensor_img = torch.Tensor(padded_image).permute(2, 0, 1)
+            batch_images.append([tensor_img])
+
+        return batch_images, torch.Tensor(image_unpadded_heights), torch.Tensor(image_unpadded_widths)
+
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -638,7 +667,7 @@ class FuyuProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `List[str]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -678,33 +707,9 @@ class FuyuProcessor(ProcessorMixin):
             if isinstance(images, PIL.Image.Image):
                 images = [images]
             if isinstance(images, list):
-                image_unpadded_heights = []
-                image_unpadded_widths = []
-                for image in images:
-                    image = to_numpy_array(image)
-                    if not is_scaled_image(image):
-                        image = image / 255.0
-                    channel_dimension = infer_channel_dimension_format(image, 3)
-                    if channel_dimension == ChannelDimension.FIRST:
-                        width_index = 2
-                        height_index = 1
-                    elif channel_dimension == ChannelDimension.LAST:
-                        width_index = 1
-                        height_index = 0
-                    # FIXME add format CHW or HWC detection and cast here
-                    image_unpadded_widths.append(image.shape[width_index])
-                    image_unpadded_heights.append(image.shape[height_index])
-
-                    # reproduct adept padding sampler
-                    padded_image = self.image_processor.aspectratio_preserving_padding.apply_transformation(image)
-
-                    # convert to tensor
-
-                    tensor_img = torch.Tensor(padded_image).permute(2, 0, 1)
-                    batch_images.append(tensor_img)
-                image_unpadded_heights = torch.Tensor([image_unpadded_heights])
-                image_unpadded_widths = torch.Tensor([image_unpadded_widths])
-                batch_images = [batch_images]
+                batch_images, image_unpadded_heights, image_unpadded_widths = self._process_images(images)
+                # image_unpadded_heights = image_unpadded_heights.unsqueeze(0)
+                # image_unpadded_widths = image_unpadded_widths.unsqueeze(0)
             else:
                 raise ValueError("images must be a list of ndarrays or PIL Images to be processed.")
 
@@ -712,15 +717,7 @@ class FuyuProcessor(ProcessorMixin):
             # when there are several different size subsequences per batch. The current implementation reflects
             # that limitation and should be documented.
             #
-            first_image_sequence_length = len(batch_images[0])
-
-            for image_sample, text_sample in zip(batch_images, prompts):
-                # get length of sequences within a batch
-                assert (
-                    first_image_sequence_length == len(image_sample) == len(text_sample)
-                ), "The current implementation only supports batches with the same number of subsequences."
-
-            self.subsequence_length = first_image_sequence_length
+            self.subsequence_length = 1  # Each batch contains only one sequence.
 
             assert len(prompts) == len(images)
             self.batch_size = len(batch_images)
@@ -729,7 +726,7 @@ class FuyuProcessor(ProcessorMixin):
             prompt_tokens, prompts_length = _tokenize_prompts_with_image_and_batch(
                 tokenizer=self.tokenizer,
                 prompts=prompts,
-                transformed_images=[[tensor_img]],
+                transformed_images=batch_images,
                 max_tokens_to_generate=self.max_tokens_to_generate,
                 max_position_embeddings=self.max_position_embeddings,
                 add_BOS=True,
@@ -737,20 +734,19 @@ class FuyuProcessor(ProcessorMixin):
             )
             # same so far
 
-            # FIXME the remainder of current image processing logic assumes batch_size = subsequence_size = 1.
-            image_input = tensor_img
-
-            # This is 1 if there is an image per subsequence, else 0. [batch, subsequence, presence]
-            # the remainder of current image processing logic assumes batch_size = subsequence_size = 1.
+            # This is 1 if there is an image per subsequence, else 0. [batch, 1, presence]
+            # the remainder of current image processing logic assumes subsequence_size = 1.
             # Here it is OK as the model cannot handle > 1 subsequences
-            # FIXME the image could be absent however and image presence should be inferred from user batch input
+            # the image could be absent however and image presence should be inferred from user batch input
+            # hence this code assumes the images are present. Use an assert?
+
             image_present = torch.ones(self.batch_size, 1, 1)
 
             image_placeholder_id = self.tokenizer("|SPEAKER|", add_special_tokens=False)["input_ids"][1]
             image_newline_id = self.tokenizer("|NEWLINE|", add_special_tokens=False)["input_ids"][1]
 
             model_image_input = self.image_processor.process_images_for_model_input(
-                image_input=image_input.unsqueeze(0).unsqueeze(0),
+                image_input=torch.Tensor(batch_images),
                 image_present=image_present,
                 image_unpadded_h=image_unpadded_heights,
                 image_unpadded_w=image_unpadded_widths,
@@ -783,14 +779,6 @@ class FuyuProcessor(ProcessorMixin):
                 tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[bi].shape[0]))
                 all_bi_tokens_to_place.append(tokens_to_place)
 
-            image_padded_unpacked_tokens_tensor = full_unpacked_stream_to_tensor(
-                all_bi_tokens_to_place=all_bi_tokens_to_place,
-                full_unpacked_stream=image_padded_unpacked_tokens,
-                fill_value=self.tokenizer.eos_token_id,
-                batch_size=self.batch_size,
-                new_seq_len=max_seq_len_batch,
-                offset=0,
-            )
             # Use same packing logic for the image patch indices.
             image_patch_input_indices = full_unpacked_stream_to_tensor(
                 all_bi_tokens_to_place=all_bi_tokens_to_place,

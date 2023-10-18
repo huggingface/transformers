@@ -18,15 +18,11 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Fuyu model was created by [ADEPT](https://www.adept.ai/blog/persimmon-8b), and authored by Erich Elsen, Augustus Odena, Maxwell Nye, Sağnak Taşırlar, Tri Dao, Curtis Hawthorne, Deepak Moparthi, Arushi Somani.
+The Fuyu model was created by [ADEPT](https://www.adept.ai/blog/fuyu-8b), and authored by Rohan Bavishi, Erich Elsen, Curtis Hawthorne, Maxwell Nye, Augustus Odena, Arushi Somani, Sağnak Taşırlar. 
 
-The authors introduced Fuyu-8B, a decoder model based on the classic transformers architecture, with query and key normalization. A linear encoder is added to create multimodal embeddings from image inputs. 
-Fuyu-8B is a fully permissively-licensed model with approximately 8 billion parameters, released under the Apache license.  Some of the key attributes of Fuyu-8B are multimodality (text and image inputs), long context size (16K) and performance.
+The authors introduced Fuyu-8B, a decoder-only multimodal model based on the classic transformers architecture, with query and key normalization. A linear encoder is added to create multimodal embeddings from image inputs. 
 
-The authors showcase their approach to model evaluation, focusing on prompt-based image captioning.
-
-In terms of model details, the work outlines the architecture and training methodology of Fuyu-8B, providing insights into its design choices, sequence length, and dataset composition. The authors present a fast inference code that outperforms traditional implementations through operator fusion and CUDA graph utilization while maintaining code coherence. They express their anticipation of how the community will leverage this contribution to drive innovation, hinting at further upcoming releases as part of an ongoing series of developments.
-
+By treating image tokens like text tokens and using a special image-newline character, the model knows when an image line ends. Image positional embeddings are removed. This avoids the need for different training phases for various image resolutions. With 8 billion parameters and licensed under Apache, Fuyu-8B is notable for its ability to handle both text and images, its impressive context size of 16K, and its overall performance.
 
 <Tip warning={true}>
 
@@ -65,7 +61,7 @@ from transformers import FuyuConfig, FuyuModel
 
 
 model_config = FuyuConfig()
-model = FuyuModel(model_config).from_pretrained('/output/path')
+model = FuyuModel(model_config).from_pretrained('adept-hf-collab/fuyu-8b')
 
 
 ```
@@ -80,16 +76,15 @@ from transformers.models.fuyu.processing_fuyu import FuyuProcessor
 from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
 
 
-tokenizer = AutoTokenizer.from_pretrained('/output/path')
+tokenizer = AutoTokenizer.from_pretrained('adept-hf-collab/fuyu-8b')
 image_processor = FuyuImageProcessor()
 
 
 processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
 text_prompt = "Generate a coco-style caption.\\n"
 
-image_path = "/path/to/bus.png"
-image_pil = Image.open(image_path)
-
+bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
+bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
 inputs_to_model = processor(text=text_prompt, images=[image_pil])
 
 
