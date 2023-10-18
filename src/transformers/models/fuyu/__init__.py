@@ -32,7 +32,7 @@ else:
 
 
 try:
-    if not is_torch_available() or not is_vision_available():
+    if not is_vision_available() or not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass

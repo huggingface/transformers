@@ -53,7 +53,6 @@ class FuyuImageProcessor(BaseImageProcessor):
     def __init__(
         self, target_height=1080, target_width=1920, padding_value=1.0, padding_mode: str = "constant", **kwargs
     ):
-        requires_backends(self, ["torch"])
         super().__init__(**kwargs)
         self.target_width = target_width
         self.target_height = target_height
@@ -82,6 +81,8 @@ class FuyuImageProcessor(BaseImageProcessor):
             patch_dim_h: Height of each patch.
             patch_dim_w: Width of each patch.
         """
+        requires_backends(self, ["torch"])
+
         # TODO refer to https://github.com/ArthurZucker/transformers/blob/0f0a3fe5ca5697ee58faeb5b53f049af720b5e98/src/transformers/models/vit_mae/modeling_vit_mae.py#L871
         # torch implementation is faster but does not handle non-squares
 
@@ -122,6 +123,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             image_newline_id: The id of the image newline token.
             variable_sized: Whether to process images as variable-sized.
         """
+        requires_backends(self, ["torch"])
         # Only images that are present.
         images: List[List[torch.Tensor]] = []
         image_patches: List[List[torch.Tensor]] = []
