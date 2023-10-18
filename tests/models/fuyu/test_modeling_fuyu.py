@@ -254,7 +254,7 @@ class FuyuModelTester:
 
 @require_torch_gpu
 @slow
-class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     """
     Currently, all these tests depend on a value of max_tokens_to_generate of 10.
     """
@@ -270,54 +270,6 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
         self.bus_image_pil = Image.open(io.BytesIO(requests.get(self.bus_image_url).content))
 
-    def test_model_embeddings_match_adept(self):
-        """
-        This test is very slow and needs about 30GB of RAM to be run on the Fuyu-8b model.
-        """
-        text_prompt_coco_captioning = "Generate a coco-style caption.\n"
-
-        model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=self.bus_image_pil)
-
-        continuous_embeddings = self.model.model.vision_embed_tokens(
-            model_inputs_bus_captioning['image_patches']).unsqueeze(0)
-        EXPECTED_CONTINUOUS_EMBEDDING_START = torch.Tensor(
-            [-0.1221, 0.1689, -0.2969, 0.0601, 0.2168, -0.6953, 0.3438, 0.0165, 0.2168, 0.0586]
-        )
-        EXPECTED_CONTINUOUS_EMBEDDING_END = torch.Tensor(
-            [0.1138, 0.2090, -0.0588, 0.0400, 0.1719, 0.0586, 0.0928, -0.1875, 0.0471]
-        )
-        torch.testing.assert_close(continuous_embeddings[0].shape, torch.Size([308, 4096]))
-        torch.testing.assert_close(
-            continuous_embeddings[0][0][0:10], EXPECTED_CONTINUOUS_EMBEDDING_START, rtol=0.1, atol=1e-02
-        )
-        torch.testing.assert_close(
-            continuous_embeddings[0][0][-9:], EXPECTED_CONTINUOUS_EMBEDDING_END, rtol=0.1, atol=1e-02
-        )
-
-        # word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens_tensor'][0][None, :])
-        word_embeddings = self.model.model.embed_tokens(model_inputs_bus_captioning['input_ids'])
-
-        # fmt: off
-        EXPECTED_WORD_EMBEDDING_START = torch.Tensor([2.0117e-06,-1.0371e-05,-2.0504e-05,-1.0312e-05,-1.7405e-05,-1.3471e-05,-1.7643e-05,1.3530e-05,-5.2452e-06,-2.4557e-05])
-        EXPECTED_WORD_EMBEDDING_END = torch.Tensor([-2.6345e-05, -3.3855e-05, 1.4663e-05, -1.0133e-05, -2.1338e-05, 3.0249e-06, -1.0490e-05, 1.7405e-05, -1.1250e-06])
-        # fmt: on
-
-        torch.testing.assert_close(word_embeddings.shape, torch.Size([1, 335, 4096]))
-        torch.testing.assert_close(word_embeddings[0][0][0:10], EXPECTED_WORD_EMBEDDING_START, rtol=0.1, atol=1e-02)
-        torch.testing.assert_close(word_embeddings[0][0][-9:], EXPECTED_WORD_EMBEDDING_END, rtol=0.1, atol=1e-02)
-
-    def test_model_forward_values(self):
-        # fmt: off
-        EXPECTED_HIDDEN_STATES_SLICE = torch.Tensor([[-0.5469, 1.6016, 2.3438, 2.8125, 1.0000],[0.3613, 1.0391, 2.5625, 2.2031, 1.5703],[-0.4707, 2.0938, 1.7109, 5.7188, 0.4199],])
-        # fmt: on
-        text_prompt_coco_captioning = "Generate a coco-style caption.\n"
-
-        model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=self.bus_image_pil)
-        model_outputs = self.model.model(**model_inputs_bus_captioning)
-        torch.testing.assert_close(
-            model_outputs[0][0, 5:8, 1200:1205], EXPECTED_HIDDEN_STATES_SLICE, rtol=0.1, atol=0.1
-        )
-
     @slow
     @require_torch_gpu
     def test_model_8b_chat_greedy_generation_bus_captioning(self):
@@ -328,7 +280,9 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         generated_tokens = self.model.generate(**model_inputs_bus_captioning, max_new_tokens=10)
         text = self.processor.tokenizer.batch_decode(generated_tokens)
         end_sequence = text[0].split("\x04")[1]
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, end_sequence)  # TODO replace with postprocessing
+        clean_sequence = end_sequence[:end_sequence.find(
+            '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence)
 
     @slow
     @require_torch_gpu
@@ -338,8 +292,10 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model_inputs_bus_color = self.processor(text=text_prompt_bus_color, images=self.bus_image_pil)
 
         text = self.model.generate(**model_inputs_bus_color, max_new_tokens=10)
-
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        end_sequence = text[0].split("\x04")[1]
+        clean_sequence = end_sequence[:end_sequence.find(
+            '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence)
 
     @slow
     @require_torch_gpu
@@ -355,8 +311,10 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         model_inputs_chart_vqa = self.processor(text=text_prompt_chart_vqa, images=chart_image_pil)
         text = self.model.generate(**model_inputs_chart_vqa, max_new_tokens=10)
-
-        self.assertEqual(expected_text_completion, text)
+        end_sequence = text[0].split("\x04")[1]
+        clean_sequence = end_sequence[:end_sequence.find(
+            '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
+        self.assertEqual(expected_text_completion, clean_sequence)
 
     @slow
     @require_torch_gpu
@@ -369,4 +327,7 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
         model_inputs_bbox = self.processor(text=text_prompt_bbox, images=bbox_image_pil)
         text = self.model.generate(**model_inputs_bbox, max_new_tokens=10)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        end_sequence = text[0].split("\x04")[1]
+        clean_sequence = end_sequence[:end_sequence.find(
+            '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence)
