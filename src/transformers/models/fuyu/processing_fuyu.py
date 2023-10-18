@@ -13,7 +13,7 @@ from ...image_utils import (
 from ...processing_utils import ProcessorMixin
 from ...utils import is_torch_available, is_vision_available, logging
 
-if is_torch_available and is_vision_available:
+if is_torch_available() and is_vision_available():
     from .image_processing_fuyu import FuyuImageProcessor
 
 
