@@ -58,10 +58,10 @@ come in several checkpoints they each contain a part of each weight of the model
 
 KEYS_TO_MODIFY_MAPPING = {
     "self_attention": "self_attn",
-    "language_model.encoder": "model",
-    "word_embeddings_for_head": "lm_head",
-    "language_model.embedding.word_embeddings": "model.embed_tokens",
-    "vit_encoder.linear_encoder": "model.vision_embed_tokens",
+    "language_model.encoder": "language_model.model",
+    "word_embeddings_for_head": "language_model.model.lm_head",
+    "language_model.embedding.word_embeddings": "language_model.model.embed_tokens",
+    "vit_encoder.linear_encoder": "vision_embed_tokens",
 }
 
 KEYS_TO_REMOVE = {"rotary_emb.inv_freq", "image_patch_projection", "image_patch_projection.weight", "image_patch_projection.bias"}
