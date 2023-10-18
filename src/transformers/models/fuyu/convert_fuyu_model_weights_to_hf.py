@@ -59,7 +59,7 @@ come in several checkpoints they each contain a part of each weight of the model
 KEYS_TO_MODIFY_MAPPING = {
     "self_attention": "self_attn",
     "language_model.encoder": "language_model.model",
-    "word_embeddings_for_head": "language_model.model.lm_head",
+    "word_embeddings_for_head": "language_model.lm_head",
     "language_model.embedding.word_embeddings": "language_model.model.embed_tokens",
     "vit_encoder.linear_encoder": "vision_embed_tokens",
 }
