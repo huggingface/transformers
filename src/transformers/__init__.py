@@ -4100,7 +4100,7 @@ else:
     )
     _import_structure["models.mistral"].extend(
         [
-            "FlaxMistralForCasualLM",
+            "FlaxMistralForCausalLM",
             "FlaxMistralForSequenceClassification",
             "FlaxMistralModel",
             "FlaxMistralPreTrainedModel",
@@ -4308,17 +4308,8 @@ if TYPE_CHECKING:
         AutoProcessor,
         AutoTokenizer,
     )
-    from .models.autoformer import (
-        AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        AutoformerConfig,
-    )
-    from .models.bark import (
-        BarkCoarseConfig,
-        BarkConfig,
-        BarkFineConfig,
-        BarkProcessor,
-        BarkSemanticConfig,
-    )
+    from .models.autoformer import AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoformerConfig
+    from .models.bark import BarkCoarseConfig, BarkConfig, BarkFineConfig, BarkProcessor, BarkSemanticConfig
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
@@ -4456,11 +4447,7 @@ if TYPE_CHECKING:
     from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
     from .models.efficientnet import EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientNetConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
-    from .models.encodec import (
-        ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        EncodecConfig,
-        EncodecFeatureExtractor,
-    )
+    from .models.encodec import ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP, EncodecConfig, EncodecFeatureExtractor
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
@@ -4502,10 +4489,7 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
-    from .models.idefics import (
-        IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        IdeficsConfig,
-    )
+    from .models.idefics import IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP, IdeficsConfig
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -4573,11 +4557,7 @@ if TYPE_CHECKING:
     from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
     from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
     from .models.mt5 import MT5Config
-    from .models.musicgen import (
-        MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        MusicgenConfig,
-        MusicgenDecoderConfig,
-    )
+    from .models.musicgen import MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, MusicgenConfig, MusicgenDecoderConfig
     from .models.mvp import MvpConfig, MvpTokenizer
     from .models.nat import NAT_PRETRAINED_CONFIG_ARCHIVE_MAP, NatConfig
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
@@ -4608,10 +4588,7 @@ if TYPE_CHECKING:
     )
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
-    from .models.pop2piano import (
-        POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Pop2PianoConfig,
-    )
+    from .models.pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -4705,11 +4682,7 @@ if TYPE_CHECKING:
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
     from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
-    from .models.vits import (
-        VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        VitsConfig,
-        VitsTokenizer,
-    )
+    from .models.vits import VITS_PRETRAINED_CONFIG_ARCHIVE_MAP, VitsConfig, VitsTokenizer
     from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5685,11 +5658,7 @@ if TYPE_CHECKING:
             ElectraPreTrainedModel,
             load_tf_weights_in_electra,
         )
-        from .models.encodec import (
-            ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EncodecModel,
-            EncodecPreTrainedModel,
-        )
+        from .models.encodec import ENCODEC_PRETRAINED_MODEL_ARCHIVE_LIST, EncodecModel, EncodecPreTrainedModel
         from .models.encoder_decoder import EncoderDecoderModel
         from .models.ernie import (
             ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6439,17 +6408,8 @@ if TYPE_CHECKING:
             RoFormerPreTrainedModel,
             load_tf_weights_in_roformer,
         )
-        from .models.rwkv import (
-            RWKV_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RwkvForCausalLM,
-            RwkvModel,
-            RwkvPreTrainedModel,
-        )
-        from .models.sam import (
-            SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SamModel,
-            SamPreTrainedModel,
-        )
+        from .models.rwkv import RWKV_PRETRAINED_MODEL_ARCHIVE_LIST, RwkvForCausalLM, RwkvModel, RwkvPreTrainedModel
+        from .models.sam import SAM_PRETRAINED_MODEL_ARCHIVE_LIST, SamModel, SamPreTrainedModel
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SegformerDecodeHead,
@@ -6695,11 +6655,7 @@ if TYPE_CHECKING:
             VitMatteForImageMatting,
             VitMattePreTrainedModel,
         )
-        from .models.vits import (
-            VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VitsModel,
-            VitsPreTrainedModel,
-        )
+        from .models.vits import VITS_PRETRAINED_MODEL_ARCHIVE_LIST, VitsModel, VitsPreTrainedModel
         from .models.vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VivitForVideoClassification,
@@ -7309,11 +7265,7 @@ if TYPE_CHECKING:
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
         )
-        from .models.sam import (
-            TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFSamModel,
-            TFSamPreTrainedModel,
-        )
+        from .models.sam import TF_SAM_PRETRAINED_MODEL_ARCHIVE_LIST, TFSamModel, TFSamPreTrainedModel
         from .models.segformer import (
             TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFSegformerDecodeHead,
