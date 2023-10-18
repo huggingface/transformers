@@ -1,20 +1,12 @@
 import math
-from typing import List, Union
-
-import numpy as np
+from typing import List
 
 from ...image_processing_utils import BaseImageProcessor
-from ...image_transforms import (
-    normalize,
-    pad,
-    resize,
-)
-from ...image_utils import to_numpy_array
 from ...utils import is_torch_available, is_vision_available, logging
 
 
 if is_vision_available():
-    import PIL
+    pass
 
 if is_torch_available():
     import torch
@@ -24,7 +16,8 @@ logger = logging.get_logger(__name__)
 
 class FuyuImageProcessor(BaseImageProcessor):
     """
-    This class should handle the image processing part before the main FuyuForCausalLM. In particular, it should handle:
+    This class should handle the image processing part before the main FuyuForCausalLM. In particular, it should
+    handle:
 
     - Processing Images:
         Taking a batch of images as input. If the images are variable-sized, it resizes them based on the desired patch
@@ -45,7 +38,7 @@ class FuyuImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self,  **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     def get_num_patches(self, img_h: int, img_w: int, patch_dim_h: int, patch_dim_w: int) -> int:

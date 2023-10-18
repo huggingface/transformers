@@ -1,11 +1,14 @@
 import unittest
+
 import numpy as np
 import torch
 
 from transformers import is_vision_available
+
+
 if is_vision_available():
     from PIL import Image
-from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor, AspectRatioPreservingScalingWithPad
+from transformers.models.fuyu.image_processing_fuyu import AspectRatioPreservingScalingWithPad, FuyuImageProcessor
 
 
 class TestFuyuImageProcessor(unittest.TestCase):

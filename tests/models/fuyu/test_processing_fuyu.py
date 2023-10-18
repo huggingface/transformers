@@ -1,19 +1,12 @@
+import io
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available, is_vision_available
-from transformers import FuyuImageProcessor
-from transformers import FuyuProcessor
-from transformers.testing_utils import require_torch_gpu, slow, torch_device
-
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-from ...test_pipeline_mixin import PipelineTesterMixin
-
-from transformers.models.fuyu.processing_fuyu import (
-    construct_full_unpacked_stream,
-    full_unpacked_stream_to_tensor
-)
 import requests
-import io
+
+from transformers import AutoTokenizer, FuyuImageProcessor, FuyuProcessor, is_torch_available, is_vision_available
+from transformers.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
+from transformers.testing_utils import require_torch_gpu, slow
+
 
 if is_vision_available():
     from PIL import Image
@@ -26,8 +19,7 @@ if is_torch_available():
 @require_torch_gpu
 @slow
 class FuyuProcessingTest(unittest.TestCase):  # TODO Which mixins do we add here?
-    """
-    """
+    """ """
 
     def setUp(self):
         pretrained_model_name = "huggingface/pre_release_model"
@@ -50,10 +42,9 @@ class FuyuProcessingTest(unittest.TestCase):  # TODO Which mixins do we add here
         EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS = torch.Tensor([[71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71011, 71019, 1, 128340, 71374, 71389, 120412, 71377, 71835, 71374, 73615, 71375, 71399, 71435, 71122,]]).to(torch.int64)
         # fmt: on
         torch.testing.assert_close(
-            self.one_image_bus_model_inputs["image_patches_indices"], EXPECTED_IMAGE_PATCH_INPUTS)
-        torch.testing.assert_close(
-            self.one_image_bus_model_inputs["input_ids"], EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS
+            self.one_image_bus_model_inputs["image_patches_indices"], EXPECTED_IMAGE_PATCH_INPUTS
         )
+        torch.testing.assert_close(self.one_image_bus_model_inputs["input_ids"], EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS)
 
 
 class TestImageTextProcessingUtils(unittest.TestCase):
@@ -68,13 +59,10 @@ class TestImageTextProcessingUtils(unittest.TestCase):
 
         self.num_real_text_tokens = [[3, 2], [2, 4]]
         # Here the input stream is padded to avoid inconsistencies (current model release matches)
-        self.input_stream = torch.tensor([
-            [[1, 2, 3], [4, 5, 0]],
-            [[6, 7, 0], [8, 9, 10]]
-        ])
+        self.input_stream = torch.tensor([[[1, 2, 3], [4, 5, 0]], [[6, 7, 0], [8, 9, 10]]])
         self.image_tokens = [
             [torch.tensor([1, 2]), torch.tensor([3])],
-            [torch.tensor([4, 5, 6]), torch.tensor([7, 8])]
+            [torch.tensor([4, 5, 6]), torch.tensor([7, 8])],
         ]
 
     def test_full_unpacked_stream_to_tensor(self):
@@ -84,21 +72,16 @@ class TestImageTextProcessingUtils(unittest.TestCase):
             self.fill_value,
             self.batch_size,
             self.new_seq_len,
-            offset=0
+            offset=0,
         )
         EXPECTED_TENSOR = torch.tensor([[1, 2, 3, 4, 0, 0, 0, 0], [5, 6, 7, 8, 9, 10, 0, 0]])
         self.assertTrue(torch.equal(result, EXPECTED_TENSOR))
 
     def test_construct_full_unpacked_stream(self):
         result = construct_full_unpacked_stream(
-            self.num_real_text_tokens,
-            self.input_stream,
-            self.image_tokens,
-            self.batch_size,
-            self.num_sub_sequences
+            self.num_real_text_tokens, self.input_stream, self.image_tokens, self.batch_size, self.num_sub_sequences
         )
-        EXPECTED_UNPACKED_STREAM = [torch.tensor([1, 2, 1, 2, 3]),
-                                    torch.tensor([4, 5, 6, 6, 7])]
+        EXPECTED_UNPACKED_STREAM = [torch.tensor([1, 2, 1, 2, 3]), torch.tensor([4, 5, 6, 6, 7])]
         for i in range(len(result)):
             self.assertTrue(torch.equal(result[i], EXPECTED_UNPACKED_STREAM[i]))
 
@@ -133,5 +116,5 @@ class TestProcessImagesForModelInput(unittest.TestCase):
             image_newline_id=self.image_newline_id,
             variable_sized=self.variable_sized,
         )
-        print(result['images'][0][0])
-        self.assertEqual(result['images'][0][0].shape, torch.Size([3, 64, 64]))
+        print(result["images"][0][0])
+        self.assertEqual(result["images"][0][0].shape, torch.Size([3, 64, 64]))

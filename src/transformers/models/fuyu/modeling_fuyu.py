@@ -155,6 +155,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
     Args:
         config: FuyuConfig
     """
+
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -163,7 +164,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
         # for device placement easyness
         input_embeds = self.language_model.get_input_embeddings()
-        self.input_embeds = self.register_buffer("input_embeds", input_embeds, persistent=False )
+        self.input_embeds = self.register_buffer("input_embeds", input_embeds, persistent=False)
 
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
@@ -320,7 +321,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
-
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,

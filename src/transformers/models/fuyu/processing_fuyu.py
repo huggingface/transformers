@@ -99,7 +99,6 @@ def construct_full_unpacked_stream(
     return all_bi_stream
 
 
-
 def _replace_string_repr_with_token_tags(prompt: str) -> str:
     prompt = prompt.replace(TEXT_REPR_POINT_OPEN, TOKEN_POINT_OPEN_STRING)
     prompt = prompt.replace(TEXT_REPR_POINT_CLOSE, TOKEN_POINT_CLOSE_STRING)
@@ -131,6 +130,7 @@ def _segment_prompt_into_text_token_conversions(prompt: str) -> List:
             (elem, i > 1 and prompt_split[i - 1] in [TOKEN_BBOX_OPEN_STRING, TOKEN_POINT_OPEN_STRING])
         )
     return prompt_text_list
+
 
 def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenizer) -> List[int]:
     """
@@ -272,6 +272,7 @@ def _tokenize_prompts_with_image_and_batch(
     prompts_length_tensor = torch.tensor(prompts_length, dtype=torch.int64)  # , device="cuda")
 
     return prompts_tokens_tensor, prompts_length_tensor
+
 
 def original_to_transformed_h_coords(self, original_coords):
     # apply crop

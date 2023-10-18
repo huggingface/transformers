@@ -28,9 +28,9 @@ FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class FuyuConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an Fuyu
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the
+    This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an
+    Fuyu model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the
     [adept/fuyu-8b-base](https://huggingface.co/adept/fuyu-8b-base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -65,8 +65,7 @@ class FuyuConfig(PretrainedConfig):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-            Whether to tie weight embeddings
+            relevant if `config.is_decoder=True`. Whether to tie weight embeddings
         tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         rope_theta (`float`, *optional*, defaults to 25000.0):
             The base period of the RoPE embeddings.
