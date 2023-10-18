@@ -64,7 +64,7 @@ FUYU_START_DOCSTRING = r"""
 )
 class FuyuPreTrainedModel(PreTrainedModel):
     config_class = FuyuConfig
-
+    base_model_prefix = "fuyu"
     supports_gradient_checkpointing = True
     _no_split_modules = []
     _skip_keys_device_placement = "past_key_values"
@@ -160,12 +160,11 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
     Args:
         config: FuyuConfig
     """
-
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config) # either this or AutoModel
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.input_embeds =  self.language_model.get_input_embeddings()
 
         self.vision_embed_tokens = nn.Linear(
