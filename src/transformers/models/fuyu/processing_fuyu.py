@@ -26,11 +26,6 @@ TEXT_REPR_BBOX_CLOSE = "</box>"
 TEXT_REPR_POINT_OPEN = "<point>"
 TEXT_REPR_POINT_CLOSE = "</point>"
 
-processor = FuyuImageProcessor()
-patchify_image = processor.patchify_image
-
-get_num_patches = processor.get_num_patches
-
 
 def full_unpacked_stream_to_tensor(
     all_bi_tokens_to_place: List[int],
