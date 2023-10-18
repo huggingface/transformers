@@ -14,7 +14,7 @@
 """ PyTorch UnivNetModel model."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
