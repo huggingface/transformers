@@ -30,7 +30,7 @@ SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Speech2TextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Speech2TextModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`Speech2TextModel`]. It is used to instantiate a
     Speech2Text model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Speech2Text
     [facebook/s2t-small-librispeech-asr](https://huggingface.co/facebook/s2t-small-librispeech-asr) architecture.
@@ -41,8 +41,8 @@ class Speech2TextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 10000):
-            Vocabulary size of the Speech2Text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Speech2TextModel`]
+            Vocabulary size of the Speech2Text model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`Speech2TextModel`]
         d_model (`int`, *optional*, defaults to 256):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -91,13 +91,13 @@ class Speech2TextConfig(PretrainedConfig):
         max_source_positions (`int`, *optional*, defaults to 6000):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
         max_target_positions (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically, set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically, set this to something
+            large just in case (e.g., 512 or 1024 or 2048).
         num_conv_layers (`int`, *optional*, defaults to 2):
             Number of 1D convolutional layers in the conv module.
         conv_kernel_sizes (`Tuple[int]`, *optional*, defaults to `(5, 5)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the conv module. The length
-            of `conv_kernel_sizes` has to match `num_conv_layers`.
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the conv module. The
+            length of `conv_kernel_sizes` has to match `num_conv_layers`.
         conv_channels (`int`, *optional*, defaults to 1024):
             An integer defining the number of output channels of each convolution layers except the final one in the
             conv module.
