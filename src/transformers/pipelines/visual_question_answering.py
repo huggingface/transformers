@@ -1,7 +1,5 @@
 from typing import Union
 
-from transformers import InstructBlipProcessor
-
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -56,6 +54,27 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES)
+
+        # InstructBlip uses a multimodal processor, which we need to load manually:
+        self._is_instruct_blip = "InstructBlipForConditionalGeneration" in getattr(
+            self.model.config, "architectures", []
+        )
+        if self._is_instruct_blip:
+            self.processor = kwargs.pop("processor", None)
+            if self.processor is None:
+                self.processor = self._load_instruct_blip_processor()
+
+    def _load_instruct_blip_processor(self):
+        from transformers import InstructBlipProcessor
+
+        checkpoint = getattr(self.model.config, "_name_or_path")
+        if checkpoint is None:
+            raise ValueError(
+                "Unknown checkpoint. You must manually specify the InstructBlipProcessor using "
+                "the `processor` kwarg"
+            )
+        print(f"Loaded InstructBlipProcessor from {checkpoint}")
+        return InstructBlipProcessor.from_pretrained(checkpoint)
 
     def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, timeout=None, **kwargs):
         preprocess_params, postprocess_params = {}, {}
@@ -118,14 +137,17 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def preprocess(self, inputs, padding=False, truncation=False, timeout=None):
         image = load_image(inputs["image"], timeout=timeout)
-        if isinstance(self.image_processor, InstructBlipProcessor):
-            return self.image_processor(images=image, text=inputs["question"], return_tensors=self.framework)
 
-        model_inputs = self.tokenizer(
-            inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
-        )
-        image_features = self.image_processor(images=image, return_tensors=self.framework)
-        model_inputs.update(image_features)
+        if not self._is_instruct_blip:
+            model_inputs = self.tokenizer(
+                inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
+            )
+            image_features = self.image_processor(images=image, return_tensors=self.framework)
+            model_inputs.update(image_features)
+        else:
+            # InstructBlip processes the image and text simultaneously:
+            model_inputs = self.processor(images=image, text=inputs["question"], return_tensors=self.framework)
+
         return model_inputs
 
     def _forward(self, model_inputs):
