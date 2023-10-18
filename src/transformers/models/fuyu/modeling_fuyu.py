@@ -166,6 +166,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config) # either this or AutoModel
+        self.input_embeds =  self.language_model.get_input_embeddings()
+
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
         )
@@ -175,10 +177,10 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.language_model.embed_tokens
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.language_model.embed_tokens = value
+        self.language_model.set_input_embeddings(value)
 
     def gather_continuous_embeddings(
         self,
@@ -221,7 +223,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         return output_embeddings
 
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, image_patches=None, image_patches_indices=None, **kwargs
     ):
@@ -256,6 +257,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             }
         )
         return model_inputs
+    
+
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -304,7 +307,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
-            inputs_embeds = self.language_model.embed_tokens(input_ids)
+            inputs_embeds = self.input_embeds(input_ids)
             if image_patches is not None and past_key_values is None:
                 patch_embeddings = self.vision_embed_tokens(image_patches)
                 inputs_embeds = self.gather_continuous_embeddings(
