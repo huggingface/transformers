@@ -43,31 +43,18 @@ class Speech2TextConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 10000):
             Vocabulary size of the Speech2Text model. Defines the number of different tokens that can be represented
             by the `inputs_ids` passed when calling [`Speech2TextModel`]
-        d_model (`int`, *optional*, defaults to 256):
-            Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
             Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 12):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 4):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 4):
-            Number of attention heads for each attention layer in the Transformer decoder.
         encoder_ffn_dim (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 4):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_layers (`int`, *optional*, defaults to 6):
+            Number of decoder layers.
         decoder_ffn_dim (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        decoder_attention_heads (`int`, *optional*, defaults to 4):
+            Number of attention heads for each attention layer in the Transformer decoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](https://arxiv.org/abs/1909.11556)
             for more details.
@@ -78,6 +65,19 @@ class Speech2TextConfig(PretrainedConfig):
             Whether the model should return the last key/values attentions (not used by all models).
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is set up as an encoder-decoder architecture for sequence-to-sequence tasks.
+        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        d_model (`int`, *optional*, defaults to 256):
+            Dimensionality of the layers and the pooler layer.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         decoder_start_token_id (`int`, *optional*, defaults to 2):
             The initial token ID of the decoder when decoding sequences.
         scale_embedding (`bool`, *optional*, defaults to `True`):
