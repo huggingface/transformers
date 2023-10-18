@@ -2498,9 +2498,6 @@ class GenerationMixin:
                     break
 
             # prepare model inputs
-            import pdb
-
-            pdb.set_trace()
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # forward pass to get next token
@@ -4440,7 +4437,6 @@ class GenerationMixin:
             # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
             # need access to the assistant cache to secure strong speedups.
             candidate_input_ids = input_ids
-            # import pdb; pdb.set_trace()
             assistant_attention_mask = model_kwargs.get("attention_mask", None)
             if assistant_attention_mask is not None:
                 assistant_attention_mask = torch.cat(
