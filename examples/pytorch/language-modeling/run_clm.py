@@ -132,7 +132,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
         },
@@ -151,7 +151,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded."
+                "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded. "
                 "set True will benefit LLM loading time and RAM consumption."
             )
         },
@@ -424,7 +424,7 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, **tokenizer_kwargs)
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
@@ -506,7 +506,7 @@ def main():
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warning(
-                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model "
                 f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
         block_size = min(data_args.block_size, tokenizer.model_max_length)

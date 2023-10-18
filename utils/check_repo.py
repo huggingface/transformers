@@ -234,6 +234,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "OpenAIGPTDoubleHeadsModel",
     "OwlViTTextModel",
     "OwlViTVisionModel",
+    "Owlv2TextModel",
+    "Owlv2VisionModel",
     "OwlViTForObjectDetection",
     "RagModel",
     "RagSequenceForGeneration",

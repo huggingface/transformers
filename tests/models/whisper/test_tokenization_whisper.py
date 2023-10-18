@@ -376,7 +376,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     def test_vocab_size(self):
         self.assertEqual(self.tokenizer.vocab_size, 50257)
 
-    # Copied from transformers.tests.speech_to_test.test_tokenization_speech_to_text.py
+    # Copied from tests.models.speech_to_text.test_tokenization_speech_to_text.SpeechToTextTokenizerMultilinguialTest.test_tokenizer_decode_ignores_language_codes
     def test_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(ES_CODE, self.tokenizer.all_special_ids)
         generated_ids = [ES_CODE, 4, 1601, 47, 7647, 2]
