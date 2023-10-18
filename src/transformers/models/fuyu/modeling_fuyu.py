@@ -264,7 +264,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
-            inputs_embeds = self.language_model.get_input_embeddings(input_ids)
+            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             if image_patches is not None and past_key_values is None:
                 patch_embeddings = self.vision_embed_tokens(image_patches.to(self.vision_embed_tokens.weight.dtype))
                 inputs_embeds = self.gather_continuous_embeddings(
