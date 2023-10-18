@@ -521,13 +521,11 @@ class FalconLanguageGenerationTest(unittest.TestCase):
         test_text = "A sequence: 1, 2"  # should generate the rest of the sequence
 
         unpadded_inputs = tokenizer([test_text], return_tensors="pt").to("cuda:0")
-        unpadded_inputs.pop("token_type_ids")
         unpadded_gen_out = model.generate(**unpadded_inputs, max_new_tokens=20)
         unpadded_gen_text = tokenizer.batch_decode(unpadded_gen_out, skip_special_tokens=True)
 
         dummy_text = "This is a longer text " * 2  # forces left-padding on `test_text`
         padded_inputs = tokenizer([test_text, dummy_text], return_tensors="pt", padding=True).to("cuda:0")
-        padded_inputs.pop("token_type_ids")
         padded_gen_out = model.generate(**padded_inputs, max_new_tokens=20)
         padded_gen_text = tokenizer.batch_decode(padded_gen_out, skip_special_tokens=True)
 

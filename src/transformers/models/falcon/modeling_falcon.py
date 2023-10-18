@@ -35,13 +35,13 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_available,
+    is_flash_attn_2_available,
     logging,
 )
 from .configuration_falcon import FalconConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
@@ -606,7 +606,7 @@ class FalconFlashAttention2(FalconAttention):
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 
-        attn_dropout = self.attention_dropout if self.training else 0.0
+        attn_dropout = self.config.attention_dropout if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need

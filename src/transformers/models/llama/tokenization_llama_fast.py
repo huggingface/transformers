@@ -98,7 +98,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to add an `bos_token` at the start of sequences.
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
-        use_default_system_prompt (`bool`, *optional*, defaults to `True`):
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
     """
 
@@ -118,7 +118,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         add_bos_token=True,
         add_eos_token=False,
-        use_default_system_prompt=True,
+        use_default_system_prompt=False,
         **kwargs,
     ):
         super().__init__(
@@ -217,8 +217,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         The output should look something like:
 
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
         <bos>[INST] Prompt [/INST]
+
+        The reference for this chat template is [this code
+        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
+        in the original repository.
         """
 
         template = (
