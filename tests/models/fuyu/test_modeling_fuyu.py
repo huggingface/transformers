@@ -259,6 +259,8 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     Currently, all these tests depend on a value of max_tokens_to_generate of 10.
     """
 
+    all_model_classes = [("FuyuForCausalLM")]
+
     def setUp(self):
         self.pretrained_model_name = "huggingface/new_model_release_weights"
         tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name)
