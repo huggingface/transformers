@@ -171,6 +171,31 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
         self.assertEqual(outputs, [[{"answer": "two"}]] * 2)
 
+    @slow
+    @require_torch
+    @require_torch_gpu
+    def test_large_model_pt_instructblip(self):
+        vqa_pipeline = pipeline(
+            "visual-question-answering",
+            model="Salesforce/instructblip-flan-t5-xl",
+            model_kwargs={"torch_dtype": torch.float16},
+            device=0,
+        )
+        self.assertEqual(vqa_pipeline.model.device, torch.device(0))
+        self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
+
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        question = "Question: how many cats are there? Answer:"
+
+        outputs = vqa_pipeline(image=image, question=question)
+        self.assertEqual(outputs, [{"answer": "2"}])
+
+        outputs = vqa_pipeline({"image": image, "question": question})
+        self.assertEqual(outputs, [{"answer": "2"}])
+
+        outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
+        self.assertEqual(outputs, [[{"answer": "2"}]] * 2)
+
     @require_tf
     @unittest.skip("Visual question answering not implemented in TF")
     def test_small_model_tf(self):
