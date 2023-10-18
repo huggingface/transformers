@@ -270,8 +270,8 @@ def _tokenize_prompts_with_image_and_batch(
             prompt_tokens.extend([tokenizer.vocab["|ENDOFTEXT|"]] * padding_size)
 
     # Now we are in a structured format, we can convert to tensors.
-    prompts_tokens_tensor = torch.tensor(prompts_tokens, dtype=torch.int64)  # , device="cuda")
-    prompts_length_tensor = torch.tensor(prompts_length, dtype=torch.int64)  # , device="cuda")
+    prompts_tokens_tensor = torch.tensor(prompts_tokens, dtype=torch.int64)
+    prompts_length_tensor = torch.tensor(prompts_length, dtype=torch.int64)
 
     return prompts_tokens_tensor, prompts_length_tensor
 

@@ -42,9 +42,13 @@ class FuyuImageProcessor(BaseImageProcessor):
 
     """
 
-    # TODO make patchify logic consistent with FuyuViTModel
-
-    model_input_names = ["pixel_values"]
+    model_input_names = [
+        "images",
+        "image_input_ids",
+        "image_patches",
+        "image_patch_indices_per_batch",
+        "image_patch_indices_per_subsequence",
+    ]
 
     def __init__(self, target_height=1080, target_width=1920, padding_value=1.0, padding_mode: str = "constant"):
         self.target_width = target_width
