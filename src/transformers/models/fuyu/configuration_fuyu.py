@@ -28,7 +28,7 @@ FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class FuyuConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FuyuModel`]. It is used to instantiate an Fuyu
+    This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an Fuyu
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the
     [adept/fuyu-8b-base](https://huggingface.co/adept/fuyu-8b-base).
@@ -40,7 +40,7 @@ class FuyuConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 262144):
             Vocabulary size of the Fuyu model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`FuyuModel`]
+            `inputs_ids` passed when calling [`FuyuForCausalLM`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 16384):
@@ -93,7 +93,7 @@ class FuyuConfig(PretrainedConfig):
         text_config (`<fill_type>`, *optional*): <fill_docstring>
 
     ```python
-    >>> from transformers import FuyuModel, FuyuConfig
+    >>> from transformers import FuyuConfig
 
     >>> # Initializing a Fuyu fuyu-7b style configuration
     >>> configuration = FuyuConfig()

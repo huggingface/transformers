@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 class FuyuImageProcessor(BaseImageProcessor):
     """
-    This class should handle the image processing part before the main FuyuModel. In particular, it should handle:
+    This class should handle the image processing part before the main FuyuForCausalLM. In particular, it should handle:
 
     - Processing Images:
         Taking a batch of images as input. If the images are variable-sized, it resizes them based on the desired patch

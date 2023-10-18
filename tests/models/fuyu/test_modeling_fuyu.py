@@ -2,7 +2,7 @@ import unittest
 
 import requests
 
-from transformers import AutoTokenizer, FuyuConfig, FuyuForCausalLM, FuyuModel, is_torch_available, is_vision_available
+from transformers import AutoTokenizer, FuyuConfig, FuyuForCausalLM, is_torch_available, is_vision_available
 from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
 from transformers.models.fuyu.processing_fuyu import FuyuProcessor
 from transformers.testing_utils import require_torch_gpu, slow, torch_device
@@ -120,7 +120,7 @@ class FuyuModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = FuyuModel(config=config)
+        model = FuyuForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -140,7 +140,7 @@ class FuyuModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = FuyuModel(config)
+        model = FuyuForCausalLM(config)
         model.to(torch_device)
         model.eval()
         result = model(

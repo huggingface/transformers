@@ -61,11 +61,11 @@ tar -xvf 8b_base_model_release.tar
 Then, model can be loaded via:
 
 ```py 
-from transformers import FuyuConfig, FuyuModel
+from transformers import FuyuConfig, FuyuForCausalLM
 
 
 model_config = FuyuConfig()
-model = FuyuModel(model_config).from_pretrained('/output/path')
+model = FuyuForCausalLM(model_config).from_pretrained('/output/path')
 
 
 ```
@@ -108,17 +108,7 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. T
 
 [[autodoc]] FuyuConfig
 
-## FuyuModel
-
-[[autodoc]] FuyuModel
-    - forward
-
 ## FuyuForCausalLM
 
 [[autodoc]] FuyuForCausalLM
-    - forward
-
-## FuyuForSequenceClassification
-
-[[autodoc]] FuyuForSequenceClassification
     - forward

@@ -3620,13 +3620,6 @@ class FuyuForCausalLM(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-class FuyuModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class FuyuPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
