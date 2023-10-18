@@ -307,6 +307,11 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
 
+    @slow
+    def test_add_special_tokens(self):
+        # This test takes a long time for Whisper, so it's marked as slow for this model
+        super().test_add_special_tokens()
+
 
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "openai/whisper-small.en"
