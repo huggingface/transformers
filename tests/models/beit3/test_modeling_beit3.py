@@ -31,6 +31,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ..align.test_modeling_align import prepare_img
 
+
 if is_torch_available():
     import torch
 
@@ -46,32 +47,32 @@ if is_torch_available():
 
 class Beit3ModelTester:
     def __init__(
-            self,
-            hidden_size=37,
-            attention_heads=1,
-            intermediate_size=2,
-            num_hidden_layers=1,
-            normalize_before=True,
-            activation_fn="gelu",
-            dropout=0.0,
-            drop_path_rate=0.0,
-            attention_dropout=0.0,
-            activation_dropout=0.0,
-            deepnorm=False,
-            subln=True,
-            bert_init=False,
-            multiway=True,
-            max_source_positions=16,
-            layernorm_eps=1e-5,
-            vocab_size=50,
-            image_size=16,
-            patch_size=2,
-            num_channels=3,
-            num_labels=2,
-            batch_size=1,
-            seq_length=7,
-            use_labels=True,
-            is_training=True,
+        self,
+        hidden_size=37,
+        attention_heads=1,
+        intermediate_size=2,
+        num_hidden_layers=1,
+        normalize_before=True,
+        activation_fn="gelu",
+        dropout=0.0,
+        drop_path_rate=0.0,
+        attention_dropout=0.0,
+        activation_dropout=0.0,
+        deepnorm=False,
+        subln=True,
+        bert_init=False,
+        multiway=True,
+        max_source_positions=16,
+        layernorm_eps=1e-5,
+        vocab_size=50,
+        image_size=16,
+        patch_size=2,
+        num_channels=3,
+        num_labels=2,
+        batch_size=1,
+        seq_length=7,
+        use_labels=True,
+        is_training=True,
     ):
         self.hidden_size = hidden_size
         self.attention_heads = attention_heads
@@ -422,7 +423,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
-                                tuple_object.values(), dict_object.values()
+                            tuple_object.values(), dict_object.values()
                         ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
@@ -522,8 +523,9 @@ class BeitModelIntegrationTest(unittest.TestCase):
             attention_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 3129])
-        torch.testing.assert_allclose(output.logits.detach()[:, :3],
-                                      torch.tensor([[-10.862484, -12.388088, -7.6599636]]))
+        torch.testing.assert_allclose(
+            output.logits.detach()[:, :3], torch.tensor([[-10.862484, -12.388088, -7.6599636]])
+        )
 
     @slow
     def test_inference_beit3_visual_reasoning(self):
