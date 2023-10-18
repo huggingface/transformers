@@ -101,7 +101,7 @@ BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, 2 ,num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        text_padding_mask (`torch.LongTensor` of shape `({0})`):
+        attention_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
@@ -199,7 +199,7 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        text_padding_mask (`torch.LongTensor` of shape `({0})`):
+        attention_mask (`torch.LongTensor` of shape `({0})`):
             Padding mask for input tokens , of same shape as `input_ids`
 
             - 1 indicates the token is **not masked**,
@@ -263,16 +263,16 @@ class Beit3MultiwayFeedForwardNetwork(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, split_position: int = -1):
         if split_position == -1:
-            return self.text(hidden_states)
-        if split_position == 0:
             return self.image(hidden_states)
-        text_hidden, image_hidden = torch.split(
+        if split_position == 0:
+            return self.text(hidden_states)
+        image_hidden, text_hidden = torch.split(
             hidden_states,
             [split_position, hidden_states.size(self.dim) - split_position],
             dim=self.dim,
         )
-        text_out, image_out = self.text(text_hidden), self.image(image_hidden)
-        return torch.cat([text_out, image_out], dim=self.dim)
+        image_out, text_out = self.image(image_hidden), self.text(text_hidden)
+        return torch.cat([image_out, text_out], dim=self.dim)
 
 
 class Beit3AttentionLinear(nn.Module):
@@ -283,16 +283,16 @@ class Beit3AttentionLinear(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, split_position: int = -1):
         if split_position == -1:
-            return self.text(hidden_states)
-        if split_position == 0:
             return self.image(hidden_states)
-        text_hidden, image_hidden = torch.split(
+        if split_position == 0:
+            return self.text(hidden_states)
+        image_hidden, text_hidden = torch.split(
             hidden_states,
             [split_position, hidden_states.size(1) - split_position],
             dim=1,
         )
-        text_hidden, image_hidden = self.text(text_hidden), self.image(image_hidden)
-        return torch.cat([text_hidden, image_hidden], dim=1)
+        image_hidden, text_hidden = self.image(image_hidden), self.text(text_hidden)
+        return torch.cat([image_hidden, text_hidden], dim=1)
 
 
 class Beit3LayerNorm(nn.Module):
@@ -303,19 +303,19 @@ class Beit3LayerNorm(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, split_position: int = -1):
         if split_position == -1:
-            return self.text(hidden_states)
-
-        if split_position == 0:
             return self.image(hidden_states)
 
-        text_hidden, image_hidden = torch.split(
+        if split_position == 0:
+            return self.text(hidden_states)
+
+        image_hidden, text_hidden = torch.split(
             hidden_states,
             [split_position, hidden_states.size(1) - split_position],
             dim=1,
         )
         text_hidden = self.text(text_hidden)
         image_hidden = self.image(image_hidden)
-        hidden_states = torch.cat([text_hidden, image_hidden], dim=1)
+        hidden_states = torch.cat([image_hidden, text_hidden], dim=1)
         return hidden_states
 
 
@@ -328,7 +328,7 @@ class Beit3PositionEmbeddings(nn.Module):
 
         # being consistent with original implementation with Fairseq, which starts from 2 for position embedding
         self.image = nn.Embedding(self.num_patches + 2, config.hidden_size)
-        self.text = nn.Embedding(config.max_source_positions, config.hidden_size)
+        self.text = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, text_end_position: int, multiway_split_position: int = -1):
         if text_end_position is None:
@@ -339,7 +339,7 @@ class Beit3PositionEmbeddings(nn.Module):
             return self.image(positions)
         if multiway_split_position == 0:
             return self.text(positions)
-        text_hidden, image_hidden = torch.split(
+        image_hidden, text_hidden = torch.split(
             hidden_states,
             [multiway_split_position, hidden_states.size(1) - multiway_split_position],
             dim=1,
@@ -351,8 +351,8 @@ class Beit3PositionEmbeddings(nn.Module):
             text_positions = text_end_position
             image_positions = text_end_position
 
-        text_representations, image_representatations = self.image(text_positions), self.text(image_positions)
-        return torch.cat([text_representations, image_representatations], dim=1)
+        image_representatations, text_representations = self.image(image_positions), self.text(text_positions)
+        return torch.cat([image_representatations, text_representations], dim=1)
 
 
 class Beit3VisionEmbedding(nn.Module):
@@ -597,8 +597,6 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
             hidden_states, attention_weights = output
         else:
             hidden_states = output[0]
-        print(output_attentions)
-        print(hidden_states)
         hidden_states = self.dropout_module(hidden_states)
 
         hidden_states = self.residual_connection(hidden_states, residual)
@@ -787,6 +785,11 @@ class Beit3Model(Beit3PreTrainedModel):
             return_dict=return_dict,
         )
 
+        if not return_dict:
+            outputs = outputs + (multiway_split_position,)
+        else:
+            outputs["multiway_split_position"] = multiway_split_position
+
         return outputs
 
 
@@ -843,7 +846,7 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         >>> output = model(
         ...     input_ids=torch.tensor(input["input_ids"]),
         ...     pixel_values=pixel_values,
-        ...     text_padding_mask=torch.ones(input["input_ids"].shape),
+        ...     attention_mask=torch.ones(input["input_ids"].shape),
         ... )
         >>> list(output.logits.shape)
         [1, 2]
@@ -875,10 +878,13 @@ class Beit3ForVisualReasoning(Beit3PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
-        text_seq_length = input_ids.size()[1]
+        if not return_dict:
+            multiway_split_position = outputs[-1]
+        else:
+            multiway_split_position = outputs["multiway_split_position"]
 
         vision_cls = last_hidden_state[:, 0, :]
-        language_cls = last_hidden_state[:, text_seq_length, :]
+        language_cls = last_hidden_state[:, multiway_split_position, :]
         cls_rep = torch.cat((vision_cls, language_cls), dim=-1)
         vision_cls_rep, language_cls_rep = torch.split(cls_rep, split_size_or_sections=[batch_size, batch_size], dim=0)
         cls_rep = torch.cat((vision_cls_rep, language_cls_rep), dim=-1)
@@ -923,12 +929,12 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
     @add_start_docstrings_to_model_forward(BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = True,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+            self,
+            pixel_values: Optional[torch.FloatTensor] = None,
+            output_hidden_states: Optional[bool] = True,
+            output_attentions: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[Any], ImageClassifierOutput]:
         r"""
         Returns:
@@ -1071,7 +1077,7 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         >>> output = model(
         ...     input_ids=torch.tensor([input_tokens]),
         ...     pixel_values=torch.tensor(input["pixel_values"]),
-        ...     text_padding_mask=torch.zeros(language_masked_pos.shape),
+        ...     attention_mask=torch.zeros(language_masked_pos.shape),
         ...     language_masked_pos=language_masked_pos,
         ... )
         >>> processor.tokenizer.decode([np.argmax(output.logits.cpu().detach().numpy())])

@@ -31,7 +31,6 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ..align.test_modeling_align import prepare_img
 
-
 if is_torch_available():
     import torch
 
@@ -47,32 +46,32 @@ if is_torch_available():
 
 class Beit3ModelTester:
     def __init__(
-        self,
-        hidden_size=37,
-        attention_heads=1,
-        intermediate_size=2,
-        num_hidden_layers=1,
-        normalize_before=True,
-        activation_fn="gelu",
-        dropout=0.0,
-        drop_path_rate=0.0,
-        attention_dropout=0.0,
-        activation_dropout=0.0,
-        deepnorm=False,
-        subln=True,
-        bert_init=False,
-        multiway=True,
-        max_source_positions=16,
-        layernorm_eps=1e-5,
-        vocab_size=50,
-        image_size=16,
-        patch_size=2,
-        num_channels=3,
-        num_labels=2,
-        batch_size=1,
-        seq_length=7,
-        use_labels=True,
-        is_training=True,
+            self,
+            hidden_size=37,
+            attention_heads=1,
+            intermediate_size=2,
+            num_hidden_layers=1,
+            normalize_before=True,
+            activation_fn="gelu",
+            dropout=0.0,
+            drop_path_rate=0.0,
+            attention_dropout=0.0,
+            activation_dropout=0.0,
+            deepnorm=False,
+            subln=True,
+            bert_init=False,
+            multiway=True,
+            max_source_positions=16,
+            layernorm_eps=1e-5,
+            vocab_size=50,
+            image_size=16,
+            patch_size=2,
+            num_channels=3,
+            num_labels=2,
+            batch_size=1,
+            seq_length=7,
+            use_labels=True,
+            is_training=True,
     ):
         self.hidden_size = hidden_size
         self.attention_heads = attention_heads
@@ -242,6 +241,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_inputs_embeds = False
     test_head_masking = False
     has_attentions = False
+
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict_dup = inputs_dict.copy()
         inputs_dict_to_return = None
@@ -422,7 +422,7 @@ class Beit3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
-                            tuple_object.values(), dict_object.values()
+                                tuple_object.values(), dict_object.values()
                         ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
@@ -500,9 +500,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         # forward pass
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
         assert output.logits.shape == torch.Size([1, 1000])
-        torch.testing.assert_allclose(
-            output.logits.detach()[:, :3], torch.tensor([[-0.260473, -0.420061, -0.492118]]), rtol=1e-05
-        )
+        torch.testing.assert_allclose(output.logits.detach()[:, :3], torch.tensor([[-0.260473, -0.420061, -0.492118]]))
 
     @slow
     def test_inference_beit3_vqa(self):
@@ -521,12 +519,11 @@ class BeitModelIntegrationTest(unittest.TestCase):
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=torch.tensor(input["pixel_values"]),
-            text_padding_mask=torch.ones(input["input_ids"].shape),
+            attention_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 3129])
-        torch.testing.assert_allclose(
-            output.logits.detach()[:, :3], torch.tensor([[-10.862484, -12.388088, -7.6599636]]), rtol=1e-05
-        )
+        torch.testing.assert_allclose(output.logits.detach()[:, :3],
+                                      torch.tensor([[-10.862484, -12.388088, -7.6599636]]))
 
     @slow
     def test_inference_beit3_visual_reasoning(self):
@@ -547,10 +544,10 @@ class BeitModelIntegrationTest(unittest.TestCase):
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=pixel_values,
-            text_padding_mask=torch.ones(input["input_ids"].shape),
+            attention_mask=torch.ones(input["input_ids"].shape),
         )
         assert output.logits.shape == torch.Size([1, 2])
-        torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[6.593818, -6.582055]]), rtol=1e-05)
+        torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[6.593818, -6.582055]]))
 
     @slow
     def test_inference_beit3_for_image_captioning(self):
@@ -571,13 +568,11 @@ class BeitModelIntegrationTest(unittest.TestCase):
         output = model(
             input_ids=torch.tensor([input_tokens]),
             pixel_values=torch.tensor(input["pixel_values"]),
-            text_padding_mask=torch.zeros(language_masked_pos.shape),
+            attention_mask=torch.zeros(language_masked_pos.shape),
             language_masked_pos=language_masked_pos,
         )
         assert output.logits.shape == torch.Size([1, 64010])
-        torch.testing.assert_allclose(
-            output.logits.detach()[0, :3], torch.tensor([-2.697914, -2.697912, -2.645459]), rtol=1e-05
-        )
+        torch.testing.assert_allclose(output.logits.detach()[0, :3], torch.tensor([-2.697914, -2.697912, -2.645459]))
 
     @slow
     def test_inference_beit3_for_image_text_retrieval(self):

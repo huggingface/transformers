@@ -37,7 +37,6 @@ from transformers import (
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
-
 model_type_to_class_mapping = {
     "image_classification": Beit3ForImageClassification,
     "vqa": Beit3ForQuestionAnswering,
@@ -53,12 +52,13 @@ rename_key_mappings = {
     "k_proj": "key_proj",
     "q_proj": "query_proj",
     "v_proj": "value_proj",
-    "A": "text",
-    "B": "image",
+    "A": "image",
+    "B": "text",
     "layer_norm": "fc_norm",
     "self_attn_fc_norm": "self_attn_layer_norm",
     "final_fc_norm": "final_layer_norm",
     "first": "first",
+    "vision_embedding.proj": "vision_embedding.projection",
 }
 
 
@@ -81,16 +81,17 @@ def get_id2label_for_vqa():
 
 def get_base_config_image_classification():
     id2label, label2id = get_id2label_for_imagenet_1k()
-    return Beit3Config(hidden_size=768 * 4, num_labels=1000, id2label=id2label, label2id=label2id)
+    return Beit3Config(hidden_size=768, num_labels=1000, id2label=id2label, label2id=label2id,
+                       intermediate_size=768 * 4)
 
 
 def get_large_config_image_classification():
     id2label, label2id = get_id2label_for_imagenet_1k()
     return Beit3Config(
-        embed_dim=1024,
+        hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        hidden_size=1024 * 4,
+        intermediate_size=1024 * 4,
         num_labels=1000,
         id2label=id2label,
         label2id=label2id,
@@ -99,18 +100,19 @@ def get_large_config_image_classification():
 
 def get_base_config_vqa(img_size):
     id2label, label2id = get_id2label_for_vqa()
-    return Beit3Config(hidden_size=768 * 4, num_labels=3129, img_size=img_size, id2label=id2label, label2id=label2id)
+    return Beit3Config(intermediate_size=768 * 4, num_labels=3129, image_size=img_size, id2label=id2label,
+                       label2id=label2id)
 
 
 def get_large_config_vqa(img_size):
     id2label, label2id = get_id2label_for_vqa()
     return Beit3Config(
-        embed_dim=1024,
+        hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        hidden_size=1024 * 4,
+        intermediate_size=1024 * 4,
         num_labels=3129,
-        img_size=img_size,
+        image_size=img_size,
         id2label=id2label,
         label2id=label2id,
     )
@@ -121,9 +123,9 @@ def get_base_config_visual_reasoning(img_size):
     label2id = {v: k for k, v in id2label.items()}
 
     return Beit3Config(
-        hidden_size=768 * 4,
+        intermediate_size=768 * 4,
         num_labels=2,
-        img_size=img_size,
+        image_size=img_size,
         normalize_before=True,
         encoder_normalize_before=True,
         id2label=id2label,
@@ -135,12 +137,12 @@ def get_large_config_visual_reasoning(img_size):
     id2label = {0: "False", 1: "True"}
     label2id = {v: k for k, v in id2label.items()}
     return Beit3Config(
-        embed_dim=1024,
+        hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        hidden_size=1024 * 4,
+        intermediate_size=1024 * 4,
         num_labels=2,
-        img_size=img_size,
+        image_size=img_size,
         normalize_before=True,
         encoder_normalize_before=True,
         id2label=id2label,
@@ -150,18 +152,19 @@ def get_large_config_visual_reasoning(img_size):
 
 def get_base_config_captioning(img_size):
     return Beit3Config(
-        hidden_size=768 * 4, num_labels=2, img_size=img_size, normalize_before=True, encoder_normalize_before=True
+        intermediate_size=768 * 4, num_labels=2, image_size=img_size, normalize_before=True,
+        encoder_normalize_before=True
     )
 
 
 def get_large_config_captioning(img_size):
     return Beit3Config(
-        embed_dim=1024,
+        hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        hidden_size=1024 * 4,
+        intermediate_size=1024 * 4,
         num_labels=2,
-        img_size=img_size,
+        image_size=img_size,
         normalize_before=True,
         encoder_normalize_before=True,
     )
@@ -169,18 +172,19 @@ def get_large_config_captioning(img_size):
 
 def get_base_config_image_text_retrieval(img_size):
     return Beit3Config(
-        hidden_size=768 * 4, num_labels=2, img_size=img_size, normalize_before=True, encoder_normalize_before=True
+        intermediate_size=768 * 4, num_labels=2, image_size=img_size, normalize_before=True,
+        encoder_normalize_before=True
     )
 
 
 def get_large_config_image_text_retrieval(img_size):
     return Beit3Config(
-        embed_dim=1024,
+        hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        hidden_size=1024 * 4,
+        intermediate_size=1024 * 4,
         num_labels=2,
-        img_size=img_size,
+        image_size=img_size,
         normalize_before=True,
         encoder_normalize_before=True,
     )
@@ -277,7 +281,7 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=torch.tensor(input["pixel_values"]),
-            text_padding_mask=torch.ones(input["input_ids"].shape),
+            attention_mask=torch.ones(input["input_ids"].shape),
         )
         if validate_logits:
             assert output.logits.shape == torch.Size([1, 3129])
@@ -291,7 +295,7 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=pixel_values,
-            text_padding_mask=torch.ones(input["input_ids"].shape),
+            attention_mask=torch.ones(input["input_ids"].shape),
         )
         if validate_logits:
             assert output.logits.shape == torch.Size([1, 2])
@@ -305,7 +309,7 @@ def convert_beit3_checkpoint(checkpoint_url, pytorch_dump_folder_path, beit3_mod
         output = model(
             input_ids=torch.tensor(input["input_ids"]),
             pixel_values=torch.tensor(input["pixel_values"]),
-            text_padding_mask=torch.ones(input["input_ids"].shape),
+            attention_mask=torch.ones(input["input_ids"].shape),
             language_masked_pos=language_masked_pos,
         )
         if validate_logits:
@@ -347,7 +351,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         help="Beit3 model type, it has to be one of image_classification, vqa, visual_reasoning,"
-        "image_captioning,image_text_retrieval",
+             "image_captioning,image_text_retrieval",
     )
     parser.add_argument(
         "--validate_logits",
