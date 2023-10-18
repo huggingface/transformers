@@ -68,7 +68,7 @@ PATCHTSMIXER_START_DOCSTRING = r"""
 
 PATCHTSMIXER_INPUTS_DOCSTRING = r"""
     Parameters:
-        context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
+        past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
             Context values of the time series. For a pretraining task, this denotes the input time series to predict
             the masked portion. For a forecasting task, this denotes the history/past time series values. Similarly,
             for classification or regression tasks, it denotes the appropriate context values of the time series.
@@ -79,7 +79,7 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
         target_values (`torch.FloatTensor` of shape `(batch_size, target_len, input_size)` for forecasting,
             `(batch_size, n_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target values
             of the time series, that serve as labels for the model. The `target_values` is what the Transformer needs
-            during training to learn to output, given the `context_values`. Note that, this is NOT required for a
+            during training to learn to output, given the `past_values`. Note that, this is NOT required for a
             pretraining task.
 
             For a forecasting task, the shape is be `(batch_size, target_len, input_size)`. Even if we want to forecast
@@ -828,7 +828,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     # Weight initialization
     config_class = PatchTSMixerConfig
     base_model_prefix = "model"
-    main_input_name = "context_values"
+    main_input_name = "past_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -1419,13 +1419,13 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     @replace_return_docstrings(output_type=PatchTSMixerEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        context_values: torch.Tensor,
+        past_values: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, PatchTSMixerEncoderOutput]:
         r"""
         Args:
-            context_values (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`):
+            past_values (`torch.FloatTensor` of shape `(batch_size, input_size, num_patches, patch_len)`):
                 Patched input context.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
@@ -1433,9 +1433,9 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         Returns:
         """
 
-        # context_values: [batch_size  x n_vars x num_patches x patch_len]
+        # past_values: [batch_size  x n_vars x num_patches x patch_len]
         # return: [batch_size x n_vars x num_patches x num_features]
-        last_hidden_state, hidden_states = self.encoder(context_values, output_hidden_states=output_hidden_states)
+        last_hidden_state, hidden_states = self.encoder(past_values, output_hidden_states=output_hidden_states)
         return PatchTSMixerEncoderOutput(last_hidden_state=last_hidden_state, hidden_states=hidden_states)
 
 
@@ -1507,14 +1507,14 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     @replace_return_docstrings(output_type=PatchTSMixerModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        context_values: torch.Tensor,
+        past_values: torch.Tensor,
         observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerModelOutput:
         r"""
         Args:
-            context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
+            past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
                 Context values of the time series. For a pretraining task, this denotes the input time series to
                 predict the masked portion. For a forecasting task, this denotes the history/past time series values.
                 Similarly, for classification or regression tasks, it denotes the appropriate context values of the
@@ -1539,10 +1539,10 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 
         mask = None
         if observed_mask is None:
-            observed_mask = torch.ones_like(context_values)
-        scaled_context_values, loc, scale = self.scaler(context_values, observed_mask)
+            observed_mask = torch.ones_like(past_values)
+        scaled_past_values, loc, scale = self.scaler(past_values, observed_mask)
 
-        patched_x = self.patching(scaled_context_values)  # [batch_size x input_size x num_patch x patch_len
+        patched_x = self.patching(scaled_past_values)  # [batch_size x input_size x num_patch x patch_len
 
         enc_input = patched_x
         if self.masking is not None:
@@ -1616,14 +1616,14 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
     @replace_return_docstrings(output_type=PatchTSMixerForMaskPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        context_values: torch.Tensor,
+        past_values: torch.Tensor,
         observed_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
     ) -> PatchTSMixerForMaskPreTrainingOutput:
         r"""
         Args:
-            context_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
+            past_values (`torch.FloatTensor` of shape `(batch_size, seq_length, input_size)`):
                 Context values of the time series. For a pretraining task, this denotes the input time series to
                 predict the masked portion. For a forecasting task, this denotes the history/past time series values.
                 Similarly, for classification or regression tasks, it denotes the appropriate context values of the
@@ -1641,9 +1641,9 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
 
         """
 
-        # context_values: tensor [batch_size x seq_len x input_size]
+        # past_values: tensor [batch_size x seq_len x input_size]
         model_output = self.model(
-            context_values,
+            past_values,
             observed_mask=observed_mask,
             output_hidden_states=output_hidden_states,
         )  # x.last_hidden_state: [batch_size x nvars x num_patch x num_features]
@@ -1804,7 +1804,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
     @replace_return_docstrings(output_type=PatchTSMixerForForecastOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        context_values: torch.Tensor,
+        past_values: torch.Tensor,
         observed_mask: Optional[torch.Tensor] = None,
         target_values: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = False,
@@ -1816,9 +1816,9 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         """
 
-        # context_values: tensor [batch_size x seq_len x input_size]
+        # past_values: tensor [batch_size x seq_len x input_size]
         model_output = self.model(
-            context_values,
+            past_values,
             observed_mask=observed_mask,
             output_hidden_states=output_hidden_states,
         )  # model_output: [batch_size x nvars x num_patch x num_features]
@@ -1884,14 +1884,14 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
     def generate(
         self,
-        context_values: torch.Tensor,
+        past_values: torch.Tensor,
         observed_mask: Optional[torch.Tensor] = None,
     ) -> SamplePatchTSMixerForecastOutput:
         """
         Generate sequences of sample predictions from a model with a probability distribution head.
 
         Parameters:
-            context_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Past values of the time series that serves as context in order to predict the future.
 
             observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
@@ -1910,7 +1910,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         # get model output
         outputs = self(
-            context_values=context_values,
+            past_values=past_values,
             target_values=None,
             observed_mask=observed_mask,
             output_hidden_states=False,
@@ -1991,7 +1991,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
     @replace_return_docstrings(output_type=PatchTSMixerForClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        context_values: torch.Tensor,
+        past_values: torch.Tensor,
         target_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
@@ -2003,7 +2003,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         """
 
         model_output = self.model(
-            context_values,
+            past_values,
             output_hidden_states=output_hidden_states,
         )  # x: [batch_size x nvars x num_patch x num_features]
 
@@ -2105,7 +2105,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
     @replace_return_docstrings(output_type=PatchTSMixerForRegressionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        context_values: torch.Tensor,
+        past_values: torch.Tensor,
         target_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
@@ -2116,11 +2116,11 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         """
 
-        # context_values: tensor [batch_size x seq_len x input_size]
+        # past_values: tensor [batch_size x seq_len x input_size]
         # target_values: tensor [batch_size x n_targets]
 
         model_output = self.model(
-            context_values,
+            past_values,
             output_hidden_states=output_hidden_states,
         )  # model_output: [batch_size x nvars x num_patch x num_features]
 
@@ -2155,13 +2155,13 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
     def generate(
         self,
-        context_values: torch.Tensor,
+        past_values: torch.Tensor,
     ) -> SamplePatchTSMixerRegressionOutput:
         """
         Generate sequences of sample predictions from a model with a probability distribution head.
 
         Parameters:
-            context_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
                 Past values of the time series that serves as context in order to predict the future.
 
         Return:
@@ -2173,7 +2173,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
         # get model output
         outputs = self(
-            context_values=context_values,
+            past_values=past_values,
             target_values=None,
             output_hidden_states=False,
         )

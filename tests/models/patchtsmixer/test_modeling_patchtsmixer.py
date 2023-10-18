@@ -184,12 +184,12 @@ class PatchTSMixerModelTester:
         # bs, n_vars, num_patch, patch_len
 
         # [bs x seq_len x n_vars]
-        context_values = floats_tensor([self.batch_size, _past_length, self.input_size])
+        past_values = floats_tensor([self.batch_size, _past_length, self.input_size])
 
         target_values = floats_tensor([self.batch_size, config.forecast_len, self.input_size])
 
         inputs_dict = {
-            "context_values": context_values,
+            "past_values": past_values,
             "target_values": target_values,
         }
         return inputs_dict
@@ -344,14 +344,14 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names_with_target = [
-                "context_values",
+                "past_values",
                 "observed_mask",
                 "target_values",
                 "output_hidden_states",
                 "return_loss",
             ]
             expected_arg_names_without_target = [
-                "context_values",
+                "past_values",
                 "observed_mask",
                 "output_hidden_states",
             ]
@@ -390,7 +390,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         with torch.no_grad():
-            output = model(context_values=batch["context_values"].to(torch_device)).prediction_logits
+            output = model(past_values=batch["past_values"].to(torch_device)).prediction_logits
         num_patch = (
             max(model.config.seq_len, model.config.patch_len) - model.config.patch_len
         ) // model.config.stride + 1
@@ -421,7 +421,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         with torch.no_grad():
             output = model(
-                context_values=batch["context_values"].to(torch_device),
+                past_values=batch["past_values"].to(torch_device),
                 target_values=batch["target_values"].to(torch_device),
             ).prediction_logits
 
