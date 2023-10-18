@@ -1336,11 +1336,8 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         conditioning_embeds = model_kwargs.get("conditioning_embeds", None)
 
         if conditioning_embeds is not None:
-            mel_start_token_id = torch.tensor([[self.config.bos_token_id]], device=conditioning_embeds.device)
-            mel_start_token_embedding = self.model.decoder.input_embeds_layer(
-                mel_start_token_id
-            ) + self.model.decoder.position_embeds_layer(torch.tensor([[0]], device=conditioning_embeds.device))
-            mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
+            mel_start_token_embedding = self.model.decoder.input_embeds_layer(torch.full((conditioning_embeds.shape[0], 1), fill_value=self.config.bos_token_id, device=conditioning_embeds.device))
+            mel_start_token_embedding += self.model.decoder.position_embeds_layer(torch.full((conditioning_embeds.shape[0], 1), fill_value=0, device=conditioning_embeds.device))
             conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
 
             # subtract the positional_ids here
@@ -1581,7 +1578,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             stm = each_seq_stop_token_index.argmax()
             speech_ids[i, stm:] = decoder_fixing_codes[0]
             if stm - 3 < speech_ids.shape[1]:
-                speech_ids[i, -3:] = torch.LongTensor([decoder_fixing_codes[1:]])
+                speech_ids[i, -3:] = torch.LongTensor([decoder_fixing_codes[1:]], device=speech_ids.device)
 
         return speech_ids
 
@@ -1634,11 +1631,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         ```
         """
 
-        return self.text_encoder_model(
+        outputs = self.text_encoder_model(
             input_ids=input_ids,
             inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
-        )[0]
+        )
+
+        return outputs[0]
 
     def get_speech_features(
         self,
@@ -1730,10 +1729,12 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
             speech_ids = self.fix_speech_decoder_output(speech_ids[0])
 
-        return self.speech_encoder_model(
+        outputs = self.speech_encoder_model(
             input_ids=speech_ids,
             attention_mask=attention_mask,
-        )[0]
+        )
+
+        return outputs[0]
 
     @add_start_docstrings_to_model_forward(CLVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ClvpOutput, config_class=ClvpConfig)
