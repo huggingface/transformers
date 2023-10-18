@@ -333,7 +333,8 @@ class FlaxMistralAttention(nn.Module):
             self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype
         )
         self.o_proj = nn.Dense(self.hidden_size, use_bias=False, dtype=self.dtype)
-        self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
+        self.causal_mask =jnp.triu(make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool"),
+                                    k=-config.sliding_window)
         self.rotary_emb = FlaxMistralRotaryEmbedding(
             self.head_dim, self.max_position_embeddings, base=self.rope_theta, dtype=self.dtype
         )
@@ -417,6 +418,10 @@ class FlaxMistralAttention(nn.Module):
 
         key_states = flax_repeat_kv(key_states, self.num_key_value_groups)
         value_states = flax_repeat_kv(value_states, self.num_key_value_groups)
+        batch_size = hidden_states.shape[0]
+        causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
+        attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
+        attention_mask = jnp.log(combine_masks(attention_mask, causal_mask))
         
         if self.has_variable("cache", "cached_key") or init_cache:
             key_states, value_states, attention_mask = self._concatenate_to_cache(key_states, value_states, query_states, attention_mask)
@@ -651,6 +656,12 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
     
 
 class FlaxMistralLayerCollection(nn.Module):
+    """
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MistralDecoderLayer`]
+
+    Args:
+        config: MistralConfig
+    """
     
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
@@ -677,12 +688,11 @@ class FlaxMistralLayerCollection(nn.Module):
         for idx, decoder_layer in enumerate(self.blocks):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
+            # past_key_value = past_key_values[idx] if past_key_values is not None else None
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 init_cache=init_cache,
             )
@@ -717,9 +727,6 @@ class FlaxMistralModule(nn.Module):
         self.vocab_size = self.config.vocab_size
         self.embed_tokens = nn.Embed(self.config.vocab_size, self.config.hidden_size, dtype=self.dtype)
         self.layers = FlaxMistralLayerCollection(self.config, dtype=self.dtype)
-        # self.layers = [
-        #     FlaxMistralDecoderLayer(self.config, dtype=self.dtype) for _ in range(self.config.num_hidden_layers)
-        # ]
         self.norm = FlaxMistralRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps, dtype=self.dtype)
 
     def __call__(
@@ -756,20 +763,20 @@ class FlaxMistralModule(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        # embed positions
-        padding_mask = None
-        if attention_mask is None:
-            attention_mask = jnp.ones((batch_size, seq_length_with_past), dtype=jnp.bool_)
-        #     padding_mask = None
-        # else:
-        #     if (0 == attention_mask).any():
-        #         padding_mask = attention_mask
-        #     else:
-        #         padding_mask = None
+        # # embed positions
+        # padding_mask = None
+        # if attention_mask is None:
+        #     attention_mask = jnp.ones((batch_size, seq_length_with_past), dtype=jnp.bool_)
+        # #     padding_mask = None
+        # # else:
+        # #     if (0 == attention_mask).any():
+        # #         padding_mask = attention_mask
+        # #     else:
+        # #         padding_mask = None
 
-        attention_mask = _prepare_decoder_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, sliding_window=self.config.sliding_window,
-        )
+        # attention_mask = _prepare_decoder_attention_mask(
+        #     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, sliding_window=self.config.sliding_window,
+        # )
 
         hidden_states = inputs_embeds
 
