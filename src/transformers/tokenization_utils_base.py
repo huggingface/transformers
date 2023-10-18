@@ -831,7 +831,7 @@ class SpecialTokensMixin:
         "additional_special_tokens",
     ]
 
-    def __init__(self, verbose=True, **kwargs):
+    def __init__(self, verbose=False, **kwargs):
         self._bos_token = None
         self._eos_token = None
         self._unk_token = None
@@ -852,25 +852,12 @@ class SpecialTokensMixin:
                 continue
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
-                    # TODO THIS IS NASTY! Will always reset tokens to default rstrip and lstrip because self.set_attr on strings
-                    # will not check the addedtokens decoder. WILL FIX TOMORROW
                     assert isinstance(value, (list, tuple)), f"Value {value} is not a list or tuple"
                     assert all(
                         isinstance(t, (str, AddedToken)) for t in value
                     ), "One of the tokens is not a string or an AddedToken"
-                    if hasattr(self, "added_tokens_encoder"):
-                        extended_token = []
-                        for token in value:
-                            if isinstance(token, str) and str(token) in self.added_tokens_encoder:
-                                extended_token.append(self.added_tokens_decoder[self.added_tokens_encoder[str(token)]])
-                            else:
-                                extended_token.append(token)
-                        value = extended_token
                     setattr(self, key, value)
-                elif isinstance(value, (str)):
-                    value = AddedToken(value, normalized=False, special=True)
-                    setattr(self, key, value)
-                elif isinstance(value, AddedToken):
+                elif isinstance(value, (str, AddedToken)):
                     setattr(self, key, value)
                 else:
                     raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
@@ -960,7 +947,7 @@ class SpecialTokensMixin:
                 for token in value:
                     if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
-                        token = AddedToken(token, normalized=False, rstrip=True, lstrip=True)
+                        token = AddedToken(token, rstrip=False, lstrip=False, normalized=False, special=True)
                     if str(token) not in self.additional_special_tokens:
                         to_add.add(token)
                 if replace_additional_special_tokens:
@@ -973,8 +960,8 @@ class SpecialTokensMixin:
                 if not isinstance(value, (str, AddedToken)):
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
-                    # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
-                    value = AddedToken(value, normalized=False, rstrip=True, lstrip=True)
+                    # for legacy purpose we default to stripping. `False` depends on this
+                    value = AddedToken(value, rstrip=False, lstrip=False, normalized=False, special=True)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
                 if value not in added_tokens:
@@ -1130,74 +1117,49 @@ class SpecialTokensMixin:
 
     @bos_token.setter
     def bos_token(self, value):
-        if isinstance(value, str) and value != "":
-            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
-        elif not isinstance(value, AddedToken) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the BOS token")
         self._bos_token = value
 
     @eos_token.setter
     def eos_token(self, value):
-        if isinstance(value, str) and value != "":
-            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
-        elif not isinstance(value, AddedToken) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the EOS token")
         self._eos_token = value
 
     @unk_token.setter
     def unk_token(self, value):
-        if isinstance(value, str) and value != "":
-            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
-        elif not isinstance(value, AddedToken) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the UNK token")
         self._unk_token = value
 
     @sep_token.setter
     def sep_token(self, value):
-        if isinstance(value, str) and value != "":
-            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
-        elif not isinstance(value, AddedToken) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the SEP token")
         self._sep_token = value
 
     @pad_token.setter
     def pad_token(self, value):
-        if isinstance(value, str) and value != "":
-            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
-        elif not isinstance(value, AddedToken) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the PAD token")
         self._pad_token = value
 
     @cls_token.setter
     def cls_token(self, value):
-        if isinstance(value, str) and value != "":
-            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
-        elif not isinstance(value, AddedToken) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the CLS token")
         self._cls_token = value
 
     @mask_token.setter
     def mask_token(self, value):
-        if isinstance(value, str) and value != "":
-            value = AddedToken(value, normalized=False, rstrip=True, lstrip=True, special=True)
-        elif not isinstance(value, AddedToken) and value is not None:
+        if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the MASK token")
         self._mask_token = value
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        if value is None:
-            self._additional_special_tokens = value
-            return
-        if self._additional_special_tokens is None:
-            self._additional_special_tokens = []
-        # We store the `AddedToken` to allow adding tokens via `tokenizer.add_special_tokens`
-        for token in value:
-            if isinstance(token, str) and token != "":
-                token = AddedToken(token, normalized=False, rstrip=True, lstrip=True, special=True)
-            elif not isinstance(token, AddedToken):
-                raise ValueError(f"Cannot add instance of type {type(value)} to additional_special_tokens!")
-            self._additional_special_tokens.append(token)
+        self._additional_special_tokens = value if value is not None else None
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -2197,28 +2159,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for args_name, file_path in resolved_vocab_files.items():
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
+        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
 
         if slow_tokenizer is not None:
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
 
-        additional_special_tokens = init_kwargs.pop("additional_special_tokens", None) or []
-        added_tokens_decoder = {}
-        legacy_saved = "added_tokens_decoder" not in init_kwargs
-        if not legacy_saved:
+        #### Handle tokenizer serialization of added and special tokens
+        added_tokens_decoder: Dict[int, AddedToken] = {}
+        added_tokens_map: Dict[str, AddedToken] = {}
+        # if we have info on the slow added tokens
+        if "added_tokens_decoder" in init_kwargs:
             for idx, token in init_kwargs["added_tokens_decoder"].items():
                 if isinstance(token, dict):
                     token = AddedToken(**token)
                 if isinstance(token, AddedToken):
                     added_tokens_decoder[int(idx)] = token
-                    if str(token) in additional_special_tokens:
-                        # at this point the token is in `additional_special_tokens` as an str, let's add the AddedToken info
-                        additional_special_tokens.remove(str(token))
-                    if token.special and token not in additional_special_tokens:
-                        additional_special_tokens.append(token)
+                    added_tokens_map[str(token)] = token
                 else:
                     raise ValueError(
-                        f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
+                        f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary or an AddedToken instance"
                     )
         else:
             # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
@@ -2231,36 +2191,59 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             # We keep this new value and ignore the one stored in the special_tokens_map_file
                             continue
                         if isinstance(value, dict):
-                            value = AddedToken(**value)
-                            init_kwargs[key] = value
+                            value = AddedToken(**value, special=True)
                         elif key == "additional_special_tokens" and isinstance(value, list):
+                            additional_special_tokens = init_kwargs.pop("additional_special_tokens", []) or []
                             for token in value:
-                                token = AddedToken(**token) if isinstance(token, dict) else token
+                                token = AddedToken(**token, special=True) if isinstance(token, dict) else token
                                 if token not in additional_special_tokens:
                                     additional_special_tokens.append(token)
-                        else:
-                            init_kwargs[key] = value
+                            value = additional_special_tokens
+                        init_kwargs[key] = value
+
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
+            # this is for legacy purpose. We don't add the tokens after init for efficiency.
             if added_tokens_file is not None:
+                special_tokens = []
+                for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
+                    if init_kwargs[key] is not None:
+                        if key == "additional_special_tokens":
+                            special_tokens += [str(token) for token in init_kwargs[key]]
+                        else:
+                            special_tokens.append(str(init_kwargs[key]))
+
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
-                # legacy: we have to init with (rstrip=True, lstrip=True)
-                strip = True if "Fast" not in cls.__name__ else False
-                added_tokens_decoder = {
-                    index: AddedToken(token, rstrip=strip, lstrip=strip) for token, index in added_tok_encoder.items()
-                }
+                for str_token, index in added_tok_encoder.items():
+                    # if index not in added_tokens_decoder and str_token not in added_tokens_map:
+                    special = str_token in special_tokens
+                    added_tokens_decoder[index] = AddedToken(
+                        str_token, rstrip=False, lstrip=False, normalized=not special, special=special
+                    )
+                    added_tokens_map[str(token)] = added_tokens_decoder[index]
+
+            # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
+            # if `tokenizer_config.json` is `None`
+            if "Fast" not in cls.__name__ and tokenizer_file is not None:
+                # This is for slow so can be done before
+                with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
+                    tokenizer_file_handle = json.load(tokenizer_file_handle)
+                    added_tokens = tokenizer_file_handle.pop("added_tokens")
+                for serialized_tokens in added_tokens:
+                    idx = serialized_tokens.pop("id")
+                    added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
+                    added_tokens_map[str(added_tokens_decoder[idx])] = added_tokens_decoder[idx]
             # end legacy
 
-        # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens if the `fast` was not properly saved!
-        # thus we delay adding special tokens in the init using `slow_to_fast` flag.
-        if added_tokens_decoder is not {} and "Fast" in cls.__name__:
-            init_kwargs["slow_to_fast"] = True
-        if len(additional_special_tokens) > 0:
-            init_kwargs["additional_special_tokens"] = additional_special_tokens
-        init_kwargs["added_tokens_decoder"] = added_tokens_decoder
+        # Passing AddedTokens and not strings to the class to prevent it from casting the string to a different AddedToken
+        for key in cls.SPECIAL_TOKENS_ATTRIBUTES & init_kwargs.keys():
+            if added_tokens_map != {} and init_kwargs[key] is not None:
+                if key != "additional_special_tokens":
+                    init_kwargs[key] = added_tokens_map.get(init_kwargs[key], init_kwargs[key])
 
+        init_kwargs["added_tokens_decoder"] = added_tokens_decoder
         # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
-        init_kwargs = cls.convert_added_tokens(init_kwargs, False)
+        init_kwargs = cls.convert_added_tokens(init_kwargs, save=False)
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -2270,29 +2253,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
 
-        # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
-        # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
-        tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
-        if legacy_saved and "Fast" not in cls.__name__ and added_tokens_file is None and tokenizer_file is not None:
-            tokens_to_add_from_fast = []
-            with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
-                tokenizer_file_handle = json.load(tokenizer_file_handle)
-                added_tokens = tokenizer_file_handle.pop("added_tokens")
-            for serialized_tokens in added_tokens:
-                serialized_tokens.pop("id")
-                # for legacy purpose, we ignore whether or not these tokens are special.
-                serialized_tokens.pop("special")
-                tokens_to_add_from_fast.append(AddedToken(**serialized_tokens))
-            tokenizer.add_tokens(tokens_to_add_from_fast)
-
-        # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
-        # uses the information stored in `added_tokens_decoder`. Checks after addition that we have the same ids
-        if init_kwargs.get("slow_to_fast", False):
-            tokenizer.add_tokens([token for _, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])])
-            # finally we add all the special_tokens to make sure eveything is initialized
-            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
-
-        if len(added_tokens_decoder) > 0:
+        if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.warning_advice(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."
@@ -2308,18 +2269,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return max_model_length
 
     @classmethod
-    def convert_added_tokens(cls, obj: Union[AddedToken, Any], add_type_field=True):
+    def convert_added_tokens(cls, obj: Union[AddedToken, Any], save=False, add_type_field=True):
         if isinstance(obj, dict) and "__type" in obj and obj["__type"] == "AddedToken":
             obj.pop("__type")
             return AddedToken(**obj)
-        if isinstance(obj, AddedToken):
+        if isinstance(obj, AddedToken) and save:
+            obj = obj.__getstate__()
             if add_type_field:
-                obj = obj.content
+                obj["__type"] = "AddedToken"
+            else:
+                # Don't save "special" for previous tokenizers
+                obj.pop("special")
             return obj
         elif isinstance(obj, (list, tuple)):
-            return [cls.convert_added_tokens(o, add_type_field=add_type_field) for o in obj]
+            return [cls.convert_added_tokens(o, save=save, add_type_field=add_type_field) for o in obj]
         elif isinstance(obj, dict):
-            return {k: cls.convert_added_tokens(v, add_type_field=add_type_field) for k, v in obj.items()}
+            return {k: cls.convert_added_tokens(v, save=save, add_type_field=add_type_field) for k, v in obj.items()}
         return obj
 
     def save_pretrained(
@@ -2398,11 +2363,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
-        target_keys = list(self.init_kwargs.keys())
-        target_keys += ["model_max_length", "clean_up_tokenization_spaces", "additional_special_tokens"]
+        # Let's save the init kwargs
+        target_keys = set(self.init_kwargs.keys())
+        # Let's save the special tokens map (only the strings)
+        target_keys.update(["model_max_length", "clean_up_tokenization_spaces"])
+
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
+
+        # Let's make sure we properly save the special tokens.
+        tokenizer_config.update(self.special_tokens_map)
 
         if self.chat_template is not None:
             tokenizer_config["chat_template"] = self.chat_template
@@ -2412,9 +2383,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
-        # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
-        tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True)
+        # no typefields, this way old fast and slow can load it
+        tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True, save=True)
 
+        # Process added tokens seperatly: allows previous versions to ignore it!
         added_tokens = {}
         for key, value in self.added_tokens_decoder.items():
             added_tokens[key] = value.__getstate__()
@@ -2440,6 +2412,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if "name_or_path" in tokenizer_config:
             tokenizer_config.pop("name_or_path")
             tokenizer_config.pop("special_tokens_map_file", None)
+            tokenizer_config.pop("tokenizer_file", None)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -2448,8 +2421,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Sanitize AddedTokens in special_tokens_map
 
-        # kept for forward compatibility, will be removed in transoformers 5
-        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=True)
+        # kept for forward compatibility, will be removed in transoformers 5. Typefields are not saved for FC, special should not be save either
+        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, save=True, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
@@ -2498,7 +2471,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         added_tokens_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
         )
-        added_vocab = self.get_added_vocab()
+        # the new get_added_vocab() also returns special tokens and tokens that have an index < vocab_size
+        added_vocab = {tok: index for tok, index in self.added_tokens_encoder.items() if index >= self.vocab_size}
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
