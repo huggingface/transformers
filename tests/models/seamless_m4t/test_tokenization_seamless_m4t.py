@@ -322,7 +322,11 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # TODO: not working for tgt_text
                 # max_target_length will default to max_length if not specified
                 batch = tokenizer.prepare_seq2seq_batch(
-                    src_texts=src_text, tgt_texts=tgt_text, max_length=4, return_tensors="pt", pad_to_multiple_of=None,
+                    src_texts=src_text,
+                    tgt_texts=tgt_text,
+                    max_length=4,
+                    return_tensors="pt",
+                    pad_to_multiple_of=None,
                 )
                 self.assertEqual(batch.input_ids.shape[1], 4)
                 self.assertEqual(batch.labels.shape[1], 4)
@@ -419,7 +423,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)
-    
+
     @unittest.skip("Fails because of the hack of adding <unk> in _tokenize")
     def test_pickle_subword_regularization_tokenizer(self):
         pass
@@ -427,6 +431,7 @@ class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Fails because of the hack of adding <unk> in _tokenize")
     def test_subword_regularization_tokenizer(self):
         pass
+
 
 @require_torch
 @require_sentencepiece
@@ -563,10 +568,8 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         )
 
 
-
 @require_sentencepiece
 @require_tokenizers
-# Copied from tests.models.llama.test_tokenizatoin_llama.CommonSpmIntegrationTests with Llama -> SeamlessM4T
 class CommonSpmIntegrationTests(unittest.TestCase):
     """
     A class that regroups important test to make sure that we properly handle the special tokens.
@@ -585,7 +588,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode(". Hello")
         self.assertEqual(input_ids, [3, 1, 8, 5, 157, 87, 21, 3])
         sp_encode = self.tokenizer.sp_model.encode(". Hello")
-        
+
         # [bos, lang_id, _] + offset_sp_encode
         self.assertEqual(input_ids[:-1], [3, 1, 8] + [i + self.tokenizer.fairseq_offset for i in sp_encode])
         tokens = self.tokenizer.tokenize(". Hello")
@@ -633,7 +636,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # make sure that the output after the extra id is the same as if
         # extra_id was not there
         input_ids = self.tokenizer.encode("▁He is not             ▁He")
-        self.assertEqual(input_ids, [3, 1,  157, 47, 45, 157, 3])
+        self.assertEqual(input_ids, [3, 1, 157, 47, 45, 157, 3])
         tokens = self.tokenizer.tokenize("▁He is not              ▁He")
         self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
 
@@ -643,7 +646,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("Hey <s>I")
         self.assertEqual(input_ids, [3, 1, 157, 31, 2, 101, 3])
         sp_encode = self.tokenizer.sp_model.encode("Hey .I")
-        
+
         # the last token besides eos should be 100 offset
         self.assertEqual(input_ids[-2] - self.tokenizer.fairseq_offset, sp_encode[-1])
         tokens = self.tokenizer.tokenize("<s>I")

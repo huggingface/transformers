@@ -968,7 +968,9 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(hidden_states.device)
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(
+                hidden_states.device
+            )
             attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
             attention_mask = _expand_mask(
                 attention_mask,
@@ -2171,14 +2173,8 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
     ):
         super().__init__(config)
 
-        self.encoder = SeamlessM4TEncoder(
-            config,
-            is_t2u_encoder=True,
-        )
-        self.decoder = SeamlessM4TDecoder(
-            config,
-            embed_tokens_decoder,
-        )
+        self.encoder = SeamlessM4TEncoder(config, is_t2u_encoder=True)
+        self.decoder = SeamlessM4TDecoder(config, embed_tokens_decoder)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2366,7 +2362,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             labels = labels.to(lm_logits.device)
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-        
+
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
@@ -2724,7 +2720,11 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
             hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
         else:
             # if batched sample, need to interleave per sample, and pad -> loss of parallelism
-            # TODO: warnings if self.training ?
+            if hidden_states.shape[0] > 1 and self.training:
+                logger.warning(
+                    """`self.training=True` and you use batching. You lose parallelism during the hifigan
+                               forward pass because the samples are interleaved."""
+                )
             hidden_states = [
                 torch.repeat_interleave(hidden_state, duration, dim=-1).transpose(0, 1)
                 for (hidden_state, duration) in zip(hidden_states, dur_out)
@@ -3171,7 +3171,9 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
 
         encoder_attention_mask = attention_mask
         if attention_mask is not None:
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(encoder_outputs[0].device)
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(
+                encoder_outputs[0].device
+            )
             encoder_attention_mask = _compute_new_attention_mask(
                 hidden_states=encoder_outputs[0], seq_lens=sub_sampled_lengths
             )
@@ -3199,7 +3201,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             labels = labels.to(lm_logits.device)
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-        
+
         if not return_dict:
             outputs = decoder_outputs + encoder_outputs
             output = (lm_logits,) + outputs[1:]
@@ -3498,7 +3500,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             labels = labels.to(lm_logits.device)
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-            
+
         if not return_dict:
             outputs = decoder_outputs + encoder_outputs
             output = (lm_logits,) + outputs[1:]
@@ -3848,7 +3850,9 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
 
         encoder_attention_mask = attention_mask
         if attention_mask is not None:
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(encoder_outputs[0].device)
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(
+                encoder_outputs[0].device
+            )
             encoder_attention_mask = _compute_new_attention_mask(
                 hidden_states=encoder_outputs[0], seq_lens=sub_sampled_lengths
             )
@@ -3876,7 +3880,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             labels = labels.to(lm_logits.device)
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-        
+
         if not return_dict:
             outputs = decoder_outputs + encoder_outputs
             output = (lm_logits,) + outputs[1:]
@@ -4013,7 +4017,9 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
 
         # input modality = speech so new attention mask for the decoder
         if attention_mask is not None:
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(encoder_hidden_states.device)
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(
+                encoder_hidden_states.device
+            )
             attention_mask = _compute_new_attention_mask(
                 hidden_states=encoder_hidden_states, seq_lens=sub_sampled_lengths
             )
@@ -4285,7 +4291,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         encoder_attention_mask = attention_mask
         # input modality = speech so new attention mask
         if self.current_modality == "speech" and attention_mask is not None:
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(encoder_outputs[0].device)
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(
+                encoder_outputs[0].device
+            )
             encoder_attention_mask = _compute_new_attention_mask(
                 hidden_states=encoder_outputs[0], seq_lens=sub_sampled_lengths
             )
@@ -4313,7 +4321,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             labels = labels.to(lm_logits.device)
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-        
+
         if not return_dict:
             outputs = decoder_outputs + encoder_outputs
             output = (lm_logits,) + outputs[1:]
@@ -4492,7 +4500,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
             # input modality = speech so new attention mask for the decoder
             if attention_mask is not None:
-                sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(encoder_hidden_states.device)
+                sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(
+                    encoder_hidden_states.device
+                )
                 attention_mask = _compute_new_attention_mask(
                     hidden_states=encoder_hidden_states, seq_lens=sub_sampled_lengths
                 )

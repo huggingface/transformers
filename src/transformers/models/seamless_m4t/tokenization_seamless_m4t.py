@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import sentencepiece as spm
 
+from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import (
     BatchEncoding,
     PreTokenizedInput,
@@ -27,7 +28,6 @@ from ...tokenization_utils import (
 )
 from ...tokenization_utils_base import AddedToken
 from ...utils import PaddingStrategy, logging
-from ...convert_slow_tokenizer import import_protobuf
 
 
 logger = logging.get_logger(__name__)
@@ -152,7 +152,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
 
         self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
-
 
         # Vocab    |    0    |    1    |   2    |    3    |  4   |  5   |  6   |   7  |   8  |  9
         # -------- | ------- | ------- | ------ | ------- | ---- | ---- | ---- | ---- | ---- | ----
@@ -418,11 +417,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         }
         vocab.update(self.added_tokens_encoder)
         return vocab
-    
+
     @property
     def unk_token_length(self):
         return len(self.sp_model.encode(str(self.unk_token)))
-    
+
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
@@ -491,7 +490,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         if tokens[0].startswith(SPIECE_UNDERLINE):
             tokens[0] = tokens[0][1:]
-        
+
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
