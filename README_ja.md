@@ -210,7 +210,7 @@ Hugging Faceチームによって作られた **[トランスフォーマーを�
 >>> outputs = model(**inputs)
 ```
 
-And here is the equivalent code for TensorFlow:
+そしてこちらはTensorFlowと同等のコードとなります:
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
