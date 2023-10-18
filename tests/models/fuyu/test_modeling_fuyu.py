@@ -291,7 +291,8 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         text_prompt_bus_color = "What color is the bus?\n"
         model_inputs_bus_color = self.processor(text=text_prompt_bus_color, images=self.bus_image_pil)
 
-        text = self.model.generate(**model_inputs_bus_color, max_new_tokens=10)
+        generated_tokens = self.model.generate(**model_inputs_bus_color, max_new_tokens=10)
+        text = self.processor.tokenizer.batch_decode(generated_tokens)
         end_sequence = text[0].split("\x04")[1]
         clean_sequence = end_sequence[:end_sequence.find(
             '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
@@ -310,7 +311,8 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         chart_image_pil = Image.open(io.BytesIO(requests.get(chart_image_url).content))
 
         model_inputs_chart_vqa = self.processor(text=text_prompt_chart_vqa, images=chart_image_pil)
-        text = self.model.generate(**model_inputs_chart_vqa, max_new_tokens=10)
+        generated_tokens = self.model.generate(**model_inputs_chart_vqa, max_new_tokens=10)
+        text = self.processor.tokenizer.batch_decode(generated_tokens)
         end_sequence = text[0].split("\x04")[1]
         clean_sequence = end_sequence[:end_sequence.find(
             '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
@@ -326,7 +328,8 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         bbox_image_pil = Image.open(io.BytesIO(requests.get(bbox_image_url).content))
 
         model_inputs_bbox = self.processor(text=text_prompt_bbox, images=bbox_image_pil)
-        text = self.model.generate(**model_inputs_bbox, max_new_tokens=10)
+        generated_tokens = self.model.generate(**model_inputs_bbox, max_new_tokens=10)
+        text = self.processor.tokenizer.batch_decode(generated_tokens)
         end_sequence = text[0].split("\x04")[1]
         clean_sequence = end_sequence[:end_sequence.find(
             '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
