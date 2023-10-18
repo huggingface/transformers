@@ -43,6 +43,7 @@ if is_vision_available():
     from transformers import TvpImageProcessor
 
 
+# Copied from test.models.videomae.test_modeling_videomae.VideoMAEModelTester with VideoMAE->TVP
 class TVPModelTester:
     def __init__(
         self,
@@ -219,7 +220,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     # cnn params and transformer params and head params are randomly initialized.
-                    if "cnn" in name or "visual_prompter" in name or "transformer" in name or "head" in name:
+                    if "vision_model" in name or "visual_prompter" in name or "transformer" in name or "head" in name:
                         self.assertAlmostEqual(
                             param.data.mean().item(),
                             0.0,
@@ -398,14 +399,14 @@ class TvpModelIntegrationTests(unittest.TestCase):
     def default_image_processor(self):
         return (
             TvpImageProcessor.from_pretrained(
-                "Intel/tvp-base",
+                "Jiqing/tiny-random-tvp",
             )
             if is_vision_available()
             else None
         )
 
     def test_inference_no_head(self):
-        model = TvpModel.from_pretrained("Intel/tvp-base").to(torch_device)
+        model = TvpModel.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -417,9 +418,27 @@ class TvpModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**encoding)
 
-        expected_shape = torch.Size((1, 61, 768))
+        expected_shape = torch.Size((1, 796, 128))
         assert outputs.last_hidden_state.shape == expected_shape
         expected_slice = torch.tensor(
-            [[0.0875, 0.2006, 0.4813], [-0.3025, -0.4271, 0.1503], [0.4636, 0.0250, 0.5077]]
+            [[-0.4715, -0.4075, -1.7910], [-0.1982, 2.1252, -0.9496], [0.1366, 0.5033, -0.1846]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+
+    def test_inference_with_head(self):
+        model = TvpForVideoGrounding.from_pretrained("Jiqing/tiny-random-tvp").to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        input_ids = torch.tensor([[1, 2]])
+        attention_mask = torch.tensor([[1, 1]])
+        encoding.update({"input_ids": input_ids, "attention_mask": attention_mask})
+
+        with torch.no_grad():
+            outputs = model(**encoding)
+
+        expected_shape = torch.Size((1, 2))
+        assert outputs.logits.shape == expected_shape
+        expected_slice = torch.tensor([[0.5060, 0.4988]]).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.logits, expected_slice, atol=1e-4))
