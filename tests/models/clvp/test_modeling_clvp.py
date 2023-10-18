@@ -428,11 +428,57 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(
-        reason="ClvpModelForConditionalGeneration does not output Hidden_states, since it has two types(text and speech) of them"
-    )
     def test_hidden_states_output(self):
-        pass
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # check for decoder model, text encoder model and speech encoder model hidden states
+            decoder_hidden_states = outputs.decoder_hidden_states
+            text_encoder_hidden_states = outputs.text_encoder_hidden_states
+            speech_encoder_hidden_states = outputs.speech_encoder_hidden_states
+
+            # check length of the hidden states
+            expected_decoder_num_layers = config.decoder_config.num_hidden_layers + 1
+            self.assertEqual(len(decoder_hidden_states), expected_decoder_num_layers)
+
+            expected_speech_encoder_num_layers = config.text_config.num_hidden_layers + 1
+            self.assertEqual(len(text_encoder_hidden_states), expected_speech_encoder_num_layers)
+
+            expected_text_encoder_num_layers = config.speech_config.num_hidden_layers + 1
+            self.assertEqual(len(speech_encoder_hidden_states), expected_text_encoder_num_layers)
+
+            # check shapes of each hidden state
+
+            # for the decoder model we will only test the dimension because the ClvpConditioningEncoder could increase
+            # the sequence lengths.
+            self.assertEqual(decoder_hidden_states[0].shape[-1], config.decoder_config.hidden_size)
+
+            # the testing for text encoder stays standard because we just pass the text tokens here.
+            self.assertListEqual(
+                list(text_encoder_hidden_states[0].shape[-2:]),
+                [self.model_tester.clvp_encoder_tester.seq_length, config.text_config.hidden_size],
+            )
+
+            # for the decoder model we will only test the dimension because the fix_decoder_outputs method could increase
+            # the sequence lengths by adding `decoder_fixing_codes` tokens at the end.
+            self.assertEqual(speech_encoder_hidden_states[0].shape[-1], config.speech_config.hidden_size)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):

@@ -175,6 +175,12 @@ class ClvpOutput(ModelOutput):
             The pooled output of the `last_hidden_state` of the text encoder Model.
         speech_model_output (`BaseModelOutputWithPooling`):
             The pooled output of the `last_hidden_state` of the speech encoder Model.
+        decoder_hidden_states (`torch.FloatTensor`, *optional*):
+            The hidden states of the decoder model.
+        text_encoder_hidden_states (`torch.FloatTensor`, *optional*):
+            The hidden states of the text encoder model.
+        speech_encoder_hidden_states (`torch.FloatTensor`, *optional*):
+            The hidden states of the speech encoder model.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -185,6 +191,9 @@ class ClvpOutput(ModelOutput):
     speech_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     speech_model_output: BaseModelOutputWithPooling = None
+    decoder_hidden_states: torch.FloatTensor = None
+    text_encoder_hidden_states: torch.FloatTensor = None
+    speech_encoder_hidden_states: torch.FloatTensor = None
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Clvp
@@ -1746,8 +1755,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         text_encoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ClvpOutput]:
         r"""
@@ -1781,7 +1790,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         """
 
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1794,14 +1802,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        speech_ids = self.speech_decoder_model(
+        decoder_outputs = self.speech_decoder_model(
             inputs_embeds=conditioning_embeds,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        speech_ids = speech_ids[0]
+        speech_ids = decoder_outputs[0]
 
         # since we will get the embeds of shape `(batch_size, seq_len, embedding_dim)` during the forward pass
         # we must convert it to tokens, to make it compaitable with speech_transformer
@@ -1811,7 +1818,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         speech_outputs = self.speech_encoder_model(
             input_ids=speech_ids,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1820,7 +1826,6 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             input_ids=input_ids,
             inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1850,6 +1855,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 text_outputs[2],
                 speech_outputs[2],
             )
+            if output_hidden_states:
+                output += (decoder_outputs[-1], text_outputs[-1], speech_outputs[-1],)
+
             return ((loss,) + output) if loss is not None else output
 
         return ClvpOutput(
@@ -1860,6 +1868,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             speech_embeds=speech_embeds,
             text_model_output=text_outputs[2],
             speech_model_output=speech_outputs[2],
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            text_encoder_hidden_states=text_outputs.hidden_states,
+            speech_encoder_hidden_states=speech_outputs.hidden_states,
         )
 
     @torch.no_grad()
@@ -1869,6 +1880,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         input_features: torch.FloatTensor = None,
         attention_mask: Optional[torch.LongTensor] = None,
         generation_config: Optional[GenerationConfig] = None,
+        output_hidden_states: Optional[bool] = None,
         **kwargs,
     ):
         """
@@ -1895,6 +1907,8 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of decoder model, text encoder and speech encoder models.
 
         Returns:
             `ClvpOutput` or tuple: A `ClvpOutput` (if `return_dict_in_generate=True` or when
@@ -1911,20 +1925,26 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        speech_ids = self.speech_decoder_model.generate(
+        decoder_outputs = self.speech_decoder_model.generate(
             conditioning_embeds=conditioning_embeds,
             generation_config=generation_config,
+            output_hidden_states=output_hidden_states,
+            return_dict=generation_config.return_dict_in_generate,
         )
-        if isinstance(speech_ids, ModelOutput):
-            speech_ids = speech_ids.sequences
+        if isinstance(decoder_outputs, ModelOutput):
+            speech_ids = decoder_outputs.sequences
         speech_ids = self.fix_speech_decoder_output(speech_ids)
 
         speech_outputs = self.speech_encoder_model(
             input_ids=speech_ids,
+            output_hidden_states=output_hidden_states,
+            return_dict=generation_config.return_dict_in_generate,
         )
         text_outputs = self.text_encoder_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=output_hidden_states,
+            return_dict=generation_config.return_dict_in_generate,
         )
 
         speech_embeds = speech_outputs[0]
@@ -1949,6 +1969,9 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 text_outputs[2],
                 speech_outputs[2],
             )
+            if output_hidden_states:
+                output += (decoder_outputs[-1], text_outputs[-1], speech_outputs[-1],)
+
             return output
 
         return ClvpOutput(
@@ -1959,4 +1982,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             speech_embeds=speech_embeds,
             text_model_output=text_outputs[2],
             speech_model_output=speech_outputs[2],
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            text_encoder_hidden_states=text_outputs.hidden_states,
+            speech_encoder_hidden_states=speech_outputs.hidden_states,
         )
