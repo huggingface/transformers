@@ -31,6 +31,12 @@ TEXT_REPR_BBOX_CLOSE = "</box>"
 TEXT_REPR_POINT_OPEN = "<point>"
 TEXT_REPR_POINT_CLOSE = "</point>"
 
+TOKEN_BBOX_OPEN_STRING = BBOX_OPEN_STRING = "<0x00>"  # <bbox>
+BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
+TOKEN_BBOX_CLOSE_STRING = TOKEN_POINT_OPEN_STRING = POINT_OPEN_STRING = "<0x02>"  # <point>
+TOKEN_POINT_CLOSE_STRING = POINT_CLOSE_STRING = "<0x03>"  # </point>
+BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
+
 
 def full_unpacked_stream_to_tensor(
     all_bi_tokens_to_place: List[int],
@@ -267,14 +273,6 @@ def _tokenize_prompts_with_image_and_batch(
     prompts_length_tensor = torch.tensor(prompts_length, dtype=torch.int64)  # , device="cuda")
 
     return prompts_tokens_tensor, prompts_length_tensor
-
-
-TOKEN_BBOX_OPEN_STRING = BBOX_OPEN_STRING = "<0x00>"  # <bbox>
-BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
-TOKEN_BBOX_CLOSE_STRING = TOKEN_POINT_OPEN_STRING = POINT_OPEN_STRING = "<0x02>"  # <point>
-TOKEN_POINT_CLOSE_STRING = POINT_CLOSE_STRING = "<0x03>"  # </point>
-BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
-
 
 def original_to_transformed_h_coords(self, original_coords):
     # apply crop
