@@ -27,6 +27,7 @@ from ...tokenization_utils import (
 )
 from ...tokenization_utils_base import AddedToken
 from ...utils import PaddingStrategy, logging
+from ...convert_slow_tokenizer import import_protobuf
 
 
 logger = logging.get_logger(__name__)
@@ -146,10 +147,12 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(str(vocab_file))
+        # Add this unused argument to keep some important Copied from statements
+        self.legacy = False
         self.vocab_file = vocab_file
+
+        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
+
 
         # Vocab    |    0    |    1    |   2    |    3    |  4   |  5   |  6   |   7  |   8  |  9
         # -------- | ------- | ------- | ------ | ------- | ---- | ---- | ---- | ---- | ---- | ----
@@ -158,10 +161,10 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         # Mimic fairseq token-to-id alignment for the first 4 token
         self._added_tokens_decoder = {
-            0: AddedToken(pad_token, special=True),
-            1: AddedToken(unk_token, special=True),
-            2: AddedToken(bos_token, special=True),
-            3: AddedToken(eos_token, special=True),
+            0: AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token,
+            1: AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token,
+            2: AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token,
+            3: AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token,
         }
 
         # The first "real" token "an" has position 4 in the original fairseq vocab and position 3 in the spm vocab
@@ -415,10 +418,63 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         }
         vocab.update(self.added_tokens_encoder)
         return vocab
+    
+    @property
+    def unk_token_length(self):
+        return len(self.sp_model.encode(str(self.unk_token)))
+    
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
+    def get_spm_processor(self, from_slow=False):
+        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        if self.legacy or from_slow:  # no dependency on protobuf
+            tokenizer.Load(self.vocab_file)
+            return tokenizer
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._tokenize
-    def _tokenize(self, text: str) -> List[str]:
-        return self.sp_model.encode(text, out_type=str)
+        with open(self.vocab_file, "rb") as f:
+            sp_model = f.read()
+            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
+            model = model_pb2.ModelProto.FromString(sp_model)
+            normalizer_spec = model_pb2.NormalizerSpec()
+            normalizer_spec.add_dummy_prefix = False
+            model.normalizer_spec.MergeFrom(normalizer_spec)
+            sp_model = model.SerializeToString()
+            tokenizer.LoadFromSerializedProto(sp_model)
+        return tokenizer
+
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
+    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
+        """
+        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
+        first token is special.
+        """
+        if self.legacy or len(text) == 0:
+            return super().tokenize(text, **kwargs)
+
+        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+
+        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+            tokens = tokens[1:]
+        return tokens
+
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
+    def _tokenize(self, text, **kwargs):
+        """
+        Returns a tokenized string.
+
+        We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
+        SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
+        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
+        `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
+        `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
+        """
+        tokens = self.sp_model.encode(text, out_type=str)
+        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
+            return tokens
+
+        # 1. Encode string + prefix ex: "<unk> Hey"
+        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
+        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
+        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -431,9 +487,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        if tokens[0].startswith(SPIECE_UNDERLINE):
+            tokens[0] = tokens[0][1:]
+        
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
