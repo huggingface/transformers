@@ -283,6 +283,8 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         clean_sequence = end_sequence[:end_sequence.find(
             '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
         self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence[1:])
+
+
 """
     @slow
     @require_torch_gpu
@@ -321,7 +323,7 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     @slow
     @require_torch_gpu
     def test_model_8b_chat_greedy_generation_bounding_box(self):
-        EXPECTED_TEXT_COMPLETION = """\x00194213202244\x01|ENDOFTEXT|"""
+        EXPECTED_TEXT_COMPLETION = "\x00194213202244\x01|ENDOFTEXT|"
         text_prompt_bbox = "When presented with a box, perform OCR to extract text contained within it. If provided with text, generate the corresponding bounding box.\\nWilliams"  # noqa: E231
 
         bbox_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bbox_sample_image.png"
