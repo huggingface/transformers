@@ -139,6 +139,11 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
+        # pegasus was design to support changing the index of the first tokens. If one of the padding/eos/unk/mask token
+        # is different from default, we must rebuild the vocab
+        from_slow = kwargs.pop("from_slow", None)
+        from_slow = from_slow or str(pad_token) != "<pad>" or str(eos_token) != "</s>" or str(unk_token) != "<unk>"
+
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
@@ -149,6 +154,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             mask_token_sent=mask_token_sent,
             offset=offset,
             additional_special_tokens=additional_special_tokens,
+            from_slow=from_slow,
             **kwargs,
         )
         self.vocab_file = vocab_file

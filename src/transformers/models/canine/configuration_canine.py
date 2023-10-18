@@ -61,6 +61,12 @@ class CanineConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 57344):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 57345):
+            End of stream token id.
         downsampling_rate (`int`, *optional*, defaults to 4):
             The rate at which to downsample the original character sequence length before applying the deep Transformer
             encoder.
