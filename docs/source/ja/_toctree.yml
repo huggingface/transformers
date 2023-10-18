@@ -134,3 +134,46 @@
   - local: model_memory_anatomy
     title: モデルトレーニングの解剖学
   title: コンセプチュアルガイド
+- sections:
+  - sections:
+    - local: main_classes/agent
+      title: エージェントとツール
+    # - local: model_doc/auto
+    #   title: Auto Classes
+    - local: main_classes/callback
+      title: コールバック
+    - local: main_classes/configuration
+      title: 構成
+    - local: main_classes/data_collator
+      title: データ照合者
+    - local: main_classes/keras_callbacks
+      title: Keras コールバック
+    - local: main_classes/logging
+      title: ロギング
+    - local: main_classes/model
+      title: モデル
+    - local: main_classes/text_generation
+      title: テキストの生成
+    - local: main_classes/onnx
+      title: ONNX
+    - local: main_classes/optimizer_schedules
+      title: 最適化
+    - local: main_classes/output
+      title: モデルの出力
+    - local: main_classes/pipelines
+      title: パイプライン
+    - local: main_classes/processors
+      title: プロセッサー
+    - local: main_classes/quantization
+      title: 量子化
+    - local: main_classes/tokenizer
+      title: トークナイザー
+    - local: main_classes/trainer
+      title: トレーナー
+    - local: main_classes/deepspeed
+      title: ディープスピードの統合
+    - local: main_classes/feature_extractor
+      title: 特徴抽出器
+    - local: main_classes/image_processor
+      title: 画像処理プロセッサ
+    title: 主要なクラス
