@@ -594,6 +594,8 @@ class UnivNetModel(PreTrainedModel):
         # Get sequence lengths for UnivNetFeatureExtractor.batch_decode.
         waveform_lengths = None
         if padding_mask is not None:
+            if padding_mask.dim() == 1:
+                padding_mask = padding_mask.unsqueeze(0)
             # Padding is always contiguous and added on the right
             waveform_lengths = torch.sum(padding_mask, dim=1)
 
