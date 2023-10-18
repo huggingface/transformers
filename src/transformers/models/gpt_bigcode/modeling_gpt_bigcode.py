@@ -364,14 +364,17 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query.dtype
         if input_dtype == torch.float32:
+            # Handle the case where the model is quantized
+            target_dtype = getattr(self.config, "_pre_quantization_dtype", self.query_key_value.weight.dtype)
+
             logger.warning_once(
-                "The input hidden states seems to be silently casted in float32, this might be related to"
-                " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                " float16."
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
             )
-            query = query.to(torch.float16)
-            key = key.to(torch.float16)
-            value = value.to(torch.float16)
+            query = query.to(target_dtype)
+            key = key.to(target_dtype)
+            value = value.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
             query, key, value, padding_mask, query_length, dropout=attn_dropout, softmax_scale=softmax_scale
