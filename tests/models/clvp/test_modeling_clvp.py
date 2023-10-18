@@ -537,9 +537,8 @@ class ClvpIntegrationTest(unittest.TestCase):
         tokenizer = ClvpTokenizer.from_pretrained("susnato/clvp_dev")
         feature_extractor = ClvpFeatureExtractor.from_pretrained("susnato/clvp_dev")
 
-        tokenizer_output = tokenizer(self.text, return_tensors="pt", return_input_ids_with_special_tokens=True)
+        tokenizer_output = tokenizer(self.text, return_tensors="pt")
         self.text_tokens = tokenizer_output["input_ids"].to(torch_device)
-        self.text_with_special_tokens = tokenizer_output["input_ids_with_special_tokens"].to(torch_device)
         self.input_features = feature_extractor(
             raw_speech=self.speech_samples, sampling_rate=self.sr, return_tensors="pt"
         )["input_features"].to(torch_device)
@@ -553,7 +552,7 @@ class ClvpIntegrationTest(unittest.TestCase):
     def test_conditional_encoder(self):
         with torch.no_grad():
             conditioning_encoder_outputs = self.model.conditioning_encoder(
-                input_features=self.input_features, input_ids=self.text_with_special_tokens
+                input_features=self.input_features, input_ids=self.text_tokens
             ).to("cpu")
 
         self.assertEqual(
@@ -605,7 +604,6 @@ class ClvpIntegrationTest(unittest.TestCase):
     def test_full_model_integration(self):
         full_model_output = self.model.generate(
             input_ids=self.text_tokens,
-            input_ids_with_special_tokens=self.text_with_special_tokens,
             input_features=self.input_features,
             do_sample=False,
             num_beams=4,

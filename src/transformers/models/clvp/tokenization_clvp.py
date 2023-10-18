@@ -23,8 +23,6 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import (
-    ENCODE_KWARGS_DOCSTRING,
-    ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
     BatchEncoding,
     PaddingStrategy,
     PreTokenizedInput,
@@ -159,8 +157,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
     model_input_names = [
         "input_ids",
         "attention_mask",
-        "input_ids_with_special_tokens",
-        "attention_mask_with_special_tokens",
     ]
 
     def __init__(
@@ -348,112 +344,6 @@ class ClvpTokenizer(PreTrainedTokenizer):
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
-
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
-    def __call__(
-        self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
-        ] = None,
-        return_input_ids_with_special_tokens: bool = False,
-        add_special_tokens: bool = False,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        **kwargs,
-    ) -> BatchEncoding:
-        """
-        Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
-        sequences.
-
-        Args:
-            text (`str`, `List[str]`, `List[List[str]]`, *optional*):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_pair (`str`, `List[str]`, `List[List[str]]`, *optional*):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
-                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
-                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
-                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_pair_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
-                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
-                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
-                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_input_ids_with_special_tokens (`bool`, *optional*, defaults to False):
-                Whether to return `input_ids` with special tokens alongside `input_ids`. This is used by the
-                [`ClvpConditioningEncoder`] instead of `input_ids`. Corresponding `attention_mask` will be provided if
-                needed.
-        """
-        encodings = super().__call__(
-            text=text,
-            text_pair=text_pair,
-            text_target=text_target,
-            text_pair_target=text_pair_target,
-            add_special_tokens=add_special_tokens,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            is_split_into_words=is_split_into_words,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_tensors=return_tensors,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            return_length=return_length,
-            verbose=verbose,
-            **kwargs,
-        )
-
-        # used by only [`ClvpConditioningEncoder`].
-        if return_input_ids_with_special_tokens:
-            encodings_with_special_tokens = super().__call__(
-                text=text,
-                text_pair=text_pair,
-                text_target=text_target,
-                text_pair_target=text_pair_target,
-                add_special_tokens=True,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                is_split_into_words=is_split_into_words,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_tensors=return_tensors,
-                return_token_type_ids=return_token_type_ids,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_length=return_length,
-                verbose=verbose,
-                **kwargs,
-            )
-
-            encodings["input_ids_with_special_tokens"] = encodings_with_special_tokens["input_ids"]
-            encodings["attention_mask_with_special_tokens"] = encodings_with_special_tokens["attention_mask"]
-
-        return encodings
 
     def clean_up_tokenization(self, text):
         text = "".join(text)
