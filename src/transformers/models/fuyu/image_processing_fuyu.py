@@ -100,10 +100,10 @@ class FuyuImageProcessor(BaseImageProcessor):
         """Process images for model input. In particular, variable-sized images are handled here.
 
         Args:
-            image_input: [batch_size, num_sub_sequences, c, h, w] tensor of images padded to model input size.
-            image_present: [batch_size, num_sub_sequences] tensor of 1s and 0s indicating whether an image is present.
-            image_unpadded_h: [batch_size, num_sub_sequences] tensor of unpadded image heights.
-            image_unpadded_w: [batch_size, num_sub_sequences] tensor of unpadded image widths.
+            image_input: [batch_size, 1, c, h, w] tensor of images padded to model input size.
+            image_present: [batch_size, 1] tensor of 1s and 0s indicating whether an image is present.
+            image_unpadded_h: [batch_size, 1] tensor of unpadded image heights.
+            image_unpadded_w: [batch_size, 1] tensor of unpadded image widths.
             image_patch_dim_h: The height of the image patches.
             image_patch_dim_w: The width of the image patches.
             image_placeholder_id: The id of the image placeholder token.
