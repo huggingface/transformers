@@ -324,10 +324,11 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
 
     return mask
 
+
 def format_speech_generation_kwargs(kwargs):
     """
-    Format kwargs for SeamlessM4T models that generate speech, attribute kwargs to either the text generation 
-    or the speech generation models. 
+    Format kwargs for SeamlessM4T models that generate speech, attribute kwargs to either the text generation or the
+    speech generation models.
 
     Args:
         kwargs (`dict`)`:
@@ -359,6 +360,7 @@ def format_speech_generation_kwargs(kwargs):
             if key not in kwargs_speech:
                 kwargs_speech[key] = value
     return kwargs_text, kwargs_speech
+
 
 ############ SPEECH ENCODER related code ################
 
@@ -3990,7 +3992,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                     Please specify a `tgt_lang` in {','.join(lang_code_to_id.keys())}. Note that SeamlessM4T supports
                     more languages for text translation than for speech synthesis."""
                     )
-        
+
         kwargs_text, kwargs_speech = format_speech_generation_kwargs(kwargs)
         kwargs_text["output_hidden_states"] = True
         kwargs_text["return_dict_in_generate"] = True
