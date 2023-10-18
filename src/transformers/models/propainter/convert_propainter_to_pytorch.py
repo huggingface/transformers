@@ -605,7 +605,9 @@ def remove_classification_head_(state_dict):
 def rename_key(state_dict, old, new):
     if old in state_dict:
         val = state_dict.pop(old)
-        state_dict[new] = val
+        if "InPainting" in new:
+            new = new.replace("InPainting.","")
+        state_dict["model."+new] = val
 
 
 # We will verify our results on an image of cute cats
