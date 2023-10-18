@@ -3614,8 +3614,11 @@ def load_tf_weights_in_funnel(*args, **kwargs):
     requires_backends(load_tf_weights_in_funnel, ["torch"])
 
 
-FUYU_PRETRAINED_MODEL_ARCHIVE_LIST = None
+class FuyuForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
 
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 class FuyuModel(metaclass=DummyObject):
     _backends = ["torch"]
@@ -3624,7 +3627,7 @@ class FuyuModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class FuyuForCausalLM(metaclass=DummyObject):
+class FuyuPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

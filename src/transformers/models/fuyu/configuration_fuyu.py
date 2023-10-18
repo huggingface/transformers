@@ -53,21 +53,21 @@ class FuyuConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 16384):
             The maximum sequence length that this model might ever be used with.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 300):
             The input image size.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 30):
             The input vision transformer encoding patch size.
         num_channels (`int`, *optional*, defaults to 3):
             The input image number of channels.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         rope_theta (`float`, *optional*, defaults to 25000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
@@ -78,16 +78,19 @@ class FuyuConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalFuyu/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
-        qk_layernorm (`bool`, *optional*, default to `True`):
+        qk_layernorm (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states
-        hidden_dropout (`float`, *optional*, default to 0.0):
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after applying the MLP to the hidden states.
-        attention_dropout (`float`, *optional*, default to 0.0):
+        attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio after computing the attention scores.
-        partial_rotary_factor (`float`, *optional*, default to 0.5):
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
             Percentage of the query and keys which will have rotary embedding.
 
-        Example:
+        pad_token_id (`<fill_type>`, *optional*): <fill_docstring>
+        bos_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        eos_token_id (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        text_config (`<fill_type>`, *optional*): <fill_docstring>
 
     ```python
     >>> from transformers import FuyuModel, FuyuConfig
