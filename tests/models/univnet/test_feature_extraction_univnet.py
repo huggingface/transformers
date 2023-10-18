@@ -300,9 +300,6 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         input_lengths = list(range(800, 1400, 200))
-        speech_inputs = [floats_list((1, x))[0] for x in input_lengths]
-
-        feature_extractor(speech_inputs, padding=True, pad_end=True, return_tensors="pt").input_features
         pad_samples = feature_extractor.pad_end_length * feature_extractor.hop_length
         output_features = {
             "waveforms": torch.tensor(floats_list((3, max(input_lengths) + pad_samples))),
