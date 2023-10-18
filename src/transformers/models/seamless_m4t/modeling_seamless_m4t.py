@@ -3326,7 +3326,13 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
         # overwrite text_decoder_input_ids if tgt_lang is passed. The latter gets priority over decoder_input_ids.
         if tgt_lang is not None:
-            batch_size = len(input_features) if input_features is not None else len(kwargs.get("inputs_embeds"))
+            inputs = kwargs.get("input_embeds") if input_features is None else input_features
+            inputs = (
+                inputs
+                if inputs is not None
+                else kwargs.get("encoder_outputs", {"last_hidden_state": None})["last_hidden_state"]
+            )
+            batch_size = len(inputs)
 
             if hasattr(self.generation_config, "text_decoder_lang_to_code_id"):
                 # also accept __xxx__
