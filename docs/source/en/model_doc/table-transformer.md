@@ -33,15 +33,14 @@ significant increase in training performance and a more reliable estimate of mod
 object detection models trained on PubTables-1M produce excellent results for all three tasks of detection, structure recognition, and functional analysis without the need for any
 special customization for these tasks.*
 
-Tips:
-
-- The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition) (the task of recognizing the individual rows, columns etc. in a table).
-- One can use the [`AutoImageProcessor`] API to prepare images and optional targets for the model. This will load a [`DetrImageProcessor`] behind the scenes.
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/table_transformer_architecture.jpeg"
 alt="drawing" width="600"/>
 
 <small> Table detection and table structure recognition clarified. Taken from the <a href="https://arxiv.org/abs/2110.00061">original paper</a>. </small>
+
+The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in 
+documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition) 
+(the task of recognizing the individual rows, columns etc. in a table).
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be
 found [here](https://github.com/microsoft/table-transformer).
@@ -52,6 +51,11 @@ found [here](https://github.com/microsoft/table-transformer).
 
 - A demo notebook for the Table Transformer can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Table%20Transformer).
 - It turns out padding of images is quite important for detection. An interesting Github thread with replies from the authors can be found [here](https://github.com/microsoft/table-transformer/issues/68).
+
+<Tip>
+
+Use the [`AutoImageProcessor`] API to prepare images and optional targets for the model. This will load a [`DetrImageProcessor`] behind the scenes.
+</Tip>
 
 ## TableTransformerConfig
 
