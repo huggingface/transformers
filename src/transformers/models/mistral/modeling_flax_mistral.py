@@ -29,11 +29,14 @@ from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 
-from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
-                                      FlaxCausalLMOutputWithCrossAttentions,
-                                      FlaxSequenceClassifierOutput)
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutputWithPast,
+    FlaxCausalLMOutputWithCrossAttentions,
+    FlaxSequenceClassifierOutput,
+)
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, logging
 from .configuration_mistral import MistralConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -60,10 +63,11 @@ class FlaxMistralRMSNorm(nn.Module):
     hidden_size: int
     eps: float = 1e-6
     dtype: jnp.dtype = jnp.float32
+    weight_dtype: jnp.dtype = jnp.float32
 
     @nn.compact
     def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
-        weight = self.param("weight", ones, self.hidden_size, self.dtype)
+        weight = self.param("weight", ones, self.hidden_size, self.weight_dtype)
         variance = (hidden_states**2).mean(-1, keepdims=True)
         hidden_states = hidden_states * 1 / jnp.sqrt(variance + self.eps)
         return weight * hidden_states
