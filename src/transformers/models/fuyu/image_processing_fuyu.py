@@ -72,7 +72,7 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         return num_patches
 
-    def patchify_image(self, image: torch.Tensor, patch_dim_h: int, patch_dim_w: int) -> torch.Tensor:
+    def patchify_image(self, image: "torch.Tensor", patch_dim_h: int, patch_dim_w: int) -> "torch.Tensor":
         """
         Convert an image into a tensor of patches.
 
@@ -100,10 +100,10 @@ class FuyuImageProcessor(BaseImageProcessor):
 
     def process_images_for_model_input(
         self,
-        image_input: torch.Tensor,
-        image_present: torch.Tensor,
-        image_unpadded_h: torch.Tensor,
-        image_unpadded_w: torch.Tensor,
+        image_input: "torch.Tensor",
+        image_present: "torch.Tensor",
+        image_unpadded_h: "torch.Tensor",
+        image_unpadded_w: "torch.Tensor",
         image_patch_dim_h: int,
         image_patch_dim_w: int,
         image_placeholder_id: int,

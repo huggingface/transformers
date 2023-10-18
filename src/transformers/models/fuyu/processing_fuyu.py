@@ -45,12 +45,12 @@ BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
 
 def full_unpacked_stream_to_tensor(
     all_bi_tokens_to_place: List[int],
-    full_unpacked_stream: List[torch.Tensor],
+    full_unpacked_stream: List["torch.Tensor"],
     fill_value: int,
     batch_size: int,
     new_seq_len: int,
     offset: int,
-) -> torch.Tensor:
+) -> "torch.Tensor":
     """Takes an unpacked stream of tokens (i.e. a list of tensors, one for each item in the batch) and does
     the required padding to create a single tensor for the batch of shape batch_size x new_seq_len.
     """
@@ -75,12 +75,12 @@ def full_unpacked_stream_to_tensor(
 
 
 def construct_full_unpacked_stream(
-    num_real_text_tokens: Union[List[List[int]], torch.Tensor],
-    input_stream: torch.Tensor,
-    image_tokens: List[List[torch.Tensor]],
+    num_real_text_tokens: Union[List[List[int]], "torch.Tensor"],
+    input_stream: "torch.Tensor",
+    image_tokens: List[List["torch.Tensor"]],
     batch_size: int,
     num_sub_sequences: int,
-) -> List[torch.Tensor]:
+) -> List["torch.Tensor"]:
     """Takes an input_stream tensor of shape B x S x ?. For each subsequence, adds any required
     padding to account for images and then unpacks the subsequences to create a single sequence per item in the batch.
     Returns a list of tensors, one for each item in the batch."""
@@ -209,12 +209,12 @@ def _transform_within_tags(text: str, transformed_image, tokenizer) -> List[int]
 def _tokenize_prompts_with_image_and_batch(
     tokenizer,
     prompts: List[List[str]],
-    transformed_images: Optional[List[List[torch.Tensor]]],
+    transformed_images: Optional[List[List["torch.Tensor"]]],
     max_tokens_to_generate: int,
     max_position_embeddings: int,
     add_BOS: bool,  # Same issue with types as above
     add_beginning_of_answer_token: bool,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple["torch.Tensor", "torch.Tensor"]:
     """
     Given a set of prompts and number of tokens to generate:
     - tokenize prompts
