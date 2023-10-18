@@ -1172,7 +1172,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # CTC models must specify return_timestamps type - cannot set `return_timestamps=True` blindly
         with self.assertRaisesRegex(
             ValueError,
-            "^CTC can either predict character level timestamps, or word level timestamps."
+            "^CTC can either predict character level timestamps, or word level timestamps. "
             "Set `return_timestamps='char'` or `return_timestamps='word'` as required.$",
         ):
             _ = speech_recognizer(audio, return_timestamps=True)

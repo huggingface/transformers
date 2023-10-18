@@ -115,7 +115,7 @@ from .import_utils import (
     is_detectron2_available,
     is_essentia_available,
     is_faiss_available,
-    is_flash_attn_available,
+    is_flash_attn_2_available,
     is_flax_available,
     is_fsdp_available,
     is_ftfy_available,

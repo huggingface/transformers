@@ -2550,6 +2550,14 @@ def _generate_speech(
     vocoder: Optional[nn.Module] = None,
     output_cross_attentions: bool = False,
 ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    if speaker_embeddings is None:
+        raise ValueError(
+            """`speaker_embeddings` must be specified. For example, you can use a speaker embeddings by following
+                    the code snippet provided in this link:
+                    https://huggingface.co/datasets/Matthijs/cmu-arctic-xvectors
+                    """
+        )
+
     encoder_attention_mask = torch.ones_like(input_values)
 
     encoder_out = model.speecht5.encoder(
