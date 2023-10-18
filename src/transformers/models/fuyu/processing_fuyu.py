@@ -12,7 +12,7 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...processing_utils import ProcessorMixin
-from ...utils import is_vision_available, is_torch_available, logging
+from ...utils import is_torch_available, is_vision_available, logging
 from .image_processing_fuyu import FuyuImageProcessor
 
 

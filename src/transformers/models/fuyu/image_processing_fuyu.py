@@ -1,17 +1,17 @@
 import math
 from typing import List, Union
 
-from ...image_processing_utils import BaseImageProcessor
-from ...utils import is_torch_available, is_vision_available, logging
+import numpy as np
 
+from ...image_processing_utils import BaseImageProcessor
 from ...image_transforms import (
     normalize,
     pad,
     resize,
 )
 from ...image_utils import to_numpy_array
+from ...utils import is_torch_available, is_vision_available, logging
 
-import numpy as np
 
 if is_vision_available():
     import PIL
@@ -203,7 +203,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             "image_patch_indices_per_batch": image_patch_indices_per_batch,
             "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
         }
-    
+
     def _scale_to_target_aspect_ratio(self, image: np.ndarray) -> np.ndarray:
         image_height, image_width, _ = image.shape
         if image_width <= self.target_width and image_height <= self.target_height:
@@ -242,4 +242,3 @@ class FuyuImageProcessor(BaseImageProcessor):
         padded_image = self._pad_to_target_size(scaled_image)
         normalized_padded_image = normalize(padded_image, 0.5, 0.5)
         return normalized_padded_image
-    
