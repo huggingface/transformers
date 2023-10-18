@@ -324,6 +324,41 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
 
     return mask
 
+def format_speech_generation_kwargs(kwargs):
+    """
+    Format kwargs for SeamlessM4T models that generate speech, attribute kwargs to either the text generation 
+    or the speech generation models. 
+
+    Args:
+        kwargs (`dict`)`:
+             Keyword arguments are of two types:
+
+                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
+                except for `decoder_input_ids` which will only be passed through the text components.
+                - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
+                text model and speech model respectively. It has the priority over the keywords without a prefix.
+
+                This means you can, for example, specify a generation strategy for one generation but not for the
+                other.
+    """
+    # attribute kwargs to models
+    kwargs_text = {}
+    kwargs_speech = {}
+    for key, value in kwargs.items():
+        if key.startswith("text_"):
+            key = key[len("text_") :]
+            kwargs_text[key] = value
+        elif key.startswith("speech_"):
+            key = key[len("speech_") :]
+            kwargs_speech[key] = value
+        else:
+            # If the key is already in a specific config, then it's been set with a
+            # submodules specific value and we don't override
+            if key not in kwargs_text:
+                kwargs_text[key] = value
+            if key not in kwargs_speech:
+                kwargs_speech[key] = value
+    return kwargs_text, kwargs_speech
 
 ############ SPEECH ENCODER related code ################
 
@@ -2736,8 +2771,6 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         lang = lang.repeat(1, 1, hidden_states.shape[-1])
         hidden_states = torch.cat([lang, hidden_states, spkr], dim=1)
 
-        # mask = torch.arange(hidden_states.shape[2]).repeat(2,1)<unit_lengths.unsqueeze(1)
-        # hidden_states = hidden_states * mask.unsqueeze(1)
         hidden_states = self.hifi_gan(hidden_states)
 
         unit_lengths = self._get_dur_output_lengths(input_ids, dur_out)
@@ -2781,7 +2814,6 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
     SEAMLESS_M4T_START_DOCSTRING,
 )
 class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
-    # base_model_prefix = ""
     _keys_to_ignore_on_load_missing = ["speech_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_ids"
 
@@ -3599,23 +3631,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
                     more languages for text translation than for speech synthesis."""
                     )
 
-        # attribute kwargs to models
-        kwargs_text = {}
-        kwargs_speech = {}
-        for key, value in kwargs.items():
-            if key.startswith("text_"):
-                key = key[len("text_") :]
-                kwargs_text[key] = value
-            elif key.startswith("speech_"):
-                key = key[len("speech_") :]
-                kwargs_speech[key] = value
-            else:
-                # If the key is already in a specific config, then it's been set with a
-                # submodules specific value and we don't override
-                if key not in kwargs_text:
-                    kwargs_text[key] = value
-                if key not in kwargs_speech:
-                    kwargs_speech[key] = value
+        kwargs_text, kwargs_speech = format_speech_generation_kwargs(kwargs)
         kwargs_text["output_hidden_states"] = True
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
@@ -3676,7 +3692,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         # second generation
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
         output_unit_ids = unit_ids.detach().clone()
-        unit_ids = unit_ids
 
         # get rid of t2u_decoder_input_ids
         unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1] :]
@@ -3975,24 +3990,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                     Please specify a `tgt_lang` in {','.join(lang_code_to_id.keys())}. Note that SeamlessM4T supports
                     more languages for text translation than for speech synthesis."""
                     )
-
-        # attribute kwargs to models
-        kwargs_text = {}
-        kwargs_speech = {}
-        for key, value in kwargs.items():
-            if key.startswith("text_"):
-                key = key[len("text_") :]
-                kwargs_text[key] = value
-            elif key.startswith("speech_"):
-                key = key[len("speech_") :]
-                kwargs_speech[key] = value
-            else:
-                # If the key is already in a specific config, then it's been set with a
-                # submodules specific value and we don't override
-                if key not in kwargs_text:
-                    kwargs_text[key] = value
-                if key not in kwargs_speech:
-                    kwargs_speech[key] = value
+        
+        kwargs_text, kwargs_speech = format_speech_generation_kwargs(kwargs)
         kwargs_text["output_hidden_states"] = True
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
@@ -4062,7 +4061,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         # second generation
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
         output_unit_ids = unit_ids.detach().clone()
-        unit_ids = unit_ids
 
         # get rid of t2u_decoder_input_ids
         unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1] :]
@@ -4440,23 +4438,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             else (len(input_ids) if input_ids is not None else len(kwargs.get("inputs_embeds")))
         )
 
-        # attribute kwargs to models
-        kwargs_text = {}
-        kwargs_speech = {}
-        for key, value in kwargs.items():
-            if key.startswith("text_"):
-                key = key[len("text_") :]
-                kwargs_text[key] = value
-            elif key.startswith("speech_"):
-                key = key[len("speech_") :]
-                kwargs_speech[key] = value
-            else:
-                # If the key is already in a specific config, then it's been set with a
-                # submodules specific value and we don't override
-                if key not in kwargs_text:
-                    kwargs_text[key] = value
-                if key not in kwargs_speech:
-                    kwargs_speech[key] = value
+        kwargs_text, kwargs_speech = format_speech_generation_kwargs(kwargs)
         kwargs_text["output_hidden_states"] = True
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
@@ -4547,7 +4529,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # second generation
         unit_ids = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
         output_unit_ids = unit_ids.detach().clone()
-        unit_ids = unit_ids
 
         # get rid of t2u_decoder_input_ids
         unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1] :]
