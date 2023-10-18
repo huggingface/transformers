@@ -100,11 +100,12 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
 
 
 class PatchTSMixerGatedAttention(nn.Module):
-    """PatchTSMixerGatedAttention
+    """
+    Module that applies gated attention to input data.
 
     Args:
-        in_size (`int`): input size
-        out_size (`int`): output size
+        in_size (`int`): The input size.
+        out_size (`int`): The output size.
     """
 
     def __init__(self, in_size: int, out_size: int):
@@ -120,11 +121,16 @@ class PatchTSMixerGatedAttention(nn.Module):
 
 class PatchTSMixerTranspose(nn.Module):
     """
-    Transpose the tensor to the dimension defined in **dims**
+    Transpose the input tensor according to specified dimensions.
 
     Args:
-        dims (`list`, *optional*, defaults to `False`):
-               List of dimensions to be transposed contiguous. if True, the transposed tensor is contiguous.
+        *dims (`int`): Variable-length list of dimensions to permute the input tensor. The input tensor is
+            transposed based on the order of dimensions provided.
+        contiguous (`bool`, *optional*, defaults to False): If True, the transposed tensor is made contiguous.
+
+    Returns:
+        `torch.Tensor`: The transposed tensor.
+
     """
 
     def __init__(self, *dims, contiguous=False):
@@ -133,10 +139,10 @@ class PatchTSMixerTranspose(nn.Module):
 
     def forward(self, inputs: torch.Tensor):
         """
-        Parameters:
-            inputs (`torch.Tensor`): input to be transposed
+        Args:
+            inputs (`torch.Tensor`): Input to be transposed.
         Returns:
-            `torch.Tensor`: transposed tensor
+            `torch.Tensor`: transposed tensor.
         """
         if self.contiguous:
             return inputs.transpose(*self.dims).contiguous()
@@ -166,9 +172,9 @@ class PatchTSMixerNormLayer(nn.Module):
 
     def forward(self, inputs: torch.Tensor):
         """
-        Parameters:
+        Args:
             inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`):
-                input to the normalization layer
+                Input to the normalization layer.
         Returns:
             `torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`
         """
@@ -220,9 +226,9 @@ class PatchTSMixerMLP(nn.Module):
 
     def forward(self, inputs: torch.Tensor):
         """
-        Parameters:
+        Args:
             inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`):
-                input to the MLP layer
+                Input to the MLP layer.
         Returns:
             `torch.Tensor` of the same shape as `inputs`
         """
@@ -234,7 +240,7 @@ class PatchTSMixerMLP(nn.Module):
 
 
 class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
-    """PatchTSMixerChannelFeatureMixerBlock
+    """This module mixes the features in the channel dimension.
 
     Args:
         config (`PatchTSMixerConfig`, *mandatory*):
@@ -267,7 +273,7 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
 
     def forward(self, inputs: torch.Tensor):
         """
-        Parameters:
+        Args:
             inputs (`torch.Tensor` of shape `((batch_size, num_channels, num_patches, num_features))`):
                 input to the MLP layer
         Returns:
@@ -290,7 +296,7 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
 
 
 class PatchMixerBlock(nn.Module):
-    """PatchMixerBlock
+    """This module mixes the patch dimension.
 
     Args:
         config (`PatchTSMixerConfig`, *mandatory*):
@@ -337,6 +343,13 @@ class PatchMixerBlock(nn.Module):
             self.norm_attn = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
     def forward(self, data):
+        """
+        Args:
+            data (`torch.Tensor`): Input tensor.
+
+        Returns:
+            `torch.Tensor`: Transformed tensor.
+        """
         residual = data
 
         data = self.norm(data)
@@ -380,7 +393,7 @@ class PatchMixerBlock(nn.Module):
 
 
 class FeatureMixerBlock(nn.Module):
-    """FeatureMixerBlock
+    """This module mixes the hidden feature dimension.
 
     Args:
         config (`PatchTSMixerConfig`, *mandatory*):
@@ -412,6 +425,13 @@ class FeatureMixerBlock(nn.Module):
             self.gab = PatchTSMixerGatedAttention(in_size=num_features, out_size=num_features)
 
     def forward(self, data):
+        """
+        Args:
+            data (`torch.Tensor`): Input tensor.
+
+        Returns:
+            `torch.Tensor`: Transformed tensor.
+        """
         residual = data
 
         data = self.norm(data)
@@ -427,9 +447,12 @@ class FeatureMixerBlock(nn.Module):
 
 class PatchTSMixerLayer(nn.Module):
     """
+    The `PatchTSMixer` layer that does all three kinds of mixing.
+
     Args:
         config (`PatchTSMixerConfig`, *mandatory*):
             Configuration.
+
     """
 
     def __init__(
@@ -454,6 +477,13 @@ class PatchTSMixerLayer(nn.Module):
             )
 
     def forward(self, data):
+        """
+        Args:
+            data (`torch.Tensor`): Input tensor.
+
+        Returns:
+            `torch.Tensor`: Transformed tensor.
+        """
         # data.shape == (batch_size, num_patches, num_features)
         if self.mode == "mix_channel":
             data = self.channel_feature_mixer(data)
@@ -466,7 +496,7 @@ class PatchTSMixerLayer(nn.Module):
 
 
 class PatchTSMixerBlock(nn.Module):
-    """PatchTSMixer Backbone. The main coputing framework of the `PatchTSMixer` model.
+    """The main coputing framework of the `PatchTSMixer` model.
 
     Args:
         config (`PatchTSMixerConfig`, *mandatory*):
@@ -491,6 +521,17 @@ class PatchTSMixerBlock(nn.Module):
         )
 
     def forward(self, data, output_hidden_states: Optional[bool] = False):
+        r"""
+
+        Args:
+            data (`torch.Tensor`): The input tensor.
+            output_hidden_states (`bool`, *optional*, defaults to False.):
+                Whether to output the hidden states as well.
+
+        Returns:
+            `torch.Tensor`: The embedding. `list`: List of all hidden states if `output_hidden_states` is set to
+            `True`.
+        """
         all_hidden_states = []
 
         logger.debug(data.shape)
