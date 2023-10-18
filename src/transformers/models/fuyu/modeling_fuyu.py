@@ -160,6 +160,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+
+        # for device placement easyness
         input_embeds = self.language_model.get_input_embeddings()
         self.input_embeds = self.register_buffer("input_embeds", input_embeds, persistent=False )
 
