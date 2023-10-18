@@ -17,19 +17,12 @@
 import json
 import os
 from functools import lru_cache
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...tokenization_utils_base import (
-    BatchEncoding,
-    PaddingStrategy,
-    PreTokenizedInput,
-    TextInput,
-    TruncationStrategy,
-)
-from ...utils import TensorType, add_end_docstrings, logging
+from ...utils import logging
 from .number_normalizer import EnglishNormalizer
 
 
@@ -347,14 +340,18 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
     def clean_up_tokenization(self, text):
         text = "".join(text)
-        text = text.replace("[SPACE]", " ") if "[SPACE]" in self.encoder.keys() else text
-        text = text.replace("[STOP]", " ") if "[STOP]" in self.encoder.keys() else text
-
         text = (
-            text.replace(self.unk_token, "")
-            .replace("   ", " ")
-            .replace("  ", " ")
+            text.replace("[SPACE]", " ")
+            if "[SPACE]" in list(self.encoder.keys()) + list(self.added_tokens_encoder.keys())
+            else text
         )
+        text = (
+            text.replace("[STOP]", " ")
+            if "[STOP]" in list(self.encoder.keys()) + list(self.added_tokens_encoder.keys())
+            else text
+        )
+
+        text = text.replace(self.unk_token, "").replace("   ", " ").replace("  ", " ")
         return text
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary

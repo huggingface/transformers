@@ -560,7 +560,9 @@ class ClvpConditioningEncoder(nn.Module):
         self.decoder_config = config.decoder_config
 
         self.text_token_embedding = nn.Embedding(self.text_config.vocab_size, self.decoder_config.hidden_size)
-        self.text_position_embedding = nn.Embedding(self.decoder_config.max_text_tokens, self.decoder_config.hidden_size)
+        self.text_position_embedding = nn.Embedding(
+            self.decoder_config.max_text_tokens, self.decoder_config.hidden_size
+        )
 
         self.mel_conv = nn.Conv1d(self.decoder_config.feature_size, self.decoder_config.hidden_size, kernel_size=1)
 
@@ -1345,8 +1347,16 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
         conditioning_embeds = model_kwargs.get("conditioning_embeds", None)
 
         if conditioning_embeds is not None:
-            mel_start_token_embedding = self.model.decoder.input_embeds_layer(torch.full((conditioning_embeds.shape[0], 1), fill_value=self.config.bos_token_id, device=conditioning_embeds.device))
-            mel_start_token_embedding += self.model.decoder.position_embeds_layer(torch.full((conditioning_embeds.shape[0], 1), fill_value=0, device=conditioning_embeds.device))
+            mel_start_token_embedding = self.model.decoder.input_embeds_layer(
+                torch.full(
+                    (conditioning_embeds.shape[0], 1),
+                    fill_value=self.config.bos_token_id,
+                    device=conditioning_embeds.device,
+                )
+            )
+            mel_start_token_embedding += self.model.decoder.position_embeds_layer(
+                torch.full((conditioning_embeds.shape[0], 1), fill_value=0, device=conditioning_embeds.device)
+            )
             conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
 
             # subtract the positional_ids here
@@ -1856,7 +1866,11 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 speech_outputs[2],
             )
             if output_hidden_states:
-                output += (decoder_outputs[-1], text_outputs[-1], speech_outputs[-1],)
+                output += (
+                    decoder_outputs[-1],
+                    text_outputs[-1],
+                    speech_outputs[-1],
+                )
 
             return ((loss,) + output) if loss is not None else output
 
@@ -1970,7 +1984,11 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
                 speech_outputs[2],
             )
             if output_hidden_states:
-                output += (decoder_outputs[-1], text_outputs[-1], speech_outputs[-1],)
+                output += (
+                    decoder_outputs[-1],
+                    text_outputs[-1],
+                    speech_outputs[-1],
+                )
 
             return output
 
