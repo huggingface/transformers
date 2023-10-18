@@ -649,10 +649,6 @@ class FuyuModel(FuyuPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        # self.processor = FuyuProcessor()
-
-        # vision tokens
-
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
         )
