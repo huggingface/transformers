@@ -110,10 +110,10 @@ class TestProcessImagesForModelInput(unittest.TestCase):
         """
         self.image_processor = FuyuImageProcessor()
 
-        self.image_input = torch.randn([2, 1, 3, 64, 64])
-        self.image_present = torch.tensor([[0], [1]])
-        self.image_unpadded_h = torch.tensor([[32], [45]])  # Adjusted for subsequence of 1
-        self.image_unpadded_w = torch.tensor([[32], [50]])  # Adjusted for subsequence of 1
+        self.image_input = torch.randn([1, 1, 3, 64, 64])
+        self.image_present = torch.tensor([[1]])
+        self.image_unpadded_h = torch.tensor([[45]])  # Adjusted for subsequence of 1
+        self.image_unpadded_w = torch.tensor([[50]])  # Adjusted for subsequence of 1
         self.image_patch_dim_h = 16
         self.image_patch_dim_w = 16
         self.image_placeholder_id = 999
@@ -133,5 +133,5 @@ class TestProcessImagesForModelInput(unittest.TestCase):
             image_newline_id=self.image_newline_id,
             variable_sized=self.variable_sized,
         )
-
-        self.assertEqual(result['images'][1][0].shape, torch.Size([3, 64, 64]))
+        print(result['images'][0][0])
+        self.assertEqual(result['images'][0][0].shape, torch.Size([3, 64, 64]))

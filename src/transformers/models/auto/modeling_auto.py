@@ -717,7 +717,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("flaubert", "FlaubertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
         ("funnel", "FunnelForSequenceClassification"),
-        ("fuyu", "FuyuForSequenceClassification"),
         ("gpt-sw3", "GPT2ForSequenceClassification"),
         ("gpt2", "GPT2ForSequenceClassification"),
         ("gpt_bigcode", "GPTBigCodeForSequenceClassification"),

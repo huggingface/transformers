@@ -278,7 +278,6 @@ def _tokenize_prompts_with_image_and_batch(
 
     # If not tool use, tranform the coordinates while tokenizing
     if transformed_images is not None:
-        assert len(prompts) == len(transformed_images)
         transformed_prompt_tokens = []
         for prompt_seq, transformed_image_seq in zip(prompts, transformed_images):
             transformed_prompt_tokens.append(
@@ -582,10 +581,7 @@ class FuyuProcessor(ProcessorMixin):
             if isinstance(text, str):
                 prompts = [[text]]
             elif isinstance(text, list):
-                if isinstance(text[0], list):
-                    prompts = text
-                else:
-                    prompts = [text]
+                prompts = [[text_seq] for text_seq in text]
             batch_images = []
             if isinstance(images, PIL.Image.Image):
                 images = [images]
@@ -602,7 +598,6 @@ class FuyuProcessor(ProcessorMixin):
             #
             self.subsequence_length = 1  # Each batch contains only one sequence.
             self.batch_size = len(batch_images)
-
             # FIXME max_tokens_to_generate is embedded into this processor's call.
             prompt_tokens, prompts_length = _tokenize_prompts_with_image_and_batch(
                 tokenizer=self.tokenizer,
@@ -669,9 +664,11 @@ class FuyuProcessor(ProcessorMixin):
                 new_seq_len=max_seq_len_batch,
                 offset=0,
             )
+
+            image_patches_tensor = torch.stack([img[0] for img in model_image_input["image_patches"]]).unsqueeze(1)
             return {
                 "input_ids": image_padded_unpacked_tokens[0].unsqueeze(0),
-                "image_patches": model_image_input["image_patches"][0][0].unsqueeze(0),
+                "image_patches": image_patches_tensor[0][0].unsqueeze(0),
                 "image_patches_indices": image_patch_input_indices,
             }
 

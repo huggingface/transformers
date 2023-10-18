@@ -1859,7 +1859,7 @@ else:
         ]
     )
     _import_structure["models.fuyu"].extend(
-        ["FuyuForCausalLM", "FuyuForSequenceClassification", "FuyuModel", "FuyuPreTrainedModel"]
+        ["FuyuForCausalLM", "FuyuModel", "FuyuPreTrainedModel"]
     )
     _import_structure["models.git"].extend(
         [
@@ -5790,7 +5790,6 @@ if TYPE_CHECKING:
         )
         from .models.fuyu import (
             FuyuForCausalLM,
-            FuyuForSequenceClassification,
             FuyuModel,
             FuyuPreTrainedModel,
         )

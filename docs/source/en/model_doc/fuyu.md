@@ -57,11 +57,9 @@ tar -xvf 8b_base_model_release.tar
 Then, model can be loaded via:
 
 ```py 
-from transformers import FuyuConfig, FuyuModel
+from transformers import FuyuModel
 
-
-model_config = FuyuConfig()
-model = FuyuModel(model_config).from_pretrained('adept-hf-collab/fuyu-8b')
+model = FuyuModel.from_pretrained('adept-hf-collab/fuyu-8b')
 
 
 ```
@@ -85,7 +83,7 @@ text_prompt = "Generate a coco-style caption.\\n"
 
 bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
 bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
-inputs_to_model = processor(text=text_prompt, images=[image_pil])
+inputs_to_model = processor(text=text_prompt, images=image_pil)
 
 
 ```
@@ -93,10 +91,10 @@ inputs_to_model = processor(text=text_prompt, images=[image_pil])
 This model was contributed by [Molbap](https://huggingface.co/Molbap).
 The original code can be found [here](https://github.com/persimmon-ai-labs/adept-inference).
 
-- Perismmon uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
-The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. The `chat` template will be updated with the templating functions in a follow up PR!
+- Fuyu uses a `sentencepiece` based tokenizer, with a `Unigram` model. It supports bytefallback, which is only available in `tokenizers==0.14.0` for the fast tokenizer.
+The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. 
 
-- The authors suggest to use the following prompt format for the chat mode: `f"human: {prompt}\n\nadept:"`
+- The authors suggest to use the following prompt for image captioning: `f"Generate a coco-style caption.\\n"`
 
 
 ## FuyuConfig
@@ -111,9 +109,4 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece. T
 ## FuyuForCausalLM
 
 [[autodoc]] FuyuForCausalLM
-    - forward
-
-## FuyuForSequenceClassification
-
-[[autodoc]] FuyuForSequenceClassification
     - forward

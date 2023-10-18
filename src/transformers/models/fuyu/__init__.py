@@ -41,7 +41,6 @@ else:
         "FuyuForCausalLM",
         "FuyuModel",
         "FuyuPreTrainedModel",
-        "FuyuForSequenceClassification",
     ]
 
 
@@ -65,7 +64,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_fuyu import (
             FuyuForCausalLM,
-            FuyuForSequenceClassification,
             FuyuModel,
             FuyuPreTrainedModel,
         )
