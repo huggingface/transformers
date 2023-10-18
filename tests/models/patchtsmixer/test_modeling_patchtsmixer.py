@@ -627,14 +627,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_forecast_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         head = ForecastHead(
-            num_patches=config.num_patches,
-            input_size=config.input_size,
-            patch_len=config.patch_len,
-            num_features=config.num_features,
-            forecast_len=config.forecast_len,
-            head_dropout=config.head_dropout,
-            mode=config.mode,
-            forecast_channel_indices=config.forecast_channel_indices,
+            config=config,
         )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
         output = head(self.__class__.enc_output)
@@ -944,14 +937,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_classification_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         head = LinearHead(
-            num_patches=config.num_patches,
-            input_size=config.input_size,
-            num_features=config.num_features,
-            head_dropout=config.head_dropout,
-            output_dim=config.num_labels,
-            output_range=config.output_range,
-            head_agg=config.head_agg,
-            mode=config.mode,
+            config=config,
         )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
         output = head(self.__class__.enc_output)
@@ -980,14 +966,7 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
     def test_regression_head(self):
         config = PatchTSMixerConfig(**self.__class__.params)
         head = LinearHead(
-            num_patches=config.num_patches,
-            input_size=config.input_size,
-            num_features=config.num_features,
-            head_dropout=config.head_dropout,
-            output_dim=config.n_targets,
-            output_range=config.output_range,
-            head_agg=config.head_agg,
-            mode=config.mode,
+            config=config,
         )
         # output = head(self.__class__.enc_output, raw_data = self.__class__.correct_pretrain_output)
         output = head(self.__class__.enc_output)
