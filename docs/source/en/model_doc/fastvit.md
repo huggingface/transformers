@@ -79,7 +79,6 @@ Complete example showcasing the use of FastViT model with pre-trained weights:
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
-
 >>> pixel_values = ImageProcessor(images=image, return_tensors="pt").pixel_values
 >>> outputs = model(pixel_values)
 
