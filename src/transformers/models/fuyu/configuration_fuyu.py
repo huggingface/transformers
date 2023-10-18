@@ -89,9 +89,9 @@ class FuyuConfig(PretrainedConfig):
 
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
-        bos_token_id (`int`, *optional*):
+        bos_token_id (`int`, *optional*, defaults to 1):
             The id of the *beginning-of-sequence* token.
-        eos_token_id (`Union[int, List[int]]`, *optional*):
+        eos_token_id (`Union[int, List[int]]`, *optional*, defaults to 2):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize the `language``[`Aut`].
