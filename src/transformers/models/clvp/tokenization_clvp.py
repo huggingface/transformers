@@ -177,10 +177,10 @@ class ClvpTokenizer(PreTrainedTokenizer):
         add_eos_token=False,
         **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
 
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
@@ -455,61 +455,13 @@ class ClvpTokenizer(PreTrainedTokenizer):
 
         return encodings
 
-    def _decode(
-        self,
-        token_ids: List[int],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
-        spaces_between_special_tokens: bool = True,
-        **kwargs,
-    ) -> str:
-        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-        legacy_added_tokens = set(self._added_tokens_encoder.keys()) - set(self.all_special_tokens) | {
-            token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
-        }
-        sub_texts = []
-        current_sub_text = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            if token in legacy_added_tokens:
-                if current_sub_text:
-                    string = self.convert_tokens_to_string(current_sub_text)
-                    if len(string) > 0:
-                        sub_texts.append(string)
-                    current_sub_text = []
-                sub_texts.append(token)
-            else:
-                current_sub_text.append(token)
-
-        if current_sub_text:
-            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-
-        if spaces_between_special_tokens:
-            text = " ".join(sub_texts)
-        else:
-            text = "".join(sub_texts)
-
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
-        )
-
-        if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
-        else:
-            return text
-
     def clean_up_tokenization(self, text):
         text = "".join(text)
+        text = text.replace("[SPACE]", " ") if "[SPACE]" in self.encoder.keys() else text
+        text = text.replace("[STOP]", " ") if "[STOP]" in self.encoder.keys() else text
+
         text = (
-            text.replace("[SPACE]", " ")
-            .replace("[STOP]", "")
-            .replace(self.unk_token, "")
+            text.replace(self.unk_token, "")
             .replace("   ", " ")
             .replace("  ", " ")
         )
