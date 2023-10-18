@@ -10,7 +10,7 @@ from ...image_transforms import (
     resize,
 )
 from ...image_utils import to_numpy_array
-from ...utils import is_torch_available, is_vision_available, logging
+from ...utils import is_torch_available, is_vision_available, logging, requires_backends
 
 
 if is_vision_available():
@@ -51,6 +51,7 @@ class FuyuImageProcessor(BaseImageProcessor):
     ]
 
     def __init__(self, target_height=1080, target_width=1920, padding_value=1.0, padding_mode: str = "constant"):
+        requires_backends(self, ["torch"])
         self.target_width = target_width
         self.target_height = target_height
         self.padding_value = padding_value
