@@ -12,7 +12,9 @@ from ...image_utils import (
 )
 from ...processing_utils import ProcessorMixin
 from ...utils import is_torch_available, is_vision_available, logging
-from .image_processing_fuyu import FuyuImageProcessor
+
+if is_torch_available and is_vision_available:
+    from .image_processing_fuyu import FuyuImageProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -66,7 +68,7 @@ def full_unpacked_stream_to_tensor(
     # Place each batch entry into the batch tensor.
     for bi in range(batch_size):
         tokens_to_place = all_bi_tokens_to_place[bi]
-        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset : tokens_to_place + offset]
+        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset: tokens_to_place + offset]
 
     return new_padded_tensor
 
