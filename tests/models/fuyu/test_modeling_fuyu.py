@@ -8,6 +8,7 @@ from transformers.testing_utils import require_torch_gpu, slow, torch_device
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+import requests
 
 if is_vision_available():
     from PIL import Image
@@ -292,29 +293,25 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     """
 
     def setUp(self):
-        pretrained_model_name = "huggingface/pre_release_model"
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name)
+        self.pretrained_model_name = "huggingface/new_model_release_weights"
+        tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name)
         image_processor = FuyuImageProcessor()
 
-        processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
-        text_prompt = "Generate a coco-style caption.\\n"
-
-        image_path = "/fsx/pablo/adept-collab/adept-mm/mm-inference-for-hf/bus.png"
-        image_pil = Image.open(image_path)
-
-        self.model_inputs = processor(text=text_prompt, images=[image_pil])
-
-        self.model_config = FuyuConfig()
-        self.model = FuyuModel(self.model_config).from_pretrained(pretrained_model_name)
+        self.processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        self.model = FuyuForCausalLM.from_pretrained(self.pretrained_model_name)
 
     def test_model_embeddings_match_adept(self):
         """
         This test is very slow and needs about 30GB of RAM to be run on the Fuyu-8b model.
         """
+        text_prompt_coco_captioning = "Generate a coco-style caption.\n"
+        bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/bus.png"
+        bus_image_pil = Image.open(requests.get(bus_image_url, stream=True).raw)
 
-        continuous_embeddings = self.model.vision_embed_tokens(
-            self.model_inputs["model_image_input"]["image_patches"][0][0]
-        ).unsqueeze(0)
+        model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=bus_image_pil)
+
+        continuous_embeddings = self.model.model.vision_embed_tokens(
+            model_inputs_bus_captioning['image_patches']).unsqueeze(0)
         EXPECTED_CONTINUOUS_EMBEDDING_START = torch.Tensor(
             [-0.1221, 0.1689, -0.2969, 0.0601, 0.2168, -0.6953, 0.3438, 0.0165, 0.2168, 0.0586]
         )
@@ -330,7 +327,7 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         )
 
         # word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens_tensor'][0][None, :])
-        word_embeddings = self.model.embed_tokens(self.model_inputs["image_padded_unpacked_tokens"][0][None, :])
+        word_embeddings = self.model.model.embed_tokens(model_inputs_bus_captioning['input_ids'])
 
         # fmt: off
         EXPECTED_WORD_EMBEDDING_START = torch.Tensor([2.0117e-06,-1.0371e-05,-2.0504e-05,-1.0312e-05,-1.7405e-05,-1.3471e-05,-1.7643e-05,1.3530e-05,-5.2452e-06,-2.4557e-05])
@@ -345,12 +342,66 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         # fmt: off
         EXPECTED_HIDDEN_STATES_SLICE = torch.Tensor([[-0.5469, 1.6016, 2.3438, 2.8125, 1.0000],[0.3613, 1.0391, 2.5625, 2.2031, 1.5703],[-0.4707, 2.0938, 1.7109, 5.7188, 0.4199],])
         # fmt: on
+        text_prompt_coco_captioning = "Generate a coco-style caption.\n"
+        bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/bus.png"
+        bus_image_pil = Image.open(requests.get(bus_image_url, stream=True).raw)
 
-        model_outputs = self.model(
-            input_ids=self.model_inputs["image_padded_unpacked_tokens"][0].unsqueeze(0),
-            image_patches=self.model_inputs["model_image_input"]["image_patches"][0][0].unsqueeze(0),
-            image_patches_indices=self.model_inputs["image_patch_input_indices"],
-        )
+        model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=bus_image_pil)
+        model_outputs = self.model.model(**model_inputs_bus_captioning)
         torch.testing.assert_close(
             model_outputs[0][0, 5:8, 1200:1205], EXPECTED_HIDDEN_STATES_SLICE, rtol=0.1, atol=0.1
         )
+
+    @slow
+    @require_torch_gpu
+    def test_model_8b_chat_greedy_generation_bus_captioning(self):
+        EXPECTED_TEXT_COMPLETION = """A bus parked on the side of a road.|ENDOFTEXT|"""
+        text_prompt_coco_captioning = "Generate a coco-style caption.\n"
+        bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/bus.png"
+        bus_image_pil = Image.open(requests.get(bus_image_url, stream=True).raw)
+
+        model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=bus_image_pil)
+        text = self.model.generate(**model_inputs_bus_captioning, max_new_tokens=10)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
+    @require_torch_gpu
+    def test_model_8b_chat_greedy_generation_bus_color(self):
+        EXPECTED_TEXT_COMPLETION = """The bus is blue.\n|ENDOFTEXT|"""
+        text_prompt_bus_color = "What color is the bus?\n"
+        bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/bus.png"
+        bus_image_pil = Image.open(requests.get(bus_image_url, stream=True).raw)
+        model_inputs_bus_color = self.processor(text=text_prompt_bus_color, images=bus_image_pil)
+
+        text = self.model.generate(**model_inputs_bus_color, max_new_tokens=10)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
+    @require_torch_gpu
+    def test_model_8b_chat_greedy_generation_chart_vqa(self):
+        EXPECTED_TEXT_TOKENS = ['The', 'life expectancy', 'at', 'birth', 'of male',
+                                's in', '', '20', '18', 'is', '', '80', '.', '7', '.', '\n', '|ENDOFTEXT|']
+        expected_text_completion = " ".join(EXPECTED_TEXT_TOKENS)  # TODO make sure the end string matches
+
+        text_prompt_chart_vqa = "What is the highest life expectancy at birth of male?\n"
+
+        chart_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/chart.png"
+        chart_image_pil = Image.open(requests.get(chart_image_url, stream=True).raw)
+
+        model_inputs_chart_vqa = self.processor(text=text_prompt_chart_vqa, images=chart_image_pil)
+        text = self.model.generate(**model_inputs_chart_vqa, max_new_tokens=10)
+
+        self.assertEqual(expected_text_completion, text)
+
+    @slow
+    @require_torch_gpu
+    def test_model_8b_chat_greedy_generation_bounding_box(self):
+        EXPECTED_TEXT_COMPLETION = """\x00194213202244\x01|ENDOFTEXT|"""
+        text_prompt_bbox = """When presented with a box, perform OCR to extract text contained within it. If provided with text, generate the corresponding bounding box.\\nWilliams"""  # noqa: E231
+
+        bbox_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/bbox_sample_image.png"
+        bbox_image_pil = Image.open(requests.get(bbox_image_url, stream=True).raw)
+
+        model_inputs_bbox = self.processor(text=text_prompt_bbox, images=bbox_image_pil)
+        text = self.model.generate(**model_inputs_bbox, max_new_tokens=10)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
