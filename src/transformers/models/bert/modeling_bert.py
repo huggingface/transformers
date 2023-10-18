@@ -111,6 +111,7 @@ BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all BERT models at https://huggingface.co/models?filter=bert
 ]
 
+
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(padding_mask):
     seqlens_in_batch = padding_mask.sum(dim=-1, dtype=torch.int32)
@@ -122,6 +123,7 @@ def _get_unpad_data(padding_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
+
 
 if is_torch_fx_available():
 
@@ -308,12 +310,15 @@ class BertSelfAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def _query_key_value_attention_mask(self, hidden_states: torch.Tensor,
+    def _query_key_value_attention_mask(
+        self,
+        hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        
 
         mixed_query_layer = self.query(hidden_states)
 
@@ -344,7 +349,6 @@ class BertSelfAttention(nn.Module):
 
         return query_layer, key_layer, value_layer, attention_mask
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -356,12 +360,9 @@ class BertSelfAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor]:
-
-        query_layer, key_layer, value_layer, attention_mask = self._query_key_value_attention_mask(hidden_states,
-        attention_mask,
-        encoder_hidden_states,
-        encoder_attention_mask,
-        past_key_value)
+        query_layer, key_layer, value_layer, attention_mask = self._query_key_value_attention_mask(
+            hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask, past_key_value
+        )
 
         use_cache = past_key_value is not None
         if self.is_decoder:
@@ -486,7 +487,7 @@ class BertAttention(nn.Module):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
-            padding_mask
+            padding_mask,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -505,24 +506,27 @@ class BertFlashAttention2(BertAttention):
         output_attentions: Optional[bool] = False,
         padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor]:
-
-
-        if self.self.position_embedding_type == "relative_key" or self.self.position_embedding_type == "relative_key_query":
-            raise ValueError("Relative positional encoding is currently not supported, as there is currently no fused kernel for this operation") 
+        if (
+            self.self.position_embedding_type == "relative_key"
+            or self.self.position_embedding_type == "relative_key_query"
+        ):
+            raise ValueError(
+                "Relative positional encoding is currently not supported, as there is currently no fused kernel for this operation"
+            )
 
         if head_mask is not None:
-            raise ValueError("A mask was passed to the the head_mask parameter, this is currently not support for flash attention 2 ")
+            raise ValueError(
+                "A mask was passed to the the head_mask parameter, this is currently not support for flash attention 2 "
+            )
 
         if output_attentions:
-            raise Warning("output_attentions was set as true, but this is currently not support for flash attention 2 as this intermediary ")
+            raise Warning(
+                "output_attentions was set as true, but this is currently not supported for flash attention 2"
+            )
 
-        
         bsz, seq_len, hidden_dim = hidden_states.shape
-        query_layer, key_layer, value_layer, attention_mask = self.self._query_key_value_attention_mask(hidden_states,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value
+        query_layer, key_layer, value_layer, attention_mask = self.self._query_key_value_attention_mask(
+            hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask, past_key_value
         )
 
         # Flash attention requires the input to have the shape
@@ -532,7 +536,7 @@ class BertFlashAttention2(BertAttention):
         value_layer = value_layer.transpose(1, 2)
 
         attn_dropout = self.self.dropout.p if self.training else 0.0
-        
+
         context_layer = self._flash_attention_forward(
             query_layer, key_layer, value_layer, padding_mask, seq_len, dropout=attn_dropout
         )
@@ -551,18 +555,18 @@ class BertFlashAttention2(BertAttention):
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
-        output = (attention_output, past_key_value) if self.self.is_decoder else (attention_output, )
+        output = (attention_output, past_key_value) if self.self.is_decoder else (attention_output,)
 
         return output
-
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
         self, query_layer, key_layer, value_layer, padding_mask, query_length, dropout=0.0, softmax_scale=None
-    ):
+    ) -> torch.Tensor:
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
         first unpad the input, then computes the attention scores and pad the final attention scores.
+
         Args:
             query_layer (`torch.Tensor`):
                 Input query states to be passed to Flash Attention API
@@ -577,6 +581,8 @@ class BertFlashAttention2(BertAttention):
                 Attention dropout
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+        Returns:
+
         """
 
         # Contains at least one padding token in the sequence
@@ -680,7 +686,11 @@ class BertLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = BertAttention(config) if not getattr(config, "_flash_attn_2_enabled", False) else BertFlashAttention2(config=config)
+        self.attention = (
+            BertAttention(config)
+            if not getattr(config, "_flash_attn_2_enabled", False)
+            else BertFlashAttention2(config=config)
+        )
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
@@ -709,7 +719,7 @@ class BertLayer(nn.Module):
             head_mask,
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
-            padding_mask=padding_mask
+            padding_mask=padding_mask,
         )
         attention_output = self_attention_outputs[0]
 
@@ -788,7 +798,7 @@ class BertEncoder(nn.Module):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         # Attention mask is inverted in BertModel forward,
-        padding_mask = check_padding_in_attention_mask(1.0-attention_mask)
+        padding_mask = check_padding_in_attention_mask(1.0 - attention_mask)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -830,7 +840,7 @@ class BertEncoder(nn.Module):
                     encoder_attention_mask,
                     past_key_value,
                     output_attentions,
-                    padding_mask
+                    padding_mask,
                 )
 
             hidden_states = layer_outputs[0]
