@@ -3,7 +3,7 @@ import unittest
 
 import requests
 
-from transformers import AutoTokenizer, FuyuConfig, FuyuForCausalLM, FuyuModel, is_torch_available, is_vision_available
+from transformers import AutoTokenizer, FuyuConfig, FuyuForCausalLM, is_torch_available, is_vision_available
 from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
 from transformers.models.fuyu.processing_fuyu import FuyuProcessor
 from transformers.testing_utils import require_torch_gpu, slow, torch_device
@@ -120,7 +120,7 @@ class FuyuModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = FuyuModel(config=config)
+        model = FuyuForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -140,7 +140,7 @@ class FuyuModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = FuyuModel(config)
+        model = FuyuForCausalLM(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -259,6 +259,8 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     Currently, all these tests depend on a value of max_tokens_to_generate of 10.
     """
 
+    all_model_classes = ("FuyuForCausalLM") if is_torch_available() else ()
+
     def setUp(self):
         self.pretrained_model_name = "huggingface/new_model_release_weights"
         tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name)
@@ -266,7 +268,6 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
 
         self.processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
         self.model = FuyuForCausalLM.from_pretrained(self.pretrained_model_name)
-
         self.bus_image_url = (
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
         )
@@ -311,25 +312,9 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
     @slow
     @require_torch_gpu
     def test_model_8b_chat_greedy_generation_chart_vqa(self):
-        EXPECTED_TEXT_TOKENS = [
-            "The",
-            "life expectancy",
-            "at",
-            "birth",
-            "of male",
-            "s in",
-            "",
-            "20",
-            "18",
-            "is",
-            "",
-            "80",
-            ".",
-            "7",
-            ".",
-            "\n",
-            "|ENDOFTEXT|",
-        ]
+        # fmt: off
+        EXPECTED_TEXT_TOKENS = ["The","life expectancy","at","birth","of male","s in","","20","18","is","","80",".","7",".","\n","|ENDOFTEXT|",]
+        # fmt: on
         expected_text_completion = " ".join(EXPECTED_TEXT_TOKENS)  # TODO make sure the end string matches
 
         text_prompt_chart_vqa = "What is the highest life expectancy at birth of male?\n"

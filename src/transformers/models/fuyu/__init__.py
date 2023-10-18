@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_fuyu": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
+    "configuration_fuyu": ["FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
 }
 
 
@@ -39,7 +39,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_fuyu"] = [
         "FuyuForCausalLM",
-        "FuyuModel",
         "FuyuPreTrainedModel",
     ]
 
@@ -64,7 +63,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_fuyu import (
             FuyuForCausalLM,
-            FuyuModel,
             FuyuPreTrainedModel,
         )
 

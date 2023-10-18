@@ -1858,7 +1858,7 @@ else:
             "load_tf_weights_in_funnel",
         ]
     )
-    _import_structure["models.fuyu"].extend(["FuyuForCausalLM", "FuyuModel", "FuyuPreTrainedModel"])
+    _import_structure["models.fuyu"].extend(["FuyuForCausalLM", "FuyuPreTrainedModel"])
     _import_structure["models.git"].extend(
         [
             "GIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5788,7 +5788,6 @@ if TYPE_CHECKING:
         )
         from .models.fuyu import (
             FuyuForCausalLM,
-            FuyuModel,
             FuyuPreTrainedModel,
         )
         from .models.git import (

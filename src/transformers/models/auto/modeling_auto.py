@@ -94,7 +94,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetModel"),
         ("fsmt", "FSMTModel"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
-        ("fuyu", "FuyuModel"),
         ("git", "GitModel"),
         ("glpn", "GLPNModel"),
         ("gpt-sw3", "GPT2Model"),

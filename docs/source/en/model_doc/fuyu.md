@@ -57,11 +57,9 @@ tar -xvf 8b_base_model_release.tar
 Then, model can be loaded via:
 
 ```py 
-from transformers import FuyuModel
-
-model = FuyuModel.from_pretrained('adept-hf-collab/fuyu-8b')
-
-
+from transformers import FuyuConfig, FuyuForCausalLM
+model_config = FuyuConfig()
+model = FuyuForCausalLM(model_config).from_pretrained('/output/path')
 ```
 
 Inputs need to be passed through a specific Processor to have the correct formats.
@@ -101,12 +99,17 @@ The `LlamaTokenizer` is used as it is a standard wrapper around sentencepiece.
 
 [[autodoc]] FuyuConfig
 
-## FuyuModel
-
-[[autodoc]] FuyuModel
-    - forward
-
 ## FuyuForCausalLM
 
 [[autodoc]] FuyuForCausalLM
     - forward
+
+## FuyuImageProcessor
+
+[[autodoc]] FuyuImageProcessor
+    - __call__
+
+## FuyuProcessor
+
+[[autodoc]] FuyuProcessor
+    - __call__

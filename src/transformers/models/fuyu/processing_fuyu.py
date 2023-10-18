@@ -2,7 +2,6 @@ import re
 from typing import Any, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-import torch
 
 from ...image_utils import (
     ChannelDimension,
@@ -12,7 +11,7 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...processing_utils import ProcessorMixin
-from ...utils import is_vision_available, logging
+from ...utils import is_torch_available, is_vision_available, logging
 from .image_processing_fuyu import FuyuImageProcessor
 
 
@@ -20,6 +19,9 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
 
 BBOX_OPEN_STRING = "<0x00>"  # <bbox>
 BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
@@ -64,7 +66,7 @@ def full_unpacked_stream_to_tensor(
     # Place each batch entry into the batch tensor.
     for bi in range(batch_size):
         tokens_to_place = all_bi_tokens_to_place[bi]
-        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset : tokens_to_place + offset]
+        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset: tokens_to_place + offset]
 
     return new_padded_tensor
 
@@ -268,8 +270,8 @@ def _tokenize_prompts_with_image_and_batch(
             prompt_tokens.extend([tokenizer.vocab["|ENDOFTEXT|"]] * padding_size)
 
     # Now we are in a structured format, we can convert to tensors.
-    prompts_tokens_tensor = torch.tensor(prompts_tokens, dtype=torch.int64)  # , device="cuda")
-    prompts_length_tensor = torch.tensor(prompts_length, dtype=torch.int64)  # , device="cuda")
+    prompts_tokens_tensor = torch.tensor(prompts_tokens, dtype=torch.int64)
+    prompts_length_tensor = torch.tensor(prompts_length, dtype=torch.int64)
 
     return prompts_tokens_tensor, prompts_length_tensor
 
@@ -403,7 +405,7 @@ class FuyuProcessor(ProcessorMixin):
             image_unpadded_heights.append([image.shape[height_index]])
 
             # Reproduct adept padding sampler
-            padded_image = self.image_processor.aspectratio_preserving_padding.apply_transformation(image)
+            padded_image = self.image_processor.apply_transformation(image)
 
             tensor_img = torch.Tensor(padded_image).permute(2, 0, 1)
             batch_images.append([tensor_img])
