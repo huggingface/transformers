@@ -785,34 +785,25 @@ class ForecastHead(nn.Module):
     """Forecast Head
 
     Args:
-        num_patches (`int`): Number of patches to segment
-        patch_len (`int`, *optional*): Patch length. Defaults to 16.
-        input_size (`int`, *optional*): Number of input variables. Defaults to 3.
-        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
-        head_dropout (`float`, *optional*): Head Dropout rate. Defaults to 0.2.
-        forecast_len (`int`, *optional*): Forecast Length. Defaults to 16.
-        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
-            common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
-            In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
-            we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
-            Defaults to "common_channel".
-        forecast_channel_indices (`list`, *optional*):
-            List of channel indices to forecast. If None, forecast all channels.
+        config (`PatchTSMixerConfig`, *mandatory*): Configuration.
     """
 
     def __init__(
         self,
-        num_patches: int,
-        input_size: int = 3,
-        patch_len: int = 16,
-        num_features: int = 16,
-        forecast_len: int = 16,
-        head_dropout: float = 0.2,
-        mode: str = "common_channel",
-        forecast_channel_indices: list = None,
+        config: PatchTSMixerConfig,
         distribution_output=None,
     ):
         super().__init__()
+
+        num_patches = config.num_patches
+        input_size = config.input_size
+        patch_len = config.patch_len
+        num_features = config.num_features
+        forecast_len = config.forecast_len
+        head_dropout = config.head_dropout
+        mode = config.mode
+        forecast_channel_indices = config.forecast_channel_indices
+
         self.forecast_len = forecast_len
         self.nvars = input_size
         self.num_features = num_features
@@ -914,34 +905,26 @@ class LinearHead(nn.Module):
     """LinearHead for Classification and Regression
 
     Args:
-        num_patches (`int`): Number of patches to segment
-        patch_len (`int`, *optional*): Patch length. Defaults to 16.
-        input_size (`int`, *optional*): Number of input variables. Defaults to 3.
-        num_features (`int`, *optional*): Hidden feature size. Defaults to 16.
-        head_dropout (`float`, *optional*): Head Dropout rate. Defaults to 0.2.
-        head_agg (str, *optional*): Aggregation mode. Allowed values are use_last, max_pool, avg_pool.
-                                Defaults to max_pool.
-        output_range (`list`, *optional*): Output range of [low, high] to restrict sigmoid. Defaults to None.
-        mode (str, *optional*): Mixer Mode. Determines how to process the channels. Allowed values: flatten,
-            common_channel, mix_channel. In flatten, patch embedding encodes the patch information across all channels.
-            In common_channel mode, patch embedding is independent of channels (Channel Independece). In mix_channel,
-            we follow channel independence, but in addition to patch and feature mixing, we also do channel mixing.
-            Defaults to "common_channel".
+        config (`PatchTSMixerConfig`, *mandatory*):
+
     """
 
     def __init__(
         self,
-        num_patches: int = 5,
-        input_size: int = 3,
-        num_features: int = 16,
-        head_dropout: float = 0.2,
-        output_dim: int = 1,
-        output_range: list = None,
-        head_agg: str = "max_pool",
-        mode: str = "common_channel",
+        config: PatchTSMixerConfig,
         distribution_output=None,
     ):
         super().__init__()
+
+        num_patches = config.num_patches
+        input_size = config.input_size
+        num_features = config.num_features
+        head_dropout = config.head_dropout
+        output_dim = config.n_targets
+        output_range = config.output_range
+        head_agg = config.head_agg
+        mode = config.mode
+
         self.nvars = input_size
         self.num_features = num_features
         self.input_size = input_size
@@ -2087,14 +2070,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
         self.model = PatchTSMixerModel(config)
         self.head = ForecastHead(
-            num_patches=config.num_patches,
-            input_size=config.input_size,
-            patch_len=config.patch_len,
-            num_features=config.num_features,
-            forecast_len=config.forecast_len,
-            head_dropout=config.head_dropout,
-            mode=config.mode,
-            forecast_channel_indices=config.forecast_channel_indices,
+            config=config,
             distribution_output=self.distribution_output,
         )
 
@@ -2279,14 +2255,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
 
         self.model = PatchTSMixerModel(config)
         self.head = LinearHead(
-            num_patches=config.num_patches,
-            input_size=config.input_size,
-            num_features=config.num_features,
-            head_dropout=config.head_dropout,
-            output_dim=config.num_labels,
-            output_range=config.output_range,
-            head_agg=config.head_agg,
-            mode=config.mode,
+            config=config,
         )
         self.loss = torch.nn.CrossEntropyLoss()
 
@@ -2419,14 +2388,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             self.inject_scale = None
 
         self.head = LinearHead(
-            num_patches=config.num_patches,
-            input_size=config.input_size,
-            num_features=config.num_features,
-            head_dropout=config.head_dropout,
-            output_dim=config.n_targets,
-            output_range=config.output_range,
-            head_agg=config.head_agg,
-            mode=config.mode,
+            config=config,
             distribution_output=self.distribution_output,
         )
 
