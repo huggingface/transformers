@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -122,8 +123,38 @@ class FuyuConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
+        text_config=None,
         **kwargs,
     ):
+        
+        if text_config is None:
+            text_config = dict(
+                vocab_size = vocab_size,
+                max_position_embeddings = max_position_embeddings,
+                hidden_size = hidden_size,
+                intermediate_size = intermediate_size,
+                num_hidden_layers = num_hidden_layers,
+                num_attention_heads = num_attention_heads,
+                hidden_act = hidden_act,
+                initializer_range = initializer_range,
+                layer_norm_eps = layer_norm_eps,
+                use_cache = use_cache,
+                rope_theta = rope_theta,
+                rope_scaling = rope_scaling,
+                qk_layernorm = qk_layernorm,
+                hidden_dropout = hidden_dropout,
+                attention_dropout = attention_dropout,
+                partial_rotary_factor = partial_rotary_factor,
+                pad_token_id=pad_token_id,
+                bos_token_id=bos_token_id,
+                eos_token_id=eos_token_id,
+                tie_word_embeddings=tie_word_embeddings
+            )
+            logger.info("text_config is None. initializing the text model with default values.")
+        text_model_type = text_config["model_type"] if "model_type" in text_config else "persimmon"
+        self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
+
+
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.image_size = image_size
