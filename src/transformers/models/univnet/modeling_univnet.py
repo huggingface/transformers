@@ -184,20 +184,20 @@ class UnivNetKernelPredictor(nn.Module):
         bias_hidden_states = self.bias_conv(hidden_states)
 
         # Reshape kernels and biases to appropriate shape
-        kernels = kernel_hidden_states.contiguous().view(
+        kernels = kernel_hidden_states.view(
             batch_size,
             self.conv_layers,
             self.conv_in_channels,
             self.conv_out_channels,
             self.conv_kernel_size,
             seq_length,
-        )
-        biases = bias_hidden_states.contiguous().view(
+        ).contiguous()
+        biases = bias_hidden_states.view(
             batch_size,
             self.conv_layers,
             self.conv_out_channels,
             seq_length,
-        )
+        ).contiguous()
 
         return kernels, biases
 
@@ -216,7 +216,7 @@ class UnivNetKernelPredictor(nn.Module):
         nn.utils.remove_weight_norm(self.bias_conv)
 
 
-class UnivNetLVCResidualBlock(nn.Module):
+class UnivNetLvcResidualBlock(nn.Module):
     """
     Implementation of the location variable convolution (LVC) residual block for the UnivNet residual network.
 
@@ -339,7 +339,7 @@ class UnivNetLVCResidualBlock(nn.Module):
         nn.utils.remove_weight_norm(self.conv)
 
 
-class UnivNetLVCBlock(nn.Module):
+class UnivNetLvcBlock(nn.Module):
     """
     Implementation of the location variable convolution (LVC) residual block of the UnivNet residual block. Includes a
     `UnivNetKernelPredictor` inside to predict the kernels and biases of the LVC layers.
@@ -348,15 +348,11 @@ class UnivNetLVCBlock(nn.Module):
     [maum-ai/univnet](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/model/lvcnet.py#L98)
 
     Parameters:
-        config: (`UnivNetConfig`):
+        config (`UnivNetConfig`):
             Config for the `UnivNetModel` model.
-        kernel_size (`int`, *optional*, defaults to 3):
-            The kernel size for the dilated 1D convolutional layers in the residual blocks.
-        stride (`int`, *optional*, defaults to 8):
-            The stride for the dilated 1D convolutional layers in the residual blocks.
-        dilations (`Union[Tuple[int], List[int]], *optional*, defaults to `[1, 3, 9, 27]`):
-            A tuple of list of dilations for the dilated 1D convolutional layers in the residual blocks. The length of
-            `dilations` determines how many residual blocks are in `UnivNetLVCBlock`.
+        layer_id (`int`):
+            An integer corresponding to the index of the current LVC resnet block layer. This should be between 0 and
+            `len(config.resblock_stride_sizes) - 1)` inclusive.
         lvc_hop_size (`int`, *optional*, defaults to 256):
             The hop size for the location variable convolutional layers.
     """
@@ -364,16 +360,14 @@ class UnivNetLVCBlock(nn.Module):
     def __init__(
         self,
         config: UnivNetConfig,
-        kernel_size: int = 3,
-        stride: int = 8,
-        dilations: Union[Tuple[int], List[int]] = [1, 3, 9, 27],
+        layer_id: int,
         lvc_hop_size: int = 256,
     ):
         super().__init__()
         self.hidden_channels = config.model_hidden_channels
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.dilations = dilations
+        self.kernel_size = config.resblock_kernel_sizes[layer_id]
+        self.stride = config.resblock_stride_sizes[layer_id]
+        self.dilations = config.resblock_dilation_sizes[layer_id]
         self.cond_hop_length = lvc_hop_size
         self.leaky_relu_slope = config.leaky_relu_slope
         self.num_blocks = len(self.dilations)
@@ -390,7 +384,7 @@ class UnivNetLVCBlock(nn.Module):
         self.kernel_predictor = UnivNetKernelPredictor(config, self.kernel_size, self.num_blocks)
 
         self.resblocks = nn.ModuleList(
-            [UnivNetLVCResidualBlock(config, self.kernel_size, self.dilations[i]) for i in range(self.num_blocks)]
+            [UnivNetLvcResidualBlock(config, self.kernel_size, self.dilations[i]) for i in range(self.num_blocks)]
         )
 
     def forward(self, hidden_states: torch.FloatTensor, spectrogram: torch.FloatTensor):
@@ -451,11 +445,14 @@ UNIVNET_INPUTS_DOCSTRING = r"""
             Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
             sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
             config.model_in_channels)`. If not supplied, will be randomly generated.
-        padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        padding_mask (`torch.BoolTensor`, *optional*):
             Mask indicating which parts of each sequence are padded. Mask values are selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**
             - 0 for tokens that are **masked**
+
+            The mask can be batched and of shape `(batch_size, sequence_length)` or un-batched and of shape
+            `(sequence_length,)`.
         generator (`torch.Generator`, *optional*):
             A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
             deterministic.
@@ -497,11 +494,9 @@ class UnivNetModel(PreTrainedModel):
 
         self.resblocks = nn.ModuleList(
             [
-                UnivNetLVCBlock(
+                UnivNetLvcBlock(
                     config,
-                    kernel_size=config.resblock_kernel_sizes[i],
-                    stride=config.resblock_stride_sizes[i],
-                    dilations=config.resblock_dilation_sizes[i],
+                    layer_id=i,
                     lvc_hop_size=hop_lengths[i],
                 )
                 for i in range(num_layers)

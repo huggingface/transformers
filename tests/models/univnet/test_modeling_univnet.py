@@ -101,6 +101,8 @@ class UnivNetModelTester:
 class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (UnivNetModel,) if is_torch_available() else ()
     test_torchscript = False
+    # The UnivNetModel is not a transformer and does not use any attention mechanisms, so skip transformer/attention
+    # related tests.
     test_pruning = False
     test_resize_embeddings = False
     test_resize_position_embeddings = False
@@ -282,7 +284,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
     def test_model_inference_batched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetModel.from_pretrained("dg845/univnet-dev")
-        model.to(torch_device)
+        model.eval().to(torch_device)
 
         # Get batched noise and spectrogram inputs.
         input_speech = self.get_inputs(torch_device, num_samples=3)
@@ -306,7 +308,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
     def test_model_inference_unbatched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetModel.from_pretrained("dg845/univnet-dev")
-        model.to(torch_device)
+        model.eval().to(torch_device)
 
         # Get unbatched noise and spectrogram inputs.
         input_speech = self.get_inputs(torch_device, num_samples=1)
@@ -330,7 +332,7 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
     def test_integration(self):
         feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
         model = UnivNetModel.from_pretrained("dg845/univnet-dev")
-        model.to(torch_device)
+        model.eval().to(torch_device)
 
         audio, sr = self._load_datasamples(1, sampling_rate=feature_extractor.sampling_rate)
 
