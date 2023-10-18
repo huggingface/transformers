@@ -571,8 +571,18 @@ class UnivNetModel(PreTrainedModel):
         if noise_sequence_batch_size != spectrogram_batch_size:
             raise ValueError(
                 f"The batch size of `noise_sequence` is {noise_sequence_batch_size} and the batch size of"
-                f" `spectrogram` is {spectrogram_batch_size}, but the two are expected to be equal."
+                f" `input_features` is {spectrogram_batch_size}, but the two are expected to be equal."
             )
+
+        if padding_mask is not None:
+            if padding_mask.dim() == 1:
+                padding_mask = padding_mask.unsqueeze(0)
+            padding_mask_batch_size = padding_mask.shape[0]
+            if padding_mask_batch_size != spectrogram_batch_size:
+                raise ValueError(
+                    f"The batch size of `padding_mask` is {padding_mask_batch_size} and the batch size of"
+                    f" `input_features` is {spectrogram_batch_size}, but the two are expected to be equal."
+                )
 
         # Change shapes to have channels before sequence lengths
         hidden_states = noise_sequence.transpose(2, 1)
@@ -594,8 +604,6 @@ class UnivNetModel(PreTrainedModel):
         # Get sequence lengths for UnivNetFeatureExtractor.batch_decode.
         waveform_lengths = None
         if padding_mask is not None:
-            if padding_mask.dim() == 1:
-                padding_mask = padding_mask.unsqueeze(0)
             # Padding is always contiguous and added on the right
             waveform_lengths = torch.sum(padding_mask, dim=1)
 
