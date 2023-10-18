@@ -2,7 +2,6 @@ import re
 from typing import Any, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-import torch
 
 from ...image_utils import (
     ChannelDimension,
