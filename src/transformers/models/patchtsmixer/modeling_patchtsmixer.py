@@ -534,8 +534,6 @@ class PatchTSMixerBlock(nn.Module):
         """
         all_hidden_states = []
 
-        logger.debug(data.shape)
-
         embedding = data
 
         for mod in self.mixers:
@@ -575,9 +573,6 @@ class PatchTSMixer(nn.Module):
         pe = config.pe
         learn_pe = config.learn_pe
 
-        # if mode == "flatten":
-        #     logger.warn("Use mode = common_channel or mix_channel. mode=flatten is not preferred due to poor performance")
-
         self.mode = mode
         self.use_pe = use_pe
 
@@ -611,12 +606,9 @@ class PatchTSMixer(nn.Module):
                 (batch_size, self.num_patches, self.input_size * self.patch_len),
             )  # input_ts: [bs x num_patch x patch_len * n_vars]
 
-        logger.debug(input_ts.shape)
         patches = self.patcher(
             input_ts
         )  # flatten: [bs x num_patch x num_features]   common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
-
-        logger.debug(input_ts.shape)
 
         if self.use_pe:
             patches = patches + self.W_pos
