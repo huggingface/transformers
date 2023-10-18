@@ -26,17 +26,20 @@ import jax
 import jax.numpy as jnp
 import torch
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
+from flax.linen import combine_masks, make_causal_mask
 from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
+from jax import lax
 
-from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
-                                      FlaxCausalLMOutputWithCrossAttentions,
-                                      FlaxSequenceClassifierOutput)
-from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
-                                    append_call_sample_docstring, logging)
-from ...utils import (add_start_docstrings,
-                      add_start_docstrings_to_model_forward)
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutputWithPast,
+    FlaxCausalLMOutputWithCrossAttentions,
+    FlaxSequenceClassifierOutput,
+)
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_mistral import MistralConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -309,13 +312,14 @@ class FlaxMistralAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.hidden_size = self.config.hidden_size
-        self.num_heads = self.config.num_attention_heads
+        config = self.config
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
-        self.num_key_value_heads = self.config.num_key_value_heads
+        self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.max_position_embeddings = self.config.max_position_embeddings
-        self.rope_theta = self.config.rope_theta
+        self.max_position_embeddings = config.max_position_embeddings
+        self.rope_theta = config.rope_theta
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
@@ -329,11 +333,44 @@ class FlaxMistralAttention(nn.Module):
             self.num_key_value_heads * self.head_dim, use_bias=False, dtype=self.dtype
         )
         self.o_proj = nn.Dense(self.hidden_size, use_bias=False, dtype=self.dtype)
+        self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxMistralRotaryEmbedding(
             self.head_dim, self.max_position_embeddings, base=self.rope_theta, dtype=self.dtype
         )
-
+        
     @nn.compact
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
+    def _concatenate_to_cache(self, key, value, query, attention_mask):
+        """
+        This function takes projected key, value states from a single input token and concatenates the states to cached
+        states from previous steps. This function is slighly adapted from the official Flax repository:
+        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
+        """
+        # detect if we're initializing by absence of existing cache data.
+        is_initialized = self.has_variable("cache", "cached_key")
+        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
+        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
+        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+
+        if is_initialized:
+            *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
+            # update key, value caches with our new 1d spatial slices
+            cur_index = cache_index.value
+            indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
+            key = lax.dynamic_update_slice(cached_key.value, key, indices)
+            value = lax.dynamic_update_slice(cached_value.value, value, indices)
+            cached_key.value = key
+            cached_value.value = value
+            num_updated_cache_vectors = query.shape[1]
+            cache_index.value = cache_index.value + num_updated_cache_vectors
+            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions that have already been generated and cached, not the remaining zero elements.
+            pad_mask = jnp.broadcast_to(
+                jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
+                tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
+            )
+            attention_mask = combine_masks(pad_mask, attention_mask)
+        return key, value, attention_mask
+
     def __call__(
         self,
         hidden_states: jnp.ndarray,
@@ -341,7 +378,7 @@ class FlaxMistralAttention(nn.Module):
         position_ids: Optional[jnp.ndarray] = None,
         past_key_value: Optional[Tuple[jnp.ndarray]] = None,
         output_attentions: bool = False,
-        use_cache: bool = False,
+        init_cache: bool = False,
         padding_mask: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         bsz, q_len, _ = hidden_states.shape
@@ -362,16 +399,27 @@ class FlaxMistralAttention(nn.Module):
 
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = flax_apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        if self.has_variable("cache", "cached_key"):
+            mask_shift = self.variables["cache"]["cache_index"]
+            max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
+            causal_mask = lax.dynamic_slice(
+                self.causal_mask, (0, 0, mask_shift, 0), (1, 1, q_len, max_decoder_length)
+            )
+        else:
+            causal_mask = self.causal_mask[:, :, :q_len, :kv_seq_len]
 
         if past_key_value is not None:
             # reuse k, v, self_attention
             key_states = jnp.concatenate([past_key_value[0], key_states], axis=2)
             value_states = jnp.concatenate([past_key_value[1], value_states], axis=2)
 
-        past_key_value = (key_states, value_states) if use_cache else None
+        past_key_value = (key_states, value_states) if init_cache else None
 
         key_states = flax_repeat_kv(key_states, self.num_key_value_groups)
         value_states = flax_repeat_kv(value_states, self.num_key_value_groups)
+        
+        if self.has_variable("cache", "cached_key") or init_cache:
+            key_states, value_states, attention_mask = self._concatenate_to_cache(key_states, value_states, query_states, attention_mask)
 
         attn_weights = query_states @ key_states.transpose(0, 1, 3, 2) / math.sqrt(self.head_dim)
 
@@ -412,14 +460,15 @@ class FlaxMistralDecoderLayer(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.hidden_size = self.config.hidden_size
-        self.self_attn = FlaxMistralAttention(config=self.config, dtype=self.dtype)
-        self.mlp = FlaxMistralMLP(self.config, dtype=self.dtype)
+        config = self.config
+        self.hidden_size = config.hidden_size
+        self.self_attn = FlaxMistralAttention(config=config, dtype=self.dtype)
+        self.mlp = FlaxMistralMLP(config, dtype=self.dtype)
         self.input_layernorm = FlaxMistralRMSNorm(
-            self.config.hidden_size, eps=self.config.rms_norm_eps, dtype=self.dtype
+            config.hidden_size, eps=config.rms_norm_eps, dtype=self.dtype
         )
         self.post_attention_layernorm = FlaxMistralRMSNorm(
-            self.config.hidden_size, eps=self.config.rms_norm_eps, dtype=self.dtype
+            config.hidden_size, eps=config.rms_norm_eps, dtype=self.dtype
         )
 
     def __call__(
@@ -429,7 +478,7 @@ class FlaxMistralDecoderLayer(nn.Module):
         position_ids: Optional[jnp.ndarray] = None,
         past_key_value: Optional[Tuple[jnp.ndarray]] = None,
         output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
+        init_cache: Optional[bool] = False,
         padding_mask: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, Optional[Tuple[jnp.ndarray, jnp.ndarray]]]:
         """
@@ -440,7 +489,7 @@ class FlaxMistralDecoderLayer(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
-            use_cache (`bool`, *optional*):
+            init_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
@@ -457,7 +506,7 @@ class FlaxMistralDecoderLayer(nn.Module):
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
-            use_cache=use_cache,
+            init_cache=init_cache,
             padding_mask=padding_mask,
         )
         hidden_states = residual + hidden_states
@@ -473,7 +522,7 @@ class FlaxMistralDecoderLayer(nn.Module):
         if output_attentions:
             outputs += (self_attn_weights,)
 
-        if use_cache:
+        if init_cache:
             outputs += (present_key_value,)
 
         return outputs
@@ -543,9 +592,9 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=True, use_cache=True
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=True, init_cache=True
         )
-        return unfreeze(init_variables["past_key_values"])
+        return unfreeze(init_variables["cache"])
 
     # @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -553,7 +602,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         input_ids,
         attention_mask=None,
         position_ids=None,
-        use_cache: bool = False,
+        init_cache: bool = False,
         params: dict = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -576,18 +625,26 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         # Handle any PRNG if needed
         rngs = {}
         inputs = {"params": params or self.params}
+        
+        if past_key_values:
+            inputs["cache"] = past_key_values
+            mutable = ["cache"]
+        else:
+            mutable = False
+
 
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             position_ids=jnp.array(position_ids, dtype="i4"),
-            use_cache=use_cache,
+            init_cache=init_cache,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             rngs=rngs,
+            mutable=mutable,
         )
 
         return outputs
@@ -608,14 +665,14 @@ class FlaxMistralLayerCollection(nn.Module):
                  attention_mask: Optional[jnp.ndarray] = None,
                  position_ids: Optional[jnp.ndarray] = None,
                  past_key_values: Optional[List[jnp.ndarray]] = None,
-                 use_cache: Optional[bool] = None,
+                 init_cache: Optional[bool] = None,
                  output_attentions: Optional[bool] = None,
                  output_hidden_states: Optional[bool] = None,
                  return_dict: Optional[bool] = None,) -> Any:
         
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = () if init_cache else None
 
         for idx, decoder_layer in enumerate(self.blocks):
             if output_hidden_states:
@@ -627,12 +684,12 @@ class FlaxMistralLayerCollection(nn.Module):
                 position_ids=position_ids,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
-                use_cache=use_cache,
+                init_cache=init_cache,
             )
 
             hidden_states = layer_outputs[0]
 
-            if use_cache:
+            if init_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
 
             if output_attentions:
@@ -672,7 +729,7 @@ class FlaxMistralModule(nn.Module):
         position_ids: Optional[jnp.ndarray] = None,
         past_key_values: Optional[List[jnp.ndarray]] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
-        use_cache: Optional[bool] = None,
+        init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -681,7 +738,6 @@ class FlaxMistralModule(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -696,19 +752,7 @@ class FlaxMistralModule(nn.Module):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         seq_length_with_past = seq_length
-        past_key_values_length = 0
 
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
-
-        if position_ids is None:
-            position_ids = jnp.arange(
-                past_key_values_length,
-                seq_length + past_key_values_length,
-                dtype=jnp.int64,
-            )
-            position_ids = jnp.expand_dims(position_ids, axis=0)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -732,14 +776,14 @@ class FlaxMistralModule(nn.Module):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = () if init_cache else None
         
         outputs = self.layers(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            use_cache=use_cache,
+            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -753,7 +797,7 @@ class FlaxMistralModule(nn.Module):
             all_hidden_states = outputs[2] + (hidden_states,)
             outputs = (hidden_states, all_hidden_states) + outputs[2:]
 
-        next_cache = outputs[1] if use_cache else None
+        next_cache = outputs[1] if init_cache else None
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, outputs[-1]] if v is not None)
         
@@ -788,7 +832,7 @@ class FlaxMistralForCausalLMModule(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
+        init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -808,7 +852,7 @@ class FlaxMistralForCausalLMModule(nn.Module):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -872,7 +916,7 @@ class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
             {
                 "position_ids": position_ids,
                 "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
+                "init_cache": kwargs.get("init_cache"),
                 "attention_mask": attention_mask,
             }
         )
@@ -908,7 +952,7 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
+        init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -922,7 +966,7 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
