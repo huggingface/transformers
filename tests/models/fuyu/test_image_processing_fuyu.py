@@ -8,12 +8,12 @@ from transformers import is_vision_available
 
 if is_vision_available():
     from PIL import Image
-from transformers.models.fuyu.image_processing_fuyu import AspectRatioPreservingScalingWithPad, FuyuImageProcessor
+from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
 
 
 class TestFuyuImageProcessor(unittest.TestCase):
     def setUp(self):
-        self.processor = FuyuImageProcessor()
+        self.processor = FuyuImageProcessor(target_height=160, target_width=320, padding_value=1.0)
         self.batch_size = 3
         self.channels = 3
         self.height = 300
@@ -23,6 +23,8 @@ class TestFuyuImageProcessor(unittest.TestCase):
 
         self.image_patch_dim_h = 30
         self.image_patch_dim_w = 30
+        self.sample_image = np.zeros((450, 210, 3), dtype=np.uint8)
+        self.sample_image_pil = Image.fromarray(self.sample_image)
 
     def test_patches(self):
         expected_num_patches = self.processor.get_num_patches(
@@ -36,24 +38,17 @@ class TestFuyuImageProcessor(unittest.TestCase):
             patches_final.shape[1] == expected_num_patches
         ), f"Expected {expected_num_patches} patches, got {patches_final.shape[1]}."
 
-
-class TestAspectRatioPreservingScalingWithPad(unittest.TestCase):
-    def setUp(self):
-        self.scaler_pad = AspectRatioPreservingScalingWithPad(target_width=320, target_height=160, padding_value=1.0)
-        self.sample_image = np.zeros((450, 210, 3), dtype=np.uint8)
-        self.sample_image_pil = Image.fromarray(self.sample_image)
-
     def test_scale_to_target_aspect_ratio(self):
-        scaled_image = self.scaler_pad._scale_to_target_aspect_ratio(self.sample_image)
+        scaled_image = self.processor._scale_to_target_aspect_ratio(self.sample_image)
         self.assertEqual(scaled_image.shape[0], 74)
         self.assertEqual(scaled_image.shape[1], 160)
 
     def test_apply_transformation_numpy(self):
-        transformed_image = self.scaler_pad.apply_transformation(self.sample_image)
+        transformed_image = self.processor.apply_transformation(self.sample_image)
         self.assertEqual(transformed_image.shape[0], 160)
         self.assertEqual(transformed_image.shape[1], 320)
 
     def test_apply_transformation_pil(self):
-        transformed_image = self.scaler_pad.apply_transformation(self.sample_image_pil)
+        transformed_image = self.processor.apply_transformation(self.sample_image_pil)
         self.assertEqual(transformed_image.shape[0], 160)
         self.assertEqual(transformed_image.shape[1], 320)
