@@ -306,7 +306,7 @@ Create a function to preprocess the dataset so the audio samples are the same le
 ...     return inputs
 ```
 
-Apply the `preprocess_function` to the the first few examples in the dataset:
+Apply the `preprocess_function` to the first few examples in the dataset:
 
 ```py
 >>> processed_dataset = preprocess_function(dataset[:5])
