@@ -66,7 +66,8 @@ class FuyuConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`. Whether to tie weight embeddings
-        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie input and output embeddings.
         rope_theta (`float`, *optional*, defaults to 25000.0):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
@@ -86,10 +87,14 @@ class FuyuConfig(PretrainedConfig):
         partial_rotary_factor (`float`, *optional*, defaults to 0.5):
             Percentage of the query and keys which will have rotary embedding.
 
-        pad_token_id (`<fill_type>`, *optional*): <fill_docstring>
-        bos_token_id (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        eos_token_id (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        text_config (`<fill_type>`, *optional*): <fill_docstring>
+        pad_token_id (`int`, *optional*):
+            The id of the *padding* token.
+        bos_token_id (`int`, *optional*):
+            The id of the *beginning-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`, *optional*):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize the `language``[`Aut`].
 
     ```python
     >>> from transformers import FuyuConfig
