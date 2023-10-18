@@ -64,7 +64,12 @@ KEYS_TO_MODIFY_MAPPING = {
     "vit_encoder.linear_encoder": "vision_embed_tokens",
 }
 
-KEYS_TO_REMOVE = {"rotary_emb.inv_freq", "image_patch_projection", "image_patch_projection.weight", "image_patch_projection.bias"}
+KEYS_TO_REMOVE = {
+    "rotary_emb.inv_freq",
+    "image_patch_projection",
+    "image_patch_projection.weight",
+    "image_patch_projection.bias",
+}
 
 
 def rename_state_dict(state_dict):

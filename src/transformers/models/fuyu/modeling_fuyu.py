@@ -18,21 +18,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Fuyu model."""
-import collections
-import math
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModelForCausalLM
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_fuyu import FuyuConfig
 
 
@@ -160,12 +155,13 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
     Args:
         config: FuyuConfig
     """
+
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        self.input_embeds =  self.language_model.get_input_embeddings()
+        self.input_embeds = self.language_model.get_input_embeddings()
 
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
@@ -221,9 +217,15 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx][src_indices]
         return output_embeddings
 
-
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, image_patches=None, image_patches_indices=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        image_patches=None,
+        image_patches_indices=None,
+        **kwargs,
     ):
         if past_key_values:
             input_ids = input_ids[:, -1:]
@@ -252,11 +254,10 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "image_patches_indices": image_patches_indices if past_key_values is None else None,
-                "image_patches": image_patches if past_key_values is None else None
+                "image_patches": image_patches if past_key_values is None else None,
             }
         )
         return model_inputs
-    
 
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     def forward(
@@ -316,13 +317,13 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                 )
 
         outputs = self.language_model(
-            inputs_embeds = inputs_embeds,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    past_key_values=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache
-                )
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+        )
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
         return outputs

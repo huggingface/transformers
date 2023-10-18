@@ -1,5 +1,7 @@
 import unittest
 
+import requests
+
 from transformers import AutoTokenizer, FuyuConfig, FuyuForCausalLM, FuyuModel, is_torch_available, is_vision_available
 from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
 from transformers.models.fuyu.processing_fuyu import FuyuProcessor
@@ -8,7 +10,6 @@ from transformers.testing_utils import require_torch_gpu, slow, torch_device
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-import requests
 
 if is_vision_available():
     from PIL import Image
@@ -311,7 +312,8 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model_inputs_bus_captioning = self.processor(text=text_prompt_coco_captioning, images=bus_image_pil)
 
         continuous_embeddings = self.model.model.vision_embed_tokens(
-            model_inputs_bus_captioning['image_patches']).unsqueeze(0)
+            model_inputs_bus_captioning["image_patches"]
+        ).unsqueeze(0)
         EXPECTED_CONTINUOUS_EMBEDDING_START = torch.Tensor(
             [-0.1221, 0.1689, -0.2969, 0.0601, 0.2168, -0.6953, 0.3438, 0.0165, 0.2168, 0.0586]
         )
@@ -327,7 +329,7 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         )
 
         # word_embeddings = self.model.embed_tokens(self.model_inputs['image_padded_unpacked_tokens_tensor'][0][None, :])
-        word_embeddings = self.model.model.embed_tokens(model_inputs_bus_captioning['input_ids'])
+        word_embeddings = self.model.model.embed_tokens(model_inputs_bus_captioning["input_ids"])
 
         # fmt: off
         EXPECTED_WORD_EMBEDDING_START = torch.Tensor([2.0117e-06,-1.0371e-05,-2.0504e-05,-1.0312e-05,-1.7405e-05,-1.3471e-05,-1.7643e-05,1.3530e-05,-5.2452e-06,-2.4557e-05])
@@ -379,8 +381,9 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     @slow
     @require_torch_gpu
     def test_model_8b_chat_greedy_generation_chart_vqa(self):
-        EXPECTED_TEXT_TOKENS = ['The', 'life expectancy', 'at', 'birth', 'of male',
-                                's in', '', '20', '18', 'is', '', '80', '.', '7', '.', '\n', '|ENDOFTEXT|']
+        # fmt: off
+        EXPECTED_TEXT_TOKENS = ["The","life expectancy","at","birth","of male","s in","","20","18","is","","80",".","7",".","\n","|ENDOFTEXT|",]
+        # fmt: on
         expected_text_completion = " ".join(EXPECTED_TEXT_TOKENS)  # TODO make sure the end string matches
 
         text_prompt_chart_vqa = "What is the highest life expectancy at birth of male?\n"
@@ -399,7 +402,9 @@ class FuyuIntegrationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         EXPECTED_TEXT_COMPLETION = """\x00194213202244\x01|ENDOFTEXT|"""
         text_prompt_bbox = """When presented with a box, perform OCR to extract text contained within it. If provided with text, generate the corresponding bounding box.\\nWilliams"""  # noqa: E231
 
-        bbox_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/bbox_sample_image.png"
+        bbox_image_url = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/bbox_sample_image.png"
+        )
         bbox_image_pil = Image.open(requests.get(bbox_image_url, stream=True).raw)
 
         model_inputs_bbox = self.processor(text=text_prompt_bbox, images=bbox_image_pil)

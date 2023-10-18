@@ -1,4 +1,3 @@
-import math
 import re
 from typing import Any, Iterable, List, Optional, Tuple, Union
 
@@ -13,8 +12,9 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...processing_utils import ProcessorMixin
-from .image_processing_fuyu import FuyuImageProcessor
 from ...utils import is_vision_available, logging
+from .image_processing_fuyu import FuyuImageProcessor
+
 
 logger = logging.get_logger(__name__)
 
@@ -58,7 +58,7 @@ def full_unpacked_stream_to_tensor(
     # Place each batch entry into the batch tensor.
     for bi in range(batch_size):
         tokens_to_place = all_bi_tokens_to_place[bi]
-        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset: tokens_to_place + offset]
+        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset : tokens_to_place + offset]
 
     return new_padded_tensor
 
@@ -93,7 +93,6 @@ def construct_full_unpacked_stream(
     return all_bi_stream
 
 
-
 def _replace_string_repr_with_token_tags(prompt: str) -> str:
     prompt = prompt.replace(TEXT_REPR_POINT_OPEN, TOKEN_POINT_OPEN_STRING)
     prompt = prompt.replace(TEXT_REPR_POINT_CLOSE, TOKEN_POINT_CLOSE_STRING)
@@ -121,9 +120,11 @@ def _segment_prompt_into_text_token_conversions(prompt: str) -> List:
             TOKEN_POINT_CLOSE_STRING,
         ]:
             continue
-        prompt_text_list.append((elem, i > 1 and prompt_split[i - 1]
-                                in [TOKEN_BBOX_OPEN_STRING, TOKEN_POINT_OPEN_STRING]))
+        prompt_text_list.append(
+            (elem, i > 1 and prompt_split[i - 1] in [TOKEN_BBOX_OPEN_STRING, TOKEN_POINT_OPEN_STRING])
+        )
     return prompt_text_list
+
 
 def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenizer) -> List[int]:
     """
@@ -155,7 +156,6 @@ def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenize
         else:
             transformed_prompt_tokens.extend(tokenizer(elem[0], add_special_tokens=False).input_ids)
     return transformed_prompt_tokens
-
 
 
 def _transform_within_tags(text: str, transformed_image, tokenizer) -> List[int]:
@@ -537,7 +537,7 @@ class FuyuProcessor(ProcessorMixin):
                 tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[bi].shape[0]))
                 all_bi_tokens_to_place.append(tokens_to_place)
 
-            image_padded_unpacked_tokens_tensor = full_unpacked_stream_to_tensor(
+            full_unpacked_stream_to_tensor(
                 all_bi_tokens_to_place=all_bi_tokens_to_place,
                 full_unpacked_stream=image_padded_unpacked_tokens,
                 fill_value=self.tokenizer.eos_token_id,
