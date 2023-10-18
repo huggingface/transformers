@@ -20,7 +20,7 @@ import math
 import unittest
 from typing import Dict, List, Tuple
 
-from transformers import GroundingDINOConfig, SwinConfig, is_torch_available, is_vision_available
+from transformers import GroundingDINOConfig, SwinConfig, is_torch_available, is_vision_available, GroundingDINOTextPrenetConfig
 from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
@@ -58,14 +58,14 @@ class GroundingDINOModelTester:
         use_labels=True,
         hidden_size=32,
         num_hidden_layers=2,
-        num_attention_heads=8,
-        intermediate_size=8,
+        num_attention_heads=4,
+        intermediate_size=4,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         num_queries=12,
         num_channels=3,
-        image_size=196,
+        image_size=64,
         n_targets=8,
         num_labels=91,
         num_feature_levels=4,
@@ -128,12 +128,19 @@ class GroundingDINOModelTester:
     def get_config(self):
         swin_config = SwinConfig(
             window_size=7,
-            embed_dim=96,
-            depths=[2, 2, 18, 2],
-            num_heads=[3, 6, 12, 24],
+            embed_dim=16,
+            depths=[1, 1, 1, 1],
+            num_heads=[1, 1, 1, 1],
             image_size=self.image_size,
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
+        )
+        text_backbone = GroundingDINOTextPrenetConfig(
+            hidden_size=8,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=8,
+            max_position_embeddings=8
         )
         return GroundingDINOConfig(
             d_model=self.hidden_size,
@@ -153,6 +160,7 @@ class GroundingDINOModelTester:
             use_timm_backbone=False,
             backbone_config=swin_config,
             max_text_len=self.max_text_len,
+            text_backbone_config=text_backbone
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -592,11 +600,9 @@ class GroundingDINOModelIntegrationTests(unittest.TestCase):
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
+        expected_boxes = torch.tensor([[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]).to(torch_device)
         expected_logits = torch.tensor(
-            [[-9.6645, -4.3449, -5.8705], [-9.7035, -3.8504, -5.0724], [-10.5634, -5.3379, -7.5116]]
-        ).to(torch_device)
-        expected_boxes = torch.tensor(
-            [[0.8693, 0.2289, 0.2492], [0.3150, 0.5489, 0.5845], [0.5563, 0.7580, 0.8518]]
+            [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
@@ -607,46 +613,16 @@ class GroundingDINOModelIntegrationTests(unittest.TestCase):
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
-            outputs, threshold=0.3, target_sizes=[image.size[::-1]]
+            outputs, threshold=0.35, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.7999, 0.7894, 0.6331, 0.4720, 0.4382]).to(torch_device)
+        expected_scores = torch.tensor([0.4526, 0.4082]).to(torch_device)
         expected_labels = [17, 17, 75, 75, 63]
-        expected_slice_boxes = torch.tensor([16.5028, 52.8390, 318.2544, 470.7841]).to(torch_device)
+        expected_slice_boxes = torch.tensor([491.1074, 198.5045, 292.5861, 350.6499]).to(torch_device)
 
-        self.assertEqual(len(results["scores"]), 5)
+        self.assertEqual(len(results["scores"]), 2)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
         self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes))
-
-    def test_inference_object_detection_head_with_box_refine_two_stage(self):
-        model = GroundingDINOForObjectDetection.from_pretrained(
-            "SenseTime/deformable-detr-with-box-refine-two-stage"
-        ).to(torch_device)
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
-
-        expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
-        self.assertEqual(outputs.logits.shape, expected_shape_logits)
-
-        expected_logits = torch.tensor(
-            [[-6.7108, -4.3213, -6.3777], [-8.9014, -6.1799, -6.7240], [-6.9315, -4.4735, -6.2298]]
-        ).to(torch_device)
-        expected_boxes = torch.tensor(
-            [[0.2583, 0.5499, 0.4683], [0.7652, 0.9068, 0.4882], [0.5490, 0.2763, 0.0564]]
-        ).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
-
-        expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
-        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
 
     @require_torch_gpu
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):

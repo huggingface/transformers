@@ -370,11 +370,16 @@ class GroundingDINOConfig(PretrainedConfig):
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
-        self.text_backbone_config = (
-            GroundingDINOTextPrenetConfig()
-            if text_backbone_config is None
-            else GroundingDINOTextPrenetConfig(**text_backbone_config)
-        )
+        if text_backbone_config is None:
+            self.text_backbone_config = GroundingDINOTextPrenetConfig()
+        elif isinstance(text_backbone_config, dict):
+            self.text_backbone_config = GroundingDINOTextPrenetConfig(**text_backbone_config)
+        elif isinstance(text_backbone_config, GroundingDINOTextPrenetConfig):
+            self.text_backbone_config = text_backbone_config
+        else:
+            raise ValueError(
+                f"`text_backbone_config` should be either a `dict` or a `GroundingDINOTextPrenetConfig` instance instead got {type(text_backbone_config)}"
+            )
         self.max_text_len = max_text_len
         # Text Enhancer
         self.text_enhancer_dropout = text_enhancer_dropout

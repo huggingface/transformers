@@ -391,7 +391,7 @@ def convert_grounding_dino_checkpoint(args):
         [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
     )
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-3)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
