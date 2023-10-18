@@ -480,6 +480,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_src_tokens[1:], ids[1 : len(self.expected_src_tokens)])
         self.assertEqual(256152, ids[0])
 
+    # Copied from tests.models.nllb.NllbDistilledIntegrationTest.test_enro_tokenizer_decode_ignores_language_codes
     def test_enro_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(RO_CODE, self.tokenizer.all_special_ids)
         # fmt: off
@@ -500,6 +501,7 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         self.assertEqual(ids[0], EN_CODE)
         self.assertEqual(len(ids), desired_max_length)
 
+    # Copied from tests.models.nllb.NllbDistilledIntegrationTest.test_special_tokens_unaffacted_by_save_load with fairseq_tokens_to_ids->additional_special_tokens, Nllb->SeamlessM4T
     def test_special_tokens_unaffacted_by_save_load(self):
         tmpdirname = tempfile.mkdtemp()
         original_special_tokens = self.tokenizer.additional_special_tokens
