@@ -220,48 +220,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx][src_indices]
         return output_embeddings
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        image_patches=None,
-        image_patches_indices=None,
-        **kwargs,
-    ):
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
-
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        if image_patches_indices is not None:
-            model_inputs["image_patches_indices"] = image_patches_indices
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "image_patches_indices": image_patches_indices if past_key_values is None else None,
-                "image_patches": image_patches if past_key_values is None else None,
-            }
-        )
-        return model_inputs
-
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -310,7 +268,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
-            inputs_embeds = self.input_embeds(input_ids)
+            inputs_embeds = self.language_model.input_embeds(input_ids)
             if image_patches is not None and past_key_values is None:
                 patch_embeddings = self.vision_embed_tokens(image_patches.to(self.vision_embed_tokens.weight.dtype))
                 inputs_embeds = self.gather_continuous_embeddings(
@@ -330,3 +288,45 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
         return outputs
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        image_patches=None,
+        image_patches_indices=None,
+        **kwargs,
+    ):
+        if past_key_values:
+            input_ids = input_ids[:, -1:]
+
+        position_ids = kwargs.get("position_ids", None)
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        if image_patches_indices is not None:
+            model_inputs["image_patches_indices"] = image_patches_indices
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "image_patches_indices": image_patches_indices if past_key_values is None else None,
+                "image_patches": image_patches if past_key_values is None else None,
+            }
+        )
+        return model_inputs
