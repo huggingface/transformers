@@ -1,6 +1,5 @@
 import math
 import re
-from enum import IntEnum, auto
 from typing import Any, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -17,75 +16,10 @@ from ...processing_utils import ProcessorMixin
 from .image_processing_fuyu import FuyuImageProcessor
 import PIL
 
-# TODO(fjord): Once we're using the new vocabulary, switch to reserved/prioritized tokens like <bbox> and <point>.
 BBOX_OPEN_STRING = "<0x00>"  # <bbox>
 BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
 POINT_OPEN_STRING = "<0x02>"  # <point>
 POINT_CLOSE_STRING = "<0x03>"  # </point>
-
-
-# TODO(augustus): this should live somewhere different, since they'll want it in finetuning, etc
-
-
-class TokenType(IntEnum):
-    """The type of token - used for computing losses."""
-
-    TAG = auto()
-    TEXT = auto()
-    NEWLINE = auto()
-    LOCATION = auto()
-    EOS = auto()
-    PROMPT = auto()
-    CAPTION_LABEL = auto()
-    BOS = auto()
-    IMAGE = auto()
-    IMAGE_NEWLINE = auto()
-    OTHER = auto()
-
-    # The questions and answers in the bbox-center-to-token task.
-    BBOX_CENTER_TO_TOKEN_QUERY = auto()
-    BBOX_CENTER_TO_TOKEN_ANSWER = auto()
-
-    # The questions and answers in the token-to-bbox-center task.
-    TOKEN_TO_BBOX_CENTER_QUERY = auto()
-    TOKEN_TO_BBOX_CENTER_ANSWER = auto()
-
-    # For delimiters we don't take the loss on
-    DELIMITER = auto()
-
-    # Normal GPT-style tokens
-    GPT_TOKEN = auto()
-
-    # Finetuning
-    FT_CONTEXT = auto()
-    FT_HISTORY = auto()
-    FT_OBSERVATION = auto()
-    FT_COMMAND = auto()
-    FT_ACTION = auto()
-    FT_REWARD = auto()
-
-    # For the openImages dataset
-    BBOX_TO_POINTLABEL_QUERY = auto()
-    BBOX_TO_POINTLABEL_ANSWER = auto()
-    BBOX_TO_CLASS_LABEL_ANSWER = auto()
-
-    # The questions and answers in the bbox-to-tokens task.
-    BBOX_TO_TOKENS_QUERY = auto()
-    BBOX_TO_TOKENS_ANSWER = auto()
-    TOKENS_TO_BBOX_QUERY = auto()
-    TOKENS_TO_BBOX_ANSWER = auto()
-
-    VQA_QUESTION = auto()
-    VQA_ANSWER = auto()
-
-    CLASSIFY_IMAGE_QUERY = auto()
-    CLASSIFY_IMAGE_ANSWER = auto()
-
-    COUNT_IMAGE_QUERY = auto()
-    COUNT_IMAGE_ANSWER = auto()
-
-    GENERATED_CAPTION = auto()
-
 
 TEXT_REPR_BBOX_OPEN = "<box>"
 TEXT_REPR_BBOX_CLOSE = "</box>"
@@ -276,37 +210,6 @@ def process_images_for_model_input(
     }
 
 
-def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenizer) -> List[int]:
-    """
-    This function transforms the prompt in the following fashion:
-    - <box> <point> and </box> </point> to their respective token mappings
-    - extract the coordinates from the tag
-    - transform the coordinates into the transformed image space
-    - return the prompt tokens with the transformed coordinates and new tags
-
-    Bounding boxes and points MUST be in the following format: <box>y1, x1, y2, x2</box> <point>x, y</point> The spaces
-    and punctuation added above are NOT optional.
-    """
-    # Make a namedtuple that stores "text" and "is_bbox"
-
-    # We want to do the following: Tokenize the code normally -> when we see a point or box, tokenize using the tokenize_within_tag function
-    # When point or box close tag, continue tokenizing normally
-    # First, we replace the point and box tags with their respective tokens
-    prompt = _replace_string_repr_with_token_tags(prompt)
-    # Tokenize the prompt
-    # Convert prompt into a list split
-    prompt_text_list = _segment_prompt_into_text_token_conversions(prompt)
-    transformed_prompt_tokens: List[int] = []
-    for elem in prompt_text_list:
-        if elem[1]:
-            # This is a location, we need to tokenize it
-            within_tag_tokenized = _transform_within_tags(elem[0], transformed_image, tokenizer)
-            # Surround the text with the open and close tags
-            transformed_prompt_tokens.extend(within_tag_tokenized)
-        else:
-            transformed_prompt_tokens.extend(tokenizer(elem[0], add_special_tokens=False).input_ids)
-    return transformed_prompt_tokens
-
 
 def _replace_string_repr_with_token_tags(prompt: str) -> str:
     prompt = prompt.replace(TEXT_REPR_POINT_OPEN, TOKEN_POINT_OPEN_STRING)
@@ -338,6 +241,38 @@ def _segment_prompt_into_text_token_conversions(prompt: str) -> List:
         prompt_text_list.append((elem, i > 1 and prompt_split[i - 1]
                                 in [TOKEN_BBOX_OPEN_STRING, TOKEN_POINT_OPEN_STRING]))
     return prompt_text_list
+
+def _transform_coordinates_and_tokenize(prompt: str, transformed_image, tokenizer) -> List[int]:
+    """
+    This function transforms the prompt in the following fashion:
+    - <box> <point> and </box> </point> to their respective token mappings
+    - extract the coordinates from the tag
+    - transform the coordinates into the transformed image space
+    - return the prompt tokens with the transformed coordinates and new tags
+
+    Bounding boxes and points MUST be in the following format: <box>y1, x1, y2, x2</box> <point>x, y</point> The spaces
+    and punctuation added above are NOT optional.
+    """
+    # Make a namedtuple that stores "text" and "is_bbox"
+
+    # We want to do the following: Tokenize the code normally -> when we see a point or box, tokenize using the tokenize_within_tag function
+    # When point or box close tag, continue tokenizing normally
+    # First, we replace the point and box tags with their respective tokens
+    prompt = _replace_string_repr_with_token_tags(prompt)
+    # Tokenize the prompt
+    # Convert prompt into a list split
+    prompt_text_list = _segment_prompt_into_text_token_conversions(prompt)
+    transformed_prompt_tokens: List[int] = []
+    for elem in prompt_text_list:
+        if elem[1]:
+            # This is a location, we need to tokenize it
+            within_tag_tokenized = _transform_within_tags(elem[0], transformed_image, tokenizer)
+            # Surround the text with the open and close tags
+            transformed_prompt_tokens.extend(within_tag_tokenized)
+        else:
+            transformed_prompt_tokens.extend(tokenizer(elem[0], add_special_tokens=False).input_ids)
+    return transformed_prompt_tokens
+
 
 
 def _transform_within_tags(text: str, transformed_image, tokenizer) -> List[int]:
@@ -451,75 +386,11 @@ def _tokenize_prompts_with_image_and_batch(
     return prompts_tokens_tensor, prompts_length_tensor
 
 
-def _is_cuda(tensor):
-    """Check if a tensor is not none and is cuda."""
-    assert tensor is not None
-    assert tensor.is_cuda
-
-
-def _is_cuda_contiguous(tensor):
-    """Check if a tensor is not none, is cuda, and is contiguous."""
-    _is_cuda(tensor)
-    assert tensor.is_contiguous()
-
-
-def broadcast_tensor(size, dtype, tensor=None, rank=0, device=0):
-    """Given size and type of a tensor on all ranks and the tensor value
-    Args:
-    only on a specific rank, broadcast from that rank to all other ranks.
-        size: size of the tensor dtype: type of the tensor tensor: tensor to be broadcasted rank: primary rank for
-        broadcasting device: device of the tensor. If not set to None, then we use cuda.current_device().
-            Default is 0, since we use cuda.current_device() to get the device.
-    """
-    if device is not None:
-        device = torch.cuda.current_device()
-    if device is not None:
-        _is_cuda_contiguous(tensor)
-    else:
-        tensor = torch.empty(size, dtype=dtype, device=device)
-    return tensor
-
-
-def broadcast_list(size, dtype, list_values=None, rank=0, device=0):
-    """Broadcast a list of values with a given type.
-    Args:
-        size: size of the list
-        dtype: dtype of the list
-        list_values: list of values to be broadcasted
-        rank: primary rank for broadcasting
-        device: device of the tensor. If not set to None, then we use cuda.current_device().
-            Default is 0, since we use cuda.current_device() to get the device.
-    """
-    tensor = None
-    if device is not None:
-        device = torch.cuda.current_device()
-
-    tensor = torch.tensor(list_values, dtype=dtype, device=device)
-    return broadcast_tensor(size, dtype, tensor=tensor, rank=rank, device=device)
-
-
-def broadcast_int_list(size, int_list=None, rank=0, device=0):
-    """Broadcast a list of interger values.
-    Args:
-        size: size of the list
-        int_list: list of values to be broadcasted
-        rank: primary rank for broadcasting
-        device: device of the tensor. If not set to None, then we use cuda.current_device().
-            Default is 0, since we use cuda.current_device() to get the device.
-    """
-    if device is not None:
-        device = torch.cuda.current_device()
-    return broadcast_list(size, torch.int64, list_values=int_list, rank=rank, device=device)
-
-
-# TODO(fjord): Once we're using the new vocabulary, switch to reserved/prioritized tokens like <bbox> and <point>.
 TOKEN_BBOX_OPEN_STRING = BBOX_OPEN_STRING = "<0x00>"  # <bbox>
 BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
 TOKEN_BBOX_CLOSE_STRING = TOKEN_POINT_OPEN_STRING = POINT_OPEN_STRING = "<0x02>"  # <point>
 TOKEN_POINT_CLOSE_STRING = POINT_CLOSE_STRING = "<0x03>"  # </point>
 BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
-
-npt = None
 
 
 def original_to_transformed_h_coords(self, original_coords):
