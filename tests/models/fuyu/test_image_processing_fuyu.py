@@ -8,6 +8,7 @@ from transformers import is_vision_available
 
 if is_vision_available():
     from PIL import Image
+    
 from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
 
 
