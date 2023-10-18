@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch OPT model."""
+import inspect
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -411,9 +412,10 @@ class OPTPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module, value=False, use_reentrant=True):
         if isinstance(module, (OPTDecoder)):
             module.gradient_checkpointing = value
+            module.gradient_checkpointing_use_reentrant = use_reentrant
 
 
 OPT_INPUTS_DOCSTRING = r"""
@@ -520,6 +522,8 @@ class OPTDecoder(OPTPreTrainedModel):
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.gradient_checkpointing = False
+        # Use the default value
+        self.gradient_checkpointing_use_reentrant = True
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -699,12 +703,18 @@ class OPTDecoder(OPTPreTrainedModel):
 
                     return custom_forward
 
+                kwargs = {}
+
+                if "use_reentrant" in list(inspect.signature(torch.utils.checkpoint.checkpoint).parameters):
+                    kwargs["use_reentrant"] = self.gradient_checkpointing_use_reentrant
+
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     causal_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
                     None,
+                    **kwargs,
                 )
             else:
                 layer_outputs = decoder_layer(

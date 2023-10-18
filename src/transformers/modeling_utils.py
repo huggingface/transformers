@@ -1819,7 +1819,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def gradient_checkpointing_enable(self):
+    def gradient_checkpointing_enable(self, use_reentrant: bool = True) -> None:
         """
         Activates gradient checkpointing for the current model.
 
@@ -1828,7 +1828,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if not self.supports_gradient_checkpointing:
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
-        self.apply(partial(self._set_gradient_checkpointing, value=True))
+
+        _supports_use_reentrant = "use_reentrant" in list(
+            inspect.signature(self._set_gradient_checkpointing).parameters
+        )
+        gc_kwargs = {}
+
+        if not _supports_use_reentrant and not use_reentrant:
+            logger.warn(
+                f"{self.__class__.__name__} does not support the use_reentrant argument. The argument will be ignored."
+                " Please raise an issue on GitHub to support this argument if needed."
+            )
+        elif _supports_use_reentrant and not use_reentrant:
+            gc_kwargs["use_reentrant"] = use_reentrant
+
+        self.apply(partial(self._set_gradient_checkpointing, value=True, **gc_kwargs))
 
         if getattr(self, "_hf_peft_config_loaded", False):
             # When using PEFT + gradient checkpointing + Trainer we need to make sure the input has requires_grad=True

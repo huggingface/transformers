@@ -572,6 +572,9 @@ class TrainingArguments:
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        gradient_checkpointing_use_reentrant (`bool`, *optional*, defaults to `True`):
+            If `False` use `use_reentrant=False` when calling gradient checkpointing as recommended per PyTorch
+            documentation (can fix some bugs and unexpected behaviours for distributed training).
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
             that need inputs, predictions and references for scoring calculation in Metric class.
@@ -1118,6 +1121,10 @@ class TrainingArguments:
         metadata={
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
+    )
+    gradient_checkpointing_use_reentrant: bool = field(
+        default=True,
+        metadata={"help": "If False use `use_reentrant=False` as recommended per PyTorch documentation."},
     )
     include_inputs_for_metrics: bool = field(
         default=False, metadata={"help": "Whether or not the inputs will be passed to the `compute_metrics` function."}
@@ -2102,6 +2109,7 @@ class TrainingArguments:
         gradient_accumulation_steps: int = 1,
         seed: int = 42,
         gradient_checkpointing: bool = False,
+        gradient_checkpointing_use_reentrant: bool = True,
     ):
         """
         A method that regroups all basic arguments linked to the training.
@@ -2165,6 +2173,7 @@ class TrainingArguments:
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.seed = seed
         self.gradient_checkpointing = gradient_checkpointing
+        self.gradient_checkpointing_use_reentrant = gradient_checkpointing_use_reentrant
         return self
 
     def set_evaluate(
