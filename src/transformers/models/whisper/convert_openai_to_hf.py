@@ -1,49 +1,5 @@
 #!/usr/bin/env python
-"""Converts a Whisper model in OpenAI format to Hugging Face format.
-
-Example:
-
-```bash
-# Converts the model from OpenAI to Hugging Face format:
-python convert_openai_to_hf.py \
-  --checkpoint_path tiny \
-  --pytorch_dump_folder_path whisper-tiny-hf
-```
-
-```python
->>> import torchaudio
->>> from transformers import WhisperProcessor, WhisperForConditionalGeneration
->>> from transformers.models.whisper.convert_openai_to_hf import convert_openai_whisper_to_tfms
-
->>> # Converts the model from OpenAI to Hugging Face format:
->>> convert_openai_whisper_to_tfms("tiny.en", "whisper-tiny.en-hf")  # doctest: +IGNORE_RESULT
-
->>> # Select an audio file:
->>> audio_path = "https://huggingface.co/datasets/sanchit-gandhi/librispeech_long/resolve/main/audio.wav"
-
->>> # Load the Whisper model in Hugging Face format:
->>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
->>> model = WhisperForConditionalGeneration.from_pretrained("whisper-tiny.en-hf")
->>> model.config.forced_decoder_ids = None
-
->>> # Select an audio file:
->>> waveform, sampling_rate = torchaudio.load(audio_path)
-
->>> # Use the model and processor to transcribe the audio:
->>> input_features = processor(
-...     waveform.squeeze().numpy(), sampling_rate=sampling_rate, return_tensors="pt"
-... ).input_features
-
->>> # Generate token ids
->>> predicted_ids = model.generate(input_features)
-
->>> # Decode token ids to text
->>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
-
->>> transcription[0]
-' Chapter 16. I might have told you of the beginning of this liaison in a few lines'
-```
-"""
+"""Converts a Whisper model in OpenAI format to Hugging Face format."""
 # Copyright 2022 The HuggingFace Inc. team and the OpenAI team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

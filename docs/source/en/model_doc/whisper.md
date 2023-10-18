@@ -35,6 +35,61 @@ Tips:
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). The Tensorflow version of this model was contributed by [amyeroberts](https://huggingface.co/amyeroberts).
 The original code can be found [here](https://github.com/openai/whisper).
 
+## Inference
+
+Here is a step-by-step guide to transcribing an audio sample using a pre-trained Whisper model:
+
+```python
+>>> import torchaudio
+>>> from transformers import WhisperProcessor, WhisperForConditionalGeneration
+
+>>> # Select an audio file:
+>>> audio_path = "https://huggingface.co/datasets/sanchit-gandhi/librispeech_long/resolve/main/audio.wav"
+
+>>> # Load the Whisper model in Hugging Face format:
+>>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+>>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+>>> model.config.forced_decoder_ids = None
+
+>>> # Select an audio file:
+>>> waveform, sampling_rate = torchaudio.load(audio_path)
+
+>>> # Use the model and processor to transcribe the audio:
+>>> input_features = processor(
+...     waveform.squeeze().numpy(), sampling_rate=sampling_rate, return_tensors="pt"
+... ).input_features
+
+>>> # Generate token ids
+>>> predicted_ids = model.generate(input_features)
+
+>>> # Decode token ids to text
+>>> transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+
+>>> transcription[0]
+' Chapter 16.'
+```
+
+## Format Conversion
+
+For users with models in the original OpenAI format who wish to utilize them with the Hugging Face library, a conversion script is provided. The example below demonstrates how to transform Whisper models from OpenAI to Hugging Face format:
+
+```bash
+# Change to the whisper directory where the script resides:
+cd src/transformers/models/whisper/
+# Converts the model from OpenAI to Hugging Face format:
+convert_openai_to_hf.py \
+  --checkpoint_path tiny \
+  --pytorch_dump_folder_path whisper-tiny-hf
+```
+
+For those more comfortable working directly in Python, the conversion can also be achieved with the code snippet below:
+
+```python
+>>> from transformers.models.whisper.convert_openai_to_hf import convert_openai_whisper_to_tfms
+>>> convert_openai_whisper_to_tfms("tiny.en", "whisper-tiny.en-hf")  # doctest: +IGNORE_RESULT
+```
+
+This step is not usually required if we are using the models already [provided by OpenAI in the Hugging Face Hub](https://huggingface.co/openai).
 
 ## WhisperConfig
 
