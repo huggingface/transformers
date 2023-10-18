@@ -22,7 +22,7 @@ _import_structure = {
 
 
 try:
-    if not is_vision_available() or not is_torch_available():
+    if not is_vision_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -32,7 +32,7 @@ else:
 
 
 try:
-    if not is_vision_available() or not is_torch_available():
+    if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from .configuration_fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig
 
     try:
-        if not is_vision_available() or not is_torch_available():
+        if not is_vision_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass

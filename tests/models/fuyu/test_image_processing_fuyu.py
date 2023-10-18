@@ -3,15 +3,16 @@ import unittest
 import numpy as np
 
 from transformers import is_torch_available, is_vision_available
-
 from transformers.testing_utils import (
     require_torch,
     require_torchvision,
     require_vision,
 )
 
+
 if is_torch_available() and is_vision_available():
     import torch
+
     from transformers import FuyuImageProcessor
 
 if is_vision_available():
