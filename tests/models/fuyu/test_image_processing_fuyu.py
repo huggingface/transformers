@@ -4,8 +4,13 @@ import numpy as np
 
 from transformers import is_torch_available, is_vision_available
 
+from transformers.testing_utils import (
+    require_torch,
+    require_torchvision,
+    require_vision,
+)
 
-if is_torch_available():
+if is_torch_available() and is_vision_available:
     import torch
     from transformers import FuyuImageProcessor
 
@@ -13,6 +18,9 @@ if is_vision_available():
     from PIL import Image
 
 
+@require_torch
+@require_vision
+@require_torchvision
 class TestFuyuImageProcessor(unittest.TestCase):
     def setUp(self):
         self.processor = FuyuImageProcessor(target_height=160, target_width=320, padding_value=1.0)
