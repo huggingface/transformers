@@ -614,7 +614,10 @@ class FalconFlashAttention2(FalconAttention):
         input_dtype = query_layer.dtype
         if input_dtype == torch.float32:
             # Handle the case where the model is quantized
-            target_dtype = getattr(self.config, "_pre_quantization_dtype", self.query_key_value.weight.dtype)
+            if hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.query_key_value.weight.dtype
 
             logger.warning_once(
                 f"The input hidden states seems to be silently casted in float32, this might be related to"
