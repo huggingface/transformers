@@ -64,7 +64,7 @@ The original code can be found [here](https://github.com/microsoft/unilm/tree/ma
     >>> output = model(
     ...     input_ids=torch.tensor(input["input_ids"]),
     ...     pixel_values=pixel_values,
-    ...     text_padding_mask=torch.ones(input["input_ids"].shape),
+    ...     attention_mask=torch.ones(input["input_ids"].shape),
     ... )
     ```"""
 
