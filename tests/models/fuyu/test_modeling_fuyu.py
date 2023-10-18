@@ -12,8 +12,9 @@ from ...test_modeling_common import ids_tensor, random_attention_mask
 if is_vision_available():
     from PIL import Image
 
-    from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
-    from transformers.models.fuyu.processing_fuyu import FuyuProcessor
+
+if is_torch_available() and is_vision_available():
+    from transformers import FuyuImageProcessor, FuyuProcessor
 
 
 if is_torch_available():

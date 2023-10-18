@@ -11,7 +11,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
+from transformers import FuyuImageProcessor
 
 
 class TestFuyuImageProcessor(unittest.TestCase):

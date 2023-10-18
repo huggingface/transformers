@@ -10,6 +10,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow
 if is_vision_available():
     from PIL import Image
 
+if is_vision_available() and is_torch_available():
     from transformers import FuyuImageProcessor, FuyuProcessor
 
 if is_torch_available():
