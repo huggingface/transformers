@@ -403,7 +403,7 @@ class FuyuProcessor(ProcessorMixin):
             image_unpadded_heights.append([image.shape[height_index]])
 
             # Reproduct adept padding sampler
-            padded_image = self.image_processor.aspectratio_preserving_padding.apply_transformation(image)
+            padded_image = self.image_processor.apply_transformation(image)
 
             tensor_img = torch.Tensor(padded_image).permute(2, 0, 1)
             batch_images.append([tensor_img])
