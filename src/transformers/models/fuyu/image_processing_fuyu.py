@@ -1,12 +1,20 @@
 import math
-from typing import List
+from typing import List, Union
 
 from ...image_processing_utils import BaseImageProcessor
 from ...utils import is_torch_available, is_vision_available, logging
 
+from ...image_transforms import (
+    normalize,
+    pad,
+    resize,
+)
+from ...image_utils import to_numpy_array
+
+import numpy as np
 
 if is_vision_available():
-    pass
+    import PIL
 
 if is_torch_available():
     import torch
@@ -38,8 +46,11 @@ class FuyuImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, target_height=1080, target_width=1920, padding_value=1.0, padding_mode: str = "constant"):
+        self.target_width = target_width
+        self.target_height = target_height
+        self.padding_value = padding_value
+        self.padding_mode = padding_mode
 
     def get_num_patches(self, img_h: int, img_w: int, patch_dim_h: int, patch_dim_w: int) -> int:
         """Calculate number of patches required to encode an image."""
@@ -192,3 +203,43 @@ class FuyuImageProcessor(BaseImageProcessor):
             "image_patch_indices_per_batch": image_patch_indices_per_batch,
             "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
         }
+    
+    def _scale_to_target_aspect_ratio(self, image: np.ndarray) -> np.ndarray:
+        image_height, image_width, _ = image.shape
+        if image_width <= self.target_width and image_height <= self.target_height:
+            return image
+
+        height_scale_factor = self.target_height / image_height
+        width_scale_factor = self.target_width / image_width
+        optimal_scale_factor = min(height_scale_factor, width_scale_factor)
+
+        new_height = int(image_height * optimal_scale_factor)
+        new_width = int(image_width * optimal_scale_factor)
+
+        scaled_image = resize(image=image, size=(new_width, new_height))
+        return np.array(scaled_image)
+
+    def _pad_to_target_size(self, image: np.ndarray) -> np.ndarray:
+        image_height, image_width, _ = image.shape
+
+        padding_top = 0
+        padding_left = 0
+        padding_bottom = self.target_height - image_height
+        padding_right = self.target_width - image_width
+
+        padded_image = pad(
+            image,
+            ((padding_top, padding_bottom), (padding_left, padding_right)),
+            mode=self.padding_mode,
+            constant_values=self.padding_value,
+        )
+        return padded_image
+
+    def apply_transformation(self, image: Union[np.ndarray, PIL.Image.Image]) -> np.ndarray:
+        if isinstance(image, PIL.Image.Image):
+            image = to_numpy_array(image)
+        scaled_image = self._scale_to_target_aspect_ratio(image)
+        padded_image = self._pad_to_target_size(scaled_image)
+        normalized_padded_image = normalize(padded_image, 0.5, 0.5)
+        return normalized_padded_image
+    

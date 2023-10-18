@@ -12,7 +12,7 @@ from ...image_utils import (
     to_numpy_array,
 )
 from ...processing_utils import ProcessorMixin
-from ...utils import is_vision_available, logging
+from ...utils import is_vision_available, is_torch_available, logging
 from .image_processing_fuyu import FuyuImageProcessor
 
 
@@ -20,6 +20,9 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
 
 BBOX_OPEN_STRING = "<0x00>"  # <bbox>
 BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
