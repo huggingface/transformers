@@ -154,6 +154,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
     def setUp(self):
         self.feat_extract_tester = UnivNetFeatureExtractionTester(self)
 
+    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_feat_extract_from_and_save_pretrained
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
@@ -169,6 +170,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
+    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_feat_extract_to_json_file
     def test_feat_extract_to_json_file(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
@@ -313,6 +315,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertEqual(waveform.shape[0], input_length)
 
     @require_torch
+    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad
     def test_double_precision_pad(self):
         import torch
 
