@@ -2,15 +2,16 @@ import unittest
 
 import numpy as np
 
+from transformers import is_torch_available, is_vision_available
 
-from transformers import is_vision_available, is_torch_available
 
 if is_torch_available():
     import torch
 
 if is_vision_available():
     from PIL import Image
-from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
+
+    from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
 
 
 class TestFuyuImageProcessor(unittest.TestCase):

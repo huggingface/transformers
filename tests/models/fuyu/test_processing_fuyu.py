@@ -3,19 +3,22 @@ import unittest
 
 import requests
 
-from transformers import AutoTokenizer, FuyuImageProcessor, FuyuProcessor, is_torch_available, is_vision_available
-from transformers.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
-from transformers.testing_utils import require_torch_gpu, slow
+from transformers import AutoTokenizer, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torch_gpu, slow
 
 
 if is_vision_available():
     from PIL import Image
 
+    from transformers import FuyuImageProcessor, FuyuProcessor
 
 if is_torch_available():
     import torch
 
+    from transformers.models.fuyu.processing_fuyu import construct_full_unpacked_stream, full_unpacked_stream_to_tensor
 
+
+@require_torch
 @require_torch_gpu
 @slow
 class FuyuProcessingTest(unittest.TestCase):  # TODO Which mixins do we add here?
@@ -47,6 +50,7 @@ class FuyuProcessingTest(unittest.TestCase):  # TODO Which mixins do we add here
         torch.testing.assert_close(self.one_image_bus_model_inputs["input_ids"], EXPECTED_PADDED_UNPACKED_TOKEN_INPUTS)
 
 
+@require_torch
 class TestImageTextProcessingUtils(unittest.TestCase):
     def setUp(self):
         self.batch_size = 2
@@ -86,6 +90,7 @@ class TestImageTextProcessingUtils(unittest.TestCase):
             self.assertTrue(torch.equal(result[i], EXPECTED_UNPACKED_STREAM[i]))
 
 
+@require_torch
 class TestProcessImagesForModelInput(unittest.TestCase):
     def setUp(self):
         """

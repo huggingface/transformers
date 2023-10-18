@@ -3,10 +3,8 @@ import unittest
 
 import requests
 
-from transformers import AutoTokenizer, FuyuConfig, FuyuForCausalLM, is_torch_available, is_vision_available
-from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
-from transformers.models.fuyu.processing_fuyu import FuyuProcessor
-from transformers.testing_utils import require_torch_gpu, slow, torch_device
+from transformers import AutoTokenizer, FuyuConfig, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...test_modeling_common import ids_tensor, random_attention_mask
 
@@ -14,9 +12,14 @@ from ...test_modeling_common import ids_tensor, random_attention_mask
 if is_vision_available():
     from PIL import Image
 
+    from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
+    from transformers.models.fuyu.processing_fuyu import FuyuProcessor
+
 
 if is_torch_available():
     import torch
+
+    from transformers import FuyuForCausalLM
 
 
 # Copied from transformers.tests.llama.test_modelling_llama.LlamaModelTest with Llama->Fuyu
@@ -252,6 +255,7 @@ class FuyuModelTester:
         return config, inputs_dict
 
 
+@require_torch
 @require_torch_gpu
 @slow
 class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)

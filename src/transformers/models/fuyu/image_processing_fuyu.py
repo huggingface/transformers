@@ -54,7 +54,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         self, target_height=1080, target_width=1920, padding_value=1.0, padding_mode: str = "constant", **kwargs
     ):
         requires_backends(self, ["torch"])
-        super.__init__(**kwargs)
+        super().__init__(**kwargs)  
         self.target_width = target_width
         self.target_height = target_height
         self.padding_value = padding_value
