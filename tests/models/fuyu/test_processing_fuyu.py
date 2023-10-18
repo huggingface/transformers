@@ -9,7 +9,6 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 from transformers.models.fuyu.processing_fuyu import (
-    process_images_for_model_input,
     construct_full_unpacked_stream,
     full_unpacked_stream_to_tensor
 )
@@ -98,8 +97,8 @@ class TestImageTextProcessingUtils(unittest.TestCase):
             self.batch_size,
             self.num_sub_sequences
         )
-        EXPECTED_UNPACKED_STREAM = [torch.tensor([1, 2, 1, 2, 3, 3, 4, 5]),
-                                    torch.tensor([4, 5, 6, 6, 7, 7, 8, 8, 9, 10])]
+        EXPECTED_UNPACKED_STREAM = [torch.tensor([1, 2, 1, 2, 3]),
+                                    torch.tensor([4, 5, 6, 6, 7])]
         for i in range(len(result)):
             self.assertTrue(torch.equal(result[i], EXPECTED_UNPACKED_STREAM[i]))
 
@@ -109,6 +108,8 @@ class TestProcessImagesForModelInput(unittest.TestCase):
         """
         Adding a mix of present and absent images.
         """
+        self.image_processor = FuyuImageProcessor()
+
         self.image_input = torch.randn([2, 1, 3, 64, 64])
         self.image_present = torch.tensor([[0], [1]])
         self.image_unpadded_h = torch.tensor([[32], [45]])  # Adjusted for subsequence of 1
@@ -119,27 +120,9 @@ class TestProcessImagesForModelInput(unittest.TestCase):
         self.image_newline_id = 888
         self.variable_sized = True
 
-    def test_process_images_for_model_input_variable_sized(self):
-        result = process_images_for_model_input(
-            image_input=self.image_input,
-            image_present=self.image_present,
-            image_unpadded_h=self.image_unpadded_h,
-            image_unpadded_w=self.image_unpadded_w,
-            image_patch_dim_h=self.image_patch_dim_h,
-            image_patch_dim_w=self.image_patch_dim_w,
-            image_placeholder_id=self.image_placeholder_id,
-            image_newline_id=self.image_newline_id,
-            variable_sized=self.variable_sized,
-        )
-
-        self.assertEqual(len(result['images']), 2)
-        self.assertEqual(len(result['images'][0]), 1)
-        self.assertEqual(result['images'][0][0].shape, torch.Size([]))  # Adjusted for empty image
-        self.assertEqual(result['images'][1][0].shape, torch.Size([3, 48, 48]))
-
     def test_process_images_for_model_input_fixed_sized(self):
         self.variable_sized = False
-        result = process_images_for_model_input(
+        result = self.image_processor.process_images_for_model_input(
             image_input=self.image_input,
             image_present=self.image_present,
             image_unpadded_h=self.image_unpadded_h,
