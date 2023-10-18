@@ -315,7 +315,7 @@ class GenerationConfig(PushToHubMixin):
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
-        # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the the hub
+        # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the hub
         # interface.
         self._from_model_config = kwargs.pop("_from_model_config", False)
         self._commit_hash = kwargs.pop("_commit_hash", None)
