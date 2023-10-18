@@ -408,15 +408,18 @@ class MistralFlashAttention2(MistralAttention):
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            # Handle the case where the model is quantized
+            target_dtype = getattr(self.config, "_pre_quantization_dtype", self.q_proj.weight.dtype)
+
             logger.warning_once(
-                "The input hidden states seems to be silently casted in float32, this might be related to"
-                " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                " float16."
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
             )
 
-            query_states = query_states.to(torch.float16)
-            key_states = key_states.to(torch.float16)
-            value_states = value_states.to(torch.float16)
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
 
         # Reashape to the expected shape for Flash Attention
         query_states = query_states.transpose(1, 2)
