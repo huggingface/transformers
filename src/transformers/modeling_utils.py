@@ -1173,13 +1173,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Args:
             torch_dtype (`torch.dtype`, *optional*):
                 Override the default `torch.dtype` and load the model under this dtype.
+            use_flash_attention_2 (`bool`, *optional*):
+                Whether to load the model with Flash Attention 2 modules.
         """
         torch_dtype = kwargs.pop("torch_dtype", None)
+        use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
         # override default dtype if needed
         dtype_orig = None
         if torch_dtype is not None:
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+
+        if use_flash_attention_2:
+            config = cls._check_and_enable_flash_attn_2(config, torch_dtype)
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
