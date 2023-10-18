@@ -522,7 +522,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
         tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
-        tokenizer.add_tokens(["<REPR_END>"], special_tokens=False)
+        tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
