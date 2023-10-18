@@ -183,7 +183,6 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     # load HuggingFace model
     if base_model:
         model = ViTModel(config, add_pooling_layer=False).eval()
-        # print(model.state_dict().keys())
     else:
         model = ViTForImageClassification(config).eval()
     model.load_state_dict(state_dict)
@@ -199,8 +198,6 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
 
     if base_model:
         timm_pooled_output = timm_model.forward_features(pixel_values)
-        print(timm_pooled_output)
-        print(outputs.last_hidden_state)
         assert timm_pooled_output.shape == outputs.last_hidden_state.shape
         assert torch.allclose(timm_pooled_output, outputs.last_hidden_state, atol=1e-1)
     else:
