@@ -1,15 +1,15 @@
+import io
 import unittest
+
+import requests
 
 from transformers import AutoTokenizer, FuyuConfig, FuyuForCausalLM, FuyuModel, is_torch_available, is_vision_available
 from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
 from transformers.models.fuyu.processing_fuyu import FuyuProcessor
 from transformers.testing_utils import require_torch_gpu, slow, torch_device
 
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_modeling_common import ids_tensor, random_attention_mask
 
-import requests
-import io
 
 if is_vision_available():
     from PIL import Image
@@ -267,7 +267,9 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         self.processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
         self.model = FuyuForCausalLM.from_pretrained(self.pretrained_model_name)
 
-        self.bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
+        self.bus_image_url = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
+        )
         self.bus_image_pil = Image.open(io.BytesIO(requests.get(self.bus_image_url).content))
 
     @slow
@@ -280,8 +282,11 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         generated_tokens = self.model.generate(**model_inputs_bus_captioning, max_new_tokens=10)
         text = self.processor.tokenizer.batch_decode(generated_tokens)
         end_sequence = text[0].split("\x04")[1]
-        clean_sequence = end_sequence[:end_sequence.find(
-            '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
+        clean_sequence = (
+            end_sequence[: end_sequence.find("|ENDOFTEXT|") + len("|ENDOFTEXT|")]
+            if "|ENDOFTEXT|" in end_sequence
+            else end_sequence
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence)
 
     @slow
@@ -293,27 +298,52 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
 
         text = self.model.generate(**model_inputs_bus_color, max_new_tokens=10)
         end_sequence = text[0].split("\x04")[1]
-        clean_sequence = end_sequence[:end_sequence.find(
-            '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
+        clean_sequence = (
+            end_sequence[: end_sequence.find("|ENDOFTEXT|") + len("|ENDOFTEXT|")]
+            if "|ENDOFTEXT|" in end_sequence
+            else end_sequence
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence)
 
     @slow
     @require_torch_gpu
     def test_model_8b_chat_greedy_generation_chart_vqa(self):
-        EXPECTED_TEXT_TOKENS = ['The', 'life expectancy', 'at', 'birth', 'of male',
-                                's in', '', '20', '18', 'is', '', '80', '.', '7', '.', '\n', '|ENDOFTEXT|']
+        EXPECTED_TEXT_TOKENS = [
+            "The",
+            "life expectancy",
+            "at",
+            "birth",
+            "of male",
+            "s in",
+            "",
+            "20",
+            "18",
+            "is",
+            "",
+            "80",
+            ".",
+            "7",
+            ".",
+            "\n",
+            "|ENDOFTEXT|",
+        ]
         expected_text_completion = " ".join(EXPECTED_TEXT_TOKENS)  # TODO make sure the end string matches
 
         text_prompt_chart_vqa = "What is the highest life expectancy at birth of male?\n"
 
-        chart_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/chart.png"
+        chart_image_url = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/chart.png"
+        )
         chart_image_pil = Image.open(io.BytesIO(requests.get(chart_image_url).content))
 
         model_inputs_chart_vqa = self.processor(text=text_prompt_chart_vqa, images=chart_image_pil)
         text = self.model.generate(**model_inputs_chart_vqa, max_new_tokens=10)
         end_sequence = text[0].split("\x04")[1]
-        clean_sequence = end_sequence[:end_sequence.find(
-            '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
+        clean_sequence = (
+            end_sequence[: end_sequence.find("|ENDOFTEXT|") + len("|ENDOFTEXT|")]
+            if "|ENDOFTEXT|" in end_sequence
+            else end_sequence
+        )
         self.assertEqual(expected_text_completion, clean_sequence)
 
     @slow
@@ -328,6 +358,9 @@ class FuyuIntegrationTest(unittest.TestCase):  # , ModelTesterMixin)
         model_inputs_bbox = self.processor(text=text_prompt_bbox, images=bbox_image_pil)
         text = self.model.generate(**model_inputs_bbox, max_new_tokens=10)
         end_sequence = text[0].split("\x04")[1]
-        clean_sequence = end_sequence[:end_sequence.find(
-            '|ENDOFTEXT|') + len('|ENDOFTEXT|')] if '|ENDOFTEXT|' in end_sequence else end_sequence
+        clean_sequence = (
+            end_sequence[: end_sequence.find("|ENDOFTEXT|") + len("|ENDOFTEXT|")]
+            if "|ENDOFTEXT|" in end_sequence
+            else end_sequence
+        )
         self.assertEqual(EXPECTED_TEXT_COMPLETION, clean_sequence)

@@ -26,10 +26,10 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_fuyu import FuyuConfig
@@ -165,7 +165,7 @@ class FuyuDynamicNTKScalingRotaryEmbedding(FuyuRotaryEmbedding):
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2:]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -347,11 +347,11 @@ class FuyuAttention(nn.Module):
         # Partial rotary embedding
         query_rot, query_pass = (
             query_states[..., : self.rotary_emb.dim],
-            query_states[..., self.rotary_emb.dim:],
+            query_states[..., self.rotary_emb.dim :],
         )
         key_rot, key_pass = (
             key_states[..., : self.rotary_emb.dim],
-            key_states[..., self.rotary_emb.dim:],
+            key_states[..., self.rotary_emb.dim :],
         )
         # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
         query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
@@ -948,7 +948,8 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
         >>> from PIL import Image
         >>> import torch
-        >>> pretrained_path = 'adept/fuyu-8b'
+
+        >>> pretrained_path = "adept/fuyu-8b"
         >>> tokenizer = AutoTokenizer.from_pretrained(pretrained_path)
         >>> image_processor = FuyuImageProcessor()
         >>> processor = FuyuProcessor(image_processor=image_processor, tokenizer=tokenizer)
@@ -959,8 +960,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         >>> model_config = FuyuConfig()
         >>> model = FuyuForCausalLM.from_pretrained(pretrained_path)
         >>> generation_output = model.generate(**model_inputs, max_new_tokens=10)
-
-
         '
         ```"""
 
@@ -1014,7 +1013,14 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, image_patches=None, image_patches_indices=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        image_patches=None,
+        image_patches_indices=None,
+        **kwargs,
     ):
         if past_key_values:
             input_ids = input_ids[:, -1:]
@@ -1043,7 +1049,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
                 "image_patches_indices": image_patches_indices if past_key_values is None else None,
-                "image_patches": image_patches if past_key_values is None else None
+                "image_patches": image_patches if past_key_values is None else None,
             }
         )
         return model_inputs
