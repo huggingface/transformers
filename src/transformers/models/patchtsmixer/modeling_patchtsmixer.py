@@ -550,7 +550,8 @@ class PatchTSMixerBlock(nn.Module):
 
 
 class PatchTSMixer(nn.Module):
-    """MLPMixer
+    """The entire network. It does the patching operation and
+    then applies the necessary `PatchTSMixerBlock`s.
 
     Args:
         config (`PatchTSMixerConfig`, *mandatory*):
@@ -626,7 +627,7 @@ class PatchTSMixer(nn.Module):
 
 
 class ForecastHead(nn.Module):
-    """Forecast Head
+    """Forecasting Head.
 
     Args:
         config (`PatchTSMixerConfig`, *mandatory*): Configuration.
@@ -690,10 +691,16 @@ class ForecastHead(nn.Module):
 
     def forward(self, hidden_features, target=None):
         """
-        # hidden_features: [batch_size x num_patch x num_features] flatten mode or
-            [batch_size x n_vars x num_patch x num_features] common_channel/mix_channel
 
-        Output: [batch_size x forecast_len x nvars]
+        Args:
+            hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x num_features)` in `flatten` mode
+                or `(batch_size x n_vars x num_patch x num_features)` in `common_channel`/`mix_channel` mode.): Input
+                hidden features.
+            target (`torch.Tensor`, *optional*):
+                Target tensor.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size x forecast_len x nvars)`.
 
         """
         if self.mode in ["common_channel", "mix_channel"]:
@@ -724,7 +731,7 @@ class ForecastHead(nn.Module):
 
 
 class LinearHead(nn.Module):
-    """LinearHead for Classification and Regression
+    """Linear head for Classification and Regression.
 
     Args:
         config (`PatchTSMixerConfig`, *mandatory*):
@@ -787,9 +794,15 @@ class LinearHead(nn.Module):
 
     def forward(self, hidden_features, target=None):
         """
-        # hidden_features: [batch_size x num_patch x num_features] flatten mode or
-            [batch_size x n_vars x num_patch x num_features] common_channel/mix_channel
-        Output: [batch_size x output_dim]
+        Args:
+            hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x num_features)` in `flatten` mode
+                or `(batch_size x n_vars x num_patch x num_features)` in `common_channel`/`mix_channel` mode.): Input
+                hidden features.
+            target (`torch.Tensor`, *optional*):
+                Target tensor.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size x output_dim)`.
         """
         hidden_features = hidden_features.transpose(
             -1, -2
@@ -842,7 +855,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
 
 
 class PretrainHead(nn.Module):
-    """Pretrain head
+    """Pretraining head.
 
     Args:
         config (`PatchTSMixerConfig`, *mandatory*):
@@ -876,10 +889,15 @@ class PretrainHead(nn.Module):
 
     def forward(self, hidden_features, target=None):
         """
-        # flatten mode: [batch_size x num_patch x num_features] or
-            common_channel/mix_channel mode: [batch_size x n_vars x num_patch x num_features]
+        Args:
+            hidden_features (`torch.Tensor` of shape `(batch_size x num_patch x num_features)` in `flatten` mode
+                or `(batch_size x n_vars x num_patch x num_features)` in `common_channel`/`mix_channel` mode.): Input
+                hidden features.
+            target (`torch.Tensor`, *optional*):
+                Target tensor.
 
-        Output: z: [batch_size x n_vars x num_patch x patch_len]
+        Returns:
+            `torch.Tensor` of shape `(batch_size x n_vars x num_patch x patch_len)`.
         """
 
         if self.mode == "flatten":
@@ -1344,7 +1362,7 @@ class InjectScalerStatistics4D(nn.Module):
 
     def forward(self, inputs: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
         """
-        Parameters:
+        Args:
             inputs (`torch.Tensor` of shape `(batch_size, input_size, num_patch, num_features)`)
             loc (`torch.Tensor` of shape `(batch_size, 1, input_size)`)
             scale (`torch.Tensor` of shape `(batch_size, 1, input_size)`)
@@ -1389,6 +1407,10 @@ class PatchTSMixerEncoderOutput(ModelOutput):
 class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     """
     Encoder for PatchTSMixer which inputs patched time-series and outputs patched embeddings.
+
+    Args:
+        config (`PatchTSMixerConfig`, *mandatory*):
+            Configuration.
     """
 
     def __init__(self, config: PatchTSMixerConfig):
