@@ -87,7 +87,7 @@ TVP_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-class TvpOutput(ModelOutput):
+class TvpVideoGroundingOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -323,95 +323,9 @@ class TvpTextInputEmbeddings(nn.Module):
         return embeddings
 
 
-class TvpSelfAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-    # Copied from Llama
-    def _shape(self, tensor: torch.Tensor, sequence_length: int, batch_size: int):
-        return (
-            tensor.view(batch_size, sequence_length, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-            .contiguous()
-        )
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions: Optional[bool] = None,
-    ):
-        batch_size, sequence_length = hidden_states.shape[:2]
-        mixed_query_layer = self.query(hidden_states)
-
-        mixed_key_layer = self.key(hidden_states)
-        mixed_value_layer = self.value(hidden_states)
-
-        query_layer = self._shape(mixed_query_layer, sequence_length, batch_size)
-        key_layer = self._shape(mixed_key_layer, sequence_length, batch_size)
-        value_layer = self._shape(mixed_value_layer, sequence_length, batch_size)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        attn_output = torch.matmul(attention_probs, value_layer)
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(batch_size, sequence_length, self.all_head_size)
-
-        outputs = (attn_output, attention_probs) if output_attentions else (attn_output,)
-        return outputs
-
-
-# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L378
-class TvpSelfOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.layer_norm(hidden_states + input_tensor)
-        return hidden_states
-
-
 class TvpAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # self.self = TvpSelfAttention(config)
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
@@ -519,21 +433,20 @@ class TvpIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutputLayer with Bert->Tvp
-class TvpOutputLayer(nn.Module):
+class TvpOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.layer_norm(hidden_states + input_tensor)
@@ -545,7 +458,7 @@ class TvpEncodeLayer(nn.Module):
         super().__init__()
         self.attention = TvpAttention(config)
         self.intermediate = TvpIntermediate(config)
-        self.output = TvpOutputLayer(config)
+        self.output = TvpOutput(config)
 
     def forward(
         self,
@@ -894,12 +807,12 @@ class TvpModel(TvpPreTrainedModel):
         >>> import torch
         >>> from transformers import AutoConfig, AutoTokenizer, TvpModel
 
-        >>> config = AutoConfig.from_pretrained("Intel/tvp-base")
+        >>> config = AutoConfig.from_pretrained("Jiqing/tiny-random-tvp")
         >>> model = TvpModel(config)
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("Intel/tvp-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Jiqing/tiny-random-tvp")
 
-        >>> pixel_values = torch.rand(1, 48, 3, 448, 448)
+        >>> pixel_values = torch.rand(1, 1, 3, 448, 448)
         >>> text_inputs = tokenizer("This is an example inputs", return_tensors="pt")
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
@@ -969,7 +882,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TVP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TvpOutput, config_class=TvpConfig)
+    @replace_return_docstrings(output_type=TvpVideoGroundingOutput, config_class=TvpConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -991,12 +904,12 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
         >>> import torch
         >>> from transformers import AutoConfig, AutoTokenizer, TvpForVideoGrounding
 
-        >>> config = AutoConfig.from_pretrained("Intel/tvp-base")
+        >>> config = AutoConfig.from_pretrained("Jiqing/tiny-random-tvp")
         >>> model = TvpForVideoGrounding(config)
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("Intel/tvp-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Jiqing/tiny-random-tvp")
 
-        >>> pixel_values = torch.rand(1, 48, 3, 448, 448)
+        >>> pixel_values = torch.rand(1, 1, 3, 448, 448)
         >>> text_inputs = tokenizer("This is an example inputs", return_tensors="pt")
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
@@ -1038,7 +951,7 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
                 ) + outputs
             return outputs
 
-        return TvpOutput(
+        return TvpVideoGroundingOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,
