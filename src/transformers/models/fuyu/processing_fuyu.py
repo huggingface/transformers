@@ -14,7 +14,12 @@ from ...image_utils import (
 )
 from ...processing_utils import ProcessorMixin
 from .image_processing_fuyu import FuyuImageProcessor
-import PIL
+from ...utils import is_vision_available, logging
+
+logger = logging.get_logger(__name__)
+
+if is_vision_available():
+    import PIL
 
 BBOX_OPEN_STRING = "<0x00>"  # <bbox>
 BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
