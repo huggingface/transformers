@@ -903,7 +903,7 @@ class TvpModel(TvpPreTrainedModel):
         >>> text_inputs = tokenizer("This is an example inputs", return_tensors="pt")
         >>> output = model(text_inputs.input_ids, pixel_values, text_inputs.attention_mask)
         ```"""
-        # Add visual prompt, it will
+        # Add visual prompt, it compensates for the spatiotemporal information loss in 2D visual features.
         if self.config.visual_prompter_apply not in ("add", "replace", "remove"):
             raise ValueError("`visual_prompter_apply` must be in (add, replace, remove)")
 
