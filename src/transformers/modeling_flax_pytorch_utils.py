@@ -29,7 +29,6 @@ import transformers
 
 from .utils import logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -238,7 +237,7 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
     for shard_file in shard_filenames:
         # load using msgpack utils
         pt_state_dict = torch.load(shard_file)
-        pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
+        pt_state_dict = {k: v.numpy() if v.dtype != torch.bfloat16 else v.float().numpy() for k, v in pt_state_dict.items()}
 
         model_prefix = flax_model.base_model_prefix
 
