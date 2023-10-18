@@ -36,6 +36,7 @@ else:
         "RwkvForCausalLM",
         "RwkvModel",
         "RwkvPreTrainedModel",
+        "RWKVWorldTokenizer",
     ]
 
 
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
             RwkvModel,
             RwkvPreTrainedModel,
         )
+        from .tokenization_rwkv import RWKVWorldTokenizer
 else:
     import sys
 

@@ -883,6 +883,7 @@ else:
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
+    _import_structure["models.rwkv"].append("RWKVWorldTokenizer")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
 
@@ -2671,6 +2672,7 @@ else:
             "RwkvForCausalLM",
             "RwkvModel",
             "RwkvPreTrainedModel",
+            "RWKVWorldTokenizer",
         ]
     )
     _import_structure["models.sam"].extend(
@@ -4993,6 +4995,7 @@ if TYPE_CHECKING:
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
+        from .models.rwkv import RWKVWorldTokenizer
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
     try:

@@ -413,6 +413,7 @@ else:
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("rwkv-world", ("RWKVWorldTokenizer", None)),
         ]
     )
 
