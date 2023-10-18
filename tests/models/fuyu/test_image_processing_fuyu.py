@@ -1,10 +1,12 @@
 import unittest
 
 import numpy as np
-import torch
 
-from transformers import is_vision_available
 
+from transformers import is_vision_available, is_torch_available
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from PIL import Image
