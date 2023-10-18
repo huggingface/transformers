@@ -613,15 +613,18 @@ class FalconFlashAttention2(FalconAttention):
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_layer.dtype
         if input_dtype == torch.float32:
+            # Handle the case where the model is quantized
+            target_dtype = getattr(self.config, "_pre_quantization_dtype", self.query_key_value.weight.dtype)
+
             logger.warning_once(
-                "The input hidden states seems to be silently casted in float32, this might be related to"
-                " the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                " float16."
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
             )
 
-            query_layer = query_layer.to(torch.float16)
-            key_layer = key_layer.to(torch.float16)
-            value_layer = value_layer.to(torch.float16)
+            query_layer = query_layer.to(target_dtype)
+            key_layer = key_layer.to(target_dtype)
+            value_layer = value_layer.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
             query_layer, key_layer, value_layer, padding_mask, query_length, dropout=attn_dropout
