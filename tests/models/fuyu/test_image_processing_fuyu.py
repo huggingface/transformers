@@ -7,11 +7,10 @@ from transformers import is_torch_available, is_vision_available
 
 if is_torch_available():
     import torch
+    from transformers import FuyuImageProcessor
 
 if is_vision_available():
     from PIL import Image
-
-from transformers import FuyuImageProcessor
 
 
 class TestFuyuImageProcessor(unittest.TestCase):
