@@ -144,7 +144,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         if kwargs.pop("add_bos_token", False):
             model_id = kwargs.pop("name_or_path", "")
             raise ValueError(
-                "Currenty GPT2's fast tokenizer does NOT support adding a BOS token."
+                "Currenty GPT2's fast tokenizer does NOT support adding a BOS token. "
                 "Instead you should use GPT2's slow tokenizer class `CodeGenTokenizer` as follows: \n"
                 f"`CodeGenTokenizer.from_pretrained('{model_id}')`\nor\n"
                 f"`AutoTokenizer.from_pretrained('{model_id}', use_fast=False)`\n"
