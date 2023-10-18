@@ -35,13 +35,13 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_available,
+    is_flash_attn_2_available,
     logging,
 )
 from .configuration_falcon import FalconConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
@@ -108,15 +108,15 @@ class FalconRotaryEmbedding(nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.seq_len_cached = seq_len
-        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(seq_len, device=device).to(dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1).to(device)
 
         if dtype in [torch.float16, torch.bfloat16]:
             emb = emb.float()
 
-        self.cos_cached = emb.cos()[None, :, :]
-        self.sin_cached = emb.sin()[None, :, :]
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
@@ -133,8 +133,8 @@ class FalconRotaryEmbedding(nn.Module):
         self.sin_cached = self.sin_cached.to(device)
 
         # Gather cos, sin at the designated position ids
-        cos = self.cos_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
-        sin = self.sin_cached.squeeze(0)[position_ids]  # [bs, seq_len, dim]
+        cos = self.cos_cached[position_ids]  # [bs, seq_len, dim]
+        sin = self.sin_cached[position_ids]  # [bs, seq_len, dim]
         return cos, sin
 
     def forward(self, query, key, past_key_values_length, position_ids):
@@ -171,7 +171,7 @@ class FalconLinearScalingRotaryEmbedding(FalconRotaryEmbedding):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.seq_len_cached = seq_len
-        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(seq_len, device=device).to(dtype)
         # This line is the only difference from FalconRotaryEmbedding._set_cos_sin_cache
         t = t / self.scaling_factor
 
@@ -181,8 +181,8 @@ class FalconLinearScalingRotaryEmbedding(FalconRotaryEmbedding):
         if dtype in [torch.float16, torch.bfloat16]:
             emb = emb.float()
 
-        self.cos_cached = emb.cos()[None, :, :]
-        self.sin_cached = emb.sin()[None, :, :]
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
@@ -208,15 +208,15 @@ class FalconDynamicNTKScalingRotaryEmbedding(FalconRotaryEmbedding):
             inv_freq = 1.0 / (base ** (torch.arange(0, self.head_dim, 2).float().to(device) / self.head_dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(seq_len, device=device).to(dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1).to(device)
 
         if dtype in [torch.float16, torch.bfloat16]:
             emb = emb.float()
 
-        self.cos_cached = emb.cos()[None, :, :]
-        self.sin_cached = emb.sin()[None, :, :]
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
         self.cos_cached = self.cos_cached.type(dtype)
         self.sin_cached = self.sin_cached.type(dtype)
@@ -606,7 +606,7 @@ class FalconFlashAttention2(FalconAttention):
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 
-        attn_dropout = self.attention_dropout if self.training else 0.0
+        attn_dropout = self.config.attention_dropout if self.training else 0.0
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -1128,9 +1128,7 @@ class FalconModel(FalconPreTrainedModel):
                 position_ids = torch.arange(
                     past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
                 )
-                position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
-            else:
-                position_ids = position_ids.view(-1, seq_length).long()
+                position_ids = position_ids.unsqueeze(0)
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
@@ -1230,7 +1228,16 @@ class FalconForCausalLM(FalconPreTrainedModel):
         **kwargs,
     ) -> dict:
         if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
 
         # Note: versions of Falcon with alibi do not use position_ids. It is used with RoPE.
         if not self.transformer.use_alibi and attention_mask is not None and position_ids is None:
@@ -1238,7 +1245,7 @@ class FalconForCausalLM(FalconPreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -input_ids.shape[1] :]
 
         return {
             "input_ids": input_ids,

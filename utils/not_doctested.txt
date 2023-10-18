@@ -626,7 +626,6 @@ src/transformers/models/lilt/configuration_lilt.py
 src/transformers/models/llama/configuration_llama.py
 src/transformers/models/llama/convert_llama_weights_to_hf.py
 src/transformers/models/llama/modeling_llama.py
-src/transformers/models/llama/tokenization_llama_fast.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
 src/transformers/models/longt5/configuration_longt5.py

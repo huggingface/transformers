@@ -134,10 +134,6 @@ def is_dagshub_available():
     return None not in [importlib.util.find_spec("dagshub"), importlib.util.find_spec("mlflow")]
 
 
-def is_fairscale_available():
-    return importlib.util.find_spec("fairscale") is not None
-
-
 def is_neptune_available():
     return _has_neptune
 
@@ -1316,7 +1312,7 @@ class NeptuneCallback(TrainerCallback):
                 target_path = consistent_checkpoint_path
             except IOError as e:
                 logger.warning(
-                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'."
+                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'. "
                     "Could fail trying to upload.".format(e)
                 )
 
