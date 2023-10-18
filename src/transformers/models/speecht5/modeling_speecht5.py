@@ -2508,7 +2508,16 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "encoder_outputs": encoder_outputs,
@@ -2541,6 +2550,14 @@ def _generate_speech(
     vocoder: Optional[nn.Module] = None,
     output_cross_attentions: bool = False,
 ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
+    if speaker_embeddings is None:
+        raise ValueError(
+            """`speaker_embeddings` must be specified. For example, you can use a speaker embeddings by following
+                    the code snippet provided in this link:
+                    https://huggingface.co/datasets/Matthijs/cmu-arctic-xvectors
+                    """
+        )
+
     encoder_attention_mask = torch.ones_like(input_values)
 
     encoder_out = model.speecht5.encoder(

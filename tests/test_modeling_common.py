@@ -64,6 +64,7 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     require_accelerate,
+    require_bitsandbytes,
     require_flash_attn,
     require_safetensors,
     require_torch,
@@ -274,6 +275,24 @@ class ModelTesterMixin:
             )
             for p1, p2 in zip(model.parameters(), new_model.parameters()):
                 self.assertTrue(torch.equal(p1, p2))
+
+    def test_keep_in_fp32_modules(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            if model_class._keep_in_fp32_modules is None:
+                return
+
+            model = model_class(config)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+
+                for name, param in model.named_parameters():
+                    if any(n in model_class._keep_in_fp32_modules for n in name.split(".")):
+                        self.assertTrue(param.dtype == torch.float32)
+                    else:
+                        self.assertTrue(param.dtype == torch.float16, name)
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2792,6 +2811,10 @@ class ModelTesterMixin:
 
                 self.assertTrue(torch.allclose(logits_fa[1:], logits[1:], atol=4e-2, rtol=4e-2))
 
+                # check with inference + dropout
+                model.train()
+                _ = model_fa(dummy_input, attention_mask=dummy_attention_mask, output_hidden_states=True)
+
     @require_flash_attn
     @require_torch_gpu
     @mark.flash_attn_test
@@ -2926,7 +2949,7 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
 
                 dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
                 model = model_class.from_pretrained(
                     tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
@@ -2936,6 +2959,45 @@ class ModelTesterMixin:
                 _ = model.generate(
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=30, do_sample=False
                 )
+
+    @require_flash_attn
+    @require_torch_gpu
+    @require_bitsandbytes
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_fp32_ln(self):
+        import torch
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
+                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+
+                model = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    use_flash_attention_2=True,
+                    low_cpu_mem_usage=True,
+                    load_in_4bit=True,
+                )
+
+                for _, param in model.named_parameters():
+                    # upcast only layer norms
+                    if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
+                        param.data = param.data.to(torch.float32)
+
+                _ = model(input_ids=dummy_input)
+
+                # with attention mask
+                _ = model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
 
 
 global_rng = random.Random()
@@ -2960,7 +3022,8 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
 def random_attention_mask(shape, rng=None, name=None):
     attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None)
     # make sure that at least one token is attended to for each batch
-    attn_mask[:, -1] = 1
+    # we choose the 1st token so this property of `at least one being non-zero` still holds after applying causal mask
+    attn_mask[:, 0] = 1
     return attn_mask
 
 

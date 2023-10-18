@@ -84,6 +84,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("nat", "ViTImageProcessor"),
         ("nougat", "NougatImageProcessor"),
         ("oneformer", "OneFormerImageProcessor"),
+        ("owlv2", "Owlv2ImageProcessor"),
         ("owlvit", "OwlViTImageProcessor"),
         ("perceiver", "PerceiverImageProcessor"),
         ("pix2struct", "Pix2StructImageProcessor"),

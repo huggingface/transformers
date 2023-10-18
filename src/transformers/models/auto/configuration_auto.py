@@ -159,6 +159,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("open-llama", "OpenLlamaConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
         ("opt", "OPTConfig"),
+        ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
@@ -365,6 +366,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("open-llama", "OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("openai-gpt", "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("opt", "OPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("owlv2", "OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("owlvit", "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus", "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pegasus_x", "PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -590,6 +592,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("open-llama", "OpenLlama"),
         ("openai-gpt", "OpenAI GPT"),
         ("opt", "OPT"),
+        ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
         ("pegasus", "Pegasus"),
         ("pegasus_x", "PEGASUS-X"),
@@ -1031,9 +1034,6 @@ class AutoConfig:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         code_revision = kwargs.pop("code_revision", None)
 
-        revision = kwargs.pop("revision", None)
-        kwargs["revision"] = sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code)
-
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
@@ -1081,24 +1081,3 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
-
-
-def sanitize_code_revision(pretrained_model_name_or_path, revision, trust_remote_code):
-    if revision in ["main", None] and not trust_remote_code:
-        revision_dict = {
-            "tiiuae/falcon-7b": "4e2d06f0a7c6370ebabbc30c6f59377ae8f73d76",
-            "tiiuae/falcon-7b-instruct": "f8dac3fff96d5debd43edf56fb4e1abcfffbef28",
-            "tiiuae/falcon-40b": "f1ba7d328c06aa6fbb4a8afd3c756f46d7e6b232",
-            "tiiuae/falcon-40b-instruct": "7475ff8cfc36ed9a962b658ae3c33391566a85a5",
-        }
-
-        if isinstance(pretrained_model_name_or_path, str) and pretrained_model_name_or_path.lower() in revision_dict:
-            revision = revision_dict.get(pretrained_model_name_or_path.lower())
-            logger.warning(
-                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
-                f"transformers library implementation. {pretrained_model_name_or_path}'s revision is set to a version that doesn't "
-                f"leverage remote code ({revision}).\n\nIn order to override this, please set a revision manually or set "
-                "`trust_remote_code=True`."
-            )
-
-    return revision
