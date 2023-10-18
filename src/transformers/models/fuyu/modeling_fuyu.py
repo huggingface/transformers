@@ -320,6 +320,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
+
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
