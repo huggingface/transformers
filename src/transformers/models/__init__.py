@@ -88,6 +88,7 @@ from . import (
     focalnet,
     fsmt,
     funnel,
+    fuyu,
     git,
     glpn,
     gpt2,

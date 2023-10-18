@@ -36,6 +36,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "EncodecConfig": ["overlap"],
     # used as `self.bert_model = BertModel(config, ...)`
     "DPRConfig": True,
+    "FuyuConfig": True,
     # not used in modeling files, but it's an important information
     "FSMTConfig": ["langs"],
     # used internally in the configuration class file
