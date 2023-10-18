@@ -29,18 +29,102 @@ from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 
-from ...modeling_flax_outputs import (
-    FlaxBaseModelOutputWithPast,
-    FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSequenceClassifierOutput,
-)
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, logging
+from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
+                                      FlaxCausalLMOutputWithCrossAttentions,
+                                      FlaxSequenceClassifierOutput)
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring, logging)
+from ...utils import (add_start_docstrings,
+                      add_start_docstrings_to_model_forward)
 from .configuration_mistral import MistralConfig
-
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MistralConfig"
+_CHECKPOINT_FOR_DOC = "mistralai/Mistral-7B-v0.1"
+
+MISTRAL_START_DOCSTRING = r"""
+
+    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a Flax Linen
+    [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
+    regular Flax Module and refer to the Flax documentation for all matter related to general usage and behavior.
+
+    Finally, this model supports inherent JAX features such as:
+
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
+
+    Parameters:
+        config ([`MistralConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16`, or
+            `jax.numpy.bfloat16`.
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given `dtype`.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
+"""
+
+MISTRAL_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
+            Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
+            auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 def rotate_half(x):
@@ -660,28 +744,6 @@ class FlaxMistralModule(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        # for idx, decoder_layer in enumerate(self.layers):
-        #     if output_hidden_states:
-        #         all_hidden_states += (hidden_states,)
-        #     past_key_value = past_key_values[idx] if past_key_values is not None else None
-        #     layer_outputs = decoder_layer(
-        #         hidden_states,
-        #         attention_mask=attention_mask,
-        #         position_ids=position_ids,
-        #         past_key_value=past_key_value,
-        #         output_attentions=output_attentions,
-        #         use_cache=use_cache,
-        #         padding_mask=padding_mask,
-        #     )
-
-        #     hidden_states = layer_outputs[0]
-
-        #     if use_cache:
-        #         next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
-
-        #     if output_attentions:
-        #         all_self_attns += (layer_outputs[1],)
         
         hidden_states = outputs[0]
         hidden_states = self.norm(hidden_states)
@@ -702,10 +764,13 @@ class FlaxMistralModule(nn.Module):
             attentions=outputs[-1] if output_attentions else None,
         )
 
-
+@add_start_docstrings(
+    "The bare Mistral Model transformer outputting raw hidden-states without any specific head on top.",
+    MISTRAL_START_DOCSTRING,
+)
 class FlaxMistralModel(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralModule
-
+append_call_sample_docstring(FlaxMistralModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPast, _CONFIG_FOR_DOC)
 
 class FlaxMistralForCausalLMModule(nn.Module):
     config: MistralConfig
@@ -723,37 +788,12 @@ class FlaxMistralForCausalLMModule(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FlaxCausalLMOutputWithCrossAttentions]:
-        r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, FlaxMistralForCausalLM
-
-        >>> model = FlaxMistralForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
+        
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -789,7 +829,12 @@ class FlaxMistralForCausalLMModule(nn.Module):
             attentions=outputs.attentions if return_dict else outputs[3],
         )
 
-
+@add_start_docstrings(
+    """
+    The Mistral Model transformer with a language modeling head (linear layer) on top.
+    """,
+    MISTRAL_START_DOCSTRING,
+)
 class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralForCausalLMModule
 
@@ -842,6 +887,7 @@ class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
 
+append_call_sample_docstring(FlaxMistralForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutputWithCrossAttentions, _CONFIG_FOR_DOC)
 
 class FlaxMistralForSequenceClassificationModule(nn.Module):
 
@@ -862,18 +908,12 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FlaxSequenceClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.model(
@@ -917,6 +957,13 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
             attentions=transformer_outputs.attentions,
         )
 
-
+@add_start_docstrings(
+    """
+    The Mistral Model transformer with a sequence classification  head (linear layer) on top.
+    """,
+    MISTRAL_START_DOCSTRING,
+)
 class FlaxMistralForSequenceClassification(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralForSequenceClassificationModule
+
+append_call_sample_docstring(FlaxMistralForSequenceClassification, _CHECKPOINT_FOR_DOC, FlaxSequenceClassifierOutput, _CONFIG_FOR_DOC)
