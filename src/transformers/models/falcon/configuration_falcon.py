@@ -173,7 +173,7 @@ class FalconConfig(PretrainedConfig):
         if self.rope_scaling is None:
             return
 
-        if self.rotary:
+        if self.alibi:
             raise ValueError("`rope_scaling` is not supported when `alibi` is `True`.")
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
