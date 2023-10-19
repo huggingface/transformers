@@ -377,7 +377,6 @@ def _expand_mask(mask: torch.Tensor, past_key_values_length: int) -> torch.BoolT
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
-    attention_mask = attention_mask if attention_mask is not None
     batch_size, seq_length = attention_mask.shape
     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
     base = torch.tensor(
@@ -426,7 +425,7 @@ def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: 
 
 
 class FalconAttention(nn.Module):
-    def __init__(self, config: FalconConfig):
+    def __init__(self, config: FalconConfig, attention_mask_cache=None):
         super().__init__()
 
         self.config = config
@@ -435,6 +434,7 @@ class FalconAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.split_size = self.hidden_size
         self.hidden_dropout = config.hidden_dropout
+        self.attention_mask_cache = attention_mask_cache
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -588,8 +588,14 @@ class FalconAttention(nn.Module):
         else:
             present = None
 
-        float_min = torch.finfo(query_layer.dtype).min
-        attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, float_min).to(query_layer.dtype)
+        if attention_mask is not None:
+            # convert 2d -> 4d. Re-use cached mask if available
+            attention_mask = self.attention_mask_cache.to_4d(attention_mask, query_length, kv_length, query_layer.dtype)
+        elif self.attention_mask_cache.is_causal:
+            # create 4d causal mask. Re-use cached mask if available
+            attention_mask = self.attention_mask_cache.to_causal_4d(
+                batch_size, query_length, kv_length, query_layer.dtype, query_layer.device
+            )
 
         query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
         key_layer_ = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
@@ -605,7 +611,7 @@ class FalconAttention(nn.Module):
                 )
 
                 attn_output = F.scaled_dot_product_attention(
-                    query_layer_, key_layer_, value_layer_, attention_mask_float, 0.0, is_causal=False
+                    query_layer_, key_layer_, value_layer_, attention_mask, 0.0, is_causal=False
                 )
                 attention_scores = None
             else:
@@ -613,7 +619,7 @@ class FalconAttention(nn.Module):
                 attention_scores /= math.sqrt(self.head_dim)
 
                 attention_scores = F.softmax(
-                    attention_scores + attention_mask_float, dim=-1, dtype=hidden_states.dtype
+                    attention_scores + attention_mask, dim=-1, dtype=hidden_states.dtype
                 )
                 attn_output = attention_scores @ value_layer_
 
@@ -640,12 +646,12 @@ class FalconAttention(nn.Module):
             if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
                 attention_scores = attention_scores.to(torch.float32)
             # Matt (HF) note: We could possibly use F.scaled_dot_product_attention here too, by
-            # adding (alibi * self.inv_norm_factor) to attention_mask_float. I think this would be mathematically
+            # adding (alibi * self.inv_norm_factor) to attention_mask. I think this would be mathematically
             # equivalent and more performant, but there might be a numerical difference. If you're reading this
             # and you'd like to experiment and maybe file a PR, feel free!
             attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
             attention_logits *= self.inv_norm_factor
-            attention_probs = F.softmax(attention_logits + attention_mask_float, dim=-1, dtype=hidden_states.dtype)
+            attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
             # [batch_size, num_heads, q_length, kv_length]
             attention_probs = self.attention_dropout(attention_probs)
 
@@ -874,15 +880,15 @@ class FalconMLP(nn.Module):
 
 
 class FalconDecoderLayer(nn.Module):
-    def __init__(self, config: FalconConfig):
+    def __init__(self, config: FalconConfig, attention_mask_cache=None):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
         self.self_attention = (
-            FalconAttention(config)
+            FalconAttention(config, attention_mask_cache=attention_mask_cache)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else FalconFlashAttention2(config)
+            else FalconFlashAttention2(config, attention_mask_cache=attention_mask_cache)
         )
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
@@ -1121,8 +1127,12 @@ class FalconModel(FalconPreTrainedModel):
         # Embedding + LN Embedding
         self.word_embeddings = nn.Embedding(config.vocab_size, self.embed_dim)
 
+        # create attention mask cache that trickles down to each attention layer
+        # so that the attention_mask cache can be shared among layers
+        attention_mask_cache = AttentionMaskCache(is_causal=True)
+
         # Transformer blocks
-        self.h = nn.ModuleList([FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([FalconDecoderLayer(config, attention_mask_cache) for _ in range(config.num_hidden_layers)])
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
