@@ -205,7 +205,8 @@ class PatchTSTTranspose(nn.Module):
 
     def __init__(self, *dims, contiguous=False):
         super().__init__()
-        self.dims, self.contiguous = dims, contiguous
+        self.dims = dims
+        self.contiguous = dims
 
     def forward(self, inputs: torch.Tensor):
         """
