@@ -23,6 +23,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig", "RwkvOnnxConfig"],
+    "tokenization_rwkv": ["RWKVWorldTokenizer"],
 }
 
 try:
