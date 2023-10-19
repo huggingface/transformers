@@ -84,6 +84,12 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
+    # TODO: Not needed
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    pixel_values = pixel_values.to(device)
+    ####
+    
     # Pass image by the model
     outputs = model(pixel_values)
 
