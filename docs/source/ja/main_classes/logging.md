@@ -73,6 +73,23 @@ logger.warning("WARN")
 
 デフォルトでは、モデルのダウンロード中に「tqdm」進行状況バーが表示されます。 [`logging.disable_progress_bar`] および [`logging.enable_progress_bar`] を使用して、この動作を抑制または抑制解除できます。
 
+## `logging` vs `warnings`
+
+Python には、よく組み合わせて使用​​される 2 つのロギング システムがあります。上で説明した `logging` と `warnings` です。
+これにより、特定のバケット内の警告をさらに分類できます (例: 機能またはパスの`FutureWarning`)
+これはすでに非推奨になっており、`DeprecationWarning`は今後の非推奨を示します。
+
+両方とも`transformers`ライブラリで使用します。 `logging`の`captureWarning`メソッドを活用して適応させて、
+これらの警告メッセージは、上記の冗長設定ツールによって管理されます。
+
+それはライブラリの開発者にとって何を意味しますか?次のヒューリスティックを尊重する必要があります。
+- `warnings`は、ライブラリおよび`transformers`に依存するライブラリの開発者に優先されるべきです。
+- `logging`は、日常のプロジェクトでライブラリを使用するライブラリのエンドユーザーに使用する必要があります。
+
+以下の`captureWarnings`メソッドのリファレンスを参照してください。
+
+[[autodoc]] logging.captureWarnings
+
 ## Base setters
 
 [[autodoc]] logging.set_verbosity_error
