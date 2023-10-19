@@ -110,7 +110,7 @@ QQP、QNLI、RTE、WNLI。
     - all
 
 さらに、次のメソッドを使用して、SQuAD の例を次の形式に変換できます。
-モデルの入力として使用できる [`~data.processors.utils.SquadFeature`]。
+モデルの入力として使用できる [`~data.processors.utils.SquadFeatures`]。
 
 [[autodoc]] data.processors.squad.squad_convert_examples_to_features
 
