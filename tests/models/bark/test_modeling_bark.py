@@ -929,8 +929,19 @@ class BarkModelIntegrationTests(unittest.TestCase):
         expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]
         # fmt: on
 
-        self.semantic_generation_config.min_eos_p = 0.05
+        # Should be aboe to read min_eos_p from kwargs
+        with torch.no_grad():
+            output_ids = self.model.semantic.generate(
+                **input_ids,
+                do_sample=True,
+                temperature=1.0,
+                semantic_generation_config=self.semantic_generation_config,
+                min_eos_p=0.01,
+            )
+        self.assertNotEqual(output_ids[0, : len(expected_output_ids)].tolist()[-1], [-1])
 
+        # Should be able to read min_eos_p from the semantic generation config
+        self.semantic_generation_config.min_eos_p = 0.05
         with torch.no_grad():
             output_ids = self.model.semantic.generate(
                 **input_ids,
