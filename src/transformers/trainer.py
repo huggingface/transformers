@@ -432,6 +432,10 @@ class Trainer:
                 self.fsdp = ShardingStrategy.SHARD_GRAD_OP
             elif FSDPOption.NO_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.NO_SHARD
+            elif FSDPOption.HYBRID_SHARD in args.fsdp:
+                self.fsdp = ShardingStrategy.HYBRID_SHARD
+            elif FSDPOption._HYBRID_SHARD_ZERO2 in args.fsdp:
+                self.fsdp = ShardingStrategy._HYBRID_SHARD_ZERO2
 
             self.backward_prefetch = BackwardPrefetch.BACKWARD_PRE
             if "backward_prefetch" in self.args.fsdp_config and "backward_post" in self.args.fsdp_config.get(
