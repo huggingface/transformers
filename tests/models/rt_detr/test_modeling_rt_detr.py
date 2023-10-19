@@ -19,7 +19,7 @@ import inspect
 import math
 import unittest
 
-from transformers import RTDetrConfig, ResNetConfig, is_torch_available, is_vision_available
+from transformers import ResNetConfig, RTDetrConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -32,7 +32,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import RTDetrForObjectDetection, RT_DETRForSegmentation, RTDetrModel
+    from transformers import RT_DETRForSegmentation, RTDetrForObjectDetection, RTDetrModel
 
 
 if is_vision_available():

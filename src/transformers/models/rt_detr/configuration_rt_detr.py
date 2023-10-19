@@ -1,5 +1,4 @@
-
-        # coding=utf-8
+# coding=utf-8
 # Copyright 2023 Facebook AI Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,15 +14,9 @@
 # limitations under the License.
 """ RT_DETR model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -31,7 +24,6 @@ logger = logging.get_logger(__name__)
 RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "rafaelpadilla/porting_rt_detr": "https://huggingface.co/rafaelpadilla/porting_rt_detr/raw/main/config.json",
 }
-
 
 
 class RTDetrConfig(PretrainedConfig):
@@ -145,27 +137,27 @@ class RTDetrConfig(PretrainedConfig):
         # General
         initializer_range=0.02,
         # PResNet config:
-        depth=50, 
-        variant='d', 
-        num_stages=4, 
-        return_idx=[0, 1, 2, 3], 
-        act_presnet='relu',
-        freeze_at=-1, 
-        freeze_norm=True, 
+        depth=50,
+        variant="d",
+        num_stages=4,
+        return_idx=[0, 1, 2, 3],
+        act_presnet="relu",
+        freeze_at=-1,
+        freeze_norm=True,
         pretrained=True,
         is_encoder_decoder=True,
-        block_nums = [3, 4, 6, 3], # TODO Rafael: OC depends on the depth
-            # 18: [2, 2, 2, 2],
-            # 34: [3, 4, 6, 3],
-            # 50: [3, 4, 6, 3],
-            # 101: [3, 4, 23, 3],
-            # 152: [3, 8, 36, 3],
+        block_nums=[3, 4, 6, 3],  # TODO Rafael: OC depends on the depth
+        # 18: [2, 2, 2, 2],
+        # 34: [3, 4, 6, 3],
+        # 50: [3, 4, 6, 3],
+        # 101: [3, 4, 23, 3],
+        # 152: [3, 8, 36, 3],
         # HybridEncoder config:
         in_channels=[512, 1024, 2048],
         feat_strides=[8, 16, 32],
         hidden_dim=256,
         num_head=8,
-        dim_feedforward = 1024,
+        dim_feedforward=1024,
         dropout=0.0,
         enc_act="gelu",
         use_encoder_idx=[2],
@@ -190,7 +182,7 @@ class RTDetrConfig(PretrainedConfig):
         learnt_init_query=False,
         eval_spatial_size=None,
         eval_idx=-1,
-        eps=1e-2, 
+        eps=1e-2,
         aux_loss=True,
         **kwargs,
     ):
@@ -200,7 +192,7 @@ class RTDetrConfig(PretrainedConfig):
         self.variant = variant
         self.num_stages = num_stages
         self.return_idx = return_idx
-        self.act_presnet, = act_presnet,
+        self.act_presnet = (act_presnet
         self.freeze_at = freeze_at
         self.freeze_norm = freeze_norm
         self.pretrained = pretrained
@@ -238,5 +230,5 @@ class RTDetrConfig(PretrainedConfig):
         self.eval_idx = eval_idx
         self.eps = eps
         self.aux_loss = aux_loss
-        
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

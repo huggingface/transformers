@@ -15,12 +15,14 @@
 """Convert RT Detr checkpoints from the original repository: https://github.com/lyuwenyu/RT-DETR/issues/42"""
 
 import argparse
+from pathlib import Path
 
 import requests
 import torch
 from PIL import Image
-from pathlib import Path
+
 from transformers import RTDetrConfig, RtDetrImageProcessor, RTDetrModel
+
 
 # TODO: Rafael Convert all these weights (?)
 # rtdetr_r18vd_5x_coco_objects365_from_paddle.pth -> https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r18vd_5x_coco_objects365_from_paddle.pth
@@ -37,9 +39,11 @@ from transformers import RTDetrConfig, RtDetrImageProcessor, RTDetrModel
 # Weights downloaded from: https://github.com/lyuwenyu/RT-DETR/issues/42
 #########################
 
+
 def get_sample_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     return Image.open(requests.get(url, stream=True).raw)
+
 
 def update_config_values(config, checkpoint_name):
     # Real values for rtdetr_r50vd_6x_coco_from_paddle.pth
@@ -53,20 +57,20 @@ def update_config_values(config, checkpoint_name):
         config.feat_channels = [256, 256, 256]
     else:
         raise ValueError("ERRORS")
-        
- 
+
+
 def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub, repo_id):
     config = RTDetrConfig()
 
     checkpoint_name = Path(checkpoint_url).name
     version = Path(checkpoint_url).parts[-2]
-    
+
     if version != "v0.1":
         raise ValueError("Given checkpoint version is not supported.")
-    
-    # Update config values basaed on the checkpoint    
+
+    # Update config values basaed on the checkpoint
     update_config_values(config, checkpoint_name)
-    
+
     # Load model with the updated config
     model = RTDetrModel(config)
 
@@ -81,21 +85,19 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     image_processor = RtDetrImageProcessor()
     encoding = image_processor(images=img, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
-    
+
     # Pass image by the model
     outputs = model(pixel_values)
-    
+
     d = {name: param for name, param in model.named_parameters() if name.startswith("backbone")}
     ds = {name: param.shape for name, param in model.named_parameters() if name.startswith("backbone")}
 
-# PResNet
-# "{'depth': 50, 'variant': 'd', 'freeze_at': 0, 'return_idx': [1, 2, 3], 'num_stages': 4, 'freeze_norm': True, 'pretrained': True}"
-# HybridEncoder
-# "{'in_channels': [512, 1024, 2048], 'feat_strides': [8, 16, 32], 'hidden_dim': 256, 'use_encoder_idx': [2], 'num_encoder_layers': 1, 'nhead': 8, 'dim_feedforward': 1024, 'dropout': 0.0, 'enc_act': 'gelu', 'pe_temperature': 10000, 'expansion': 1.0, 'depth_mult': 1, 'act': 'silu', 'eval_spatial_size': [640, 640]}"
-# RTDETRTransformer
-# "{'feat_channels': [256, 256, 256], 'feat_strides': [8, 16, 32], 'hidden_dim': 256, 'num_levels': 3, 'num_queries': 300, 'num_decoder_layers': 6, 'num_denoising': 100, 'eval_idx': -1, 'eval_spatial_size': [640, 640]}"
-
-
+    # PResNet
+    # "{'depth': 50, 'variant': 'd', 'freeze_at': 0, 'return_idx': [1, 2, 3], 'num_stages': 4, 'freeze_norm': True, 'pretrained': True}"
+    # HybridEncoder
+    # "{'in_channels': [512, 1024, 2048], 'feat_strides': [8, 16, 32], 'hidden_dim': 256, 'use_encoder_idx': [2], 'num_encoder_layers': 1, 'nhead': 8, 'dim_feedforward': 1024, 'dropout': 0.0, 'enc_act': 'gelu', 'pe_temperature': 10000, 'expansion': 1.0, 'depth_mult': 1, 'act': 'silu', 'eval_spatial_size': [640, 640]}"
+    # RTDETRTransformer
+    # "{'feat_channels': [256, 256, 256], 'feat_strides': [8, 16, 32], 'hidden_dim': 256, 'num_levels': 3, 'num_queries': 300, 'num_decoder_layers': 6, 'num_denoising': 100, 'eval_idx': -1, 'eval_spatial_size': [640, 640]}"
 
     # image_processor = ViTMAEImageProcessor(size=config.image_size)
 
@@ -136,10 +138,9 @@ def convert_rt_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
 
     print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
-    
+
     if push_to_hub:
         model.push_to_hub(repo_id=repo_id, organization="DepuMeng", commit_message="Add model")
-
 
 
 if __name__ == "__main__":
@@ -162,9 +163,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     # TODO: Rafael remove it from here
-    args.checkpoint_url = "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth"
+    args.checkpoint_url = (
+        "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetr_r50vd_6x_coco_from_paddle.pth"
+    )
     args.repo_id = "rafaelpadilla/porting_rt_detr"
     ####
-    
+
     convert_rt_detr_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
-    

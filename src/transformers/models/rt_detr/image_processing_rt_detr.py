@@ -15,7 +15,6 @@
 """Image processor class for RT_DETR."""
 
 import io
-import pathlib
 from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
@@ -23,19 +22,15 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
     id_to_rgb,
-    pad,
     rescale,
     resize,
     rgb_to_id,
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -45,7 +40,6 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_coco_detection_annotations,
-    valid_coco_panoptic_annotations,
     valid_images,
 )
 from ...utils import (
@@ -87,7 +81,7 @@ class AnnotionFormat(ExplicitEnum):
     COCO_PANOPTIC = "coco_panoptic"
 
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotionFormat.COCO_DETECTION)
+SUPPORTED_ANNOTATION_FORMATS = AnnotionFormat.COCO_DETECTION
 
 
 def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
@@ -283,6 +277,7 @@ def prepare_coco_detection_annotation(
         new_target["masks"] = masks[keep]
 
     return new_target
+
 
 # TODO copy from image_processing_detr.py
 def score_labels_from_class_probabilities(logits: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -690,8 +685,7 @@ class RtDetrImageProcessor(BaseImageProcessor):
             images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            for image in images
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
         data = {"pixel_values": images}
 

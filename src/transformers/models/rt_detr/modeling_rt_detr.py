@@ -18,12 +18,10 @@ import copy
 import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
-import math 
 
 import torch
-from torch import Tensor, nn
+from torch import nn
 
-from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -35,20 +33,18 @@ from ...utils import (
     is_vision_available,
     logging,
     replace_return_docstrings,
-    requires_backends,
 )
-from ..auto import AutoBackbone
 from .configuration_rt_detr import RTDetrConfig
 
 
 if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
+    pass
 
 if is_timm_available():
-    from timm import create_model
+    pass
 
 if is_vision_available():
-    from transformers.image_transforms import center_to_corners_format
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -59,7 +55,6 @@ RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "checkpoing/todo",
     # See all RT_DETR models at https://huggingface.co/models?filter=rt_detr
 ]
-
 
 
 @dataclass
@@ -585,7 +580,6 @@ RT_DETR_INPUTS_DOCSTRING = r"""
 #         )
 
 
-
 # @add_start_docstrings(
 #     """
 #     RT_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top, for tasks
@@ -762,10 +756,11 @@ RT_DETR_INPUTS_DOCSTRING = r"""
 
 #### TODO: Rafael
 from collections import OrderedDict
-import torch.nn.functional as F 
+
+import torch.nn.functional as F
 
 
-def get_activation(activation: str, inplace: bool=True):
+def get_activation(activation: str, inplace: bool = True):
     activation = activation.lower()
     if activation == "silu":
         activation_func = nn.SiLU()
@@ -782,24 +777,25 @@ def get_activation(activation: str, inplace: bool=True):
     elif isinstance(activation, nn.Module):
         activation_func = activation
     else:
-        raise RuntimeError(f"Not valid activation {activation}")  
+        raise RuntimeError(f"Not valid activation {activation}")
     if hasattr(activation_func, "inplace"):
         activation_func.inplace = inplace
-    return activation_func 
+    return activation_func
 
 
 class ConvNormLayer(nn.Module):
     def __init__(self, channels_in, channels_out, kernel_size, stride, padding=None, bias=False, activation=None):
         super().__init__()
         self.conv = nn.Conv2d(
-            channels_in, 
-            channels_out, 
-            kernel_size, 
-            stride, 
-            padding=(kernel_size-1)//2 if padding is None else padding, 
-            bias=bias)
+            channels_in,
+            channels_out,
+            kernel_size,
+            stride,
+            padding=(kernel_size - 1) // 2 if padding is None else padding,
+            bias=bias,
+        )
         self.norm = nn.BatchNorm2d(channels_out)
-        self.activation = nn.Identity() if activation is None else get_activation(activation) 
+        self.activation = nn.Identity() if activation is None else get_activation(activation)
 
     def forward(self, x):
         return self.activation(self.norm(self.conv(x)))
@@ -808,15 +804,15 @@ class ConvNormLayer(nn.Module):
 class BottleNeck(nn.Module):
     expansion = 4
 
-    def __init__(self, channels_in, channels_out, stride, shortcut, activation='relu', variant='b'):
+    def __init__(self, channels_in, channels_out, stride, shortcut, activation="relu", variant="b"):
         super().__init__()
 
-        if variant == 'a':
+        if variant == "a":
             stride1, stride2 = stride, 1
         else:
             stride1, stride2 = 1, stride
 
-        width = channels_out 
+        width = channels_out
 
         self.branch2a = ConvNormLayer(channels_in, width, 1, stride1, activation=activation)
         self.branch2b = ConvNormLayer(width, width, 3, stride2, activation=activation)
@@ -824,15 +820,19 @@ class BottleNeck(nn.Module):
 
         self.shortcut = shortcut
         if not shortcut:
-            if variant == 'd' and stride == 2:
-                self.short = nn.Sequential(OrderedDict([
-                    ('pool', nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
-                    ('conv', ConvNormLayer(channels_in, channels_out * self.expansion, 1, 1))
-                ]))
+            if variant == "d" and stride == 2:
+                self.short = nn.Sequential(
+                    OrderedDict(
+                        [
+                            ("pool", nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
+                            ("conv", ConvNormLayer(channels_in, channels_out * self.expansion, 1, 1)),
+                        ]
+                    )
+                )
             else:
                 self.short = ConvNormLayer(channels_in, channels_out * self.expansion, 1, stride)
 
-        self.activation = nn.Identity() if activation is None else get_activation(activation) 
+        self.activation = nn.Identity() if activation is None else get_activation(activation)
 
     def forward(self, x):
         out = self.branch2a(x)
@@ -853,24 +853,27 @@ class BottleNeck(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, channels_in, channels_out, stride, shortcut, activation='relu', variant='b'):
+    def __init__(self, channels_in, channels_out, stride, shortcut, activation="relu", variant="b"):
         super().__init__()
 
         self.shortcut = shortcut
 
         if not shortcut:
-            if variant == 'd' and stride == 2:
-                self.short = nn.Sequential(OrderedDict([
-                    ('pool', nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
-                    ('conv', ConvNormLayer(channels_in, channels_out, 1, 1))
-                ]))
+            if variant == "d" and stride == 2:
+                self.short = nn.Sequential(
+                    OrderedDict(
+                        [
+                            ("pool", nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
+                            ("conv", ConvNormLayer(channels_in, channels_out, 1, 1)),
+                        ]
+                    )
+                )
             else:
                 self.short = ConvNormLayer(channels_in, channels_out, 1, stride)
 
         self.branch2a = ConvNormLayer(channels_in, channels_out, 3, stride, activation=activation)
         self.branch2b = ConvNormLayer(channels_out, channels_out, 3, 1, activation=None)
-        self.activation = nn.Identity() if activation is None else get_activation(activation) 
-
+        self.activation = nn.Identity() if activation is None else get_activation(activation)
 
     def forward(self, x):
         out = self.branch2a(x)
@@ -879,7 +882,7 @@ class BasicBlock(nn.Module):
             short = x
         else:
             short = self.short(x)
-        
+
         out = out + short
         out = self.activation(out)
 
@@ -887,19 +890,20 @@ class BasicBlock(nn.Module):
 
 
 class Blocks(nn.Module):
-    def __init__(self, block, channels_in, channels_out, count, stage_num, activation='relu', variant='b'):
+    def __init__(self, block, channels_in, channels_out, count, stage_num, activation="relu", variant="b"):
         super().__init__()
 
         self.blocks = nn.ModuleList()
         for i in range(count):
             self.blocks.append(
                 block(
-                    channels_in, 
+                    channels_in,
                     channels_out,
-                    stride=2 if i == 0 and stage_num != 2 else 1, 
+                    stride=2 if i == 0 and stage_num != 2 else 1,
                     shortcut=False if i == 0 else True,
                     variant=variant,
-                    activation=activation)
+                    activation=activation,
+                )
             )
 
             if i == 0:
@@ -911,7 +915,9 @@ class Blocks(nn.Module):
             out = block(out)
         return out
 
-#TODO: Rafael! Importante: Use Resnet-d from timm library instead of the PResNet (config.userfromtimm=True) -> see how deformable detr does
+
+# TODO: Rafael! Importante: Use Resnet-d from timm library instead of the PResNet (config.userfromtimm=True) -> see how deformable detr does
+
 
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->RtDetr
 class RtDetrFrozenBatchNorm2d(nn.Module):
@@ -952,6 +958,7 @@ class RtDetrFrozenBatchNorm2d(nn.Module):
         bias = bias - running_mean * scale
         return x * scale + bias
 
+
 # TODO: Rafael tirar isso daqui
 # class FrozenBatchNorm2d(nn.Module):
 #     """copy and modified from https://github.com/facebookresearch/detr/blob/master/models/backbone.py
@@ -968,7 +975,7 @@ class RtDetrFrozenBatchNorm2d(nn.Module):
 #         self.register_buffer("running_mean", torch.zeros(n))
 #         self.register_buffer("running_var", torch.ones(n))
 #         self.eps = eps
-#         self.num_features = n 
+#         self.num_features = n
 
 #     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
 #                               missing_keys, unexpected_keys, error_msgs):
@@ -1000,9 +1007,11 @@ def bias_init_with_prob(prior_prob=0.01):
     bias_init = float(-math.log((1 - prior_prob) / prior_prob))
     return bias_init
 
-def inverse_sigmoid(input: torch.Tensor, eps: float=1e-5) -> torch.Tensor:
-    x = x.clip(min=0., max=1.)
+
+def inverse_sigmoid(input: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
+    x = x.clip(min=0.0, max=1.0)
     return torch.log(x.clip(min=eps) / (1 - x).clip(min=eps))
+
 
 def deformable_attention_core_func(value, value_spatial_shapes, sampling_locations, attention_weights):
     batch_size, _, num_head, head_dim = value.shape
@@ -1013,23 +1022,21 @@ def deformable_attention_core_func(value, value_spatial_shapes, sampling_locatio
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
     for level, (h, w) in enumerate(value_spatial_shapes):
-        new_value_list = value_list[level].flatten(2).permute(
-            0, 2, 1).reshape(batch_size * num_head, head_dim, h, w)
-        new_sampling_grid = sampling_grids[:, :, :, level].permute(
-            0, 2, 1, 3, 4).flatten(0, 1)
+        new_value_list = value_list[level].flatten(2).permute(0, 2, 1).reshape(batch_size * num_head, head_dim, h, w)
+        new_sampling_grid = sampling_grids[:, :, :, level].permute(0, 2, 1, 3, 4).flatten(0, 1)
         new_sampling_value = F.grid_sample(
-            new_value_list,
-            new_sampling_grid,
-            mode='bilinear',
-            padding_mode='zeros',
-            align_corners=False)
+            new_value_list, new_sampling_grid, mode="bilinear", padding_mode="zeros", align_corners=False
+        )
         sampling_value_list.append(new_sampling_value)
     # (N_, Lq_, M_, L_, P_) -> (N_, M_, Lq_, L_, P_) -> (N_*M_, 1, Lq_, L_*P_)
     attention_weights = attention_weights.permute(0, 2, 1, 3, 4).reshape(
-        batch_size * num_head, 1, len_q, n_levels * n_points)
-    output = (torch.stack(
-        sampling_value_list, dim=-2).flatten(-2) *
-              attention_weights).sum(-1).reshape(batch_size, num_head * head_dim, len_q)
+        batch_size * num_head, 1, len_q, n_levels * n_points
+    )
+    output = (
+        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+        .sum(-1)
+        .reshape(batch_size, num_head * head_dim, len_q)
+    )
 
     return output.permute(0, 2, 1)
 
@@ -1047,7 +1054,7 @@ class PResNet(nn.Module):
         freeze_at = config.freeze_at
         freeze_norm = config.freeze_norm
         pretrained = config.pretrained
-        
+
         channels_in = 64
         if variant in ["c", "d"]:
             conv_def = [
@@ -1058,10 +1065,15 @@ class PResNet(nn.Module):
         else:
             conv_def = [[3, channels_in, 7, 2, "conv1_1"]]
 
-        self.conv1 = nn.Sequential(OrderedDict([
-            (_name, ConvNormLayer(c_in, c_out, k, s, activation=act_presnet)) for c_in, c_out, k, s, _name in conv_def
-        ]))
-        
+        self.conv1 = nn.Sequential(
+            OrderedDict(
+                [
+                    (_name, ConvNormLayer(c_in, c_out, k, s, activation=act_presnet))
+                    for c_in, c_out, k, s, _name in conv_def
+                ]
+            )
+        )
+
         channels_out_list = [64, 128, 256, 512]
         block = BottleNeck if depth >= 50 else BasicBlock
 
@@ -1072,7 +1084,15 @@ class PResNet(nn.Module):
         for i in range(num_stages):
             stage_num = i + 2
             self.res_layers.append(
-                Blocks(block, channels_in, channels_out_list[i], block_nums[i], stage_num, activation=act_presnet, variant=variant)
+                Blocks(
+                    block,
+                    channels_in,
+                    channels_out_list[i],
+                    block_nums[i],
+                    stage_num,
+                    activation=act_presnet,
+                    variant=variant,
+                )
             )
             channels_in = _out_channels[i]
 
@@ -1088,12 +1108,12 @@ class PResNet(nn.Module):
         if freeze_norm:
             self._freeze_norm(self)
 
-        # TODO Rafael: How/Where to load weights? 
+        # TODO Rafael: How/Where to load weights?
         # if pretrained:
         #     state = torch.hub.load_state_dict_from_url(donwload_url[depth])
         #     self.load_state_dict(state)
         #     print(f"Load PResNet{depth} state_dict")
-            
+
     def _freeze_parameters(self, m: nn.Module):
         for p in m.parameters():
             p.requires_grad = False
@@ -1120,13 +1140,9 @@ class PResNet(nn.Module):
 
 
 class TransformerEncoderLayer(nn.Module):
-    def __init__(self,
-                 d_model,
-                 num_head,
-                 dim_feedforward=2048,
-                 dropout=0.1,
-                 activation="relu",
-                 normalize_before=False):
+    def __init__(
+        self, d_model, num_head, dim_feedforward=2048, dropout=0.1, activation="relu", normalize_before=False
+    ):
         super().__init__()
         self.normalize_before = normalize_before
 
@@ -1140,7 +1156,7 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
-        self.activation = get_activation(activation) 
+        self.activation = get_activation(activation)
 
     @staticmethod
     def with_pos_embed(tensor, pos_embed):
@@ -1186,16 +1202,16 @@ class TransformerEncoder(nn.Module):
 
 
 class RepVggBlock(nn.Module):
-    def __init__(self, channels_in, channels_out, activation='relu'):
+    def __init__(self, channels_in, channels_out, activation="relu"):
         super().__init__()
         self.channels_in = channels_in
         self.channels_out = channels_out
         self.conv1 = ConvNormLayer(channels_in, channels_out, 3, 1, padding=1, activation=None)
         self.conv2 = ConvNormLayer(channels_in, channels_out, 1, 1, padding=0, activation=None)
-        self.activation = nn.Identity() if activation is None else get_activation(activation) 
+        self.activation = nn.Identity() if activation is None else get_activation(activation)
 
     def forward(self, x):
-        if hasattr(self, 'conv'):
+        if hasattr(self, "conv"):
             y = self.conv(x)
         else:
             y = self.conv1(x) + self.conv2(x)
@@ -1203,17 +1219,17 @@ class RepVggBlock(nn.Module):
         return self.activation(y)
 
     def convert_to_deploy(self):
-        if not hasattr(self, 'conv'):
+        if not hasattr(self, "conv"):
             self.conv = nn.Conv2d(self.channels_in, self.channels_out, 3, 1, padding=1)
 
         kernel, bias = self.get_equivalent_kernel_bias()
         self.conv.weight.data = kernel
-        self.conv.bias.data = bias 
+        self.conv.bias.data = bias
 
     def get_equivalent_kernel_bias(self):
         kernel3x3, bias3x3 = self._fuse_bn_tensor(self.conv1)
         kernel1x1, bias1x1 = self._fuse_bn_tensor(self.conv2)
-        
+
         return kernel3x3 + self._pad_1x1_to_3x3_tensor(kernel1x1), bias3x3 + bias1x1
 
     def _pad_1x1_to_3x3_tensor(self, kernel1x1):
@@ -1237,20 +1253,14 @@ class RepVggBlock(nn.Module):
 
 
 class CSPRepLayer(nn.Module):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 num_blocks=3,
-                 expansion=1.0,
-                 bias=None,
-                 activation="silu"):
+    def __init__(self, in_channels, out_channels, num_blocks=3, expansion=1.0, bias=None, activation="silu"):
         super(CSPRepLayer, self).__init__()
         hidden_channels = int(out_channels * expansion)
         self.conv1 = ConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, activation=activation)
         self.conv2 = ConvNormLayer(in_channels, hidden_channels, 1, 1, bias=bias, activation=activation)
-        self.bottlenecks = nn.Sequential(*[
-            RepVggBlock(hidden_channels, hidden_channels, activation=activation) for _ in range(num_blocks)
-        ])
+        self.bottlenecks = nn.Sequential(
+            *[RepVggBlock(hidden_channels, hidden_channels, activation=activation) for _ in range(num_blocks)]
+        )
         if hidden_channels != out_channels:
             self.conv3 = ConvNormLayer(hidden_channels, out_channels, 1, 1, bias=bias, activation=activation)
         else:
@@ -1266,7 +1276,7 @@ class CSPRepLayer(nn.Module):
 class HybridEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        
+
         self.in_channels = config.in_channels
         self.feat_strides = config.feat_strides
         self.hidden_dim = config.hidden_dim
@@ -1283,28 +1293,27 @@ class HybridEncoder(nn.Module):
         expansion = config.expansion
         depth_mult = config.depth_mult
         act_encoder = config.act_encoder
-        
+
         # channel projection
         self.input_proj = nn.ModuleList()
         for in_channel in self.in_channels:
             self.input_proj.append(
                 nn.Sequential(
-                    nn.Conv2d(in_channel, self.hidden_dim, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(self.hidden_dim)
+                    nn.Conv2d(in_channel, self.hidden_dim, kernel_size=1, bias=False), nn.BatchNorm2d(self.hidden_dim)
                 )
             )
 
         # encoder transformer
         encoder_layer = TransformerEncoderLayer(
-            self.hidden_dim, 
-            num_head=num_head,
-            dim_feedforward=dim_feedforward, 
-            dropout=dropout,
-            activation=enc_act)
+            self.hidden_dim, num_head=num_head, dim_feedforward=dim_feedforward, dropout=dropout, activation=enc_act
+        )
 
-        self.encoder = nn.ModuleList([
-            TransformerEncoder(copy.deepcopy(encoder_layer), self.num_encoder_layers) for _ in range(len(self.use_encoder_idx))
-        ])
+        self.encoder = nn.ModuleList(
+            [
+                TransformerEncoder(copy.deepcopy(encoder_layer), self.num_encoder_layers)
+                for _ in range(len(self.use_encoder_idx))
+            ]
+        )
 
         # top-down fpn
         self.lateral_convs = nn.ModuleList()
@@ -1312,18 +1321,28 @@ class HybridEncoder(nn.Module):
         for _ in range(len(self.in_channels) - 1, 0, -1):
             self.lateral_convs.append(ConvNormLayer(self.hidden_dim, self.hidden_dim, 1, 1, activation=act_encoder))
             self.fpn_blocks.append(
-                CSPRepLayer(self.hidden_dim * 2, self.hidden_dim, round(3 * depth_mult), activation=act_encoder, expansion=expansion)
+                CSPRepLayer(
+                    self.hidden_dim * 2,
+                    self.hidden_dim,
+                    round(3 * depth_mult),
+                    activation=act_encoder,
+                    expansion=expansion,
+                )
             )
 
         # bottom-up pan
         self.downsample_convs = nn.ModuleList()
         self.pan_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1):
-            self.downsample_convs.append(
-                ConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder)
-            )
+            self.downsample_convs.append(ConvNormLayer(self.hidden_dim, self.hidden_dim, 3, 2, activation=act_encoder))
             self.pan_blocks.append(
-                CSPRepLayer(self.hidden_dim * 2, self.hidden_dim, round(3 * depth_mult), activation=act_encoder, expansion=expansion)
+                CSPRepLayer(
+                    self.hidden_dim * 2,
+                    self.hidden_dim,
+                    round(3 * depth_mult),
+                    activation=act_encoder,
+                    expansion=expansion,
+                )
             )
 
         self._reset_parameters()
@@ -1333,20 +1352,20 @@ class HybridEncoder(nn.Module):
             for idx in self.use_encoder_idx:
                 stride = self.feat_strides[idx]
                 pos_embed = self.build_2d_sincos_position_embedding(
-                    self.eval_size[1] // stride, self.eval_size[0] // stride,
-                    self.hidden_dim, self.pe_temperature)
-                setattr(self, f'pos_embed{idx}', pos_embed)
+                    self.eval_size[1] // stride, self.eval_size[0] // stride, self.hidden_dim, self.pe_temperature
+                )
+                setattr(self, f"pos_embed{idx}", pos_embed)
 
     @staticmethod
-    def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.):
+    def build_2d_sincos_position_embedding(w, h, embed_dim=256, temperature=10000.0):
         grid_w = torch.arange(int(w), dtype=torch.float32)
         grid_h = torch.arange(int(h), dtype=torch.float32)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing='ij')
+        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="ij")
         if embed_dim % 4 != 0:
             raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
         pos_dim = embed_dim // 4
         omega = torch.arange(pos_dim, dtype=torch.float32) / pos_dim
-        omega = 1. / (temperature ** omega)
+        omega = 1.0 / (temperature**omega)
 
         out_w = grid_w.flatten()[..., None] @ omega[None]
         out_h = grid_h.flatten()[..., None] @ omega[None]
@@ -1356,7 +1375,7 @@ class HybridEncoder(nn.Module):
     def forward(self, feats):
         assert len(feats) == len(self.in_channels)
         proj_feats = [self.input_proj[i](feat) for i, feat in enumerate(feats)]
-        
+
         # encoder
         if self.num_encoder_layers > 0:
             for i, enc_ind in enumerate(self.use_encoder_idx):
@@ -1364,10 +1383,11 @@ class HybridEncoder(nn.Module):
                 # flatten [B, C, H, W] to [B, HxW, C]
                 src_flatten = proj_feats[enc_ind].flatten(2).permute(0, 2, 1)
                 if self.training or self.eval_size is None:
-                    pos_embed = self.build_2d_sincos_position_embedding(
-                        w, h, self.hidden_dim, self.pe_temperature).to(src_flatten.device)
+                    pos_embed = self.build_2d_sincos_position_embedding(w, h, self.hidden_dim, self.pe_temperature).to(
+                        src_flatten.device
+                    )
                 else:
-                    pos_embed = getattr(self, f'pos_embed{enc_ind}', None).to(src_flatten.device)
+                    pos_embed = getattr(self, f"pos_embed{enc_ind}", None).to(src_flatten.device)
 
                 memory = self.encoder[i](src_flatten, pos_embed=pos_embed)
                 proj_feats[enc_ind] = memory.permute(0, 2, 1).reshape(-1, self.hidden_dim, h, w).contiguous()
@@ -1379,8 +1399,10 @@ class HybridEncoder(nn.Module):
             feat_low = proj_feats[idx - 1]
             feat_heigh = self.lateral_convs[len(self.in_channels) - 1 - idx](feat_heigh)
             inner_outs[0] = feat_heigh
-            upsample_feat = F.interpolate(feat_heigh, scale_factor=2., mode='nearest')
-            inner_out = self.fpn_blocks[len(self.in_channels)-1-idx](torch.concat([upsample_feat, feat_low], dim=1))
+            upsample_feat = F.interpolate(feat_heigh, scale_factor=2.0, mode="nearest")
+            inner_out = self.fpn_blocks[len(self.in_channels) - 1 - idx](
+                torch.concat([upsample_feat, feat_low], dim=1)
+            )
             inner_outs.insert(0, inner_out)
 
         outs = [inner_outs[0]]
@@ -1394,9 +1416,14 @@ class HybridEncoder(nn.Module):
         return outs
 
 
-
 class MSDeformableAttention(nn.Module):
-    def __init__(self, embed_dim=256, num_heads=8, num_levels=4, num_points=4,):
+    def __init__(
+        self,
+        embed_dim=256,
+        num_heads=8,
+        num_levels=4,
+        num_points=4,
+    ):
         """
         Multi-Scale Deformable Attention Module
         """
@@ -1409,7 +1436,10 @@ class MSDeformableAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError("Relation self.head_dim * num_heads == self.embed_dim does not apply")
-        self.sampling_offsets = nn.Linear(embed_dim, self.total_points * 2,)
+        self.sampling_offsets = nn.Linear(
+            embed_dim,
+            self.total_points * 2,
+        )
         self.attention_weights = nn.Linear(embed_dim, self.total_points)
         self.value_proj = nn.Linear(embed_dim, embed_dim)
         self.output_proj = nn.Linear(embed_dim, embed_dim)
@@ -1435,42 +1465,40 @@ class MSDeformableAttention(nn.Module):
         nn.init.xavier_uniform_(self.output_proj.weight)
         nn.init.constant_(self.output_proj.bias, 0)
 
-    def forward(self,
-                query,
-                reference_points,
-                value,
-                value_spatial_shapes,
-                value_mask=None):
+    def forward(self, query, reference_points, value, value_spatial_shapes, value_mask=None):
         bs, len_q = query.shape[:2]
         len_v = value.shape[1]
         value = self.value_proj(value)
-        
+
         if value_mask is not None:
             value_mask = value_mask.astype(value.dtype).unsqueeze(-1)
             value *= value_mask
         value = value.reshape(bs, len_v, self.num_heads, self.head_dim)
         sampling_offsets = self.sampling_offsets(query).reshape(
-            bs, len_q, self.num_heads, self.num_levels, self.num_points, 2)
+            bs, len_q, self.num_heads, self.num_levels, self.num_points, 2
+        )
         attention_weights = self.attention_weights(query).reshape(
-            bs, len_q, self.num_heads, self.num_levels * self.num_points)
+            bs, len_q, self.num_heads, self.num_levels * self.num_points
+        )
         attention_weights = F.softmax(attention_weights, dim=-1).reshape(
-            bs, len_q, self.num_heads, self.num_levels, self.num_points)
+            bs, len_q, self.num_heads, self.num_levels, self.num_points
+        )
 
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.tensor(value_spatial_shapes)
-            offset_normalizer = offset_normalizer.flip([1]).reshape(
-                1, 1, 1, self.num_levels, 1, 2)
-            sampling_locations = reference_points.reshape(
-                bs, len_q, 1, self.num_levels, 1, 2
-            ) + sampling_offsets / offset_normalizer
+            offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.num_levels, 1, 2)
+            sampling_locations = (
+                reference_points.reshape(bs, len_q, 1, self.num_levels, 1, 2) + sampling_offsets / offset_normalizer
+            )
         elif reference_points.shape[-1] == 4:
             sampling_locations = (
-                reference_points[:, :, None, :, None, :2] + sampling_offsets /
-                self.num_points * reference_points[:, :, None, :, None, 2:] * 0.5)
+                reference_points[:, :, None, :, None, :2]
+                + sampling_offsets / self.num_points * reference_points[:, :, None, :, None, 2:] * 0.5
+            )
         else:
             raise ValueError(
-                "Last dim of reference_points must be 2 or 4, but get {} instead.".
-                format(reference_points.shape[-1]))
+                "Last dim of reference_points must be 2 or 4, but get {} instead.".format(reference_points.shape[-1])
+            )
 
         output = self.ms_deformable_attn_core(value, value_spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
@@ -1478,14 +1506,16 @@ class MSDeformableAttention(nn.Module):
 
 
 class TransformerDecoderLayer(nn.Module):
-    def __init__(self,
-                 d_model=256,
-                 n_head=8,
-                 dim_feedforward=1024,
-                 dropout=0.,
-                 activation="relu",
-                 n_levels=4,
-                 n_points=4,):
+    def __init__(
+        self,
+        d_model=256,
+        n_head=8,
+        dim_feedforward=1024,
+        dropout=0.0,
+        activation="relu",
+        n_levels=4,
+        n_points=4,
+    ):
         super(TransformerDecoderLayer, self).__init__()
 
         # self attention
@@ -1510,15 +1540,17 @@ class TransformerDecoderLayer(nn.Module):
     def forward_ffn(self, tgt):
         return self.linear2(self.dropout3(self.activation(self.linear1(tgt))))
 
-    def forward(self,
-                target,
-                reference_points,
-                memory,
-                memory_spatial_shapes,
-                memory_level_start_index,
-                attn_mask=None,
-                memory_mask=None,
-                query_pos_embed=None):
+    def forward(
+        self,
+        target,
+        reference_points,
+        memory,
+        memory_spatial_shapes,
+        memory_level_start_index,
+        attn_mask=None,
+        memory_mask=None,
+        query_pos_embed=None,
+    ):
         # self attention
         q = k = self.with_pos_embed(tgt, query_pos_embed)
 
@@ -1527,12 +1559,9 @@ class TransformerDecoderLayer(nn.Module):
         target = self.norm1(target)
 
         # cross attention
-        cross_attention_res = self.cross_attn(\
-            self.with_pos_embed(target, query_pos_embed), 
-            reference_points, 
-            memory, 
-            memory_spatial_shapes, 
-            memory_mask)
+        cross_attention_res = self.cross_attn(
+            self.with_pos_embed(target, query_pos_embed), reference_points, memory, memory_spatial_shapes, memory_mask
+        )
         target = target + self.dropout2(cross_attention_res)
         target = self.norm2(cross_attention_res)
 
@@ -1552,17 +1581,19 @@ class TransformerDecoder(nn.Module):
         self.num_layers = num_layers
         self.eval_idx = eval_idx if eval_idx >= 0 else num_layers + eval_idx
 
-    def forward(self,
-                target,
-                ref_points_unact,
-                memory,
-                memory_spatial_shapes,
-                memory_level_start_index,
-                bbox_head,
-                score_head,
-                query_pos_head,
-                attn_mask=None,
-                memory_mask=None):
+    def forward(
+        self,
+        target,
+        ref_points_unact,
+        memory,
+        memory_spatial_shapes,
+        memory_level_start_index,
+        bbox_head,
+        score_head,
+        query_pos_head,
+        attn_mask=None,
+        memory_mask=None,
+    ):
         output = target
         dec_out_bboxes = []
         dec_out_logits = []
@@ -1572,9 +1603,16 @@ class TransformerDecoder(nn.Module):
             ref_points_input = ref_points_detach.unsqueeze(2)
             query_pos_embed = query_pos_head(ref_points_detach)
 
-            output = layer(output, ref_points_input, memory,
-                           memory_spatial_shapes, memory_level_start_index,
-                           attn_mask, memory_mask, query_pos_embed)
+            output = layer(
+                output,
+                ref_points_input,
+                memory,
+                memory_spatial_shapes,
+                memory_level_start_index,
+                attn_mask,
+                memory_mask,
+                query_pos_embed,
+            )
 
             inter_ref_bbox = F.sigmoid(bbox_head[i](output) + inverse_sigmoid(ref_points_detach))
 
@@ -1590,14 +1628,13 @@ class TransformerDecoder(nn.Module):
                 break
 
             ref_points = inter_ref_bbox
-            ref_points_detach = inter_ref_bbox.detach(
-            ) if self.training else inter_ref_bbox
+            ref_points_detach = inter_ref_bbox.detach() if self.training else inter_ref_bbox
 
         return torch.stack(dec_out_bboxes), torch.stack(dec_out_logits)
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, act='relu'):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, act="relu"):
         super().__init__()
         self.num_layers = num_layers
         hidden = [hidden_dim] * (num_layers - 1)
@@ -1611,22 +1648,22 @@ class MLP(nn.Module):
 
 
 class RTDetrTransformer(nn.Module):
-    __share__ = ['num_classes']
-    def __init__(self, config):
+    __share__ = ["num_classes"]
 
+    def __init__(self, config):
         super(RTDetrTransformer, self).__init__()
-        
+
         position_embed_type = config.position_embed_type
         feat_channels = config.feat_channels
         feat_strides = config.feat_strides
         num_levels = config.num_levels
 
-        if position_embed_type not in ['sine', 'learned']:
+        if position_embed_type not in ["sine", "learned"]:
             raise ValueError(f"position_embed_type not supported {position_embed_type}")
         if len(feat_channels) > num_levels:
-            raise ValueError(f"relation feat_channels <= num_levels does not apply")
+            raise ValueError("relation feat_channels <= num_levels does not apply")
         if len(feat_strides) != len(feat_channels):
-            raise ValueError(f"relation len(feat_strides) == len(feat_channels) does not apply")
+            raise ValueError("relation len(feat_strides) == len(feat_channels) does not apply")
         for _ in range(num_levels - len(feat_strides)):
             feat_strides.append(feat_strides[-1] * 2)
 
@@ -1653,12 +1690,16 @@ class RTDetrTransformer(nn.Module):
         self._build_input_proj_layer(feat_channels)
 
         # Transformer module
-        decoder_layer = TransformerDecoderLayer(self.hidden_dim, self.num_head, dim_feedforward, dropout, activation, num_levels, num_decoder_points)
+        decoder_layer = TransformerDecoderLayer(
+            self.hidden_dim, self.num_head, dim_feedforward, dropout, activation, num_levels, num_decoder_points
+        )
         self.decoder = TransformerDecoder(self.hidden_dim, decoder_layer, self.num_decoder_layers, eval_idx)
 
         # denoising part
-        if self.num_denoising > 0: 
-            self.denoising_class_embed = nn.Embedding(self.num_classes+1, self.hidden_dim, padding_idx=self.num_classes)
+        if self.num_denoising > 0:
+            self.denoising_class_embed = nn.Embedding(
+                self.num_classes + 1, self.hidden_dim, padding_idx=self.num_classes
+            )
 
         # decoder embedding
         if self.learnt_init_query:
@@ -1668,20 +1709,20 @@ class RTDetrTransformer(nn.Module):
         # encoder head
         self.enc_output = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim),
-            nn.LayerNorm(self.hidden_dim,)
+            nn.LayerNorm(
+                self.hidden_dim,
+            ),
         )
         self.enc_score_head = nn.Linear(self.hidden_dim, self.num_classes)
         self.enc_bbox_head = MLP(self.hidden_dim, self.hidden_dim, 4, num_layers=3)
 
         # decoder head
-        self.dec_score_head = nn.ModuleList([
-            nn.Linear(self.hidden_dim, self.num_classes)
-            for _ in range(self.num_decoder_layers)
-        ])
-        self.dec_bbox_head = nn.ModuleList([
-            MLP(self.hidden_dim, self.hidden_dim, 4, num_layers=3)
-            for _ in range(self.num_decoder_layers)
-        ])
+        self.dec_score_head = nn.ModuleList(
+            [nn.Linear(self.hidden_dim, self.num_classes) for _ in range(self.num_decoder_layers)]
+        )
+        self.dec_bbox_head = nn.ModuleList(
+            [MLP(self.hidden_dim, self.hidden_dim, 4, num_layers=3) for _ in range(self.num_decoder_layers)]
+        )
 
         # init encoder output anchors and valid_mask
         if self.eval_spatial_size:
@@ -1700,7 +1741,7 @@ class RTDetrTransformer(nn.Module):
             nn.init.constant_(cls_.bias, bias)
             nn.init.constant_(reg_.layers[-1].weight, 0)
             nn.init.constant_(reg_.layers[-1].bias, 0)
-        
+
         # linear_init_(self.enc_output[0])
         nn.init.xavier_uniform_(self.enc_output[0].weight)
         if self.learnt_init_query:
@@ -1708,14 +1749,22 @@ class RTDetrTransformer(nn.Module):
         nn.init.xavier_uniform_(self.query_pos_head.layers[0].weight)
         nn.init.xavier_uniform_(self.query_pos_head.layers[1].weight)
 
-
     def _build_input_proj_layer(self, feat_channels):
         self.input_proj = nn.ModuleList()
         for in_channels in feat_channels:
             self.input_proj.append(
-                nn.Sequential(OrderedDict([
-                    ('conv', nn.Conv2d(in_channels, self.hidden_dim, 1, bias=False)), 
-                    ('norm', nn.BatchNorm2d(self.hidden_dim,))])
+                nn.Sequential(
+                    OrderedDict(
+                        [
+                            ("conv", nn.Conv2d(in_channels, self.hidden_dim, 1, bias=False)),
+                            (
+                                "norm",
+                                nn.BatchNorm2d(
+                                    self.hidden_dim,
+                                ),
+                            ),
+                        ]
+                    )
                 )
             )
 
@@ -1723,9 +1772,13 @@ class RTDetrTransformer(nn.Module):
 
         for _ in range(self.num_levels - len(feat_channels)):
             self.input_proj.append(
-                nn.Sequential(OrderedDict([
-                    ('conv', nn.Conv2d(in_channels, self.hidden_dim, 3, 2, padding=1, bias=False)),
-                    ('norm', nn.BatchNorm2d(self.hidden_dim))])
+                nn.Sequential(
+                    OrderedDict(
+                        [
+                            ("conv", nn.Conv2d(in_channels, self.hidden_dim, 3, 2, padding=1, bias=False)),
+                            ("norm", nn.BatchNorm2d(self.hidden_dim)),
+                        ]
+                    )
                 )
             )
             in_channels = self.hidden_dim
@@ -1744,7 +1797,9 @@ class RTDetrTransformer(nn.Module):
         # get encoder inputs
         feat_flatten = []
         spatial_shapes = []
-        level_start_index = [0, ]
+        level_start_index = [
+            0,
+        ]
         for i, feat in enumerate(proj_feats):
             _, _, h, w = feat.shape
             # [b, c, h, w] -> [b, h*w, c]
@@ -1759,24 +1814,20 @@ class RTDetrTransformer(nn.Module):
         level_start_index.pop()
         return (feat_flatten, spatial_shapes, level_start_index)
 
-    def _generate_anchors(self,
-                          spatial_shapes=None,
-                          grid_size=0.05,
-                          dtype=torch.float32,
-                          device='cpu'):
+    def _generate_anchors(self, spatial_shapes=None, grid_size=0.05, dtype=torch.float32, device="cpu"):
         if spatial_shapes is None:
-            spatial_shapes = [[int(self.eval_spatial_size[0] / s), int(self.eval_spatial_size[1] / s)]
-                for s in self.feat_strides
+            spatial_shapes = [
+                [int(self.eval_spatial_size[0] / s), int(self.eval_spatial_size[1] / s)] for s in self.feat_strides
             ]
         anchors = []
         for lvl, (h, w) in enumerate(spatial_shapes):
-            grid_y, grid_x = torch.meshgrid(\
-                torch.arange(end=h, dtype=dtype), \
-                torch.arange(end=w, dtype=dtype), indexing='ij')
+            grid_y, grid_x = torch.meshgrid(
+                torch.arange(end=h, dtype=dtype), torch.arange(end=w, dtype=dtype), indexing="ij"
+            )
             grid_xy = torch.stack([grid_x, grid_y], -1)
             valid_WH = torch.tensor([w, h]).to(dtype)
             grid_xy = (grid_xy.unsqueeze(0) + 0.5) / valid_WH
-            wh = torch.ones_like(grid_xy) * grid_size * (2.0 ** lvl)
+            wh = torch.ones_like(grid_xy) * grid_size * (2.0**lvl)
             anchors.append(torch.concat([grid_xy, wh], -1).reshape(-1, h * w, 4))
 
         anchors = torch.concat(anchors, 1).to(device)
@@ -1786,12 +1837,7 @@ class RTDetrTransformer(nn.Module):
 
         return anchors, valid_mask
 
-
-    def _get_decoder_input(self,
-                           memory,
-                           spatial_shapes,
-                           denoising_class=None,
-                           denoising_bbox_unact=None):
+    def _get_decoder_input(self, memory, spatial_shapes, denoising_class=None, denoising_bbox_unact=None):
         bs, _, _ = memory.shape
         # prepare input for decoder
         if self.training or self.eval_spatial_size is None:
@@ -1800,7 +1846,7 @@ class RTDetrTransformer(nn.Module):
             anchors, valid_mask = self.anchors.to(memory.device), self.valid_mask.to(memory.device)
 
         # memory = torch.where(valid_mask, memory, 0)
-        memory = valid_mask.to(memory.dtype) * memory  # TODO fix type error for onnx export 
+        memory = valid_mask.to(memory.dtype) * memory  # TODO fix type error for onnx export
 
         output_memory = self.enc_output(memory)
 
@@ -1808,24 +1854,24 @@ class RTDetrTransformer(nn.Module):
         enc_outputs_coord_unact = self.enc_bbox_head(output_memory) + anchors
 
         _, topk_ind = torch.topk(enc_outputs_class.max(-1).values, self.num_queries, dim=1)
-        
-        reference_points_unact = enc_outputs_coord_unact.gather(dim=1, \
-            index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_unact.shape[-1]))
+
+        reference_points_unact = enc_outputs_coord_unact.gather(
+            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_unact.shape[-1])
+        )
 
         enc_topk_bboxes = F.sigmoid(reference_points_unact)
         if denoising_bbox_unact is not None:
-            reference_points_unact = torch.concat(
-                [denoising_bbox_unact, reference_points_unact], 1)
-        
-        enc_topk_logits = enc_outputs_class.gather(dim=1, \
-            index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1]))
+            reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
+
+        enc_topk_logits = enc_outputs_class.gather(
+            dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_class.shape[-1])
+        )
 
         # extract region features
         if self.learnt_init_query:
             target = self.tgt_embed.weight.unsqueeze(0).tile([bs, 1, 1])
         else:
-            target = output_memory.gather(dim=1, \
-                index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
+            target = output_memory.gather(dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1]))
             target = target.detach()
 
         if denoising_class is not None:
@@ -1833,27 +1879,27 @@ class RTDetrTransformer(nn.Module):
 
         return target, reference_points_unact.detach(), enc_topk_bboxes, enc_topk_logits
 
-
     def forward(self, feats, targets=None):
-
         # input projection and embedding
         (memory, spatial_shapes, level_start_index) = self._get_encoder_input(feats)
-        
+
         # prepare denoising training
         if self.training and self.num_denoising > 0:
-            denoising_class, denoising_bbox_unact, attn_mask, dn_meta = \
-                get_contrastive_denoising_training_group(targets, \
-                    self.num_classes, 
-                    self.num_queries, 
-                    self.denoising_class_embed, 
-                    num_denoising=self.num_denoising, 
-                    label_noise_ratio=self.label_noise_ratio, 
-                    box_noise_scale=self.box_noise_scale, )
+            denoising_class, denoising_bbox_unact, attn_mask, dn_meta = get_contrastive_denoising_training_group(
+                targets,
+                self.num_classes,
+                self.num_queries,
+                self.denoising_class_embed,
+                num_denoising=self.num_denoising,
+                label_noise_ratio=self.label_noise_ratio,
+                box_noise_scale=self.box_noise_scale,
+            )
         else:
             denoising_class, denoising_bbox_unact, attn_mask, dn_meta = None, None, None, None
 
-        target, init_ref_points_unact, enc_topk_bboxes, enc_topk_logits = \
-            self._get_decoder_input(memory, spatial_shapes, denoising_class, denoising_bbox_unact)
+        target, init_ref_points_unact, enc_topk_bboxes, enc_topk_logits = self._get_decoder_input(
+            memory, spatial_shapes, denoising_class, denoising_bbox_unact
+        )
 
         # decoder
         out_bboxes, out_logits = self.decoder(
@@ -1865,21 +1911,22 @@ class RTDetrTransformer(nn.Module):
             self.dec_bbox_head,
             self.dec_score_head,
             self.query_pos_head,
-            attn_mask=attn_mask)
+            attn_mask=attn_mask,
+        )
 
         if self.training and dn_meta is not None:
-            dn_out_bboxes, out_bboxes = torch.split(out_bboxes, dn_meta['dn_num_split'], dim=2)
-            dn_out_logits, out_logits = torch.split(out_logits, dn_meta['dn_num_split'], dim=2)
+            dn_out_bboxes, out_bboxes = torch.split(out_bboxes, dn_meta["dn_num_split"], dim=2)
+            dn_out_logits, out_logits = torch.split(out_logits, dn_meta["dn_num_split"], dim=2)
 
-        out = {'pred_logits': out_logits[-1], 'pred_boxes': out_bboxes[-1]}
+        out = {"pred_logits": out_logits[-1], "pred_boxes": out_bboxes[-1]}
 
         if self.training and self.aux_loss:
-            out['aux_outputs'] = self._set_aux_loss(out_logits[:-1], out_bboxes[:-1])
-            out['aux_outputs'].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
-            
+            out["aux_outputs"] = self._set_aux_loss(out_logits[:-1], out_bboxes[:-1])
+            out["aux_outputs"].extend(self._set_aux_loss([enc_topk_logits], [enc_topk_bboxes]))
+
             if self.training and dn_meta is not None:
-                out['dn_aux_outputs'] = self._set_aux_loss(dn_out_logits, dn_out_bboxes)
-                out['dn_meta'] = dn_meta
+                out["dn_aux_outputs"] = self._set_aux_loss(dn_out_logits, dn_out_bboxes)
+                out["dn_meta"] = dn_meta
 
         return out
 
@@ -1888,8 +1935,8 @@ class RTDetrTransformer(nn.Module):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{'pred_logits': a, 'pred_boxes': b}
-                for a, b in zip(outputs_class, outputs_coord)]
+        return [{"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
+
 
 class RTDetrPreTrainedModel(PreTrainedModel):
     """
@@ -1902,7 +1949,6 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
-        
         """Initalize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d, RtDetrFrozenBatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -1911,7 +1957,7 @@ class RTDetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, RT_DETRDecoder):
             module.gradient_checkpointing = value

@@ -11,27 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import shutil
-import tempfile
 import unittest
-import requests
-
-import numpy as np
 
 from transformers.testing_utils import (
-    is_pt_tf_cross_test,
-    require_tf,
     require_torch,
-    require_torchvision,
     require_vision,
 )
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
-from transformers.utils import is_torch_available, is_vision_available
 
 if is_vision_available():
     from PIL import Image
+
     from transformers import RtDetrImageProcessor
 
 if is_torch_available():
@@ -62,9 +55,9 @@ class RtDetrImageProcessingTester(unittest.TestCase):
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
             "return_tensors": self.return_tensors,
-            "num_channels": self.num_channels
+            "num_channels": self.num_channels,
         }
-    
+
     # def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
     #     url_images = [
     #         "http://images.cocodataset.org/val2017/000000000139.jpg",
@@ -97,12 +90,12 @@ class RtDetrImageProcessingTester(unittest.TestCase):
             torchify=torchify,
         )
 
-        
+
 @require_torch
 @require_vision
 class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = RtDetrImageProcessor if is_vision_available() else None
-    
+
     def setUp(self):
         self.image_processor_tester = RtDetrImageProcessingTester()
 
@@ -119,22 +112,17 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
         self.assertTrue(hasattr(image_processing, "return_tensors"))
-    
+
     def test_image_processor_outputs(self):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
 
         image_processing = self.image_processing_class(**self.image_processor_dict)
         encoding = image_processing(images=image, return_tensors="pt")
-        
+
         # verify pixel values: shape
         expected_shape = torch.Size([1, 3, 640, 640])
         self.assertEqual(encoding["pixel_values"].shape, expected_shape)
-        
+
         # verify pixel values: output values
         expected_slice = torch.tensor([0.5490196347236633, 0.5647059082984924, 0.572549045085907])
         self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-5))
-
-
-    
-
-
