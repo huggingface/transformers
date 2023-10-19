@@ -1553,14 +1553,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.set_input_embeddings(new_embeddings)
 
         # Update new_num_tokens with the actual size of new_embeddings
-        if pad_to_multiple_of is not None:
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
-
-                with deepspeed.zero.GatheredParameters(new_embeddings.weight, modifier_rank=None):
-                    new_num_tokens = new_embeddings.weight.shape[0]
-            else:
-                new_num_tokens = new_embeddings.weight.shape[0]
+        new_num_tokens = new_embeddings.num_embeddings
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
