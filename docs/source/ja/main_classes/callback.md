@@ -51,7 +51,7 @@ rendered properly in your Markdown viewer.
 コールバックを実装するメインクラスは [`TrainerCallback`] です。それは、
 [`TrainingArguments`] は [`Trainer`] をインスタンス化するために使用され、それにアクセスできます。
 [`TrainerState`] を介してトレーナーの内部状態を取得し、トレーニング ループ上でいくつかのアクションを実行できます。
-[`トレーナーコントロール`]。
+[`TrainerControl`]。
 
 ## 利用可能なコールバック
 
