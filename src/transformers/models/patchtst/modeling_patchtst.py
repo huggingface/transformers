@@ -232,7 +232,7 @@ def positional_encoding(position_embedding_type, learned, q_len, d_model):
         nn.init.uniform_(position_enc, -0.02, 0.02)
     elif position_embedding_type == "normal":
         position_enc = torch.zeros((q_len, 1))
-        torch.nn.init.normal_(position_enc, mean=0.0, std=0.1)
+        nn.init.normal_(position_enc, mean=0.0, std=0.1)
     elif position_embedding_type == "uniform":
         position_enc = torch.zeros((q_len, 1))
         nn.init.uniform_(position_enc, a=0.0, b=0.1)
@@ -710,7 +710,7 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize weights"""
         if self.config.use_cls_token:
-            torch.nn.init.normal_(self.config.cls_token, std=0.02)
+            nn.init.normal_(self.config.cls_token, std=0.02)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -1362,7 +1362,6 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         config.mask_input = True
         self.model = PatchTSTModel(config=config)
         self.head = MaskPretrainHead(config)
-        self.loss = torch.nn.MSELoss(reduction="none")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1408,7 +1407,8 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         x_hat = self.head(model_output[0])
 
         # calculate masked_loss
-        loss_val = self.loss(x_hat, model_output.patched_input)
+        loss = nn.MSELoss(reduction="none")
+        loss_val = loss(x_hat, model_output.patched_input)
         masked_loss = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
 
         encoder_states = model_output.hidden_states
@@ -1427,7 +1427,6 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
 
         self.model = PatchTSTModel(config)
         self.head = PatchTSTClassificationHead(config)
-        self.loss = nn.CrossEntropyLoss()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1471,7 +1470,8 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
 
         loss_val = None
         if labels is not None:
-            loss_val = self.loss(y_hat, labels)
+            loss = nn.CrossEntropyLoss()
+            loss_val = loss(y_hat, labels)
 
         encoder_states = model_output.hidden_states
         if not return_dict:
@@ -1578,10 +1578,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
 
         self.model = PatchTSTModel(config)
         if config.loss == "mse":
-            self.loss = nn.MSELoss(reduction="mean")
             self.distribution_output = None
         else:
-            self.loss = nll
             if config.distribution_output == "student_t":
                 self.distribution_output = StudentTOutput(dim=config.prediction_length * config.num_output_channels)
             elif config.distribution_output == "normal":
@@ -1643,11 +1641,12 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         if future_values is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
-                loss_val = self.loss(distribution, future_values)
+                loss_val = nll(distribution, future_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
             else:
-                loss_val = self.loss(y_hat, future_values)
+                loss = nn.MSELoss(reduction="mean")
+                loss_val = loss(y_hat, future_values)
 
         encoder_states = model_output.hidden_states
         if not return_dict:
@@ -1790,10 +1789,8 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         self.model = PatchTSTModel(config)
 
         if config.loss == "mse":
-            self.loss = nn.MSELoss(reduction="mean")
             self.distribution_output = None
         else:
-            self.loss = nll
             if config.distribution_output == "student_t":
                 self.distribution_output = StudentTOutput(dim=config.prediction_length)
             elif config.distribution_output == "normal":
@@ -1855,7 +1852,7 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
                 distribution = self.distribution_output.distribution(
                     y_hat, loc=model_output.loc, scale=model_output.scale
                 )
-                loss_val = self.loss(distribution, future_values)
+                loss_val = nll(distribution, future_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
                 # for testing
@@ -1863,7 +1860,8 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
                 # loss_val = weighted_average(loss_val)
             else:
                 y_hat = y_hat * model_output.scale + model_output.loc
-                loss_val = self.loss(y_hat, future_values)
+                loss = nn.MSELoss(reduction="mean")
+                loss_val = loss(y_hat, future_values)
 
         encoder_states = model_output.hidden_states
         loc = model_output.loc
@@ -1986,10 +1984,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         self.model = PatchTSTModel(config)
         if config.loss == "mse":
-            self.loss = nn.MSELoss(reduction="mean")
             self.distribution_output = None
         else:
-            self.loss = nll
             if config.distribution_output == "student_t":
                 self.distribution_output = StudentTOutput(dim=config.prediction_length * config.num_output_channels)
             elif config.distribution_output == "normal":
@@ -2049,11 +2045,12 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         if labels is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
-                loss_val = self.loss(distribution, labels)
+                loss_val = nll(distribution, labels)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
             else:
-                loss_val = self.loss(y_hat, labels)
+                loss = nn.MSELoss(reduction="mean")
+                loss_val = loss(y_hat, labels)
 
         encoder_states = model_output.hidden_states
 
