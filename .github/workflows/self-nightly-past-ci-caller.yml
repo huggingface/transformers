@@ -23,6 +23,12 @@ jobs:
     uses: ./.github/workflows/self-nightly-scheduled.yml
     secrets: inherit
 
+  run_nightly_amd_ci:
+    name: Nightly CI
+    needs: [build_nightly_ci_images]
+    uses: ./.github/workflows/self-nightly-scheduled-amd.yml
+    secrets: inherit
+
   run_past_ci_pytorch_1-13:
     name: PyTorch 1.13
     if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci')))
