@@ -1900,12 +1900,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
                 lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
                 We default it to 2GB in order for models to be able to run easily on free-tier google colab instances
-                without CPU OOM issues. 
+                without CPU OOM issues.
 
                 <Tip warning={true}>
 
                 If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
-                which will be bigger than `max_shard_size`. 
+                which will be bigger than `max_shard_size`.
 
                 </Tip>
 
