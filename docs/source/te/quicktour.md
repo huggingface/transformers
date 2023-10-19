@@ -478,7 +478,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
    >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
    ```
 
-ఇప్పుడు ఈ తరగతులన్నింటినీ [`ట్రైనర్`]లో సేకరించండి:
+ఇప్పుడు ఈ తరగతులన్నింటినీ [`Trainer`]లో సేకరించండి:
 
 ```py
 >>> from transformers import Trainer
