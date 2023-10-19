@@ -1,23 +1,25 @@
-FROM rocm/pytorch-nightly:latest
+FROM rocm/dev-ubuntu-20.04:5.7 
+# NOTE: we do not use rocm/pytorch-nightly:latest image since it uses RoCm 5.6, and we would rather like to
+# test against the publicly recommended PyTorch build at https://pytorch.org/get-started/locally/.
+
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && \
-    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg && \
+    apt install -y --no-install-recommends git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-dev python3-pip ffmpeg && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
+RUN python3 -m pip install --no-cache-dir --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/rocm5.7
+
 RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
 
-# For some reason rocm/pytorch-nightly does not contain torchaudio but we need it for our CI.
-RUN python3 -m pip install --no-cache-dir torchaudio --index-url https://download.pytorch.org/whl/rocm5.6
-
-# If set to nothing, will install the latest version.
+# # If set to nothing, will install the latest version.
 ARG PYTORCH='2.2.0dev'
 ARG TORCH_VISION='0.17.0dev'
 ARG TORCH_AUDIO='2.0.2'
-ARG ROCM='5.6'
+ARG ROCM='5.7'
 
 ARG REF=main
 WORKDIR /

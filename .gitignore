@@ -167,3 +167,6 @@ tags
 
 # ruff
 .ruff_cache
+
+# hipified cuda kernels
+*.hip
