@@ -135,7 +135,8 @@ class PatchTSMixerTranspose(nn.Module):
 
     def __init__(self, *dims, contiguous=False):
         super().__init__()
-        self.dims, self.contiguous = dims, contiguous
+        self.dims = dims
+        self.contiguous = contiguous
 
     def forward(self, inputs: torch.Tensor):
         """
@@ -247,10 +248,7 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
             Configuration.
     """
 
-    def __init__(
-        self,
-        config: PatchTSMixerConfig,
-    ):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
 
         num_features = (config.num_features,)
@@ -303,10 +301,7 @@ class PatchMixerBlock(nn.Module):
             Configuration.
     """
 
-    def __init__(
-        self,
-        config: PatchTSMixerConfig,
-    ):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
 
         num_patches = config.num_patches
@@ -401,10 +396,7 @@ class FeatureMixerBlock(nn.Module):
 
     """
 
-    def __init__(
-        self,
-        config: PatchTSMixerConfig,
-    ):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
         num_features = config.num_features
         expansion_factor = config.expansion_factor
@@ -413,8 +405,6 @@ class FeatureMixerBlock(nn.Module):
         mode = config.mode
         norm_mlp = config.norm_mlp
 
-        self.norm_mlp = norm_mlp
-        self.mode = mode
         self.norm = PatchTSMixerNormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
         self.mlp = PatchTSMixerMLP(num_features, num_features, expansion_factor, dropout)
@@ -455,10 +445,7 @@ class PatchTSMixerLayer(nn.Module):
 
     """
 
-    def __init__(
-        self,
-        config: PatchTSMixerConfig,
-    ):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
         mode = config.mode
 
@@ -503,10 +490,7 @@ class PatchTSMixerBlock(nn.Module):
             Configuration.
     """
 
-    def __init__(
-        self,
-        config: PatchTSMixerConfig,
-    ):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
 
         num_layers = config.num_layers
@@ -520,7 +504,7 @@ class PatchTSMixerBlock(nn.Module):
             ]
         )
 
-    def forward(self, data, output_hidden_states: Optional[bool] = False):
+    def forward(self, data, output_hidden_states: bool = False):
         r"""
 
         Args:
@@ -557,10 +541,7 @@ class PatchTSMixer(nn.Module):
     """
 
     # @get_class_params
-    def __init__(
-        self,
-        config: PatchTSMixerConfig,
-    ):
+    def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
 
         num_patches = config.num_patches
@@ -595,7 +576,7 @@ class PatchTSMixer(nn.Module):
         if use_pe:
             self.W_pos = positional_encoding(pe, learn_pe, num_patches, num_features)
 
-    def forward(self, input_ts, output_hidden_states: Optional[bool] = False):
+    def forward(self, input_ts, output_hidden_states: bool = False):
         # input_ts: [bs  x n_vars x num_patch x patch_len]
         batch_size = input_ts.shape[0]
 
@@ -1612,7 +1593,6 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         if config.post_init:
             self.post_init()
 
-    # @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PatchTSMixerForMaskPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
