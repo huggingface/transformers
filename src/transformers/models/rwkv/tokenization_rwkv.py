@@ -56,7 +56,7 @@ VOCAB_FILES_NAMES = {
 }
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "rwkv-world": "https://huggingface.co/RWKV/rwkv-5-world-169m/blob/main/rwkv_vocab_v20230424.json",
+        "rwkv": "https://huggingface.co/RWKV/rwkv-5-world-169m/blob/main/rwkv_vocab_v20230424.json",
     },
 }
 
@@ -248,7 +248,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
     ```python
     >>> from transformers import RWKVWorldTokenizer
 
-    >>> tokenizer = RWKVWorldTokenizer.from_pretrained("rwkv-world")
+    >>> tokenizer = RWKVWorldTokenizer.from_pretrained("rwkv")
     >>> tokenizer("Hello world")["input_ids"]
     [33155, 40213]
 
