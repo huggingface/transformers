@@ -15,10 +15,9 @@ RUN python3 -m pip install --no-cache-dir --pre torch torchvision torchaudio --i
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
 
-# # If set to nothing, will install the latest version.
-ARG PYTORCH='2.2.0dev'
-ARG TORCH_VISION='0.17.0dev'
-ARG TORCH_AUDIO='2.0.2'
+ARG PYTORCH='2.2.0.dev+rocm5.7'
+ARG TORCH_VISION='0.17.0.dev+rocm5.7'
+ARG TORCH_AUDIO='2.2.0.dev+rocm5.7'
 ARG ROCM='5.7'
 
 ARG REF=main
