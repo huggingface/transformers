@@ -14,6 +14,7 @@
 
 import itertools
 import os
+import unittest
 from functools import partial
 
 from parameterized import parameterized
@@ -36,6 +37,11 @@ from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import FSDPOption, set_seed
 from transformers.utils import is_accelerate_available, is_torch_bf16_gpu_available
 
+
+if is_torch_available():
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_1
+else:
+    is_torch_greater_or_equal_than_2_1 = False
 
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
@@ -178,6 +184,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
     @parameterized.expand(dtypes)
     @require_torch_multi_gpu
     @slow
+    @unittest.skipIf(not is_torch_greater_or_equal_than_2_1, reason="This test on pytorch 2.0 takes 4 hours.")
     def test_basic_run_with_cpu_offload(self, dtype):
         launcher = get_launcher(distributed=True, use_accelerate=False)
         output_dir = self.get_auto_remove_tmp_dir()

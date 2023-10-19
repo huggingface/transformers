@@ -211,6 +211,18 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
+        outputs = unmasker(
+            "My name is <mask>" + "Lorem ipsum dolor sit amet, consectetur adipiscing elit," * 100,
+            tokenizer_kwargs={"truncation": True},
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=6),
+            [
+                {"sequence": "My name is grouped", "score": 2.2e-05, "token": 38015, "token_str": " grouped"},
+                {"sequence": "My name is accuser", "score": 2.1e-05, "token": 25506, "token_str": " accuser"},
+            ],
+        )
+
     @require_torch
     def test_model_no_pad_pt(self):
         unmasker = pipeline(task="fill-mask", model="sshleifer/tiny-distilroberta-base", framework="pt")

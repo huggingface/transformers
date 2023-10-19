@@ -195,7 +195,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
         dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         dropout_rate (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
@@ -203,7 +203,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
+        initializer_factor (`float``, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
         seq_len (`int`, *optional*, defaults to 4096):

@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.34.0.dev0")
+check_min_version("4.35.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -82,7 +82,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": (
-                "The name of the text column in the input dataset or a CSV/JSON file."
+                "The name of the text column in the input dataset or a CSV/JSON file. "
                 'If not specified, will use the "sentence" column for single/multi-label classifcation task.'
             )
         },
@@ -120,7 +120,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": (
-                "The name of the label column in the input dataset or a CSV/JSON file."
+                "The name of the label column in the input dataset or a CSV/JSON file. "
                 'If not specified, will use the "label" column for single/multi-label classifcation task'
             )
         },
@@ -248,7 +248,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
         },
@@ -552,7 +552,7 @@ def main():
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
-            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the "
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)

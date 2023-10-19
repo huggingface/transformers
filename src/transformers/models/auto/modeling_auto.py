@@ -134,6 +134,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mega", "MegaModel"),
         ("megatron-bert", "MegatronBertModel"),
         ("mgp-str", "MgpstrForSceneTextRecognition"),
+        ("mistral", "MistralModel"),
         ("mobilebert", "MobileBertModel"),
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
@@ -152,6 +153,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("open-llama", "OpenLlamaModel"),
         ("openai-gpt", "OpenAIGPTModel"),
         ("opt", "OPTModel"),
+        ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
         ("pegasus", "PegasusModel"),
         ("pegasus_x", "PegasusXModel"),
@@ -398,6 +400,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("electra", "ElectraForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
         ("falcon", "FalconForCausalLM"),
+        ("fuyu", "FuyuForCausalLM"),
         ("git", "GitForCausalLM"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
@@ -411,6 +414,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForCausalLM"),
         ("mega", "MegaForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
+        ("mistral", "MistralForCausalLM"),
         ("mpt", "MptForCausalLM"),
         ("musicgen", "MusicgenForCausalLM"),
         ("mvp", "MvpForCausalLM"),
@@ -636,7 +640,8 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Object Detection mapping
-        ("owlvit", "OwlViTForObjectDetection")
+        ("owlv2", "Owlv2ForObjectDetection"),
+        ("owlvit", "OwlViTForObjectDetection"),
     ]
 )
 
@@ -732,6 +737,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForSequenceClassification"),
         ("mega", "MegaForSequenceClassification"),
         ("megatron-bert", "MegatronBertForSequenceClassification"),
+        ("mistral", "MistralForSequenceClassification"),
         ("mobilebert", "MobileBertForSequenceClassification"),
         ("mpnet", "MPNetForSequenceClassification"),
         ("mpt", "MptForSequenceClassification"),
