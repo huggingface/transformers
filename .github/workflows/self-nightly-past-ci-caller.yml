@@ -23,10 +23,20 @@ jobs:
     uses: ./.github/workflows/self-nightly-scheduled.yml
     secrets: inherit
 
-  run_nightly_amd_ci:
+  run_nightly_amd_ci_mi210:
     name: Nightly CI
     needs: [build_nightly_ci_images]
     uses: ./.github/workflows/self-nightly-scheduled-amd.yml
+    with:
+      gpu_flavor: mi210
+    secrets: inherit
+
+  run_nightly_amd_ci_mi250:
+    name: Nightly CI
+    needs: [build_nightly_ci_images]
+    uses: ./.github/workflows/self-nightly-scheduled-amd.yml
+    with:
+      gpu_flavor: mi250
     secrets: inherit
 
   run_past_ci_pytorch_1-13:
