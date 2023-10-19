@@ -648,7 +648,7 @@ class PatchTSTEncoderLayer(nn.Module):
         if self.pre_norm:
             ## Norm and Multi-Head attention and Add residual connection
             src = src + self.dropout_path1(
-                self.self_attn(self.norm_sublayer1(src)[0])
+                self.self_attn(self.norm_sublayer1(src))[0]
             )  # Add: residual connection with residual dropout
         else:
             ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
@@ -669,7 +669,7 @@ class PatchTSTEncoderLayer(nn.Module):
             if self.pre_norm:
                 ## Norm and Multi-Head attention and Add residual connection
                 src = src + self.dropout_path2(
-                    self.self_attn(self.norm_sublayer2(src)[0])
+                    self.self_attn(self.norm_sublayer2(src))[0]
                 )  # Add: residual connection with residual dropout
             else:
                 ## Multi-Head attention and Add residual connection and Norm
