@@ -371,6 +371,8 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             builder_name = data_args.test_file.split(".")[-1]
+        if builder_name == "jsonl":
+            builder_name = "json"
         raw_datasets = load_dataset(
             builder_name,
             data_files=data_files,
