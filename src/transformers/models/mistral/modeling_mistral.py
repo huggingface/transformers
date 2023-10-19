@@ -63,29 +63,43 @@ class AttentionMaskCache:
         - Check whether 2D attention mask has any padding tokens or not
 
     To avoid unnecessary memory allocation, attention masks are cached and can be easily reused.
+
+    Parameters:
+        is_causal (`bool`):
+            Whether the attention mask should be a uni-directional (causal) or bi-directional mask.
+
+        sliding_window (`int`, *optional*):
+            Optionally, the sliding window masks can be created if `sliding_window` is defined to a positive integer.
     """
 
-    def __init__(self, is_causal: bool):
+    def __init__(self, is_causal: bool, sliding_window: Optional[int] = None):
         self.is_causal = is_causal
+        self.sliding_window = sliding_window
 
         self.cache_4d_mask = {}
         self.cache_4d_mask_only_causal = {}
         self.cache_has_mask = {}
 
+    def _hash_tensor(self, tensor: torch.Tensor, shape: Tuple[int] = ()):
+        # we need to use both the unique id, memory address, the _version, and shape of the tensor as a key
+        # object to be certain to not accidentally return an incorrect hashed key (e.g. if the tensor has been updated in-place, only the version is increased)
+        return (id(tensor), tensor._version, tensor.shape + shape)
+
     def has_mask(self, attention_mask_2d: torch.Tensor) -> bool:
         """
         Checks whether the attention_mask actually has a padding token or whether it has only non-padding tokens.
         """
-        if attention_mask_2d not in self.cache_has_mask and len(self.cache_has_mask) > 0:
+        mask_2d_hash = self._hash_tensor(attention_mask_2d)
+        if mask_2d_hash not in self.cache_has_mask and len(self.cache_has_mask) > 0:
             self.cache_has_mask = {}
 
-        if attention_mask_2d not in self.cache_has_mask:
-            self.cache_has_mask[attention_mask_2d] = 0 in attention_mask_2d
+        if mask_2d_hash not in self.cache_has_mask:
+            self.cache_has_mask[mask_2d_hash] = 0 in attention_mask_2d
 
-        return self.cache_has_mask[attention_mask_2d]
+        return self.cache_has_mask[mask_2d_hash]
 
     def to_causal_4d(
-        self, batch_size: int, query_length: int, key_value_length: int, dtype: torch.dtype, device: torch.device
+        self, batch_size: int, query_length: int, key_value_length: int, dtype: torch.dtype = torch.float32, device: Union[torch.device, "str"] = "cpu"
     ) -> torch.Tensor:
         """
         Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
@@ -93,6 +107,9 @@ class AttentionMaskCache:
         memory will be allocated.
         """
         expected_shape = (batch_size, 1, query_length, key_value_length)
+
+        if not self.is_causal:
+            raise ValueError(f"Please use `to_causal_4d` only if {self.__class__} has `is_causal` set to True.")
 
         # If the attention_mask shape does not match, but there is still a tensor in the cache, empty the cache
         if expected_shape not in self.cache_4d_mask_only_causal and len(self.cache_4d_mask_only_causal) > 0:
@@ -106,13 +123,14 @@ class AttentionMaskCache:
             # create causal mask
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             causal_4d_mask = None
-            if input_shape[-1] > 1 and self.is_causal:
+            if input_shape[-1] > 1 or self.sliding_window is not None:
                 past_key_values_length = key_value_length - query_length
                 causal_4d_mask = self._make_causal_mask(
                     input_shape,
                     dtype,
                     device=device,
                     past_key_values_length=past_key_values_length,
+                    sliding_window=self.sliding_window,
                 )
 
             self.cache_4d_mask_only_causal[expected_shape] = causal_4d_mask
@@ -120,7 +138,7 @@ class AttentionMaskCache:
         return self.cache_4d_mask_only_causal[expected_shape]
 
     def to_4d(
-        self, attention_mask_2d: torch.Tensor, query_length: int, key_value_length: int, dtype: torch.dtype
+        self, attention_mask_2d: torch.Tensor, query_length: int, key_value_length: int, dtype: torch.dtype = torch.float32
     ) -> torch.Tensor:
         """
         Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
@@ -128,26 +146,31 @@ class AttentionMaskCache:
         causal, a causal mask will be added. If cached 4D attention mask can be reused, no new memory will be
         allocated.
         """
+        mask_2d_hash = self._hash_tensor(attention_mask_2d, (query_length, key_value_length))
+
         # If the attention_mask does not match, but there is still a tensor in the cache, empty the cache
-        if attention_mask_2d not in self.cache_4d_mask and len(self.cache_4d_mask) > 0:
+        if mask_2d_hash not in self.cache_4d_mask and len(self.cache_4d_mask) > 0:
             self.cache_4d_mask = {}
 
         # If attention_mask is not cached, create a new one and cache it
-        if attention_mask_2d not in self.cache_4d_mask:
+        if mask_2d_hash not in self.cache_4d_mask:
             input_shape = (attention_mask_2d.shape[0], query_length)
             past_key_values_length = key_value_length - query_length
 
             # create causal mask
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             causal_4d_mask = None
-            if input_shape[-1] > 1 and self.is_causal:
+            if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
                 past_key_values_length = key_value_length - query_length
                 causal_4d_mask = self._make_causal_mask(
                     input_shape,
                     dtype,
                     device=attention_mask_2d.device,
                     past_key_values_length=past_key_values_length,
+                    sliding_window=self.sliding_window,
                 )
+            elif self.sliding_window is not None:
+                raise NotImplementedError("Sliding window is currently only implemented for causal masking")
 
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
@@ -155,12 +178,12 @@ class AttentionMaskCache:
             )
             cached_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
 
-            self.cache_4d_mask[attention_mask_2d] = cached_4d_mask
+            self.cache_4d_mask[mask_2d_hash] = cached_4d_mask
 
-        return self.cache_4d_mask[attention_mask_2d]
+        return self.cache_4d_mask[mask_2d_hash]
 
     def _make_causal_mask(
-        self, input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
+            self, input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0, sliding_window: Optional[int] = None
     ):
         """
         Make causal mask used for bi-directional self-attention.
@@ -169,10 +192,19 @@ class AttentionMaskCache:
         mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
         mask_cond = torch.arange(mask.size(-1), device=device)
         mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+
         mask = mask.to(dtype)
 
         if past_key_values_length > 0:
             mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
+
+        # add lower triangular sliding window mask if necessary
+        if sliding_window is not None:
+            diagonal = past_key_values_length - sliding_window + 1
+
+            context_mask = (1 - torch.triu(torch.ones_like(mask, dtype=torch.int), diagonal=diagonal))
+            mask.masked_fill_(context_mask.bool(), torch.finfo(dtype).min)
+
         return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
     def _expand_mask(self, mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
