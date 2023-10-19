@@ -83,11 +83,11 @@ class Speech2TextConfig(PretrainedConfig):
         scale_embedding (`bool`, *optional*, defaults to `True`):
             Whether the embeddings are scaled by the square root of `d_model`.
         pad_token_id (`int`, *optional*, defaults to 1):
-            The padding token ID for padding sequences to the same length.
+            Padding token id.
         bos_token_id (`int`, *optional*, defaults to 0):
-            The beginning-of-sequence (BOS) token ID for indicating the start of a sequence.
+            The id of the beginning-of-sequence token.
         eos_token_id (`int`, *optional*, defaults to 2):
-            The end-of-sequence (EOS) token ID for indicating the end of a sequence.
+            The id of the end-of-sequence token.
         max_source_positions (`int`, *optional*, defaults to 6000):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
         max_target_positions (`int`, *optional*, defaults to 1024):
