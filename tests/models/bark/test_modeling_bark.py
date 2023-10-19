@@ -41,8 +41,6 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 from ..encodec.test_modeling_encodec import EncodecModelTester
 
 
-from scipy.io.wavfile import write as write_wav
-
 if is_torch_available():
     import torch
 
