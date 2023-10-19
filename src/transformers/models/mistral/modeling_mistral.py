@@ -99,7 +99,12 @@ class AttentionMaskCache:
         return self.cache_has_mask[mask_2d_hash]
 
     def to_causal_4d(
-        self, batch_size: int, query_length: int, key_value_length: int, dtype: torch.dtype = torch.float32, device: Union[torch.device, "str"] = "cpu"
+        self,
+        batch_size: int,
+        query_length: int,
+        key_value_length: int,
+        dtype: torch.dtype = torch.float32,
+        device: Union[torch.device, "str"] = "cpu",
     ) -> torch.Tensor:
         """
         Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
@@ -138,7 +143,11 @@ class AttentionMaskCache:
         return self.cache_4d_mask_only_causal[expected_shape]
 
     def to_4d(
-        self, attention_mask_2d: torch.Tensor, query_length: int, key_value_length: int, dtype: torch.dtype = torch.float32
+        self,
+        attention_mask_2d: torch.Tensor,
+        query_length: int,
+        key_value_length: int,
+        dtype: torch.dtype = torch.float32,
     ) -> torch.Tensor:
         """
         Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
@@ -183,7 +192,12 @@ class AttentionMaskCache:
         return self.cache_4d_mask[mask_2d_hash]
 
     def _make_causal_mask(
-            self, input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0, sliding_window: Optional[int] = None
+        self,
+        input_ids_shape: torch.Size,
+        dtype: torch.dtype,
+        device: torch.device,
+        past_key_values_length: int = 0,
+        sliding_window: Optional[int] = None,
     ):
         """
         Make causal mask used for bi-directional self-attention.
@@ -202,7 +216,7 @@ class AttentionMaskCache:
         if sliding_window is not None:
             diagonal = past_key_values_length - sliding_window + 1
 
-            context_mask = (1 - torch.triu(torch.ones_like(mask, dtype=torch.int), diagonal=diagonal))
+            context_mask = 1 - torch.triu(torch.ones_like(mask, dtype=torch.int), diagonal=diagonal)
             mask.masked_fill_(context_mask.bool(), torch.finfo(dtype).min)
 
         return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)

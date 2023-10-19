@@ -42,13 +42,13 @@ if is_torch_available():
     from transformers.models.llama.modeling_llama import AttentionMaskCache
 
 
+@require_torch
 class AttentionMaskTester(unittest.TestCase):
-
     def check_non_causal(self, bsz, q_len, kv_len, mask_2d, mask_4d):
         mask_indices = (mask_2d != 1)[:, None].broadcast_to((bsz, q_len, kv_len))
         mask_4d_values = mask_4d[:, 0][mask_indices]
-        is_inf = (mask_4d_values == -float("inf"))
-        is_min = (mask_4d_values == torch.finfo(mask_4d.dtype).min)
+        is_inf = mask_4d_values == -float("inf")
+        is_min = mask_4d_values == torch.finfo(mask_4d.dtype).min
         assert torch.logical_or(is_inf, is_min).all()
 
     def check_to_4d(self, mask_cache, q_len, kv_len, additional_mask=None, bsz=3):
@@ -127,11 +127,10 @@ class AttentionMaskTester(unittest.TestCase):
         # This function computes the # of attention tokens that are added for
         # the sliding window
         c_mask_len = kv_len - context
-        num_mask_triangle = (c_mask_len * (c_mask_len + 1) // 2) 
+        num_mask_triangle = c_mask_len * (c_mask_len + 1) // 2
         cut_mask_len = max(c_mask_len - q_len, 0)
-        num_cut_mask = (cut_mask_len * (cut_mask_len + 1) // 2) 
+        num_cut_mask = cut_mask_len * (cut_mask_len + 1) // 2
         return num_mask_triangle - num_cut_mask
-
 
     def test_2d_to_4d_causal(self):
         mask_cache = AttentionMaskCache(is_causal=True)
@@ -149,7 +148,7 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_4d(mask_cache, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
 
     def test_2d_to_4d(self):
-        mask_2d = torch.ones((3, 7), device=torch_device, dtype=torch.long)
+        torch.ones((3, 7), device=torch_device, dtype=torch.long)
         mask_cache = AttentionMaskCache(is_causal=False)
 
         # non auto-regressive case
@@ -159,7 +158,7 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_4d(mask_cache, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
 
     def test_2d_to_4d_causal_sliding(self):
-        mask_2d = torch.ones((3, 7), device=torch_device, dtype=torch.long)
+        torch.ones((3, 7), device=torch_device, dtype=torch.long)
         mask_cache = AttentionMaskCache(is_causal=True, sliding_window=5)
 
         # auto-regressive use case
@@ -219,6 +218,7 @@ class AttentionMaskTester(unittest.TestCase):
         mask_2d[0, 3] = 4
         hash_key = mask_cache._hash_tensor(mask_2d, (3, 7))
         assert hash_key not in mask_cache.cache_4d_mask
+
 
 class LlamaModelTester:
     def __init__(
