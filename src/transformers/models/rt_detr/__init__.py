@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RT_DETRConfig"]}
+_import_structure = {"configuration_rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RTDetrConfig"]}
 
 
 try:
@@ -36,14 +36,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_rt_detr"] = [
         "RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "RT_DETRForObjectDetection",
-        "RT_DETRModel",
-        "RT_DETRPreTrainedModel",
+        "RTDetrForObjectDetection",
+        "RTDetrModel",
+        "RTDetrPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_rt_detr import RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, RT_DETRConfig
+    from .configuration_rt_detr import RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, RTDetrConfig
 
     try:
         if not is_vision_available():
@@ -61,9 +61,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_rt_detr import (
             RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RT_DETRForObjectDetection,
-            RT_DETRModel,
-            RT_DETRPreTrainedModel,
+            RTDetrForObjectDetection,
+            RTDetrModel,
+            RTDetrPreTrainedModel,
         )
 
 else:

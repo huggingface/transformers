@@ -25,7 +25,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import RT_DETRConfig, RT_DETRForObjectDetection, RT_DETRForSegmentation, DetrImageProcessor
+from transformers import RTDetrConfig, RTDetrForObjectDetection, RT_DETRForSegmentation, DetrImageProcessor
 from transformers.utils import logging
 
 
@@ -183,7 +183,7 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path):
     """
 
     # load default config
-    config = RT_DETRConfig()
+    config = RTDetrConfig()
     # set backbone and dilation attributes
     if "resnet101" in model_name:
         config.backbone = "resnet101"
@@ -247,7 +247,7 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 val = state_dict.pop(key)
                 state_dict[prefix + key] = val
     # finally, create HuggingFace model and load state dict
-    model = RT_DETRForSegmentation(config) if is_panoptic else RT_DETRForObjectDetection(config)
+    model = RT_DETRForSegmentation(config) if is_panoptic else RTDetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
     # verify our conversion

@@ -32,16 +32,16 @@ This model was contributed by [rafaelpadilla](https://huggingface.co/rafaelpadil
 The original code can be found [here](https://github.com/lyuwenyu/RT-DETR/).
 
 
-## RT_DETRConfig
+## RTDetrConfig
 
-[[autodoc]] RT_DETRConfig
+[[autodoc]] RTDetrConfig
 
-## RT_DETRModel
+## RTDetrModel
 
-[[autodoc]] RT_DETRModel
+[[autodoc]] RTDetrModel
     - forward
 
-## RT_DETRForObjectDetection
+## RTDetrForObjectDetection
 
-[[autodoc]] RT_DETRForObjectDetection
+[[autodoc]] RTDetrForObjectDetection
     - forward

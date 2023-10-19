@@ -74,7 +74,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTModel"),
         ("deta", "DetaModel"),
         ("detr", "DetrModel"),
-        ("rt_detr", "RT_DETRModel"),
+        ("rt_detr", "RTDetrModel"),
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
         ("distilbert", "DistilBertModel"),
@@ -633,7 +633,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("deta", "DetaForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
-        ("rt_detr", "RT_DETRForObjectDetection"),
+        ("rt_detr", "RTDetrForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
