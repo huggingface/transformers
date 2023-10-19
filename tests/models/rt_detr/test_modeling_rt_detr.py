@@ -19,7 +19,7 @@ import inspect
 import math
 import unittest
 
-from transformers import RT_DETRConfig, ResNetConfig, is_torch_available, is_vision_available
+from transformers import RTDetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -32,7 +32,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import RT_DETRForObjectDetection, RT_DETRForSegmentation, RT_DETRModel
+    from transformers import RTDetrForObjectDetection, RT_DETRForSegmentation, RTDetrModel
 
 
 if is_vision_available():
@@ -41,7 +41,7 @@ if is_vision_available():
     from transformers import DetrImageProcessor
 
 
-class RT_DETRModelTester:
+class RTDetrModelTester:
     def __init__(
         self,
         parent,
@@ -116,7 +116,7 @@ class RT_DETRModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        return RT_DETRConfig(
+        return RTDetrConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
@@ -138,7 +138,7 @@ class RT_DETRModelTester:
         return config, inputs_dict
 
     def create_and_check_rt_detr_model(self, config, pixel_values, pixel_mask, labels):
-        model = RT_DETRModel(config=config)
+        model = RTDetrModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -150,7 +150,7 @@ class RT_DETRModelTester:
         )
 
     def create_and_check_rt_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
-        model = RT_DETRForObjectDetection(config=config)
+        model = RTDetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -168,11 +168,11 @@ class RT_DETRModelTester:
 
 
 @require_torch
-class RT_DETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class RTDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            RT_DETRModel,
-            RT_DETRForObjectDetection,
+            RTDetrModel,
+            RTDetrForObjectDetection,
             RT_DETRForSegmentation,
         )
         if is_torch_available()
@@ -189,7 +189,7 @@ class RT_DETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["RT_DETRForObjectDetection", "RT_DETRForSegmentation"]:
+            if model_class.__name__ in ["RTDetrForObjectDetection", "RT_DETRForSegmentation"]:
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -212,8 +212,8 @@ class RT_DETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = RT_DETRModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RT_DETRConfig, has_text_modality=False)
+        self.model_tester = RTDetrModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=RTDetrConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -297,7 +297,7 @@ class RT_DETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Object Detection model returns pred_logits and pred_boxes
-                if model_class.__name__ == "RT_DETRForObjectDetection":
+                if model_class.__name__ == "RTDetrForObjectDetection":
                     correct_outlen += 2
                 # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
                 if model_class.__name__ == "RT_DETRForSegmentation":
@@ -424,7 +424,7 @@ class RT_DETRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "RT_DETRForObjectDetection":
+            if model_class.__name__ == "RTDetrForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -491,13 +491,13 @@ def prepare_img():
 @require_timm
 @require_vision
 @slow
-class RT_DETRModelIntegrationTestsTimmBackbone(unittest.TestCase):
+class RTDetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return DetrImageProcessor.from_pretrained("checkpoing/todo") if is_vision_available() else None
 
     def test_inference_no_head(self):
-        model = RT_DETRModel.from_pretrained("checkpoing/todo").to(torch_device)
+        model = RTDetrModel.from_pretrained("checkpoing/todo").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -514,7 +514,7 @@ class RT_DETRModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_inference_object_detection_head(self):
-        model = RT_DETRForObjectDetection.from_pretrained("checkpoing/todo").to(torch_device)
+        model = RTDetrForObjectDetection.from_pretrained("checkpoing/todo").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -612,7 +612,7 @@ class RT_DETRModelIntegrationTestsTimmBackbone(unittest.TestCase):
 @require_vision
 @require_torch
 @slow
-class RT_DETRModelIntegrationTests(unittest.TestCase):
+class RTDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
@@ -622,7 +622,7 @@ class RT_DETRModelIntegrationTests(unittest.TestCase):
         )
 
     def test_inference_no_head(self):
-        model = RT_DETRModel.from_pretrained("checkpoing/todo", revision="no_timm").to(torch_device)
+        model = RTDetrModel.from_pretrained("checkpoing/todo", revision="no_timm").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()

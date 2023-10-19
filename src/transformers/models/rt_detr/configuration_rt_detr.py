@@ -34,9 +34,9 @@ RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 
-class RT_DETRConfig(PretrainedConfig):
+class RTDetrConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RT_DETRModel`]. It is used to instantiate a RT_DETR
+    This is the configuration class to store the configuration of a [`RTDetrModel`]. It is used to instantiate a RT_DETR
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the RT_DETR
     [checkpoing/todo](https://huggingface.co/checkpoing/todo) architecture.
@@ -54,7 +54,7 @@ class RT_DETRConfig(PretrainedConfig):
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 100):
-            Number of object queries, i.e. detection slots. This is the maximal number of objects [`RT_DETRModel`] can
+            Number of object queries, i.e. detection slots. This is the maximal number of objects [`RTDetrModel`] can
             detect in a single image. For COCO, we recommend 100 queries.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
@@ -122,13 +122,13 @@ class RT_DETRConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import RT_DETRConfig, RT_DETRModel
+    >>> from transformers import RTDetrConfig, RTDetrModel
 
     >>> # Initializing a RT_DETR checkpoing/todo style configuration
-    >>> configuration = RT_DETRConfig()
+    >>> configuration = RTDetrConfig()
 
     >>> # Initializing a model (with random weights) from the checkpoing/todo style configuration
-    >>> model = RT_DETRModel(configuration)
+    >>> model = RTDetrModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -142,6 +142,8 @@ class RT_DETRConfig(PretrainedConfig):
 
     def __init__(
         self,
+        # General
+        initializer_range=0.02,
         # PResNet config:
         depth=50, 
         variant='d', 
@@ -165,16 +167,34 @@ class RT_DETRConfig(PretrainedConfig):
         num_head=8,
         dim_feedforward = 1024,
         dropout=0.0,
-        enc_act='gelu',
+        enc_act="gelu",
         use_encoder_idx=[2],
         num_encoder_layers=1,
         pe_temperature=10000,
         expansion=1.0,
         depth_mult=1.0,
-        act_encoder='silu',
+        act_encoder="silu",
         eval_size=None,
+        # RTDetrTransformer config:
+        num_classes=80,
+        num_queries=300,
+        position_embed_type="sine",
+        feat_channels=[512, 1024, 2048],
+        num_levels=3,
+        num_decoder_points=4,
+        num_decoder_layers=6,
+        act_decoder="relu",
+        num_denoising=100,
+        label_noise_ratio=0.5,
+        box_noise_scale=1.0,
+        learnt_init_query=False,
+        eval_spatial_size=None,
+        eval_idx=-1,
+        eps=1e-2, 
+        aux_loss=True,
         **kwargs,
     ):
+        self.initializer_range = initializer_range
         # backbone
         self.depth = depth
         self.variant = variant
@@ -201,5 +221,22 @@ class RT_DETRConfig(PretrainedConfig):
         self.depth_mult = depth_mult
         self.act_encoder = act_encoder
         self.eval_size = eval_size
+        # decoder
+        self.num_classes = num_classes
+        self.num_queries = num_queries
+        self.position_embed_type = position_embed_type
+        self.feat_channels = feat_channels
+        self.num_levels = num_levels
+        self.num_decoder_points = num_decoder_points
+        self.num_decoder_layers = num_decoder_layers
+        self.act_decoder = act_decoder
+        self.num_denoising = num_denoising
+        self.label_noise_ratio = label_noise_ratio
+        self.box_noise_scale = box_noise_scale
+        self.learnt_init_query = learnt_init_query
+        self.eval_spatial_size = eval_spatial_size
+        self.eval_idx = eval_idx
+        self.eps = eps
+        self.aux_loss = aux_loss
         
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

@@ -76,7 +76,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTConfig"),
         ("deta", "DetaConfig"),
         ("detr", "DetrConfig"),
-        ("rt_detr", "RT_DETRConfig"),
+        ("rt_detr", "RTDetrConfig"),
         ("dinat", "DinatConfig"),
         ("dinov2", "Dinov2Config"),
         ("distilbert", "DistilBertConfig"),

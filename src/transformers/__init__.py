@@ -299,7 +299,7 @@ _import_structure = {
     "models.deprecated.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
-    "models.rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RT_DETRConfig"],
+    "models.rt_detr": ["RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "RTDetrConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
     "models.dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config"],
@@ -1645,9 +1645,9 @@ else:
     _import_structure["models.rt_detr"].extend(
         [
             "RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "RT_DETRForObjectDetection",
-            "RT_DETRModel",
-            "RT_DETRPreTrainedModel",
+            "RTDetrForObjectDetection",
+            "RTDetrModel",
+            "RTDetrPreTrainedModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -4442,7 +4442,7 @@ if TYPE_CHECKING:
     from .models.deprecated.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
-    from .models.rt_detr import RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, RT_DETRConfig
+    from .models.rt_detr import RT_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, RTDetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
     from .models.dinov2 import DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Dinov2Config
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -5621,9 +5621,9 @@ if TYPE_CHECKING:
         )
         from .models.rt_detr import (
             RT_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RT_DETRForObjectDetection,
-            RT_DETRModel,
-            RT_DETRPreTrainedModel,
+            RTDetrForObjectDetection,
+            RTDetrModel,
+            RTDetrPreTrainedModel,
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
