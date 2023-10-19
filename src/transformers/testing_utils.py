@@ -724,7 +724,7 @@ if is_torch_available():
                 f"Failed to import `TRANSFORMERS_TEST_BACKEND` '{backend}'! This should be the name of an installed module. The original error (look up to see its"
                 f" traceback):\n{e}"
             ) from e
-        
+
     if "TRANSFORMERS_TEST_DEVICE" in os.environ:
         torch_device = os.environ["TRANSFORMERS_TEST_DEVICE"]
         try:
