@@ -33,14 +33,15 @@ from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
-                                      FlaxCausalLMOutputWithCrossAttentions,
-                                      FlaxSequenceClassifierOutput)
-from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
-                                    append_call_sample_docstring, logging)
-from ...utils import (add_start_docstrings,
-                      add_start_docstrings_to_model_forward)
+from ...modeling_flax_outputs import (
+    FlaxBaseModelOutputWithPast,
+    FlaxCausalLMOutputWithCrossAttentions,
+    FlaxSequenceClassifierOutput,
+)
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_mistral import MistralConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -950,46 +951,25 @@ class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
     ):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
 
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.cumsum(-1) - 1
-            position_ids = position_ids * attention_mask + (1 - attention_mask)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
+        past_key_values = self.init_cache(batch_size, max_length)
+        # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
+        # But since Llama uses a causal mask, those positions are masked anyways.
+        # Thus we can create a single static attention_mask here, which is more efficient for compilation
+        extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
+        if attention_mask is not None:
+            position_ids = attention_mask.cumsum(axis=-1) - 1
+            extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))
         else:
-            model_inputs = {}
+            position_ids = jnp.broadcast_to(jnp.arange(seq_length, dtype="i4")[None, :], (batch_size, seq_length))
 
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "init_cache": kwargs.get("init_cache"),
-                "attention_mask": attention_mask,
-            }
-        )
-        return model_inputs
+        return {
+            "past_key_values": past_key_values,
+            "attention_mask": extended_attention_mask,
+            "position_ids": position_ids,
+        }
 
     def update_inputs_for_generation(self, model_outputs, model_kwargs):
-        attention_mask = model_kwargs["attention_mask"]
-        model_kwargs["attention_mask"] = jnp.concatenate(
-            [attention_mask, jnp.ones((attention_mask.shape[0], 1))], axis=1
-        )
         model_kwargs["past_key_values"] = model_outputs.past_key_values
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
