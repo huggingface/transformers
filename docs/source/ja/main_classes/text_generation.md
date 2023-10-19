@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 - PyTorch [`~generation.GenerationMixin.generate`] は [`~generation.GenerationMixin`] に実装されています。
 - TensorFlow [`~generation.TFGenerationMixin.generate`] は [`~generation.TFGenerationMixin`] に実装されています。
-- Flax/JAX [`~世代.FlaxGenerationMixin.generate`] は [`~世代.FlaxGenerationMixin`] に実装されています。
+- Flax/JAX [`~generation.FlaxGenerationMixin.generate`] は [`~generation.FlaxGenerationMixin`] に実装されています。
 
 選択したフレームワークに関係なく、[`~generation.GenerationConfig`] を使用して生成メソッドをパラメータ化できます。
 クラスインスタンス。動作を制御する生成パラメータの完全なリストについては、このクラスを参照してください。
