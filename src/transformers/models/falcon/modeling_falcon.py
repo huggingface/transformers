@@ -210,6 +210,19 @@ class AttentionMaskCache:
             mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
         return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
+    def _expand_mask(self, mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+        """
+        Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+        """
+        bsz, src_len = mask.size()
+        tgt_len = tgt_len if tgt_len is not None else src_len
+
+        expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+        inverted_mask = 1.0 - expanded_mask
+
+        return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
 
 # TODO (joao): Is this the same implementation as in Llama? If so, let's make them the same and add the copy facilities
 class FalconRotaryEmbedding(nn.Module):
@@ -590,7 +603,9 @@ class FalconAttention(nn.Module):
 
         if attention_mask is not None:
             # convert 2d -> 4d. Re-use cached mask if available
-            attention_mask = self.attention_mask_cache.to_4d(attention_mask, query_length, kv_length, query_layer.dtype)
+            attention_mask = self.attention_mask_cache.to_4d(
+                attention_mask, query_length, kv_length, query_layer.dtype
+            )
         elif self.attention_mask_cache.is_causal:
             # create 4d causal mask. Re-use cached mask if available
             attention_mask = self.attention_mask_cache.to_causal_4d(
@@ -618,9 +633,7 @@ class FalconAttention(nn.Module):
                 attention_scores = query_layer_ @ key_layer_.transpose(-1, -2)
                 attention_scores /= math.sqrt(self.head_dim)
 
-                attention_scores = F.softmax(
-                    attention_scores + attention_mask, dim=-1, dtype=hidden_states.dtype
-                )
+                attention_scores = F.softmax(attention_scores + attention_mask, dim=-1, dtype=hidden_states.dtype)
                 attn_output = attention_scores @ value_layer_
 
             attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
@@ -1132,7 +1145,9 @@ class FalconModel(FalconPreTrainedModel):
         attention_mask_cache = AttentionMaskCache(is_causal=True)
 
         # Transformer blocks
-        self.h = nn.ModuleList([FalconDecoderLayer(config, attention_mask_cache) for _ in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList(
+            [FalconDecoderLayer(config, attention_mask_cache) for _ in range(config.num_hidden_layers)]
+        )
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -1246,7 +1261,13 @@ class FalconModel(FalconPreTrainedModel):
             past_key_values_length = past_key_values[0][0].shape[1]  # 1 because RW-cache, not standard format
 
         if self.use_alibi:
-            mask = torch.ones(input_ids, shape=(batch_size, seq_length + past_key_values_length), device=inputs_embeds.device, dtype=torch.long) if attention_mask is None else attention_mask
+            mask = (
+                torch.ones(
+                    (batch_size, seq_length + past_key_values_length), device=inputs_embeds.device, dtype=torch.long
+                )
+                if attention_mask is None
+                else attention_mask
+            )
             alibi = build_alibi_tensor(mask, self.num_heads, dtype=hidden_states.dtype)
         else:
             alibi = None
@@ -1256,12 +1277,6 @@ class FalconModel(FalconPreTrainedModel):
                     past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
                 )
                 position_ids = position_ids.unsqueeze(0)
-
-        causal_mask = self._prepare_attn_mask(
-            attention_mask,
-            input_shape=(batch_size, seq_length),
-            past_key_values_length=past_key_values_length,
-        )
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
@@ -1280,7 +1295,7 @@ class FalconModel(FalconPreTrainedModel):
                     create_custom_forward(block),
                     hidden_states,
                     alibi,
-                    causal_mask,
+                    attention_mask,
                     position_ids,
                     head_mask[i],
                 )
@@ -1288,7 +1303,7 @@ class FalconModel(FalconPreTrainedModel):
                 outputs = block(
                     hidden_states,
                     layer_past=layer_past,
-                    attention_mask=causal_mask,
+                    attention_mask=attention_mask,
                     position_ids=position_ids,
                     head_mask=head_mask[i],
                     use_cache=use_cache,

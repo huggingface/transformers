@@ -159,7 +159,6 @@ class AttentionMaskCache:
 
         return self.cache_4d_mask[attention_mask_2d]
 
-
     def _make_causal_mask(
         self, input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
     ):
@@ -175,6 +174,19 @@ class AttentionMaskCache:
         if past_key_values_length > 0:
             mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
         return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+    def _expand_mask(self, mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+        """
+        Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+        """
+        bsz, src_len = mask.size()
+        tgt_len = tgt_len if tgt_len is not None else src_len
+
+        expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+        inverted_mask = 1.0 - expanded_mask
+
+        return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -337,7 +349,7 @@ class MistralAttention(nn.Module):
     and "Generating Long Sequences with Sparse Transformers".
     """
 
-    def __init__(self, config: MistralConfig):
+    def __init__(self, config: MistralConfig, attention_mask_cache=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -347,6 +359,7 @@ class MistralAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
+        self.attention_mask_cache = attention_mask_cache
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -409,6 +422,15 @@ class MistralAttention(nn.Module):
             raise ValueError(
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
                 f" {attn_weights.size()}"
+            )
+
+        if attention_mask is not None:
+            # convert 2d -> 4d. Re-use cached mask if available
+            attention_mask = self.attention_mask_cache.to_4d(attention_mask, q_len, kv_seq_len, attn_weights.dtype)
+        elif self.attention_mask_cache.is_causal:
+            # create 4d causal mask. Re-use cached mask if available
+            attention_mask = self.attention_mask_cache.to_causal_4d(
+                bsz, q_len, kv_seq_len, attn_weights.dtype, attn_weights.device
             )
 
         if attention_mask is not None:
@@ -702,13 +724,13 @@ class MistralFlashAttention2(MistralAttention):
 
 
 class MistralDecoderLayer(nn.Module):
-    def __init__(self, config: MistralConfig):
+    def __init__(self, config: MistralConfig, attention_mask_cache=None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = (
-            MistralAttention(config=config)
+            MistralAttention(config=config, attention_mask_cache=attention_mask_cache)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else MistralFlashAttention2(config)
+            else MistralFlashAttention2(config, attention_mask_cache=attention_mask_cache)
         )
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -895,8 +917,14 @@ class MistralModel(MistralPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
+        # create attention mask cache that trickles down to each attention layer
+        # so that the attention_mask cache can be shared among layers
+        attention_mask_cache = AttentionMaskCache(is_causal=True)
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([MistralDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [MistralDecoderLayer(config, attention_mask_cache) for _ in range(config.num_hidden_layers)]
+        )
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
