@@ -570,7 +570,7 @@ class PatchTSTEncoderBlock(nn.Module):
             hidden_state = mod(hidden_state)
             if output_hidden_states:
                 all_hidden_states.append(hidden_state)
-        if output_hidden_states is None:
+        if output_hidden_states is False:
             return hidden_state, None
         return hidden_state, all_hidden_states
 
