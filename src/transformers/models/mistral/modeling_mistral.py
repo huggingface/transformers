@@ -54,16 +54,14 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MistralConfig"
 
 
-# Copied from transformers.models.llama.modeling_llama.AttentionMaskCache
-class AttentionMaskCache:
+# Copied from transformers.models.llama.modeling_llama.AttnMaskConverter
+class AttnMaskConverter:
     """
     A utility attention mask class that allows:
-        - Create a causal mask 4d mask
-        - Convert a 2D attention mask (batch_size, query_length) to a 4D attention mask (batch_size, 1, query_length,
+        - Create a causal 4d mask
+        - Create a causal 4d mask with slided window
+        - Convert a 2d attention mask (batch_size, query_length) to a 4d attention mask (batch_size, 1, query_length,
           key_value_length) that can be multiplied with attention scores
-        - Check whether 2D attention mask has any padding tokens or not
-
-    To avoid unnecessary memory allocation, attention masks are cached and can be easily reused.
 
     Parameters:
         is_causal (`bool`):
@@ -77,28 +75,6 @@ class AttentionMaskCache:
         self.is_causal = is_causal
         self.sliding_window = sliding_window
 
-        self.cache_4d_mask = {}
-        self.cache_4d_mask_only_causal = {}
-        self.cache_has_mask = {}
-
-    def _hash_tensor(self, tensor: torch.Tensor, shape: Tuple[int] = ()):
-        # we need to use both the unique id, memory address, the _version, and shape of the tensor as a key
-        # object to be certain to not accidentally return an incorrect hashed key (e.g. if the tensor has been updated in-place, only the version is increased)
-        return (id(tensor), tensor._version, tensor.shape + shape)
-
-    def has_mask(self, attention_mask_2d: torch.Tensor) -> bool:
-        """
-        Checks whether the attention_mask actually has a padding token or whether it has only non-padding tokens.
-        """
-        mask_2d_hash = self._hash_tensor(attention_mask_2d)
-        if mask_2d_hash not in self.cache_has_mask and len(self.cache_has_mask) > 0:
-            self.cache_has_mask = {}
-
-        if mask_2d_hash not in self.cache_has_mask:
-            self.cache_has_mask[mask_2d_hash] = 0 in attention_mask_2d
-
-        return self.cache_has_mask[mask_2d_hash]
-
     def to_causal_4d(
         self,
         batch_size: int,
@@ -109,39 +85,29 @@ class AttentionMaskCache:
     ) -> torch.Tensor:
         """
         Creates a causal 4D mask of (bsz, head_dim=1, query_length, key_value_length) shape and adds large negative
-        bias to upper right hand triangular matrix (causal mask). If cached 4D attention mask can be reused, no new
-        memory will be allocated.
+        bias to upper right hand triangular matrix (causal mask).
         """
-        expected_shape = (batch_size, 1, query_length, key_value_length)
-
         if not self.is_causal:
             raise ValueError(f"Please use `to_causal_4d` only if {self.__class__} has `is_causal` set to True.")
 
-        # If the attention_mask shape does not match, but there is still a tensor in the cache, empty the cache
-        if expected_shape not in self.cache_4d_mask_only_causal and len(self.cache_4d_mask_only_causal) > 0:
-            self.cache_4d_mask_only_causal = {}
-
         # If shape is not cached, create a new causal mask and cache it
-        if expected_shape not in self.cache_4d_mask_only_causal:
-            input_shape = (batch_size, query_length)
+        input_shape = (batch_size, query_length)
+        past_key_values_length = key_value_length - query_length
+
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        causal_4d_mask = None
+        if input_shape[-1] > 1 or self.sliding_window is not None:
             past_key_values_length = key_value_length - query_length
+            causal_4d_mask = self._make_causal_mask(
+                input_shape,
+                dtype,
+                device=device,
+                past_key_values_length=past_key_values_length,
+                sliding_window=self.sliding_window,
+            )
 
-            # create causal mask
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            causal_4d_mask = None
-            if input_shape[-1] > 1 or self.sliding_window is not None:
-                past_key_values_length = key_value_length - query_length
-                causal_4d_mask = self._make_causal_mask(
-                    input_shape,
-                    dtype,
-                    device=device,
-                    past_key_values_length=past_key_values_length,
-                    sliding_window=self.sliding_window,
-                )
-
-            self.cache_4d_mask_only_causal[expected_shape] = causal_4d_mask
-
-        return self.cache_4d_mask_only_causal[expected_shape]
+        return causal_4d_mask
 
     def to_4d(
         self,
@@ -153,44 +119,33 @@ class AttentionMaskCache:
         """
         Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
         key_value_length) shape and by adding a large negative bias to not-attended positions. If attention_mask is
-        causal, a causal mask will be added. If cached 4D attention mask can be reused, no new memory will be
-        allocated.
+        causal, a causal mask will be added.
         """
-        mask_2d_hash = self._hash_tensor(attention_mask_2d, (query_length, key_value_length))
+        input_shape = (attention_mask_2d.shape[0], query_length)
+        past_key_values_length = key_value_length - query_length
 
-        # If the attention_mask does not match, but there is still a tensor in the cache, empty the cache
-        if mask_2d_hash not in self.cache_4d_mask and len(self.cache_4d_mask) > 0:
-            self.cache_4d_mask = {}
-
-        # If attention_mask is not cached, create a new one and cache it
-        if mask_2d_hash not in self.cache_4d_mask:
-            input_shape = (attention_mask_2d.shape[0], query_length)
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        causal_4d_mask = None
+        if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
             past_key_values_length = key_value_length - query_length
-
-            # create causal mask
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            causal_4d_mask = None
-            if (input_shape[-1] > 1 or self.sliding_window is not None) and self.is_causal:
-                past_key_values_length = key_value_length - query_length
-                causal_4d_mask = self._make_causal_mask(
-                    input_shape,
-                    dtype,
-                    device=attention_mask_2d.device,
-                    past_key_values_length=past_key_values_length,
-                    sliding_window=self.sliding_window,
-                )
-            elif self.sliding_window is not None:
-                raise NotImplementedError("Sliding window is currently only implemented for causal masking")
-
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
-                attention_mask_2d.device
+            causal_4d_mask = self._make_causal_mask(
+                input_shape,
+                dtype,
+                device=attention_mask_2d.device,
+                past_key_values_length=past_key_values_length,
+                sliding_window=self.sliding_window,
             )
-            cached_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
+        elif self.sliding_window is not None:
+            raise NotImplementedError("Sliding window is currently only implemented for causal masking")
 
-            self.cache_4d_mask[mask_2d_hash] = cached_4d_mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
+            attention_mask_2d.device
+        )
+        expanded_4d_mask = expanded_attn_mask if causal_4d_mask is None else expanded_attn_mask + causal_4d_mask
 
-        return self.cache_4d_mask[mask_2d_hash]
+        return expanded_4d_mask
 
     def _make_causal_mask(
         self,
@@ -369,7 +324,7 @@ class MistralAttention(nn.Module):
     and "Generating Long Sequences with Sparse Transformers".
     """
 
-    def __init__(self, config: MistralConfig, attention_mask_cache=None):
+    def __init__(self, config: MistralConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -379,7 +334,7 @@ class MistralAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
-        self.attention_mask_cache = attention_mask_cache
+        self.is_causal = True
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
@@ -447,15 +402,6 @@ class MistralAttention(nn.Module):
             raise ValueError(
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
                 f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            # convert 2d -> 4d. Re-use cached mask if available
-            attention_mask = self.attention_mask_cache.to_4d(attention_mask, q_len, kv_seq_len, attn_weights.dtype)
-        elif self.attention_mask_cache.is_causal:
-            # create 4d causal mask. Re-use cached mask if available
-            attention_mask = self.attention_mask_cache.to_causal_4d(
-                bsz, q_len, kv_seq_len, attn_weights.dtype, attn_weights.device
             )
 
         if attention_mask is not None:
@@ -677,7 +623,7 @@ class MistralFlashAttention2(MistralAttention):
                     max_seqlen_k=max_seqlen_in_batch_k,
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.attention_mask_cache.is_causal,
+                    causal=self.is_causal,
                 )
             else:
                 attn_output_unpad = flash_attn_varlen_func(
@@ -690,7 +636,7 @@ class MistralFlashAttention2(MistralAttention):
                     max_seqlen_k=max_seqlen_in_batch_k,
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.attention_mask_cache.is_causal,
+                    causal=self.is_causal,
                     window_size=(self.config.sliding_window, self.config.sliding_window),
                 )
 
@@ -757,13 +703,13 @@ class MistralFlashAttention2(MistralAttention):
 
 
 class MistralDecoderLayer(nn.Module):
-    def __init__(self, config: MistralConfig, attention_mask_cache=None):
+    def __init__(self, config: MistralConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = (
-            MistralAttention(config=config, attention_mask_cache=attention_mask_cache)
+            MistralAttention(config=config)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else MistralFlashAttention2(config, attention_mask_cache=attention_mask_cache)
+            else MistralFlashAttention2(config)
         )
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -957,12 +903,10 @@ class MistralModel(MistralPreTrainedModel):
 
         # create attention mask cache that trickles down to each attention layer
         # so that the attention_mask cache can be shared among layers
-        attention_mask_cache = AttentionMaskCache(is_causal=True, sliding_window=config.sliding_window)
+        self.attn_mask_converter = AttnMaskConverter(is_causal=True, sliding_window=config.sliding_window)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [MistralDecoderLayer(config, attention_mask_cache) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([MistralDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -1036,6 +980,21 @@ class MistralModel(MistralPreTrainedModel):
                     "You are attempting to perform batched generation with padding_side='right'"
                     " this may lead to unexpected behaviour for Flash Attention version of Mistral. Make sure to "
                     " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
+                )
+
+        if getattr(self.config, "_flash_attn_2_enabled", False):
+            # 2d mask is passed through the layers
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        else:
+            key_value_length = seq_length + past_key_values_length
+            # 4d mask is passed through the layers
+            if attention_mask is not None:
+                attention_mask = self.attn_mask_converter.to_4d(
+                    attention_mask, seq_length, key_value_length, dtype=inputs_embeds.dtype
+                )
+            else:
+                attention_mask = self.attn_mask_converter.to_causal_4d(
+                    batch_size, seq_length, key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
                 )
 
         hidden_states = inputs_embeds
