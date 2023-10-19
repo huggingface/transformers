@@ -500,7 +500,6 @@ class PatchTSTMasking(nn.Module):
             self.unmasked_channel_indices.sort()
         self.seed_number = seed_number
 
-
     def forward(self, patch_input: torch.Tensor):
         """
         Parameters:
